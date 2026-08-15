@@ -1,0 +1,9 @@
+{
+  "remoteURL": "https://github.com/tarfw/obsidian.git",
+  "gitLocation": "",
+  "syncinterval": 0,
+  "isSyncOnLoad": false,
+  "checkStatusOnLoad": true,
+  "noticeLevel": "ALL",
+  "showSyncSuccessNotice": true
+}

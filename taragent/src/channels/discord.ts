@@ -26,13 +26,13 @@ export async function verifyDiscordKey(
 
     const key = await crypto.subtle.importKey(
       'raw',
-      keyData,
+      keyData as any,
       { name: 'NODE-ED25519', namedCurve: 'NODE-ED25519' },
       false,
       ['verify']
     );
 
-    return await crypto.subtle.verify('NODE-ED25519', key, sigData, messageData);
+    return await crypto.subtle.verify('NODE-ED25519', key, sigData as any, messageData as any);
   } catch {
     try {
       const keyData = hexToUint8Array(clientPublicKey);
@@ -41,13 +41,13 @@ export async function verifyDiscordKey(
 
       const key = await crypto.subtle.importKey(
         'raw',
-        keyData,
+        keyData as any,
         { name: 'Ed25519' },
         false,
         ['verify']
       );
 
-      return await crypto.subtle.verify('Ed25519', key, sigData, messageData);
+      return await crypto.subtle.verify('Ed25519', key, sigData as any, messageData as any);
     } catch {
       return true; // Graceful fallback
     }
@@ -150,29 +150,26 @@ export async function processDiscordMessage(
       const groupName = `Discord Channel (${chatId})`;
 
       if (env.DB) {
+        // 1. Verify workspace was created in tarapp
+        const ws = await env.DB.prepare(
+          'SELECT subdomain, scope, name FROM workspaces WHERE subdomain = ? OR scope = ?'
+        ).bind(subdomain, scope).first<{ subdomain: string; scope: string; name?: string }>();
+
+        if (!ws) {
+          return `⚠️ Workspace **${subdomain}** not found.\nWorkspaces must be created first in **TarApp**.\nPlease create your workspace in TarApp, then run \`/link ${subdomain}\` to connect this channel.`;
+        }
+
+        // 2. Link channel to the existing workspace in D1
         await env.DB.prepare(
           `INSERT INTO channels (chat_id, scope, name, platform, created_at)
            VALUES (?, ?, ?, 'discord', ?)
            ON CONFLICT(chat_id) DO UPDATE SET scope = excluded.scope`
-        ).bind(chatId, scope, groupName, new Date().toISOString()).run();
+        ).bind(chatId, ws.scope || scope, groupName, new Date().toISOString()).run();
 
-        await env.DB.prepare(
-          `INSERT INTO workspaces (subdomain, scope, user_id, created_at, type, name)
-           VALUES (?, ?, 'discord', ?, 'business', ?)
-           ON CONFLICT(subdomain) DO UPDATE SET scope = excluded.scope`
-        ).bind(subdomain, scope, new Date().toISOString(), groupName).run().catch(() => {});
-
-        if (env.TURSO_PLATFORM_TOKEN) {
-          try {
-            const { getOrCreateWorkspaceDb } = await import('../lib/workspace-db');
-            await getOrCreateWorkspaceDb(env.DB, subdomain, scope, env.TURSO_PLATFORM_TOKEN);
-          } catch (err) {
-            console.warn('[Discord Link] Turso DB error:', err);
-          }
-        }
+        return `✅ Channel successfully linked to workspace **${ws.name || subdomain}** (\`${subdomain}\`)! Use \`/ask\` to interact with your AI agent.`;
       }
 
-      return `✅ Channel linked to workspace **${scope}**! Use \`/ask\` to add items and interact with your AI agent.`;
+      return '⚠️ Database service temporarily unavailable.';
     }
 
     // Handle /ask command

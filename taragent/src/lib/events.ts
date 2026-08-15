@@ -1,174 +1,129 @@
 /**
- * Events + Inbox Rule Engine
+ * Events + Idempotency Engine (plan6.md §5, §14)
  *
- * Events: append-only writes to the motion table (sales, tickets, attendance, etc.)
- * Inbox: tasks auto-created from events via rule engine (kitchen tickets, restock alerts, etc.)
+ * Events: append-only writes to the motion table with integer type codes and idempotency key (idem).
+ * All motion inserts use INSERT OR IGNORE INTO motion (idem).
+ * Automatic routing of motion events to personal DB inboxes.
  */
 
-import { dbContext } from './db';
-import { executeCreate, executeRead } from './helpers';
-
-// ── Event types ─────────────────────────────────────────────────────
+import { executeWorkspaceTursoQuery } from './db';
+import { toMotionTypeCode } from './types-config';
+import { routeWorkspaceMotionToInbox } from './inbox';
 
 export interface EventData {
-  type: string;
-  data: Record<string, any>;
+  type: string | number;
+  ref?: string;
+  data?: Record<string, any> | string;
+  by?: string;
   created_by?: string;
   scope: string;
+  idem?: string;
+  workspaceId?: string;
+  workspaceName?: string;
 }
 
-// ── Write event to motion table ─────────────────────────────────────
-
+/**
+ * Write motion event to Turso motion table with integer type and idempotency check.
+ */
 export async function writeEvent(
   dbUrl: string,
   dbToken: string,
   event: EventData
-): Promise<{ id: string }> {
-  const id = `evt_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+): Promise<{ id: string; duplicate?: boolean }> {
+  const id = `mot_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  const typeCode = toMotionTypeCode(event.type);
+  const dataStr = event.data
+    ? (typeof event.data === 'string' ? event.data : JSON.stringify(event.data))
+    : null;
+  const author = event.by || event.created_by || 'system';
+  const idemKey = event.idem || `${event.scope}:${author}:${Date.now()}:${event.type}:${Math.random().toString(36).substring(2, 6)}`;
 
-  await dbContext.run({ url: dbUrl, token: dbToken }, async () => {
-    await executeCreate({
-      table: 'motion',
-      id,
-      type: event.type,
-      scope: event.scope,
+  const sql = `
+    INSERT OR IGNORE INTO motion (id, type, ref, data, by, at, scope, idem, deleted_at)
+    VALUES (?, ?, ?, ?, ?, unixepoch(), ?, ?, NULL)
+  `;
+
+  const args = [
+    id,
+    typeCode,
+    event.ref || null,
+    dataStr,
+    author,
+    event.scope,
+    idemKey,
+  ];
+
+  await executeWorkspaceTursoQuery(dbUrl, dbToken, sql, args);
+
+  // Trigger inbox routing asynchronously
+  routeWorkspaceMotionToInbox(
+    dbUrl,
+    dbToken,
+    event.workspaceId || event.scope.replace('w:', ''),
+    event.workspaceName || event.scope.replace('w:', ''),
+    {
+      type: typeCode,
+      ref: event.ref,
       data: event.data,
-      created_by: event.created_by || 'system',
-    });
-  });
-
-  // Run inbox rules (fire and forget)
-  runInboxRules(dbUrl, dbToken, event).catch(err => {
-    console.warn('[events] Inbox rule failed:', err);
+      by: event.by,
+    }
+  ).catch(err => {
+    console.warn('[events] routeWorkspaceMotionToInbox failed:', err);
   });
 
   return { id };
 }
 
-// ── Inbox Rule Engine ───────────────────────────────────────────────
-
-interface InboxRule {
-  eventType: string;
-  condition?: (data: Record<string, any>) => boolean;
-  assignee: string | ((data: Record<string, any>) => string);
-  title: string | ((data: Record<string, any>) => string);
-}
-
-const INBOX_RULES: InboxRule[] = [
-  // Kitchen ticket fired → task for kitchen staff
-  {
-    eventType: 'kitchen_ticket',
-    assignee: 'kitchen',
-    title: (d) => `Prepare order #${d.orderId || 'unknown'}`,
-  },
-  // Low stock adjustment → task for manager
-  {
-    eventType: 'stock_adjustment',
-    condition: (d) => d.qty < 0 && (d.reason === 'sale' || d.reason === 'low_stock'),
-    assignee: 'manager',
-    title: (d) => `Restock ${d.product || 'item'}`,
-  },
-  // Booking confirmed → task for assigned staff
-  {
-    eventType: 'booking',
-    assignee: (d) => d.staff_id || 'staff',
-    title: (d) => `Confirm ${d.time || 'slot'} booking`,
-  },
-  // New order → task for waiter
-  {
-    eventType: 'motion',
-    condition: (d) => d.status === 'pending',
-    assignee: 'waiter',
-    title: (d) => `Serve order #${d.orderId || 'unknown'}`,
-  },
-  // Low rating feedback → task for owner
-  {
-    eventType: 'feedback',
-    condition: (d) => d.rating && d.rating < 3,
-    assignee: 'owner',
-    title: () => 'Review customer complaint',
-  },
-];
-
-async function runInboxRules(
+/**
+ * Query recent motion events with selective SELECT and soft-delete filtering.
+ */
+export async function getRecentMotionEvents(
   dbUrl: string,
   dbToken: string,
-  event: EventData
-): Promise<void> {
-  for (const rule of INBOX_RULES) {
-    if (rule.eventType !== event.type) continue;
+  type?: number | string,
+  limit: number = 50
+): Promise<any[]> {
+  let sql = 'SELECT id, type, ref, data, by, at, scope FROM motion WHERE deleted_at IS NULL';
+  const args: any[] = [];
 
-    // Check condition if specified
-    if (rule.condition && !rule.condition(event.data)) continue;
-
-    const assignee = typeof rule.assignee === 'function'
-      ? rule.assignee(event.data)
-      : rule.assignee;
-
-    const title = typeof rule.title === 'function'
-      ? rule.title(event.data)
-      : rule.title;
-
-    const taskId = `task_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
-
-    try {
-      await dbContext.run({ url: dbUrl, token: dbToken }, async () => {
-        await executeCreate({
-          table: 'tasks',
-          id: taskId,
-          type: 'inbox_task',
-          scope: event.scope,
-          title,
-          data: {
-            assigned_to: assignee,
-            event_type: event.type,
-            event_data: event.data,
-            status: 'pending',
-          },
-        });
-      });
-    } catch (err) {
-      console.warn(`[events] Failed to create inbox task for rule ${rule.eventType}:`, err);
-    }
+  if (type !== undefined) {
+    sql += ' AND type = ?';
+    args.push(toMotionTypeCode(type));
   }
+
+  sql += ' ORDER BY at DESC LIMIT ?';
+  args.push(limit);
+
+  return await executeWorkspaceTursoQuery(dbUrl, dbToken, sql, args);
 }
 
-// ── Get user inbox (pending tasks) ──────────────────────────────────
-
+/**
+ * Get user pending inbox tasks.
+ */
 export async function getUserInbox(
   dbUrl: string,
   dbToken: string,
   userId: string,
   limit: number = 50
 ): Promise<any[]> {
-  const result = await dbContext.run({ url: dbUrl, token: dbToken }, async () => {
-    return executeRead({
-      table: 'tasks',
-      scope: 'all',
-      filter: { assigned_to: userId, status: 'pending' },
-      limit,
-    });
-  });
-
-  return (result as any)?.rows || [];
+  const sql = `
+    SELECT id, user_id, workspace_id, workspace_name, type, title, ref, priority, due, status, created_at
+    FROM inbox
+    WHERE (user_id = ? OR user_id = 'all') AND status = 1 AND deleted_at IS NULL
+    ORDER BY priority DESC, created_at DESC
+    LIMIT ?
+  `;
+  return await executeWorkspaceTursoQuery(dbUrl, dbToken, sql, [userId, limit]).catch(() => []);
 }
 
-// ── Mark task done ──────────────────────────────────────────────────
-
+/**
+ * Mark inbox task completed.
+ */
 export async function markTaskDone(
   dbUrl: string,
   dbToken: string,
   taskId: string
 ): Promise<void> {
-  await dbContext.run({ url: dbUrl, token: dbToken }, async () => {
-    const { executeUpdate } = await import('./helpers');
-    await executeUpdate({
-      table: 'tasks',
-      id: taskId,
-      patch: {
-        status: 'done',
-        completed_at: new Date().toISOString(),
-      },
-    });
-  });
+  const sql = `UPDATE inbox SET status = 2 WHERE id = ? AND deleted_at IS NULL`;
+  await executeWorkspaceTursoQuery(dbUrl, dbToken, sql, [taskId]).catch(() => {});
 }

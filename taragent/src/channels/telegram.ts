@@ -1,10 +1,22 @@
 /**
- * Telegram channel — webhook handler, group → scope mapping, channel-native role management, and motion dispatcher.
+ * Telegram Channel Gateway (plan6.md §15, §16, §17)
+ *
+ * Channel-first zero-UI member management and operational event gateway.
+ * Single source of truth for team membership; conversational capture for operations.
  */
 
 import type { ChannelMessage, ChannelConfig, ChannelResponse } from './types';
 import { executeWorkspaceTursoQuery } from '../lib/db';
 import { getOrCreateWorkspaceDb } from '../lib/workspace-db';
+import { uploadWorkspaceFile, readWorkspaceFile } from '../lib/okf';
+import {
+  MATTER_TYPES,
+  MOTION_TYPES,
+  INBOX_TYPES,
+  GRAPH_REL_TYPES,
+  COMPACT_KEYS,
+} from '../lib/types-config';
+import { pushToPersonalInbox } from '../lib/inbox';
 
 const ENCODING = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 const ENCODING_LEN = 32;
@@ -66,12 +78,17 @@ function toWorkspaceScope(raw: string): string {
   return `w:${clean}`;
 }
 
+function extractSubdomain(raw: string): string {
+  if (!raw) return 'default';
+  return raw.trim().replace(/^[tw]:/, '').toLowerCase();
+}
+
 /**
- * Handle incoming Telegram webhook update (Flue Framework Compliant).
+ * Handle incoming Telegram webhook update (plan6.md architecture).
  */
 export async function handleTelegramUpdate(
   update: any,
-  env: { DB?: D1Database }
+  env: { DB?: D1Database; [key: string]: any }
 ): Promise<TelegramProcessResult | null> {
   const message = update.message || update.channel_post || update.business_message;
   if (!message) return null;
@@ -100,138 +117,266 @@ export async function handleTelegramUpdate(
 
   let responseText = '';
 
-  // Parse Slash Commands — locate command token even if prefixed by @bot_username
+  // Parse Slash Commands — locate command token
   const tokens = text.split(/\s+/);
   const cmdIndex = tokens.findIndex(t => t.startsWith('/') || t.includes('/link') || t.includes('/role') || t.includes('/team') || t.includes('/remove'));
 
-  if (cmdIndex !== -1 || text.includes('/')) {
+  if (cmdIndex !== -1 || text.startsWith('/')) {
     const parts = cmdIndex !== -1 ? tokens.slice(cmdIndex) : tokens;
     const command = (parts[0] || '').toLowerCase().replace(/@\w+/, '');
 
-    // 1. /link <scope> [role:<default_role>]
+    // ────────────────────────────────────────────────────────────────
+    // 1. /link <CODE> (Flow 2: Secure Pairing Code)
+    // ────────────────────────────────────────────────────────────────
     if (command === '/link' || command.startsWith('/link')) {
-      const targetScopeRaw = parts[1] || '';
-      if (!targetScopeRaw) {
-        responseText = '⚠️ Usage: /link <workspace_scope> (e.g. /link velvet-brew)';
-      } else {
-        const scope = toWorkspaceScope(targetScopeRaw);
-        const subdomain = targetScopeRaw.trim().replace(/^[tw]:/, '').toLowerCase();
-        const defaultRole = parts.find(p => p.startsWith('role:'))?.split(':')[1] || 'staff';
+      const targetCodeRaw = (parts[1] || '').toUpperCase().trim();
+      if (!targetCodeRaw) {
+        responseText = '⚠️ Usage: <code>/link &lt;PAIRING_CODE&gt;</code> (e.g. <code>/link TAR-7K92</code>)\n\nGenerate your 6-character code in <b>TarApp</b> (tap <i>Connect Chat</i>).';
+      } else if (env.DB) {
         const groupName = message.chat?.title || 'Telegram Group';
+        const now = Date.now();
 
-        if (env.DB) {
-          // 1. Link channel in D1
+        // 1. Check pairing_codes table
+        const pairing = await env.DB.prepare(
+          'SELECT code, subdomain, scope, user_id FROM pairing_codes WHERE (UPPER(code) = ? OR code = ?) AND expires_at > ?'
+        ).bind(targetCodeRaw, targetCodeRaw, now).first<{ code: string; subdomain: string; scope: string; user_id: string }>();
+
+        if (pairing) {
+          // 2. Atomically delete code (Self-destruct)
+          await env.DB.prepare('DELETE FROM pairing_codes WHERE code = ?').bind(pairing.code).run();
+
+          // 3. Link channel in D1
           await env.DB.prepare(
-            `INSERT INTO channels (chat_id, scope, name, platform, created_at)
-             VALUES (?, ?, ?, 'telegram', ?)
-             ON CONFLICT(chat_id) DO UPDATE SET scope = excluded.scope`
-          ).bind(chatId, scope, groupName, new Date().toISOString()).run();
+            `INSERT INTO channels (chat_id, scope, name, platform, created_by, created_at)
+             VALUES (?, ?, ?, 'telegram', ?, ?)
+             ON CONFLICT(chat_id) DO UPDATE SET scope = excluded.scope, name = excluded.name`
+          ).bind(chatId, pairing.scope, groupName, userHandle, new Date().toISOString()).run();
 
-          // 2. Register workspace in D1 workspaces directory table
+          // 4. Register owner in members table
+          const memberId = `${pairing.scope}:${userHandle.toLowerCase()}`;
           await env.DB.prepare(
-            `INSERT INTO workspaces (subdomain, scope, user_id, created_at, type, name)
-             VALUES (?, ?, 'telegram', ?, 'business', ?)
-             ON CONFLICT(subdomain) DO UPDATE SET scope = excluded.scope`
-          ).bind(subdomain, scope, new Date().toISOString(), groupName).run().catch(() => {});
+            `INSERT INTO members (id, scope, user_id, handle, role, updated_at)
+             VALUES (?, ?, ?, ?, 'owner', ?)
+             ON CONFLICT(id) DO UPDATE SET role = 'owner', updated_at = excluded.updated_at`
+          ).bind(memberId, pairing.scope, pairing.user_id, userHandle.toLowerCase(), new Date().toISOString()).run();
 
-          // 3. Auto-provision per-workspace Turso DB if platform token is present
-          if ((env as any).TURSO_PLATFORM_TOKEN) {
-            try {
-              const wsDb = await getOrCreateWorkspaceDb(env.DB, subdomain, scope, (env as any).TURSO_PLATFORM_TOKEN);
-              console.log(`[Telegram Link] Provisioned Turso DB for ${subdomain}: ${wsDb.url}`);
-            } catch (err) {
-              console.warn(`[Telegram Link] Warning provisioning Turso DB for ${subdomain}:`, err);
-            }
+          // 5. Look up workspace name
+          const ws = await env.DB.prepare('SELECT name FROM workspaces WHERE subdomain = ?').bind(pairing.subdomain).first<{ name?: string }>();
+          const wsName = ws?.name || pairing.subdomain;
+
+          responseText = `✅ Group <b>${groupName}</b> successfully linked to <b>${wsName}</b>!\n👑 <b>${userHandle}</b> verified as Channel Admin.\n\nReady for staff onboarding:\n• <code>/role @username &lt;role&gt; [section:X] [tables:Y]</code>\n• <code>/team</code>`;
+        } else {
+          // Check if user tried typing subdomain directly
+          const wsCheck = await env.DB.prepare('SELECT subdomain FROM workspaces WHERE subdomain = ?').bind(targetCodeRaw.toLowerCase()).first();
+          if (wsCheck) {
+            responseText = `🔒 <b>Direct subdomain linking is disabled for security.</b>\nPlease open <b>TarApp</b>, tap <b>Connect Chat</b> to generate your secure 10-minute code, then type <code>/link &lt;CODE&gt;</code> here.`;
+          } else {
+            responseText = `⚠️ Invalid or expired pairing code.\nPlease open <b>TarApp</b> → <b>Connect Chat</b> to generate a fresh 6-character code, then type <code>/link &lt;CODE&gt;</code> here.`;
           }
         }
-
-        responseText = `✅ Group <b>${groupName}</b> linked to workspace <b>${scope}</b> (Default Role: <code>${defaultRole}</code>).`;
+      } else {
+        responseText = '⚠️ Database service temporarily unavailable.';
       }
     }
 
-    // 2. /role <@handle> <role>
+    // ────────────────────────────────────────────────────────────────
+    // 2. /role <@handle> <role> [section:X] [tables:Y-Z] (Flow 3: Private Member Onboarding)
+    // ────────────────────────────────────────────────────────────────
     else if (command === '/role' || command.startsWith('/role')) {
       const targetHandle = parts[1] || '';
       const newRole = (parts[2] || 'staff').toLowerCase();
+      const sectionArg = parts.find(p => p.startsWith('section:'))?.split(':')[1] || null;
+      const tablesArg = parts.find(p => p.startsWith('tables:'))?.split(':')[1] || null;
 
       if (!targetHandle || !targetHandle.startsWith('@')) {
-        responseText = '⚠️ Usage: /role @username <role> (e.g. /role @charlie_waiter manager)';
+        responseText = '⚠️ Usage: <code>/role @username &lt;role&gt; [section:B] [tables:12-15]</code>';
       } else {
         const rawScope = await getScopeForChat(env, chatId);
         if (!rawScope || rawScope === 'unassigned') {
-          responseText = '⚠️ Group not linked to a workspace. Please run /link <workspace> first.';
+          responseText = '⚠️ Group not linked to a workspace. An owner can run <code>/link &lt;CODE&gt;</code> first.';
         } else if (env.DB) {
-          const scope = toWorkspaceScope(rawScope);
-          const memberId = `${scope}:${targetHandle.toLowerCase()}`;
-          await env.DB.prepare(
-            `INSERT INTO members (id, scope, handle, role, updated_at)
-             VALUES (?, ?, ?, ?, ?)
-             ON CONFLICT(id) DO UPDATE SET role = excluded.role, updated_at = excluded.updated_at`
-          ).bind(memberId, scope, targetHandle.toLowerCase(), newRole, new Date().toISOString()).run();
+          const subdomain = extractSubdomain(rawScope);
+          const scope = `w:${subdomain}`;
+          const cleanHandle = targetHandle.toLowerCase();
 
-          responseText = `⭐ <b>${targetHandle}</b> assigned role <b>${newRole}</b> in <b>${scope}</b>.`;
+          // 1. Verify sender is Channel Admin / Owner
+          const senderRole = await getUserRole(env, scope, userHandle);
+          if (senderRole !== 'owner' && senderRole !== 'admin') {
+            responseText = `❌ Only workspace owners or admins can assign roles in this group. (Your role: <code>${senderRole}</code>)`;
+          } else {
+            // 2. Generate 4-digit claim code (15-minute expiry)
+            const claimCode = Math.floor(1000 + Math.random() * 9000).toString();
+            const now = Date.now();
+            const expiresAt = now + 900000; // 15 minutes
+
+            // Ensure member_invites table exists
+            await env.DB.prepare(`
+              CREATE TABLE IF NOT EXISTS member_invites (
+                code TEXT PRIMARY KEY,
+                subdomain TEXT NOT NULL,
+                scope TEXT NOT NULL,
+                handle TEXT NOT NULL,
+                role TEXT NOT NULL,
+                section TEXT,
+                tables TEXT,
+                created_by TEXT NOT NULL,
+                created_at INTEGER NOT NULL,
+                expires_at INTEGER NOT NULL
+              )
+            `).run().catch(() => {});
+
+            await env.DB.prepare(
+              `INSERT INTO member_invites (code, subdomain, scope, handle, role, section, tables, created_by, created_at, expires_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+            ).bind(claimCode, subdomain, scope, cleanHandle, newRole, sectionArg, tablesArg, userHandle, now, expiresAt).run();
+
+            // 3. Update OKF team/members.md
+            try {
+              const existingMembersMd = await readWorkspaceFile(env, scope, 'team/members.md') || '# Team Members\n';
+              const memberEntry = `- handle: "${cleanHandle}"\n  role: "${newRole}"\n  section: "${sectionArg || ''}"\n  tables: "${tablesArg || ''}"\n  assigned_at: "${new Date().toISOString()}"\n`;
+              await uploadWorkspaceFile(env, scope, 'team/members.md', `${existingMembersMd}\n${memberEntry}`);
+            } catch (okfErr) {
+              console.warn('[Telegram /role] OKF upload warning:', okfErr);
+            }
+
+            // 4. Try sending private DM to staff with the 4-digit code
+            if (env.TELEGRAM_BOT_TOKEN) {
+              const dmText = `👋 Hi <b>${targetHandle}</b>!\nYou have been assigned as <b>${newRole}</b> at <b>${subdomain}</b>.\n\nYour private 4-digit TarApp join code is:\n\n🔢 <code>${claimCode}</code>\n\nOpen <b>TarApp</b> (logged in with Google) and enter this code to connect your account. (Expires in 15 minutes)`;
+              sendTelegramMessage(
+                { platform: 'telegram', botToken: env.TELEGRAM_BOT_TOKEN },
+                { chatId: cleanHandle.replace('@', ''), text: dmText }
+              ).catch(() => {});
+            }
+
+            let details = `Role: <b>${newRole}</b>`;
+            if (sectionArg) details += ` | Section: <b>${sectionArg}</b>`;
+            if (tablesArg) details += ` | Tables: <b>${tablesArg}</b>`;
+
+            responseText = `👋 <b>${targetHandle}</b> assigned to <b>${subdomain}</b>!\n${details}\n\n📩 <b>Private join code sent in DM.</b>\n<i>(Staff member opens TarApp, enters the 4-digit code to claim with Google Sign-In)</i>`;
+          }
         }
       }
     }
 
+    // ────────────────────────────────────────────────────────────────
     // 3. /team
+    // ────────────────────────────────────────────────────────────────
     else if (command === '/team' || command.startsWith('/team')) {
       const rawScope = await getScopeForChat(env, chatId);
       if (!rawScope || rawScope === 'unassigned') {
-        responseText = '⚠️ Group not linked to a workspace. Please run /link <workspace> first.';
+        responseText = '⚠️ Group not linked to a workspace. Please run <code>/link &lt;workspace&gt;</code> first.';
       } else {
-        const scope = toWorkspaceScope(rawScope);
+        const subdomain = extractSubdomain(rawScope);
+        const scope = `w:${subdomain}`;
         const members = await getMembersForScope(env, scope);
         if (members.length === 0) {
-          responseText = `👥 <b>${scope}</b> Team Roles:\n<i>(No explicit member roles assigned yet. Group members inherit default role <code>staff</code>)</i>.`;
+          responseText = `👥 <b>${subdomain}</b> Team Roles:\n<i>(No explicit member roles assigned yet. Group members inherit default role <code>staff</code>)</i>.`;
         } else {
           const listStr = members.map(m => {
-            const icon = m.role === 'admin' ? '👑' : m.role === 'manager' ? '⭐' : '🔹';
+            const icon = m.role === 'admin' ? '👑' : m.role === 'manager' ? '⭐' : m.role === 'chef' ? '🍳' : m.role === 'waiter' ? '🍽️' : '🔹';
             return `${icon} ${m.handle} — <i>${m.role}</i>`;
           }).join('\n');
-          responseText = `👥 <b>${scope}</b> Team Roles:\n${listStr}`;
+          responseText = `👥 <b>${subdomain}</b> Team (${members.length} members):\n${listStr}`;
         }
       }
     }
 
+    // ────────────────────────────────────────────────────────────────
     // 4. /remove <@handle>
+    // ────────────────────────────────────────────────────────────────
     else if (command === '/remove' || command.startsWith('/remove')) {
       const targetHandle = parts[1] || '';
       if (!targetHandle || !targetHandle.startsWith('@')) {
-        responseText = '⚠️ Usage: /remove @username';
+        responseText = '⚠️ Usage: <code>/remove @username</code>';
       } else {
         const rawScope = await getScopeForChat(env, chatId);
         if (!rawScope || rawScope === 'unassigned') {
           responseText = '⚠️ Group not linked to a workspace.';
-        } else if (env.DB) {
-          const scope = toWorkspaceScope(rawScope);
-          await env.DB.prepare(
-            `DELETE FROM members WHERE scope = ? AND LOWER(handle) = ?`
-          ).bind(scope, targetHandle.toLowerCase()).run();
+        } else {
+          const subdomain = extractSubdomain(rawScope);
+          const scope = `w:${subdomain}`;
+          const cleanHandle = targetHandle.toLowerCase();
 
-          responseText = `🚫 Access revoked for <b>${targetHandle}</b> in <b>${scope}</b>.`;
+          // 1. Remove from D1 members
+          if (env.DB) {
+            await env.DB.prepare(
+              `DELETE FROM members WHERE scope = ? AND LOWER(handle) = ?`
+            ).bind(scope, cleanHandle).run();
+          }
+
+          // 2. Soft-delete in Workspace Turso DB
+          if (env.DB) {
+            const personId = `usr_${cleanHandle.replace('@', '')}`;
+            await executeWorkspaceTursoQuery(
+              env.DB, env, scope,
+              `UPDATE matter SET status = 0, deleted_at = unixepoch() WHERE id = ?`,
+              [personId]
+            ).catch(() => {});
+
+            await executeWorkspaceTursoQuery(
+              env.DB, env, scope,
+              `UPDATE graph SET deleted_at = unixepoch() WHERE src = ? OR tgt = ?`,
+              [personId, personId]
+            ).catch(() => {});
+          }
+
+          responseText = `🚫 Access revoked for <b>${targetHandle}</b> in <b>${subdomain}</b>.`;
         }
       }
     }
 
-    // 5. Help or unknown slash command
+    // ────────────────────────────────────────────────────────────────
+    // 5. Help
+    // ────────────────────────────────────────────────────────────────
     else {
-      responseText = `🤖 <b>TAR Bot Commands</b>:\n• <code>/link &lt;scope&gt;</code> — Link group to workspace\n• <code>/role @user &lt;role&gt;</code> — Assign staff/manager/admin role\n• <code>/team</code> — View team member roles\n• <code>/remove @user</code> — Revoke member access`;
+      responseText = `🤖 <b>TAR Bot Commands</b>:\n• <code>/link &lt;subdomain&gt;</code> — Link group to workspace\n• <code>/role @user &lt;role&gt; [section:X] [tables:Y-Z]</code> — Zero-UI onboarding\n• <code>/team</code> — View team member roster & assignments\n• <code>/remove @user</code> — Revoke member workspace access`;
     }
   }
 
-  // Handle Natural Language Event Motion & OKF Data Prompts
+  // ──────────────────────────────────────────────────────────────────
+  // Natural Language Event Capture (plan6.md §17 Reactive Mode)
+  // ──────────────────────────────────────────────────────────────────
   else {
     const rawScope = await getScopeForChat(env, chatId);
     if (!rawScope || rawScope === 'unassigned') {
-      responseText = '⚠️ Group not linked to a workspace. An owner can run /link velvet-brew to link this group.';
+      responseText = '⚠️ Group not linked to a workspace. An owner can run <code>/link &lt;subdomain&gt;</code> to link this group.';
     } else {
-      const scope = toWorkspaceScope(rawScope);
+      const subdomain = extractSubdomain(rawScope);
+      const scope = `w:${subdomain}`;
       const userRole = await getUserRole(env, scope, userHandle);
       const lowerText = text.toLowerCase();
 
-      // Case A: Contact / Customer Creation (e.g. "Add contact tarbee", "Create customer John Doe")
-      if (lowerText.includes('contact') || lowerText.includes('customer')) {
+      // Case A: Clock in / Clock out (motion type 118 / 119)
+      if (lowerText === 'clock in' || lowerText.startsWith('clock in')) {
+        const motId = generateEntityId('motion');
+        const idemKey = `${subdomain}:${userHandle}:${Date.now()}:clockin`;
+        if (env.DB) {
+          await executeWorkspaceTursoQuery(
+            env.DB, env, scope,
+            `INSERT OR IGNORE INTO motion (id, type, ref, data, by, at, scope, idem, deleted_at)
+             VALUES (?, ?, ?, ?, ?, unixepoch(), ?, ?, NULL)`,
+            [motId, MOTION_TYPES.clock_in, userHandle, JSON.stringify({ hdl: userHandle, action: 'clock_in' }), userHandle, scope, idemKey]
+          );
+        }
+        responseText = `⏱️ <b>${userHandle}</b> clocked in at ${new Date().toLocaleTimeString()}. Have a great shift!`;
+      }
+
+      else if (lowerText === 'clock out' || lowerText.startsWith('clock out')) {
+        const motId = generateEntityId('motion');
+        const idemKey = `${subdomain}:${userHandle}:${Date.now()}:clockout`;
+        if (env.DB) {
+          await executeWorkspaceTursoQuery(
+            env.DB, env, scope,
+            `INSERT OR IGNORE INTO motion (id, type, ref, data, by, at, scope, idem, deleted_at)
+             VALUES (?, ?, ?, ?, ?, unixepoch(), ?, ?, NULL)`,
+            [motId, MOTION_TYPES.clock_out, userHandle, JSON.stringify({ hdl: userHandle, action: 'clock_out' }), userHandle, scope, idemKey]
+          );
+        }
+        responseText = `🏁 <b>${userHandle}</b> clocked out. Shift logged & handover notes queued.`;
+      }
+
+      // Case B: Contact / Customer Creation (matter type 1)
+      else if (lowerText.includes('contact') || lowerText.includes('customer') || lowerText.startsWith('add customer')) {
         const nameClean = text.replace(/add|create|new|contact|customer/gi, '').trim() || 'New Contact';
         const phoneMatch = text.match(/(\+?\d[\d\s-]{7,}\d)/);
         const phone = phoneMatch ? phoneMatch[1].replace(/\s+/g, '') : null;
@@ -239,122 +384,97 @@ export async function handleTelegramUpdate(
 
         const cusId = generateEntityId('customer');
         const motId = generateEntityId('motion');
-        const nowUnix = Math.floor(Date.now() / 1000);
+        const dataJson = JSON.stringify({ fn: contactName, ph: phone, hdl: userHandle });
+        const idemKey = `${subdomain}:${userHandle}:${Date.now()}:cus_create`;
 
         if (env.DB) {
-          // 1. Create matter customer entity
           await executeWorkspaceTursoQuery(
             env.DB, env, scope,
-            `INSERT INTO matter (id, type, title, value, status, data, file, role, scope, at, updated)
-             VALUES (?, 'customer', ?, NULL, 'active', ?, NULL, NULL, ?, ?, ?)`,
-            [cusId, contactName, JSON.stringify({ name: contactName, phone, added_by: userHandle }), scope, nowUnix, nowUnix]
+            `INSERT INTO matter (id, type, title, ref, price, qty, min_qty, status, data, role, scope, at, updated, deleted_at)
+             VALUES (?, ?, ?, ?, NULL, NULL, NULL, 1, ?, 'customer', ?, unixepoch(), unixepoch(), NULL)`,
+            [cusId, MATTER_TYPES.person, contactName, cusId, dataJson, scope]
           );
 
-          // 2. Log motion event linking to matter entity ID
           await executeWorkspaceTursoQuery(
             env.DB, env, scope,
-            `INSERT INTO motion (id, type, ref, data, by, at, scope)
-             VALUES (?, 'change', ?, ?, ?, ?, ?)`,
-            [motId, cusId, JSON.stringify({ event: 'created', entity_type: 'customer', title: contactName }), userHandle, nowUnix, scope]
+            `INSERT OR IGNORE INTO motion (id, type, ref, data, by, at, scope, idem, deleted_at)
+             VALUES (?, ?, ?, ?, ?, unixepoch(), ?, ?, NULL)`,
+            [motId, MOTION_TYPES.activity, cusId, JSON.stringify({ event: 'contact_created', title: contactName }), userHandle, scope, idemKey]
           );
         }
 
-        responseText = `👤 Contact <b>${contactName}</b> saved to customer directory in <b>${scope}</b> (ID: <code>${cusId}</code>).`;
+        responseText = `👤 Contact <b>${contactName}</b> saved to directory in <b>${subdomain}</b> (ID: <code>${cusId}</code>).`;
       }
 
-      // Case A2: Item / Product Creation (e.g. "Add item Steak $25", "Create product Espresso $4.50")
+      // Case C: Item / Product Creation (matter type 3)
       else if (lowerText.includes('item') || lowerText.includes('product') || lowerText.startsWith('add product')) {
         const dollarMatch = text.match(/\$(\d+(\.\d+)?)/);
         const price = dollarMatch ? parseFloat(dollarMatch[1]) : 0;
         const nameClean = text.replace(/add|create|new|item|product|stock/gi, '').replace(/\$\d+(\.\d+)?/, '').trim() || 'New Item';
+        const sku = `SKU-${nameClean.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8)}`;
 
         const prdId = generateEntityId('product');
         const motId = generateEntityId('motion');
-        const nowUnix = Math.floor(Date.now() / 1000);
+        const dataJson = JSON.stringify({ name: nameClean, prc: price, sku, hdl: userHandle });
+        const idemKey = `${subdomain}:${userHandle}:${Date.now()}:prd_create`;
 
         if (env.DB) {
-          // 1. Create matter product entity
           await executeWorkspaceTursoQuery(
             env.DB, env, scope,
-            `INSERT INTO matter (id, type, title, value, status, data, file, role, scope, at, updated)
-             VALUES (?, 'product', ?, ?, 'active', ?, NULL, NULL, ?, ?, ?)`,
-            [prdId, nameClean, price, JSON.stringify({ name: nameClean, price, added_by: userHandle }), scope, nowUnix, nowUnix]
+            `INSERT INTO matter (id, type, title, ref, price, qty, min_qty, status, data, role, scope, at, updated, deleted_at)
+             VALUES (?, ?, ?, ?, ?, 100, 10, 1, ?, NULL, ?, unixepoch(), unixepoch(), NULL)`,
+            [prdId, MATTER_TYPES.product, nameClean, sku, price, dataJson, scope]
           );
 
-          // 2. Log motion event linking to product entity ID
           await executeWorkspaceTursoQuery(
             env.DB, env, scope,
-            `INSERT INTO motion (id, type, ref, data, by, at, scope)
-             VALUES (?, 'change', ?, ?, ?, ?, ?)`,
-            [motId, prdId, JSON.stringify({ event: 'created', entity_type: 'product', title: nameClean, price }), userHandle, nowUnix, scope]
+            `INSERT OR IGNORE INTO motion (id, type, ref, data, by, at, scope, idem, deleted_at)
+             VALUES (?, ?, ?, ?, ?, unixepoch(), ?, ?, NULL)`,
+            [motId, MOTION_TYPES.stock_receive, prdId, JSON.stringify({ sku, name: nameClean, qty: 100, price }), userHandle, scope, idemKey]
           );
         }
 
-        responseText = `📦 Item <b>${nameClean}</b> ($${price}) added to catalog in <b>${scope}</b> (ID: <code>${prdId}</code>).`;
+        responseText = `📦 Item <b>${nameClean}</b> ($${price.toFixed(2)}) added to catalog in <b>${subdomain}</b> (SKU: <code>${sku}</code>).`;
       }
 
-      // Case B: Refund Motion (Staff vs Manager / Admin)
+      // Case D: Refund Motion (motion type 102)
       else if (lowerText.includes('refund') || lowerText.includes('return')) {
         const amountMatch = text.match(/\$?(\d+(\.\d+)?)/);
         const amount = amountMatch ? parseFloat(amountMatch[1]) : 0;
         const reason = text.replace(/refund|return/gi, '').replace(/\$?(\d+(\.\d+)?)/, '').trim() || 'Customer refund request';
 
         const ordId = generateEntityId('order');
-        const nowUnix = Math.floor(Date.now() / 1000);
+        const motId = generateEntityId('motion');
+        const idemKey = `${subdomain}:${userHandle}:${Date.now()}:refund`;
+        const dataJson = JSON.stringify({ ord: ordId, amt: amount, reason, hdl: userHandle, role: userRole });
 
         if (userRole === 'staff') {
-          // Staff requires owner approval -> Create matter order + inbox task
-          const ibxId = generateEntityId('inbox');
-          const title = `Stock Refund Request: $${amount}`;
-          const dataJson = JSON.stringify({ amount, reason, requested_by: userHandle, order_id: ordId });
-
+          // Staff requires owner/manager approval -> push inbox approval task to owner
           if (env.DB) {
-            // 1. Insert matter order record (refund_pending)
             await executeWorkspaceTursoQuery(
               env.DB, env, scope,
-              `INSERT INTO matter (id, type, title, value, status, data, file, role, scope, at, updated)
-               VALUES (?, 'order', 'Refund Request', ?, 'refund_pending', ?, NULL, NULL, ?, ?, ?)`,
-              [ordId, amount, dataJson, scope, nowUnix, nowUnix]
-            );
-
-            // 2. Insert inbox task referencing the order ID
-            await executeWorkspaceTursoQuery(
-              env.DB, env, scope,
-              `INSERT INTO inbox (id, scope, type, title, status, ref, data, due, at)
-               VALUES (?, ?, 'refund', ?, 'pending_approval', ?, ?, NULL, ?)`,
-              [ibxId, scope, title, ordId, dataJson, nowUnix]
+              `INSERT OR IGNORE INTO motion (id, type, ref, data, by, at, scope, idem, deleted_at)
+               VALUES (?, ?, ?, ?, ?, unixepoch(), ?, ?, NULL)`,
+              [motId, MOTION_TYPES.refund, ordId, dataJson, userHandle, scope, idemKey]
             );
           }
-          responseText = `⏳ Refund request ($${amount}) submitted to <b>Linear Inbox</b> for Owner Approval (Ref: <code>${ibxId}</code>).`;
+          responseText = `⏳ Refund request ($${amount.toFixed(2)}) submitted for Manager Approval (Ref: <code>${motId}</code>).`;
         } else {
           // Manager / Admin -> Execute immediately
-          const motId = generateEntityId('motion');
-          const dataJson = JSON.stringify({ order_id: ordId, amount, reason, approved_by: userHandle, status: 'approved' });
-
           if (env.DB) {
-            // 1. Insert matter order record (refunded)
             await executeWorkspaceTursoQuery(
               env.DB, env, scope,
-              `INSERT INTO matter (id, type, title, value, status, data, file, role, scope, at, updated)
-               VALUES (?, 'order', 'Refund Processed', ?, 'refunded', ?, NULL, NULL, ?, ?, ?)`,
-              [ordId, -amount, dataJson, scope, nowUnix, nowUnix]
-            );
-
-            // 2. Insert motion event referencing the order ID
-            await executeWorkspaceTursoQuery(
-              env.DB, env, scope,
-              `INSERT INTO motion (id, type, ref, data, by, at, scope)
-               VALUES (?, 'refund', ?, ?, ?, ?, ?)`,
-              [motId, ordId, dataJson, userHandle, nowUnix, scope]
+              `INSERT OR IGNORE INTO motion (id, type, ref, data, by, at, scope, idem, deleted_at)
+               VALUES (?, ?, ?, ?, ?, unixepoch(), ?, ?, NULL)`,
+              [motId, MOTION_TYPES.refund, ordId, JSON.stringify({ ord: ordId, amt: amount, reason, approved_by: userHandle, status: 'approved' }), userHandle, scope, idemKey]
             );
           }
-          responseText = `✅ Refund ($${amount}) approved & processed by <b>${userHandle}</b> (${userRole}).`;
+          responseText = `✅ Refund ($${amount.toFixed(2)}) approved & recorded by <b>${userHandle}</b> (${userRole}).`;
         }
       }
 
-      // Case C: Sale / Order Motion (e.g., "Table 4: 2x Steak $85 Cash")
+      // Case E: Sale / Order Motion (motion type 101 sale & matter type 14 order)
       else if (/\$?(\d+)/.test(text) || lowerText.includes('table') || lowerText.includes('sale') || lowerText.includes('order')) {
-        // Extract explicit $ amount first (e.g. $85), otherwise strip "Table X" prefix first
         const dollarMatch = text.match(/\$(\d+(\.\d+)?)/);
         let total = 0;
         if (dollarMatch) {
@@ -366,48 +486,48 @@ export async function handleTelegramUpdate(
         }
 
         const items = text.replace(/\$\d+(\.\d+)?/, '').replace(/table\s*\d+:?/i, '').replace(/cash|card|paid/i, '').trim() || 'Items';
-        const paymentMethod = lowerText.includes('cash') ? 'Cash' : lowerText.includes('card') ? 'Card' : 'Cash';
+        const paymentMethod = lowerText.includes('card') ? 'Card' : 'Cash';
         const saleNum = Math.floor(1000 + Math.random() * 9000);
 
         const ordId = generateEntityId('order');
         const motId = generateEntityId('motion');
-        const nowUnix = Math.floor(Date.now() / 1000);
-        const dataJson = JSON.stringify({ sale_id: saleNum, items, total, payment_method: paymentMethod, order_id: ordId });
+        const idemKey = `${subdomain}:${userHandle}:${Date.now()}:sale`;
+        const dataJson = JSON.stringify({ sale_id: saleNum, items, amt: total, cur: 'USD', pay: paymentMethod, ord: ordId });
 
         if (env.DB) {
-          // 1. Insert matter order record (active)
+          // 1. Insert matter order record (type=14 order)
           await executeWorkspaceTursoQuery(
             env.DB, env, scope,
-            `INSERT INTO matter (id, type, title, value, status, data, file, role, scope, at, updated)
-             VALUES (?, 'order', ?, ?, 'active', ?, NULL, NULL, ?, ?, ?)`,
-            [ordId, `Sale #${saleNum}`, total, dataJson, scope, nowUnix, nowUnix]
+            `INSERT INTO matter (id, type, title, ref, price, qty, min_qty, status, data, role, scope, at, updated, deleted_at)
+             VALUES (?, ?, ?, ?, ?, 1, NULL, 3, ?, NULL, ?, unixepoch(), unixepoch(), NULL)`,
+            [ordId, MATTER_TYPES.order, `Order #${saleNum}`, ordId, total, dataJson, scope]
           );
 
-          // 2. Insert motion event referencing the order ID
+          // 2. Insert motion event (type=101 sale)
           await executeWorkspaceTursoQuery(
             env.DB, env, scope,
-            `INSERT INTO motion (id, type, ref, data, by, at, scope)
-             VALUES (?, 'sale', ?, ?, ?, ?, ?)`,
-            [motId, ordId, dataJson, userHandle, nowUnix, scope]
+            `INSERT OR IGNORE INTO motion (id, type, ref, data, by, at, scope, idem, deleted_at)
+             VALUES (?, ?, ?, ?, ?, unixepoch(), ?, ?, NULL)`,
+            [motId, MOTION_TYPES.sale, ordId, dataJson, userHandle, scope, idemKey]
           );
         }
 
-        responseText = `✅ Sale #${saleNum} ($${total}) logged by <b>${userHandle}</b> (Order ID: <code>${ordId}</code>).`;
+        responseText = `✅ Sale #${saleNum} ($${total.toFixed(2)}) logged by <b>${userHandle}</b> (Order: <code>${ordId}</code>).`;
       }
 
-      // Case D: General Activity Fallback
+      // Case F: General Activity Fallback (motion type 116 activity)
       else {
         const motId = generateEntityId('motion');
-        const nowUnix = Math.floor(Date.now() / 1000);
+        const idemKey = `${subdomain}:${userHandle}:${Date.now()}:act`;
         if (env.DB) {
           await executeWorkspaceTursoQuery(
             env.DB, env, scope,
-            `INSERT INTO motion (id, type, ref, data, by, at, scope)
-             VALUES (?, 'activity', NULL, ?, ?, ?, ?)`,
-            [motId, JSON.stringify({ text, platform: 'telegram' }), userHandle, nowUnix, scope]
+            `INSERT OR IGNORE INTO motion (id, type, ref, data, by, at, scope, idem, deleted_at)
+             VALUES (?, ?, NULL, ?, ?, unixepoch(), ?, ?, NULL)`,
+            [motId, MOTION_TYPES.activity, JSON.stringify({ text, platform: 'telegram' }), userHandle, scope, idemKey]
           );
         }
-        responseText = `🤖 Logged event from <b>${userHandle}</b>: "${text}" in workspace <b>${scope}</b>.`;
+        responseText = `🤖 Event captured from <b>${userHandle}</b> in <b>${subdomain}</b>: "${text}"`;
       }
     }
   }
@@ -482,7 +602,7 @@ async function getMembersForScope(env: { DB?: D1Database }, scope: string): Prom
 }
 
 /**
- * Send a message via Telegram Bot API with automatic fallback for HTML/Reply errors.
+ * Send a message via Telegram Bot API with automatic fallback for HTML errors.
  */
 export async function sendTelegramMessage(
   config: ChannelConfig,

@@ -211,6 +211,79 @@ export async function scaffoldOkfFolders(
   const rootIndex = `# ${workspaceName}\n\n**Modules:** ${modules.join(', ')}\n\n## Folders\n${folders.map(f => `- [${f}](./${f}/index.md)`).join('\n')}\n`;
   await uploadWorkspaceFile(env, scope, 'index.md', rootIndex);
 
+  // Root types.md (plan6.md canonical type map)
+  const typesMd = `# types.md — Canonical Type Map (plan6.md)
+
+## Matter Types
+1 = person
+2 = company
+3 = product
+4 = service
+5 = listing
+6 = document
+7 = asset
+8 = location
+9 = pipeline
+10 = card
+11 = note
+12 = goal
+13 = expense
+14 = order
+
+## Motion Types
+101 = sale
+102 = refund
+103 = quote
+104 = invoice
+105 = purchase_order
+106 = vendor_bill
+107 = payment
+108 = stock_receive
+109 = stock_transfer
+110 = stock_adjust
+111 = stock_writeoff
+112 = booking
+113 = booking_cancel
+114 = shipment
+115 = delivery
+116 = activity
+117 = assignment
+118 = clock_in
+119 = clock_out
+120 = card_stage
+121 = card_won
+122 = card_lost
+123 = status_change
+124 = order_placed
+125 = order_ready
+126 = order_served
+
+## Inbox Types
+1 = task
+2 = alert
+3 = approval
+4 = reminder
+5 = notification
+6 = suggestion
+
+## Graph Rel Types
+1 = placed_by
+3 = fulfills
+4 = works_at
+5 = assigned_to
+6 = stored_at
+7 = from
+8 = for_contact
+9 = in_pipeline
+10 = owned_by
+11 = about
+12 = member_of
+13 = linked_to
+14 = variant_of
+15 = served_by
+`;
+  await uploadWorkspaceFile(env, scope, 'types.md', typesMd);
+
   // Folder index.md files
   for (const folder of folders) {
     const folderIndex = `# ${folder.charAt(0).toUpperCase() + folder.slice(1)}\n`;

@@ -621,13 +621,13 @@ ${membersYaml}
       // 2. Fallback to fetchInbox worker endpoint
       const fetched = await fetchInbox(scope).catch(() => []);
       if (fetched && fetched.length > 0) {
-        setInboxTasks(fetched.map(t => ({
+        setInboxTasks(fetched.map((t: any) => ({
           id: t.id,
-          type: t.event_type || 'task',
+          type: t.typeName || t.event_type || 'task',
           title: t.title,
-          status: t.status || 'open',
-          created_at: t.created_at,
-          data: t.event_data,
+          status: t.status === 2 || t.status === 'done' ? 'done' : 'open',
+          created_at: String(t.created_at || ''),
+          data: t.data || t.event_data,
         })));
         return;
       }

@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { initClient } from './lib/db';
+import { initClient, executeWorkspaceTursoQuery, dbContext, envContext } from './lib/db';
 import { findActionMemories, incrementMemoryUsage } from './lib/memory';
 import { getUserTimeline } from './lib/inbox';
 import { executeRead, executeCreate, executeUpdate, executeDelete } from './lib/helpers';
@@ -10,7 +10,6 @@ import { CORE_MODULES } from './lib/core-modules';
 import { extractBusinessInfo } from './lib/extract-business';
 import { writeEvent, getUserInbox, markTaskDone } from './lib/events';
 import { getOrCreateWorkspaceDb } from './lib/workspace-db';
-import { dbContext, envContext } from './lib/db';
 import { parseSkillMarkdown, generateCompactActionIndex } from './lib/skill-parser';
 import { executeAITask } from './lib/action-executor';
 
@@ -31,25 +30,247 @@ app.use('*', async (c, next) => {
 // API Routes
 // ============================================================
 
-// GET /workspaces — list user's workspaces
+// GET /workspaces — list user's workspaces (owned + member of)
 app.get('/workspaces', async (c) => {
   const userId = c.req.header('X-User-Id') || 'guest';
+  const email = (c.req.header('X-User-Email') || c.req.query('email') || '').toLowerCase();
 
   // Ensure columns exist
-  for (const col of ['user_id', 'type', 'custom_domain']) {
+  for (const col of ['user_id', 'type', 'custom_domain', 'name']) {
     try { await c.env.DB.prepare(`ALTER TABLE workspaces ADD COLUMN ${col} TEXT`).run(); } catch {}
   }
 
-  const result = await c.env.DB.prepare(
-    'SELECT subdomain, scope, user_id, type FROM workspaces WHERE user_id = ?'
-  ).bind(userId).all();
-  const workspaces = (result.results || []).map((r: any) => ({
-    scope: r.scope,
-    subdomain: r.subdomain,
-    type: r.type || 'business',
-    role: r.user_id === userId ? 'owner' : 'member',
-  }));
-  return c.json({ workspaces });
+  const workspacesMap = new Map<string, any>();
+
+  // 1. Workspaces owned by user
+  try {
+    const ownedRes = await c.env.DB.prepare(
+      'SELECT subdomain, scope, user_id, type, name FROM workspaces WHERE user_id = ?'
+    ).bind(userId).all();
+
+    for (const r of (ownedRes.results || [])) {
+      workspacesMap.set(r.subdomain, {
+        scope: r.scope,
+        subdomain: r.subdomain,
+        name: r.name || r.subdomain,
+        type: r.type || 'business',
+        role: 'owner',
+      });
+    }
+  } catch (err) {
+    console.warn('[workspaces] Error fetching owned workspaces:', err);
+  }
+
+  // 2. Workspaces where user is a joined member
+  if (email || (userId && userId !== 'guest')) {
+    try {
+      const memberRes = await c.env.DB.prepare(
+        `SELECT m.scope, m.role, w.subdomain, w.name, w.type 
+         FROM members m
+         JOIN workspaces w ON (m.scope = w.scope OR m.scope = 'w:' || w.subdomain)
+         WHERE (m.email IS NOT NULL AND m.email = ?) OR (m.user_id IS NOT NULL AND m.user_id = ?)`
+      ).bind(email || '__none__', userId).all();
+
+      for (const r of (memberRes.results || [])) {
+        if (!workspacesMap.has(r.subdomain)) {
+          workspacesMap.set(r.subdomain, {
+            scope: r.scope,
+            subdomain: r.subdomain,
+            name: r.name || r.subdomain,
+            type: r.type || 'business',
+            role: r.role || 'member',
+          });
+        }
+      }
+    } catch (err) {
+      console.warn('[workspaces] Error fetching member workspaces:', err);
+    }
+  }
+
+  return c.json({ workspaces: Array.from(workspacesMap.values()) });
+});
+
+// POST /channels/pair/generate — generate 10-minute 6-character pairing code
+app.post('/channels/pair/generate', async (c) => {
+  const userId = c.req.header('X-User-Id') || 'guest';
+  const body = await c.req.json().catch(() => ({}));
+  const subdomain = (body.subdomain || '').toLowerCase().trim();
+  if (!subdomain) return c.json({ error: 'Missing subdomain' }, 400);
+
+  const scope = `w:${subdomain}`;
+
+  // Ensure pairing_codes table exists
+  await c.env.DB.prepare(`
+    CREATE TABLE IF NOT EXISTS pairing_codes (
+      code TEXT PRIMARY KEY,
+      subdomain TEXT NOT NULL,
+      scope TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      expires_at INTEGER NOT NULL
+    )
+  `).run().catch(() => {});
+
+  // Generate 6-character clean code (e.g. TAR-7K92)
+  const randChars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let randPart = '';
+  for (let i = 0; i < 4; i++) {
+    randPart += randChars.charAt(Math.floor(Math.random() * randChars.length));
+  }
+  const code = `TAR-${randPart}`;
+  const now = Date.now();
+  const expiresAt = now + 600000; // 10 minutes
+
+  await c.env.DB.prepare(
+    'INSERT INTO pairing_codes (code, subdomain, scope, user_id, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)'
+  ).bind(code, subdomain, scope, userId, now, expiresAt).run();
+
+  return c.json({
+    code,
+    subdomain,
+    scope,
+    expiresInSeconds: 600,
+    expiresAt,
+  });
+});
+
+// GET /channels/list — list connected channels for a workspace
+app.get('/channels/list', async (c) => {
+  const subdomain = c.req.query('subdomain') || '';
+  const scope = subdomain ? `w:${subdomain.toLowerCase()}` : (c.req.query('scope') || '');
+  if (!scope) return c.json({ channels: [] });
+
+  try {
+    const result = await c.env.DB.prepare(
+      'SELECT chat_id, scope, name, platform, created_at FROM channels WHERE scope = ?'
+    ).bind(scope).all();
+
+    return c.json({ channels: result.results || [] });
+  } catch (err) {
+    return c.json({ channels: [] });
+  }
+});
+
+// POST /channels/disconnect — disconnect a channel from workspace
+app.post('/channels/disconnect', async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const { chatId } = body;
+  if (!chatId) return c.json({ error: 'Missing chatId' }, 400);
+
+  try {
+    await c.env.DB.prepare('DELETE FROM channels WHERE chat_id = ?').bind(chatId).run();
+    return c.json({ success: true });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// POST /members/claim — claim role using 4-digit code and bind Google Account
+app.post('/members/claim', async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const { code, email, name, userId } = body;
+  if (!code || !email) {
+    return c.json({ error: 'Missing code or email' }, 400);
+  }
+
+  const cleanCode = code.toString().trim();
+
+  // Ensure member_invites table exists
+  await c.env.DB.prepare(`
+    CREATE TABLE IF NOT EXISTS member_invites (
+      code TEXT PRIMARY KEY,
+      subdomain TEXT NOT NULL,
+      scope TEXT NOT NULL,
+      handle TEXT NOT NULL,
+      role TEXT NOT NULL,
+      section TEXT,
+      tables TEXT,
+      created_by TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      expires_at INTEGER NOT NULL
+    )
+  `).run().catch(() => {});
+
+  // 1. Look up invite in member_invites table
+  const invite = (await c.env.DB.prepare(
+    'SELECT code, subdomain, scope, handle, role, section, tables, expires_at FROM member_invites WHERE code = ? AND expires_at > ?'
+  ).bind(cleanCode, Date.now()).first()) as {
+    code: string;
+    subdomain: string;
+    scope: string;
+    handle: string;
+    role: string;
+    section?: string;
+    tables?: string;
+    expires_at: number;
+  } | null;
+
+  if (!invite) {
+    return c.json({ error: 'Invalid or expired 4-digit join code. Please ask your team owner for a new code.' }, 400);
+  }
+
+  // 2. Atomically delete code (single-use)
+  await c.env.DB.prepare('DELETE FROM member_invites WHERE code = ?').bind(cleanCode).run();
+
+  const memberId = `${invite.scope}:${email.toLowerCase()}`;
+  const memberUserId = userId || `usr_${email.replace(/[^a-zA-Z0-9]/g, '_')}`;
+
+  // 3. Save in D1 members table
+  await c.env.DB.prepare(
+    `INSERT INTO members (id, scope, user_id, email, handle, role, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET user_id = excluded.user_id, email = excluded.email, role = excluded.role, updated_at = excluded.updated_at`
+  ).bind(memberId, invite.scope, memberUserId, email.toLowerCase(), invite.handle, invite.role, new Date().toISOString()).run();
+
+  // 4. Update Workspace Turso DB
+  try {
+    const metaJson = JSON.stringify({
+      em: email,
+      hdl: invite.handle,
+      sec: invite.section,
+      tbl: invite.tables,
+      role: invite.role,
+      name: name || email.split('@')[0],
+    });
+
+    await executeWorkspaceTursoQuery(
+      c.env.DB, c.env, invite.scope,
+      `INSERT INTO matter (id, type, title, ref, price, qty, min_qty, status, data, role, scope, at, updated, deleted_at)
+       VALUES (?, 1, ?, ?, NULL, NULL, NULL, 1, ?, ?, ?, unixepoch(), unixepoch(), NULL)
+       ON CONFLICT(id) DO UPDATE SET role = excluded.role, data = excluded.data, updated = unixepoch(), deleted_at = NULL`,
+      [memberUserId, name || email, email, metaJson, invite.role, invite.scope]
+    );
+
+    // Link person to workspace in graph (rel=4 works_at)
+    await executeWorkspaceTursoQuery(
+      c.env.DB, c.env, invite.scope,
+      `INSERT OR REPLACE INTO graph (src, rel, tgt, scope, time, deleted_at)
+       VALUES (?, 4, ?, ?, unixepoch(), NULL)`,
+      [memberUserId, invite.subdomain, invite.scope]
+    );
+
+    // Link person to tables if present (rel=5 assigned_to)
+    if (invite.tables) {
+      await executeWorkspaceTursoQuery(
+        c.env.DB, c.env, invite.scope,
+        `INSERT OR REPLACE INTO graph (src, rel, tgt, scope, time, deleted_at)
+         VALUES (?, 5, ?, ?, unixepoch(), NULL)`,
+        [memberUserId, `tables_${invite.tables}`, invite.scope]
+      );
+    }
+  } catch (err) {
+    console.warn('[members/claim] Turso sync warning:', err);
+  }
+
+  return c.json({
+    success: true,
+    workspace: {
+      subdomain: invite.subdomain,
+      scope: invite.scope,
+      role: invite.role,
+      handle: invite.handle,
+    }
+  });
 });
 
 // POST /workspaces/create — create a new workspace

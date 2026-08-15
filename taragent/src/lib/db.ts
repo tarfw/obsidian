@@ -81,16 +81,49 @@ export function getWorkspaceClient(env: any, url: string, token: string) {
 }
 
 /**
- * Executes a SQL query against the per-workspace Turso DB found in D1's workspaces table.
+ * Executes a SQL query directly using Turso URL and auth token.
+ */
+export async function executeDirectTursoQuery(
+  url: string,
+  token: string,
+  sql: string,
+  args: any[] = []
+): Promise<any[]> {
+  const client = getWorkspaceClient(null, url, token);
+  const result = await client.execute({ sql, args });
+  return toRows(result);
+}
+
+/**
+ * Executes a SQL query against the per-workspace Turso DB found in D1's workspaces table
+ * OR directly when given a Turso URL and token.
  */
 export async function executeWorkspaceTursoQuery(
-  d1: D1Database,
-  env: any,
-  scope: string,
-  sql: string,
+  d1OrUrl: D1Database | string,
+  envOrToken: any,
+  scopeOrSql: string,
+  sqlOrArgs?: string | any[],
   args: any[] = []
 ): Promise<any> {
   try {
+    // Overload 1: Direct URL + Token call: executeWorkspaceTursoQuery(url, token, sql, args)
+    if (typeof d1OrUrl === 'string' && (d1OrUrl.startsWith('libsql://') || d1OrUrl.startsWith('https://'))) {
+      const url = d1OrUrl;
+      const token = typeof envOrToken === 'string' ? envOrToken : '';
+      const sql = scopeOrSql;
+      const queryArgs = Array.isArray(sqlOrArgs) ? sqlOrArgs : args;
+      const client = getWorkspaceClient(null, url, token);
+      const result = await client.execute({ sql, args: queryArgs });
+      return toRows(result);
+    }
+
+    // Overload 2: D1 Workspace lookup: executeWorkspaceTursoQuery(d1, env, scope, sql, args)
+    const d1 = d1OrUrl as D1Database;
+    const env = envOrToken;
+    const scope = scopeOrSql;
+    const sql = typeof sqlOrArgs === 'string' ? sqlOrArgs : '';
+    const queryArgs = args || [];
+
     const subdomain = scope.replace(/^[tw]:/, '');
     
     // Look up workspace Turso DB credentials from D1
@@ -108,11 +141,10 @@ export async function executeWorkspaceTursoQuery(
     }
 
     const client = getWorkspaceClient(env, url, token);
-    const result = await client.execute({ sql, args });
-    console.log(`[turso] Successfully executed query on workspace Turso DB (${url})`);
-    return result;
+    const result = await client.execute({ sql, args: queryArgs });
+    return toRows(result);
   } catch (err) {
-    console.error(`[turso] Error executing query on workspace Turso DB for scope ${scope}:`, err);
+    console.error(`[turso] Error executing query on workspace Turso DB:`, err);
     return null;
   }
 }

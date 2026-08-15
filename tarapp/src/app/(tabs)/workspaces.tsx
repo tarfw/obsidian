@@ -40,6 +40,8 @@ import DirectoryOverlay from '@/components/DirectoryOverlay';
 import ExploreOverlay from '@/components/ExploreOverlay';
 import CanvasOverlay from '@/components/CanvasOverlay';
 import CreateWorkspace from '@/components/CreateWorkspace';
+import ChannelConnectModal from '@/components/ChannelConnectModal';
+import JoinWorkspaceModal from '@/components/JoinWorkspaceModal';
 import { TarLogo } from '@/components/TarLogo';
 import { TarLogoLoader } from '@/components/TarLogoLoader';
 import { updateStock } from '@/lib/inventory';
@@ -203,6 +205,8 @@ export default function WorkspacesScreen() {
   const [submittingContact, setSubmittingContact] = useState(false);
   const [contactResultMessage, setContactResultMessage] = useState<string | null>(null);
   const [editContactEntity, setEditContactEntity] = useState<any | null>(null);
+  const [showConnectChatModal, setShowConnectChatModal] = useState(false);
+  const [showJoinModal, setShowJoinModal] = useState(false);
 
   // Mention (@ / #) state
   const [showMentionPopover, setShowMentionPopover] = useState(false);
@@ -1780,6 +1784,51 @@ ${membersYaml}
                 );
               })}
             </ScrollView>
+
+            {/* Quick Actions (Connect Chat / Join with Code / Create Workspace) */}
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: 12, borderTopWidth: 1, borderColor: theme.border + '40', paddingTop: 12 }}>
+              <TouchableOpacity
+                onPress={() => {
+                  setShowDropdown(false);
+                  setShowConnectChatModal(true);
+                }}
+                style={{
+                  flex: 1,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: theme.primary + '15',
+                  paddingVertical: 10,
+                  borderRadius: 10,
+                  gap: 6,
+                }}
+              >
+                <Ionicons name="chatbubbles-outline" size={16} color={theme.primary} />
+                <Text style={{ fontSize: 12.5, fontWeight: '600', color: theme.primary }}>Connect Chat</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => {
+                  setShowDropdown(false);
+                  setShowJoinModal(true);
+                }}
+                style={{
+                  flex: 1,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: theme.backgroundElement,
+                  borderWidth: 1,
+                  borderColor: theme.border,
+                  paddingVertical: 10,
+                  borderRadius: 10,
+                  gap: 6,
+                }}
+              >
+                <Ionicons name="key-outline" size={16} color={theme.text} />
+                <Text style={{ fontSize: 12.5, fontWeight: '600', color: theme.text }}>Join Code</Text>
+              </TouchableOpacity>
+            </View>
           </Pressable>
         </Pressable>
       </Modal>
@@ -1794,6 +1843,28 @@ ${membersYaml}
           closeCreateModal();
           await fetchWorkspacesList();
           const found = workspaces.find((w) => w.subdomain === slug);
+          if (found) {
+            setCurrentWorkspace(found);
+          }
+        }}
+      />
+
+      {/* Secure Channel Connect Modal (Flow 2) */}
+      <ChannelConnectModal
+        visible={showConnectChatModal}
+        onClose={() => setShowConnectChatModal(false)}
+        subdomain={currentWorkspace?.subdomain || ''}
+        workspaceName={workspaceName || currentWorkspace?.subdomain || 'Workspace'}
+        userId={currentWorkspace?.scope || 'guest'}
+      />
+
+      {/* Private Member Join Modal (Flow 3) */}
+      <JoinWorkspaceModal
+        visible={showJoinModal}
+        onClose={() => setShowJoinModal(false)}
+        onSuccess={async (joined) => {
+          await fetchWorkspacesList();
+          const found = workspaces.find((w) => w.subdomain === joined.subdomain);
           if (found) {
             setCurrentWorkspace(found);
           }

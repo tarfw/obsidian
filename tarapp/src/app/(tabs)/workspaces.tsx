@@ -3,7 +3,7 @@ import { StyleSheet, View, Text, Pressable, ScrollView, TextInput, ActivityIndic
 import { KeyboardAwareScrollView, KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import Ionicons from '@expo/vector-icons/Ionicons';
+import { Ionicons } from '@expo/vector-icons';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import * as SecureStore from 'expo-secure-store';
 import { BlurView } from 'expo-blur';
@@ -2253,23 +2253,27 @@ ${membersYaml}
 }
 
 
-function parseIndexMarkdown(md: string) {
+function parseIndexMarkdown(md?: string | null) {
   let name = '';
   let type = 'business';
   let modules: string[] = [];
 
+  if (!md || typeof md !== 'string') {
+    return { name, type, modules };
+  }
+
   const nameMatch = md.match(/^#\s*(.+)$/m);
-  if (nameMatch) {
+  if (nameMatch && nameMatch[1]) {
     name = nameMatch[1].trim();
   }
 
   const typeMatch = md.match(/\*\*Type:\*\*\s*(.+)/i);
-  if (typeMatch) {
+  if (typeMatch && typeMatch[1]) {
     type = typeMatch[1].trim().toLowerCase();
   }
 
   const modulesMatch = md.match(/\*\*Modules:\*\*\s*(.+)/i);
-  if (modulesMatch) {
+  if (modulesMatch && modulesMatch[1]) {
     modules = modulesMatch[1]
       .split(',')
       .map(m => m.trim().toLowerCase())

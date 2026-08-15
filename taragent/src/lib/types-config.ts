@@ -117,28 +117,32 @@ export const GRAPH_REL_TYPE_NAMES: Record<number, GraphRelTypeName> = Object.fro
 );
 
 // ── Helper Resolvers ─────────────────────────────────────────────────
-export function toMatterTypeCode(type: string | number): number {
+export function toMatterTypeCode(type?: string | number | null): number {
+  if (type === undefined || type === null || type === '') return 1;
   if (typeof type === 'number') return type;
-  const lower = type.toLowerCase() as MatterTypeName;
-  return MATTER_TYPES[lower] ?? 1; // Default to person/generic if not matched
+  const lower = String(type).toLowerCase().trim() as MatterTypeName;
+  return MATTER_TYPES[lower] ?? 1;
 }
 
-export function toMotionTypeCode(type: string | number): number {
+export function toMotionTypeCode(type?: string | number | null): number {
+  if (type === undefined || type === null || type === '') return 123;
   if (typeof type === 'number') return type;
-  const lower = type.toLowerCase() as MotionTypeName;
-  return MOTION_TYPES[lower] ?? 123; // Default to status_change
+  const lower = String(type).toLowerCase().trim() as MotionTypeName;
+  return MOTION_TYPES[lower] ?? 123;
 }
 
-export function toInboxTypeCode(type: string | number): number {
+export function toInboxTypeCode(type?: string | number | null): number {
+  if (type === undefined || type === null || type === '') return 1;
   if (typeof type === 'number') return type;
-  const lower = type.toLowerCase() as InboxTypeName;
-  return INBOX_TYPES[lower] ?? 1; // Default to task
+  const lower = String(type).toLowerCase().trim() as InboxTypeName;
+  return INBOX_TYPES[lower] ?? 1;
 }
 
-export function toGraphRelCode(rel: string | number): number {
+export function toGraphRelCode(rel?: string | number | null): number {
+  if (rel === undefined || rel === null || rel === '') return 4;
   if (typeof rel === 'number') return rel;
-  const lower = rel.toLowerCase() as GraphRelTypeName;
-  return GRAPH_REL_TYPES[lower] ?? 4; // Default to works_at
+  const lower = String(rel).toLowerCase().trim() as GraphRelTypeName;
+  return GRAPH_REL_TYPES[lower] ?? 4;
 }
 
 // ── Compact JSON Key Mappings (Rule 2) ───────────────────────────────

@@ -1231,14 +1231,27 @@ app.post('/channels/telegram/webhook', async (c) => {
   try {
     const body = await c.req.json();
     const { handleTelegramUpdate, sendTelegramMessage } = await import('./channels/telegram');
-    const result = await handleTelegramUpdate(body, { DB: c.env.DB });
-    if (!result) return c.json({ ok: true });
+    const result = await handleTelegramUpdate(body, c.env);
+    if (!result || !result.response || !result.response.text) {
+      return c.json({ ok: true });
+    }
 
-    // Send response back to Telegram chat
+    // Try outbound sendMessage if botToken is present
     const botToken = c.env?.TELEGRAM_BOT_TOKEN || process.env?.TELEGRAM_BOT_TOKEN;
-    await sendTelegramMessage({ platform: 'telegram', botToken }, result.response);
+    if (botToken) {
+      sendTelegramMessage({ platform: 'telegram', botToken }, result.response).catch((e) =>
+        console.warn('[Telegram Outbound Send Error]:', e)
+      );
+    }
 
-    return c.json({ ok: true, response: result.response.text });
+    // Always return webhook method response for instant Telegram inline execution
+    return c.json({
+      method: 'sendMessage',
+      chat_id: result.response.chatId,
+      text: result.response.text,
+      parse_mode: 'HTML',
+      reply_to_message_id: result.response.replyToMessageId ? Number(result.response.replyToMessageId) : undefined,
+    });
   } catch (err: any) {
     console.error('[Telegram Webhook Error]:', err);
     return c.json({ ok: false, error: err.message }, 200);

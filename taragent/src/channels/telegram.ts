@@ -135,11 +135,19 @@ export async function handleTelegramUpdate(
       } else if (env.DB) {
         const groupName = message.chat?.title || 'Telegram Group';
         const now = Date.now();
+        const normalized = targetCodeRaw.replace(/^TAR[-_]?/i, '');
 
-        // 1. Check pairing_codes table
-        const pairing = await env.DB.prepare(
-          'SELECT code, subdomain, scope, user_id FROM pairing_codes WHERE (UPPER(code) = ? OR code = ?) AND expires_at > ?'
-        ).bind(targetCodeRaw, targetCodeRaw, now).first<{ code: string; subdomain: string; scope: string; user_id: string }>();
+        // 1. Check pairing_codes table (match TAR-8XGL, 8XGL, or raw code)
+        const pairing = (await env.DB.prepare(
+          `SELECT code, subdomain, scope, user_id FROM pairing_codes 
+           WHERE (UPPER(code) = ? OR UPPER(code) = ? OR UPPER(code) = ? OR code = ?) 
+             AND expires_at > ?`
+        ).bind(targetCodeRaw, `TAR-${normalized}`, normalized, targetCodeRaw, now).first()) as {
+          code: string;
+          subdomain: string;
+          scope: string;
+          user_id: string;
+        } | null;
 
         if (pairing) {
           // 2. Atomically delete code (Self-destruct)

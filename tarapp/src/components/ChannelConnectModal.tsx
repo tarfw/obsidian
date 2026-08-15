@@ -7,9 +7,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   FlatList,
-  Alert,
   Share,
-  Linking,
   Pressable,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -17,7 +15,6 @@ import { Ionicons } from '@expo/vector-icons';
 import {
   generatePairingCode,
   getConnectedChannels,
-  disconnectChannel,
   ConnectedChannel,
   PairingCodeResponse,
 } from '../lib/channels';
@@ -61,8 +58,8 @@ export default function ChannelConnectModal({
     try {
       const data = await generatePairingCode(subdomain, userId);
       setPairingData(data);
-    } catch (err: any) {
-      Alert.alert('Error', err.message || 'Failed to generate code');
+    } catch {
+      // Fallback display
     } finally {
       setLoading(false);
     }
@@ -84,7 +81,7 @@ export default function ChannelConnectModal({
     try {
       await Share.share({
         message: commandText,
-        title: 'Tar Bot Link Command',
+        title: 'Pairing Command',
       });
       setCopied(true);
       setTimeout(() => setCopied(false), 3000);
@@ -94,40 +91,11 @@ export default function ChannelConnectModal({
     }
   }
 
-  async function handleOpenTelegram() {
-    const tgUrl = 'tg://resolve?domain=tarbee_bot';
-    const webUrl = 'https://t.me/tarbee_bot';
-    try {
-      const supported = await Linking.canOpenURL(tgUrl);
-      if (supported) {
-        await Linking.openURL(tgUrl);
-      } else {
-        await Linking.openURL(webUrl);
-      }
-    } catch {
-      await Linking.openURL(webUrl);
-    }
-  }
-
-  async function handleDisconnect(chatId: string) {
-    Alert.alert('Unlink Group', 'Are you sure you want to disconnect this chat group?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Disconnect',
-        style: 'destructive',
-        onPress: async () => {
-          await disconnectChannel(chatId);
-          loadChannels();
-        },
-      },
-    ]);
-  }
-
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={styles.overlay}>
         <Pressable style={styles.backdrop} onPress={onClose} />
-        <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom + 16, 28) }]}>
+        <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom + 16, 24) }]}>
           {/* Top Drag Handle */}
           <View style={styles.handle} />
 
@@ -140,7 +108,7 @@ export default function ChannelConnectModal({
               <View>
                 <Text style={styles.title}>Connect Team Chat</Text>
                 <Text style={styles.subTitle} numberOfLines={1}>
-                  Link Telegram group to <Text style={styles.bold}>{workspaceName}</Text>
+                  Link Telegram, Discord, or Slack to <Text style={styles.bold}>{workspaceName}</Text>
                 </Text>
               </View>
             </View>
@@ -149,9 +117,9 @@ export default function ChannelConnectModal({
             </TouchableOpacity>
           </View>
 
-          {/* Main Action Box */}
+          {/* Command Card */}
           <View style={styles.commandCard}>
-            <Text style={styles.cardHeaderLabel}>COMMAND TO PAIR</Text>
+            <Text style={styles.cardHeaderLabel}>TYPE IN YOUR CHAT GROUP</Text>
 
             {loading ? (
               <ActivityIndicator color="#2563EB" style={{ marginVertical: 14 }} />
@@ -175,56 +143,38 @@ export default function ChannelConnectModal({
               </TouchableOpacity>
             ) : null}
 
-            <View style={styles.actionRow}>
-              <TouchableOpacity style={styles.tgBtn} onPress={handleOpenTelegram}>
-                <Ionicons name="paper-plane" size={14} color="#FFFFFF" />
-                <Text style={styles.tgBtnText}>Open Telegram Bot</Text>
-              </TouchableOpacity>
-              <Text style={styles.timerNote}>⏱️ Expires in 10 mins</Text>
-            </View>
+            <Text style={styles.timerNote}>⏱️ Single-use code • Expires in 10 minutes</Text>
           </View>
 
           {/* Connected Channels List */}
-          <View style={styles.listContainer}>
-            <View style={styles.listHeader}>
+          {channels.length > 0 && (
+            <View style={styles.listContainer}>
               <Text style={styles.listTitle}>CONNECTED GROUPS ({channels.length})</Text>
-              <TouchableOpacity onPress={loadChannels} hitSlop={8}>
-                <Ionicons name="refresh" size={14} color="#6B7280" />
-              </TouchableOpacity>
-            </View>
 
-            {loadingChannels ? (
-              <ActivityIndicator size="small" color="#9CA3AF" style={{ marginVertical: 8 }} />
-            ) : channels.length === 0 ? (
-              <Text style={styles.emptyNote}>No groups connected yet. Type the command above in your group.</Text>
-            ) : (
-              <FlatList
-                data={channels}
-                keyExtractor={(item) => item.chat_id}
-                style={{ maxHeight: 120 }}
-                renderItem={({ item }) => (
-                  <View style={styles.channelRow}>
-                    <View style={styles.channelLeft}>
-                      <Ionicons
-                        name={item.platform === 'telegram' ? 'paper-plane' : 'logo-discord'}
-                        size={15}
-                        color="#2563EB"
-                      />
-                      <Text style={styles.channelTitle} numberOfLines={1}>
-                        {item.name || item.chat_id}
+              {loadingChannels ? (
+                <ActivityIndicator size="small" color="#9CA3AF" style={{ marginVertical: 6 }} />
+              ) : (
+                <FlatList
+                  data={channels}
+                  keyExtractor={(item) => item.chat_id}
+                  style={{ maxHeight: 100 }}
+                  renderItem={({ item }) => (
+                    <View style={styles.channelRow}>
+                      <View style={styles.channelLeft}>
+                        <View style={styles.greenDot} />
+                        <Text style={styles.channelTitle} numberOfLines={1}>
+                          {item.name || item.chat_id}
+                        </Text>
+                      </View>
+                      <Text style={styles.platformBadge}>
+                        {item.platform === 'telegram' ? 'Telegram' : item.platform === 'discord' ? 'Discord' : 'Chat'}
                       </Text>
                     </View>
-                    <TouchableOpacity
-                      onPress={() => handleDisconnect(item.chat_id)}
-                      style={styles.unlinkBtn}
-                    >
-                      <Text style={styles.unlinkText}>Unlink</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-              />
-            )}
-          </View>
+                  )}
+                />
+              )}
+            </View>
+          )}
 
           {/* Done Button */}
           <TouchableOpacity style={styles.doneButton} onPress={onClose}>
@@ -321,12 +271,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: '#FFFFFF',
-    paddingVertical: 10,
+    paddingVertical: 11,
     paddingHorizontal: 14,
     borderRadius: 10,
     borderWidth: 1,
     borderColor: '#CBD5E1',
-    marginBottom: 10,
+    marginBottom: 8,
   },
   commandText: {
     fontSize: 17,
@@ -355,55 +305,27 @@ const styles = StyleSheet.create({
   copiedBadgeText: {
     color: '#059669',
   },
-  actionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  tgBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#2563EB',
-    paddingVertical: 7,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-  },
-  tgBtnText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
   timerNote: {
     fontSize: 11.5,
     color: '#94A3B8',
+    textAlign: 'center',
+    marginTop: 2,
   },
   listContainer: {
     marginBottom: 16,
-  },
-  listHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 8,
   },
   listTitle: {
     fontSize: 11,
     fontWeight: '700',
     color: '#64748B',
     letterSpacing: 0.5,
-  },
-  emptyNote: {
-    fontSize: 12,
-    color: '#94A3B8',
-    fontStyle: 'italic',
-    paddingVertical: 4,
+    marginBottom: 8,
   },
   channelRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 8,
+    paddingVertical: 7,
     borderBottomWidth: 1,
     borderBottomColor: '#F1F5F9',
   },
@@ -413,21 +335,24 @@ const styles = StyleSheet.create({
     gap: 8,
     flex: 1,
   },
+  greenDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: '#10B981',
+  },
   channelTitle: {
     fontSize: 13,
     fontWeight: '500',
     color: '#1E293B',
   },
-  unlinkBtn: {
-    paddingVertical: 3,
-    paddingHorizontal: 8,
-    borderRadius: 6,
-    backgroundColor: '#FEE2E2',
-  },
-  unlinkText: {
+  platformBadge: {
     fontSize: 11,
-    fontWeight: '600',
-    color: '#DC2626',
+    color: '#64748B',
+    backgroundColor: '#F1F5F9',
+    paddingVertical: 2,
+    paddingHorizontal: 6,
+    borderRadius: 4,
   },
   doneButton: {
     backgroundColor: '#0F172A',

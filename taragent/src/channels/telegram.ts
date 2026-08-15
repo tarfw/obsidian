@@ -119,7 +119,7 @@ export async function handleTelegramUpdate(
 
   // Parse Slash Commands — locate command token
   const tokens = text.split(/\s+/);
-  const cmdIndex = tokens.findIndex(t => t.startsWith('/') || t.includes('/link') || t.includes('/role') || t.includes('/team') || t.includes('/remove'));
+  const cmdIndex = tokens.findIndex(t => t.startsWith('/') || t.includes('/link') || t.includes('/unlink') || t.includes('/role') || t.includes('/team') || t.includes('/remove'));
 
   if (cmdIndex !== -1 || text.startsWith('/')) {
     const parts = cmdIndex !== -1 ? tokens.slice(cmdIndex) : tokens;
@@ -188,7 +188,27 @@ export async function handleTelegramUpdate(
     }
 
     // ────────────────────────────────────────────────────────────────
-    // 2. /role <@handle> <role> [section:X] [tables:Y-Z] (Flow 3: Private Member Onboarding)
+    // 2. /unlink (Admin unlinks group from workspace)
+    // ────────────────────────────────────────────────────────────────
+    else if (command === '/unlink' || command.startsWith('/unlink')) {
+      const rawScope = await getScopeForChat(env, chatId);
+      if (!rawScope || rawScope === 'unassigned') {
+        responseText = '⚠️ This group is not currently linked to any workspace.';
+      } else if (env.DB) {
+        const subdomain = extractSubdomain(rawScope);
+        const scope = `w:${subdomain}`;
+        const senderRole = await getUserRole(env, scope, userHandle);
+        if (senderRole !== 'owner' && senderRole !== 'admin') {
+          responseText = `❌ Only workspace owners or admins can unlink this group. (Your role: <code>${senderRole}</code>)`;
+        } else {
+          await env.DB.prepare('DELETE FROM channels WHERE chat_id = ?').bind(chatId).run();
+          responseText = `🔌 This chat group has been successfully unlinked from <b>${subdomain}</b>.`;
+        }
+      }
+    }
+
+    // ────────────────────────────────────────────────────────────────
+    // 3. /role <@handle> <role> [section:X] [tables:Y-Z] (Flow 3: Private Member Onboarding)
     // ────────────────────────────────────────────────────────────────
     else if (command === '/role' || command.startsWith('/role')) {
       const targetHandle = parts[1] || '';

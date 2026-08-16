@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Modal, View, Pressable, StyleSheet, Text, ScrollView, ActivityIndicator, RefreshControl } from 'react-native';
+import { Modal, View, Pressable, StyleSheet, Text, ScrollView, RefreshControl } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as SecureStore from 'expo-secure-store';

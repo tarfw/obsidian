@@ -1,4 +1,4 @@
-import { StyleSheet, View, Text, Pressable, ActivityIndicator, Alert, useWindowDimensions } from 'react-native';
+import { StyleSheet, View, Text, Pressable, Alert, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useState, useEffect } from 'react';
@@ -10,6 +10,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { signInWithGoogle, getCurrentUser, trySilentSignIn } from '@/lib/auth';
 import { setUserId } from '@/lib/tar';
 import { TarLogo } from '@/components/TarLogo';
+import { TarLogoLoader } from '@/components/TarLogoLoader';
 
 const SOLUTIONS = [
   { icon: 'ellipse-outline' as const, label: 'Projects & Tasks' },
@@ -137,7 +138,7 @@ export default function AuthScreen() {
           onPress={handleGoogleAuth}
           disabled={loading}>
           {loading ? (
-            <ActivityIndicator size="small" color="#1E5631" />
+            <TarLogoLoader size={20} color="#1E5631" />
           ) : (
             <>
               <Ionicons name="logo-google" size={20} color="#1E5631" />

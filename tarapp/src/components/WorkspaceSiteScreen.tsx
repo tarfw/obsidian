@@ -5,12 +5,12 @@ import {
   Text,
   TextInput,
   Pressable,
-  ActivityIndicator,
   ScrollView,
   Modal,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import { TarLogoLoader } from './TarLogoLoader';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Linking from 'expo-linking';
 import { Ionicons } from '@expo/vector-icons';
@@ -348,7 +348,7 @@ export default function WorkspaceSiteScreen({
                   ]}
                 >
                   {isProcessing ? (
-                    <ActivityIndicator size="small" color="#FFFFFF" />
+                    <TarLogoLoader size={16} color="#FFFFFF" />
                   ) : (
                     <Ionicons name="arrow-up" size={16} color="#FFFFFF" />
                   )}

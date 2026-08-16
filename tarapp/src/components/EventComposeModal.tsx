@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   ScrollView,
   Modal,
-  ActivityIndicator,
   Platform,
   KeyboardAvoidingView,
   Pressable,
@@ -15,6 +14,7 @@ import {
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { TarLogoLoader } from '@/components/TarLogoLoader';
 
 export const PLAN5_EVENT_MOTIONS = [
   { event: 'Sale', actionName: 'action_record_sale', whatHappened: 'Transaction completed', linksTo: 'Order', params: [{ name: 'customer_id', type: 'text', required: true }, { name: 'items', type: 'text', required: true }, { name: 'payment_method', type: 'text', required: true }, { name: 'total', type: 'number', required: true }] },
@@ -539,7 +539,7 @@ export default function EventComposeModal({
 
       const options = filtered.map((e: any) => ({
         label: e.title || e.name || 'Contact',
-        value: e.title || e.name || e.id,
+        value: e.id || e.title || e.name,
         subtitle: `${e.type || 'Person'} • ${e.role || e.subtype || 'Member'}`,
         email: e.data?.email || e.email || `${(e.title || 'user').toLowerCase().replace(/\s+/g, '')}@workspace.com`,
         rawEntity: e,
@@ -814,7 +814,7 @@ export default function EventComposeModal({
               style={[styles.sendTextBtn, { opacity: isFormValid && !submitting ? 1 : 0.4 }]}
             >
               {submitting ? (
-                <ActivityIndicator size="small" color={theme.primary} />
+                <TarLogoLoader size={16} color={theme.primary} />
               ) : (
                 <Text style={[styles.sendText, { color: theme.primary, fontWeight: '700' }]}>
                   {action?.actionName === 'action_add_flow' ? 'Start Flow' : 'Submit'}

@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { View, ActivityIndicator, Text } from 'react-native';
+import { View, Text } from 'react-native';
 import { getComponent, hasComponent, type SectionProps } from './ComponentRegistry';
 import './builtins'; // Register all built-ins
 import type { UINode, SiteLayout } from '../types';

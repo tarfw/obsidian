@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   StyleSheet,
   View,
@@ -7,17 +7,18 @@ import {
   TouchableOpacity,
   ScrollView,
   Modal,
-  ActivityIndicator,
   Alert,
   Platform,
   KeyboardAvoidingView,
   Pressable,
   Linking,
+  BackHandler,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import DateTimePicker from '@expo/ui/community/datetime-picker';
 import { tar } from '@/lib/tar';
+import { TarLogoLoader } from '@/components/TarLogoLoader';
 
 export interface EntityDetailsModalProps {
   visible: boolean;
@@ -97,34 +98,77 @@ export default function ContactDetailsModal({
       : 'Customer';
 
   useEffect(() => {
-    if (entity) {
+    if (entity?.id) {
       fetchLinkedMotions(entity.id);
       fetchLinkedFlows(entity.id);
       setActiveStage(entity.data?.stage || entity.stage || 'In Progress');
+    } else {
+      setLinkedFlows([]);
+      setLinkedMotions([]);
     }
-  }, [entity]);
+  }, [entity?.id, scope]);
 
   const fetchLinkedFlows = async (entityId: string) => {
     if (!scope || !entityId) return;
     setLoadingFlows(true);
     try {
-      const graphRes = await tar.tool('read', { table: 'graph', graph_filter: { tgt: entityId }, scope });
-      const flowIds = (graphRes?.rows || [])
-        .filter((r: any) => r.rel === 'for_contact' || r.rel === 'customer' || r.rel === 8)
-        .map((r: any) => r.src);
+      const graphQueries: Promise<any>[] = [
+        tar.tool('read', { table: 'graph', tgt: entityId, scope }).catch(() => ({ rows: [] })),
+        tar.tool('read', { table: 'graph', src: entityId, scope }).catch(() => ({ rows: [] })),
+      ];
+      if (name && name.trim() !== entityId) {
+        graphQueries.push(tar.tool('read', { table: 'graph', tgt: name.trim(), scope }).catch(() => ({ rows: [] })));
+        graphQueries.push(tar.tool('read', { table: 'graph', src: name.trim(), scope }).catch(() => ({ rows: [] })));
+      }
 
-      const matterRes = await tar.tool('read', { table: 'matter', scope });
-      const allRows = matterRes?.rows || [];
+      const graphResults = await Promise.all(graphQueries);
+
+      const flowIds = new Set<string>();
+      graphResults.forEach((res: any) => {
+        (res?.rows || []).forEach((r: any) => {
+          const isRelevantRel = r.rel === 'for_contact' || r.rel === 'customer' || r.rel === 8 || r.rel === 'flow' || r.rel === 10 || r.rel === 'member';
+          if (!isRelevantRel) return;
+
+          const rSrc = String(r.src || '').trim();
+          const rTgt = String(r.tgt || '').trim();
+
+          if (rTgt === entityId || (name && rTgt.toLowerCase() === name.toLowerCase())) {
+            if (rSrc && rSrc !== entityId && rSrc !== name) flowIds.add(rSrc);
+          }
+          if (rSrc === entityId || (name && rSrc.toLowerCase() === name.toLowerCase())) {
+            if (rTgt && rTgt !== entityId && rTgt !== name) flowIds.add(rTgt);
+          }
+        });
+      });
+
+      const matterRes = await tar.tool('read', { table: 'matter', scope }).catch(() => ({ rows: [] }));
+      const allRows = (matterRes?.rows && matterRes.rows.length > 0) ? matterRes.rows : (allEntities || []);
+
+      const cleanEntityName = (name || entity?.title || '').trim().toLowerCase();
+      const cleanEntityId = String(entityId).trim().toLowerCase();
 
       const matched = allRows.filter((m: any) => {
-        const isFlowType = m.type === 'flow' || m.type === 10 || m.type === 'deal';
+        const isFlowType = m.type === 'flow' || m.type === 10 || m.type === 'deal' || m.subtype === 'flow';
         if (!isFlowType) return false;
-        return (
-          flowIds.includes(m.id) ||
-          m.data?.contact_id === entityId ||
-          m.data?.customer_id === entityId ||
-          (m.data?.customer && (m.data.customer === name || m.data.customer === entity.title))
-        );
+
+        // 1. Direct graph connection specifically for this contact
+        if (flowIds.has(String(m.id))) return true;
+
+        const mData = typeof m.data === 'string' ? (JSON.parse(m.data || '{}') || {}) : (m.data || {});
+        
+        // 2. Exact match on contact_id or customer_id in flow data
+        const flowContactId = String(mData.contact_id || mData.customer_id || m.contact_id || m.customer_id || '').trim().toLowerCase();
+        if (flowContactId && (flowContactId === cleanEntityId || (cleanEntityName && flowContactId === cleanEntityName))) {
+          return true;
+        }
+
+        // 3. Exact match on customer / client name (only if non-empty string and exact match)
+        const flowCustomer = String(mData.customer || mData.client || mData.contact || '').trim().toLowerCase();
+        if (flowCustomer && (flowCustomer === cleanEntityId || (cleanEntityName && flowCustomer === cleanEntityName))) {
+          return true;
+        }
+
+        return false;
       });
 
       setLinkedFlows(matched);
@@ -346,6 +390,29 @@ export default function ContactDetailsModal({
     }
   };
 
+  const handleBackAction = useCallback(() => {
+    if (showDatePicker) {
+      setShowDatePicker(false);
+      return true;
+    }
+    if (showInteractionModal) {
+      setShowInteractionModal(false);
+      return true;
+    }
+    if (showMenu) {
+      setShowMenu(false);
+      return true;
+    }
+    onClose();
+    return true;
+  }, [showDatePicker, showInteractionModal, showMenu, onClose]);
+
+  useEffect(() => {
+    if (!visible) return;
+    const subscription = BackHandler.addEventListener('hardwareBackPress', handleBackAction);
+    return () => subscription.remove();
+  }, [visible, handleBackAction]);
+
   if (!visible || !entity) return null;
 
   const linkedContactName = isFlow
@@ -359,36 +426,10 @@ export default function ContactDetailsModal({
     <Modal
       visible={visible}
       animationType="slide"
-      presentationStyle="pageSheet"
-      onRequestClose={onClose}
+      presentationStyle={Platform.OS === 'ios' ? 'pageSheet' : undefined}
+      onRequestClose={handleBackAction}
     >
-      <View style={[styles.container, { backgroundColor: theme.background, paddingTop: Math.max(insets.top, 14) }]}>
-        {/* Minimalist Top Navigation Bar */}
-        <View style={[styles.topBar, { borderBottomColor: theme.border + '30' }]}>
-          <TouchableOpacity onPress={onClose} hitSlop={12} style={styles.iconBtn}>
-            <Ionicons name="close" size={20} color={theme.text} />
-          </TouchableOpacity>
-
-          <Text style={[styles.topBarTitle, { color: theme.textSecondary }]}>
-            {isFlow ? 'Flow' : 'Contact'}
-          </Text>
-
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-            {!isFlow && onEditEntity && (
-              <TouchableOpacity
-                onPress={() => onEditEntity(entity)}
-                hitSlop={10}
-                style={styles.textActionBtn}
-              >
-                <Text style={[styles.textActionLabel, { color: theme.primary }]}>Edit</Text>
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity onPress={() => setShowMenu(true)} hitSlop={12} style={styles.iconBtn}>
-              <Ionicons name="ellipsis-horizontal" size={18} color={theme.textSecondary} />
-            </TouchableOpacity>
-          </View>
-        </View>
-
+      <View style={[styles.container, { backgroundColor: theme.background, paddingTop: Math.max(insets.top, 16) }]}>
         <KeyboardAvoidingView
           style={{ flex: 1 }}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -401,7 +442,10 @@ export default function ContactDetailsModal({
           >
             {/* Horizontal Profile Header */}
             <View style={styles.horizontalHero}>
-              <View
+              <TouchableOpacity
+                activeOpacity={0.7}
+                disabled={!onEditEntity || isFlow}
+                onPress={() => !isFlow && onEditEntity && onEditEntity(entity)}
                 style={[
                   styles.avatarCircle,
                   { backgroundColor: avatarColor + '15', borderColor: avatarColor + '35' },
@@ -412,9 +456,14 @@ export default function ContactDetailsModal({
                 ) : (
                   <Text style={[styles.avatarText, { color: avatarColor }]}>{initials}</Text>
                 )}
-              </View>
+              </TouchableOpacity>
 
-              <View style={styles.heroTextCol}>
+              <TouchableOpacity
+                activeOpacity={0.7}
+                disabled={!onEditEntity || isFlow}
+                onPress={() => !isFlow && onEditEntity && onEditEntity(entity)}
+                style={styles.heroTextCol}
+              >
                 <Text style={[styles.heroName, { color: theme.text }]} numberOfLines={1}>
                   {name || (isFlow ? 'Flow' : 'Contact')}
                 </Text>
@@ -444,7 +493,15 @@ export default function ContactDetailsModal({
                     </View>
                   )}
                 </View>
-              </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => setShowMenu(true)}
+                hitSlop={12}
+                style={styles.iconBtn}
+              >
+                <Ionicons name="ellipsis-horizontal" size={20} color={theme.textSecondary} />
+              </TouchableOpacity>
             </View>
 
             {/* FLOW MODE: Compact Stage Progress Selector */}
@@ -454,7 +511,7 @@ export default function ContactDetailsModal({
                   <Text style={[styles.sectionHeaderLabel, { color: theme.textMuted }]}>
                     STAGE
                   </Text>
-                  {updatingStage && <ActivityIndicator size="small" color={theme.primary} />}
+                  {updatingStage && <TarLogoLoader size={16} color={theme.primary} />}
                 </View>
 
                 <View style={styles.stageGrid}>
@@ -493,97 +550,104 @@ export default function ContactDetailsModal({
               </View>
             )}
 
-            {/* CONTACT MODE: Direct Clean Contact Info Rows */}
-            {!isFlow && (Boolean(phone) || Boolean(email) || Boolean(notes)) && (
-              <View style={[styles.infoCard, { backgroundColor: theme.backgroundElement, borderColor: theme.border + '40' }]}>
+            {/* CONTACT MODE: Minimal Horizontal Contact Action Icons (No BG Color) */}
+            {!isFlow && (Boolean(phone) || Boolean(email)) && (
+              <View style={styles.contactActionsRow}>
                 {Boolean(phone) && (
                   <TouchableOpacity
-                    activeOpacity={0.7}
+                    activeOpacity={0.6}
                     onPress={() => Linking.openURL(`tel:${phone}`).catch(() => null)}
-                    style={styles.infoLine}
+                    hitSlop={8}
+                    style={styles.actionIconBtn}
+                    accessibilityLabel={`Call ${phone}`}
                   >
-                    <View style={styles.infoLineLeft}>
-                      <Ionicons name="call-outline" size={15} color={theme.textMuted} />
-                      <Text style={[styles.infoLineText, { color: theme.text }]}>{phone}</Text>
-                    </View>
-                    <Ionicons name="open-outline" size={14} color={theme.textMuted} />
+                    <Ionicons name="call-outline" size={20} color={theme.text} />
+                  </TouchableOpacity>
+                )}
+
+                {Boolean(phone) && (
+                  <TouchableOpacity
+                    activeOpacity={0.6}
+                    onPress={() => Linking.openURL(`sms:${phone}`).catch(() => null)}
+                    hitSlop={8}
+                    style={styles.actionIconBtn}
+                    accessibilityLabel={`Message ${phone}`}
+                  >
+                    <Ionicons name="chatbubble-outline" size={20} color={theme.text} />
                   </TouchableOpacity>
                 )}
 
                 {Boolean(email) && (
                   <TouchableOpacity
-                    activeOpacity={0.7}
+                    activeOpacity={0.6}
                     onPress={() => Linking.openURL(`mailto:${email}`).catch(() => null)}
-                    style={[styles.infoLine, Boolean(phone) && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.border + '30' }]}
+                    hitSlop={8}
+                    style={styles.actionIconBtn}
+                    accessibilityLabel={`Email ${email}`}
                   >
-                    <View style={styles.infoLineLeft}>
-                      <Ionicons name="mail-outline" size={15} color={theme.textMuted} />
-                      <Text style={[styles.infoLineText, { color: theme.text }]}>{email}</Text>
-                    </View>
-                    <Ionicons name="open-outline" size={14} color={theme.textMuted} />
+                    <Ionicons name="mail-outline" size={20} color={theme.text} />
                   </TouchableOpacity>
-                )}
-
-                {Boolean(notes) && (
-                  <View style={[styles.infoLine, (Boolean(phone) || Boolean(email)) && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.border + '30' }]}>
-                    <View style={[styles.infoLineLeft, { alignItems: 'flex-start' }]}>
-                      <Ionicons name="document-text-outline" size={15} color={theme.textMuted} style={{ marginTop: 2 }} />
-                      <Text style={[styles.infoLineText, { color: theme.textSecondary, lineHeight: 19 }]}>{notes}</Text>
-                    </View>
-                  </View>
                 )}
               </View>
             )}
 
-            {/* CONTACT MODE: Minimal Flows Section */}
+            {Boolean(notes) && !isFlow && (
+              <View style={styles.notesBlock}>
+                <Text style={[styles.notesText, { color: theme.textSecondary }]}>{notes}</Text>
+              </View>
+            )}
+
+            {/* CONTACT MODE: Minimal Flat Work Section */}
             {!isFlow && (
               <View style={styles.sectionBlock}>
                 <View style={styles.sectionHeaderRow}>
                   <Text style={[styles.sectionHeaderLabel, { color: theme.textMuted }]}>
-                    FLOWS {linkedFlows.length > 0 ? `(${linkedFlows.length})` : ''}
+                    WORK {linkedFlows.length > 0 ? `(${linkedFlows.length})` : ''}
                   </Text>
                   {onLogEventForEntity && (
                     <TouchableOpacity
                       onPress={() => onLogEventForEntity(entity, 'stage')}
                       hitSlop={8}
                     >
-                      <Text style={[styles.headerActionLink, { color: theme.primary }]}>+ New Flow</Text>
+                      <Text style={[styles.headerActionLink, { color: theme.primary }]}>+ New Work</Text>
                     </TouchableOpacity>
                   )}
                 </View>
 
                 {loadingFlows ? (
-                  <ActivityIndicator size="small" color={theme.primary} style={{ marginVertical: 8 }} />
+                  <TarLogoLoader size={26} color={theme.primary} style={{ marginVertical: 12 }} />
                 ) : linkedFlows.length > 0 ? (
-                  <View style={{ gap: 6 }}>
-                    {linkedFlows.map((flow) => {
-                      const dVal = flow.value ? `$${Number(flow.value).toLocaleString()}` : '';
-                      const dStage = flow.data?.stage || 'In Progress';
+                  <View style={styles.flatFlowsContainer}>
+                    {linkedFlows.map((flow, idx) => {
+                      const fData = typeof flow.data === 'string' ? (JSON.parse(flow.data || '{}') || {}) : (flow.data || {});
+                      const dVal = flow.value || fData.value ? `$${Number(flow.value || fData.value).toLocaleString()}` : '';
+                      const dStage = fData.stage || flow.stage || 'In Progress';
                       const stageConfig = FLOW_STAGES.find(s => s.label.toLowerCase() === dStage.toLowerCase()) || FLOW_STAGES[1];
 
                       return (
                         <TouchableOpacity
-                          key={flow.id}
-                          activeOpacity={0.7}
+                          key={flow.id || idx}
+                          activeOpacity={0.6}
                           onPress={() => onSelectDeal?.(flow)}
-                          style={[styles.flowItemRow, { backgroundColor: theme.backgroundElement, borderColor: theme.border + '40' }]}
+                          style={[
+                            styles.flatFlowRow,
+                            idx < linkedFlows.length - 1 && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.border + '25' },
+                          ]}
                         >
-                          <View style={{ flex: 1, marginRight: 8 }}>
-                            <Text style={[styles.flowItemTitle, { color: theme.text }]} numberOfLines={1}>
-                              {flow.title || flow.name || 'Flow'}
+                          <View style={{ flex: 1, marginRight: 12 }}>
+                            <Text style={[styles.flatFlowTitle, { color: theme.text }]} numberOfLines={1}>
+                              {flow.title || flow.name || fData.name || 'Work'}
                             </Text>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 }}>
-                              <View style={[styles.miniStageDot, { backgroundColor: stageConfig.color }]} />
-                              <Text style={[styles.miniStageText, { color: theme.textSecondary }]}>
-                                {dStage}
+                            {Boolean(dVal) && (
+                              <Text style={[styles.flatFlowSubtext, { color: theme.textSecondary }]}>
+                                {dVal}
                               </Text>
-                            </View>
+                            )}
                           </View>
 
-                          {Boolean(dVal) && (
-                            <Text style={[styles.flowItemValue, { color: theme.text }]}>{dVal}</Text>
-                          )}
-                          <Ionicons name="chevron-forward" size={14} color={theme.textMuted} style={{ marginLeft: 4 }} />
+                          <Text style={[styles.flowStatusText, { color: theme.textSecondary }]}>
+                            {dStage}
+                          </Text>
                         </TouchableOpacity>
                       );
                     })}
@@ -596,14 +660,14 @@ export default function ContactDetailsModal({
                   >
                     <Ionicons name="git-network-outline" size={16} color={theme.primary} />
                     <Text style={[styles.emptyFlowStripText, { color: theme.primary }]}>
-                      + Start a Flow for {name || 'contact'}
+                      + Add Work for {name || 'contact'}
                     </Text>
                   </TouchableOpacity>
                 )}
               </View>
             )}
 
-            {/* Minimal Activity & Timeline */}
+            {/* Minimal Activity & Timeline (Flat List Design) */}
             <View style={styles.sectionBlock}>
               <View style={styles.sectionHeaderRow}>
                 <Text style={[styles.sectionHeaderLabel, { color: theme.textMuted }]}>
@@ -615,9 +679,9 @@ export default function ContactDetailsModal({
               </View>
 
               {loadingMotions ? (
-                <ActivityIndicator size="small" color={theme.primary} style={{ marginVertical: 12 }} />
+                <TarLogoLoader size={26} color={theme.primary} style={{ marginVertical: 14 }} />
               ) : linkedMotions.filter(m => String(m.type || '').toLowerCase() !== 'change').length > 0 ? (
-                <View style={[styles.timelineBox, { backgroundColor: theme.backgroundElement, borderColor: theme.border + '40' }]}>
+                <View style={styles.flatActivityContainer}>
                   {linkedMotions.filter(m => String(m.type || '').toLowerCase() !== 'change').map((m, idx, arr) => {
                     const mData = typeof m.data === 'string' ? (JSON.parse(m.data || '{}') || {}) : (m.data || {});
                     const title = mData.title || (m.type === 'stage' || m.type === 120 ? `Stage: ${mData.stage || 'Updated'}` : 'Note logged');
@@ -628,22 +692,22 @@ export default function ContactDetailsModal({
                       <View
                         key={m.id || idx}
                         style={[
-                          styles.timelineRow,
-                          idx < arr.length - 1 && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.border + '30' },
+                          styles.flatActivityRow,
+                          idx < arr.length - 1 && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.border + '25' },
                         ]}
                       >
-                        <View style={{ flex: 1 }}>
-                          <Text style={[styles.timelineTitleText, { color: theme.text }]} numberOfLines={1}>
+                        <View style={{ flex: 1, marginRight: 12 }}>
+                          <Text style={[styles.flatActivityTitle, { color: theme.text }]} numberOfLines={1}>
                             {title}
                           </Text>
                           {Boolean(notesText) && (
-                            <Text style={[styles.timelineNotesText, { color: theme.textSecondary }]}>
+                            <Text style={[styles.flatActivityNotes, { color: theme.textSecondary }]}>
                               {notesText}
                             </Text>
                           )}
                         </View>
                         {Boolean(dateStr) && (
-                          <Text style={[styles.timelineTimeText, { color: theme.textMuted }]}>
+                          <Text style={[styles.flatActivityTime, { color: theme.textMuted }]}>
                             {compactTimestamp(dateStr)}
                           </Text>
                         )}
@@ -660,13 +724,8 @@ export default function ContactDetailsModal({
           </ScrollView>
         </KeyboardAvoidingView>
 
-        {/* Options Menu Modal */}
-        <Modal
-          visible={showMenu}
-          transparent
-          animationType="fade"
-          onRequestClose={() => setShowMenu(false)}
-        >
+        {/* Options Menu Overlay */}
+        {showMenu && (
           <Pressable style={styles.menuBackdrop} onPress={() => setShowMenu(false)}>
             <View style={[styles.menuContainer, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
               {!isFlow && onEditEntity && (
@@ -690,16 +749,11 @@ export default function ContactDetailsModal({
               </TouchableOpacity>
             </View>
           </Pressable>
-        </Modal>
+        )}
 
-        {/* Minimal Log Note Modal */}
-        <Modal
-          visible={showInteractionModal}
-          animationType="slide"
-          presentationStyle="pageSheet"
-          onRequestClose={() => setShowInteractionModal(false)}
-        >
-          <View style={[styles.container, { backgroundColor: theme.background }]}>
+        {/* Minimal Log Note Overlay */}
+        {showInteractionModal && (
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: theme.background, zIndex: 100 }]}>
             <View style={[styles.topBar, { borderBottomColor: theme.border + '30', paddingTop: Math.max(insets.top, 12) }]}>
               <TouchableOpacity onPress={() => setShowInteractionModal(false)} hitSlop={12} style={styles.iconBtn}>
                 <Ionicons name="close" size={20} color={theme.text} />
@@ -716,7 +770,7 @@ export default function ContactDetailsModal({
                 ]}
               >
                 {submittingInteraction ? (
-                  <ActivityIndicator color="#ffffff" size="small" />
+                  <TarLogoLoader color="#ffffff" size={16} />
                 ) : (
                   <Text style={styles.savePillText}>Save</Text>
                 )}
@@ -799,7 +853,7 @@ export default function ContactDetailsModal({
               </View>
             </ScrollView>
           </View>
-        </Modal>
+        )}
       </View>
     </Modal>
   );
@@ -886,27 +940,28 @@ const styles = StyleSheet.create({
     fontSize: 11.5,
     fontWeight: '600',
   },
-  infoCard: {
-    borderRadius: 12,
-    borderWidth: 1,
-    overflow: 'hidden',
-  },
-  infoLine: {
+  contactActionsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 14,
-    paddingVertical: 11,
+    gap: 16,
+    paddingVertical: 4,
+    paddingHorizontal: 2,
   },
-  infoLineLeft: {
-    flexDirection: 'row',
+  actionIconBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     alignItems: 'center',
-    gap: 10,
-    flex: 1,
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
   },
-  infoLineText: {
-    fontSize: 13.5,
-    fontWeight: '500',
+  notesBlock: {
+    paddingVertical: 2,
+    paddingHorizontal: 2,
+  },
+  notesText: {
+    fontSize: 13,
+    lineHeight: 18,
   },
   sectionBlock: {
     gap: 8,
@@ -945,30 +1000,29 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
-  flowItemRow: {
+  flatFlowsContainer: {
+    backgroundColor: 'transparent',
+  },
+  flatFlowRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 10,
-    borderWidth: 1,
+    paddingVertical: 11,
+    paddingHorizontal: 2,
+    backgroundColor: 'transparent',
   },
-  flowItemTitle: {
-    fontSize: 13.5,
+  flatFlowTitle: {
+    fontSize: 14,
     fontWeight: '600',
   },
-  flowItemValue: {
-    fontSize: 13.5,
-    fontWeight: '700',
+  flatFlowSubtext: {
+    fontSize: 12,
+    fontWeight: '500',
+    marginTop: 2,
   },
-  miniStageDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  miniStageText: {
-    fontSize: 11.5,
+  flowStatusText: {
+    fontSize: 12.5,
+    fontWeight: '500',
   },
   emptyFlowStrip: {
     flexDirection: 'row',
@@ -984,29 +1038,27 @@ const styles = StyleSheet.create({
     fontSize: 12.5,
     fontWeight: '700',
   },
-  timelineBox: {
-    borderRadius: 12,
-    borderWidth: 1,
-    overflow: 'hidden',
+  flatActivityContainer: {
+    backgroundColor: 'transparent',
   },
-  timelineRow: {
+  flatActivityRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 12,
     paddingVertical: 10,
-    gap: 8,
+    paddingHorizontal: 2,
+    backgroundColor: 'transparent',
   },
-  timelineTitleText: {
-    fontSize: 13,
+  flatActivityTitle: {
+    fontSize: 13.5,
     fontWeight: '600',
   },
-  timelineNotesText: {
+  flatActivityNotes: {
     fontSize: 12,
     marginTop: 2,
   },
-  timelineTimeText: {
-    fontSize: 11,
+  flatActivityTime: {
+    fontSize: 11.5,
   },
   emptyStateText: {
     fontSize: 12,
@@ -1015,12 +1067,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
   },
   menuBackdrop: {
-    flex: 1,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0,0,0,0.3)',
     justifyContent: 'flex-start',
     paddingTop: 50,
     paddingRight: 16,
     alignItems: 'flex-end',
+    zIndex: 99,
   },
   menuContainer: {
     width: 150,

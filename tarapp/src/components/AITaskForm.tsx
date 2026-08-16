@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { StyleSheet, View, Text, TextInput, Pressable, ActivityIndicator, ScrollView } from 'react-native';
+import { StyleSheet, View, Text, TextInput, Pressable, ScrollView } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useTheme } from '@/hooks/use-theme';
 import { AITask } from './AITaskCard';
+import { TarLogoLoader } from './TarLogoLoader';
 
 interface AITaskFormProps {
   task: AITask;
@@ -137,7 +138,7 @@ export function AITaskForm({ task, onSubmit, onCancel, executing }: AITaskFormPr
           disabled={executing}
         >
           {executing ? (
-            <ActivityIndicator color="#fff" size="small" />
+            <TarLogoLoader color="#fff" size={16} />
           ) : (
             <>
               <Ionicons name="play" size={14} color="#fff" />

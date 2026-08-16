@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   ScrollView,
   Modal,
-  ActivityIndicator,
   Alert,
   Platform,
   KeyboardAvoidingView,
@@ -17,6 +16,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import DateTimePicker from '@expo/ui/community/datetime-picker';
 import { tar } from '@/lib/tar';
+import { TarLogoLoader } from '@/components/TarLogoLoader';
 
 export interface EntityDetailsModalProps {
   visible: boolean;
@@ -543,7 +543,7 @@ export default function EntityDetailsModal({
                         style={styles.actionTextBtn}
                       >
                         {saving ? (
-                          <ActivityIndicator size="small" color={theme.primary} />
+                          <TarLogoLoader size={16} color={theme.primary} />
                         ) : (
                           <Text style={[styles.actionText, { color: theme.primary }]}>Save</Text>
                         )}
@@ -607,7 +607,7 @@ export default function EntityDetailsModal({
             <View style={styles.timelineSection}>
 
               {loadingMotions ? (
-                <ActivityIndicator size="small" color={theme.primary} style={{ marginVertical: 16 }} />
+                <TarLogoLoader size={24} color={theme.primary} style={{ marginVertical: 16 }} />
               ) : linkedMotions.filter(m => (m.type || '').toLowerCase() !== 'change').length > 0 ? (
                 <View style={{ gap: 12, marginTop: 4 }}>
                   {linkedMotions.filter(m => (m.type || '').toLowerCase() !== 'change').map((m, idx) => {
@@ -769,7 +769,7 @@ export default function EntityDetailsModal({
                 }}
               >
                 {submittingInteraction ? (
-                  <ActivityIndicator color="#ffffff" size="small" />
+                  <TarLogoLoader color="#ffffff" size={18} />
                 ) : (
                   <Ionicons name="checkmark" size={24} color="#ffffff" />
                 )}

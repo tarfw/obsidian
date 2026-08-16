@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { StyleSheet, View, Text, TextInput, Pressable, ActivityIndicator, ScrollView } from 'react-native';
+import { StyleSheet, View, Text, TextInput, Pressable, ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Linking from 'expo-linking';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { TarLogoLoader } from '@/components/TarLogoLoader';
 
 import { useTheme } from '@/hooks/use-theme';
 import { useStorefront } from '@/hooks/use-storefront';
@@ -66,7 +67,7 @@ export default function StorefrontTab({ storeId, storeName, subdomain, products 
   };
 
   if (loading) {
-    return <ActivityIndicator style={{ marginTop: 24 }} color={theme.textSecondary} />;
+    return <TarLogoLoader size={36} style={{ marginTop: 24 }} color={theme.textSecondary} />;
   }
 
   const isDirty = draft && JSON.stringify(draft) !== JSON.stringify(published);
@@ -121,7 +122,7 @@ export default function StorefrontTab({ storeId, storeName, subdomain, products 
           disabled={!isDirty || publishing}
           onPress={handlePublish}>
           {publishing
-            ? <ActivityIndicator size="small" color="#fff" />
+            ? <TarLogoLoader size={18} color="#fff" />
             : <Text style={styles.publishText}>{isDirty ? 'Publish' : 'Published'}</Text>}
         </Pressable>
       ) : null}
@@ -139,7 +140,7 @@ export default function StorefrontTab({ storeId, storeName, subdomain, products 
           returnKeyType="send"
         />
         {generating
-          ? <ActivityIndicator size="small" color={theme.textSecondary} />
+          ? <TarLogoLoader size={20} color={theme.textSecondary} />
           : (
             <Pressable onPress={handleGenerate} disabled={!instruction.trim()}>
               <Ionicons name="arrow-up-circle" size={26} color={instruction.trim() ? '#5E6AD2' : theme.textSecondary} />

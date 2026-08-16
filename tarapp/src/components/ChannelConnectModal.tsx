@@ -5,11 +5,11 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  ActivityIndicator,
   FlatList,
   Share,
   Pressable,
 } from 'react-native';
+import { TarLogoLoader } from './TarLogoLoader';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import {
@@ -122,7 +122,7 @@ export default function ChannelConnectModal({
             <Text style={styles.cardHeaderLabel}>TYPE IN YOUR CHAT GROUP</Text>
 
             {loading ? (
-              <ActivityIndicator color="#2563EB" style={{ marginVertical: 14 }} />
+              <TarLogoLoader size={28} color="#2563EB" style={{ marginVertical: 14 }} />
             ) : pairingData ? (
               <TouchableOpacity
                 activeOpacity={0.7}
@@ -152,7 +152,7 @@ export default function ChannelConnectModal({
               <Text style={styles.listTitle}>CONNECTED GROUPS ({channels.length})</Text>
 
               {loadingChannels ? (
-                <ActivityIndicator size="small" color="#9CA3AF" style={{ marginVertical: 6 }} />
+                <TarLogoLoader size={20} color="#9CA3AF" style={{ marginVertical: 6 }} />
               ) : (
                 <FlatList
                   data={channels}

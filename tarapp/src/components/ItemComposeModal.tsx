@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   ScrollView,
   Modal,
-  ActivityIndicator,
   Platform,
   KeyboardAvoidingView,
   Pressable,
@@ -18,6 +17,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { chatCompletion } from '@/lib/ai';
 import { getStockHistory, findProduct, updateStock } from '@/lib/inventory';
+import { TarLogoLoader } from '@/components/TarLogoLoader';
 
 export const ITEM_SUBTYPES = [
   { label: 'Product', value: 'Product', subtitle: 'Physical Goods & Merchandise' },
@@ -360,7 +360,7 @@ Respond strictly in valid JSON format:
                     style={[styles.aiTextBtn, { opacity: title.trim() && !aiFilling ? 1 : 0.35 }]}
                   >
                     {aiFilling ? (
-                      <ActivityIndicator size="small" color={theme.primary} />
+                      <TarLogoLoader size={16} color={theme.primary} />
                     ) : (
                       <Text style={[styles.aiTextLabel, { color: theme.primary }]}>AI</Text>
                     )}
@@ -374,7 +374,7 @@ Respond strictly in valid JSON format:
                   style={[styles.saveBtn, { opacity: isFormValid && !submitting ? 1 : 0.4 }]}
                 >
                   {submitting ? (
-                    <ActivityIndicator size="small" color={theme.primary} />
+                    <TarLogoLoader size={16} color={theme.primary} />
                   ) : (
                     <Text style={[styles.saveText, { color: theme.primary }]}>Save</Text>
                   )}
@@ -491,7 +491,7 @@ Respond strictly in valid JSON format:
                   </View>
 
                   {loadingHistory ? (
-                    <ActivityIndicator size="small" color={theme.primary} style={{ marginVertical: 8 }} />
+                    <TarLogoLoader size={24} color={theme.primary} style={{ marginVertical: 10 }} />
                   ) : stockHistory.length > 0 ? (
                     stockHistory.slice(0, 5).map((item, idx) => {
                       if (!item) return null;
@@ -797,7 +797,7 @@ Respond strictly in valid JSON format:
                   style={[styles.imageOptionBtn, { backgroundColor: theme.border + '15', opacity: title.trim() ? 1 : 0.4 }]}
                 >
                   {imageGenerating ? (
-                    <ActivityIndicator size="small" color={theme.primary} />
+                    <TarLogoLoader size={18} color={theme.primary} />
                   ) : (
                     <Ionicons name="sparkles" size={18} color={theme.primary} />
                   )}

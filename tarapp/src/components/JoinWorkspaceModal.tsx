@@ -6,9 +6,9 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  ActivityIndicator,
   Alert,
 } from 'react-native';
+import { TarLogoLoader } from './TarLogoLoader';
 import { Ionicons } from '@expo/vector-icons';
 import { claimMemberInvite, ClaimMemberResponse } from '../lib/channels';
 import { getCurrentUser } from '../lib/auth';
@@ -100,7 +100,7 @@ export default function JoinWorkspaceModal({ visible, onClose, onSuccess }: Prop
             disabled={loading}
           >
             {loading ? (
-              <ActivityIndicator color="#FFFFFF" />
+              <TarLogoLoader size={20} color="#FFFFFF" />
             ) : (
               <Text style={styles.claimBtnText}>Claim & Join Workspace</Text>
             )}

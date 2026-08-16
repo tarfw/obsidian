@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { StyleSheet, View, Text, Pressable, ScrollView, TextInput, ActivityIndicator, Modal, Platform, TouchableOpacity, Keyboard } from 'react-native';
+import { StyleSheet, View, Text, Pressable, ScrollView, TextInput, Modal, Platform, TouchableOpacity, Keyboard } from 'react-native';
 import { KeyboardAwareScrollView, KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -918,7 +918,7 @@ ${membersYaml}
     }
   };
 
-  const handleTriggerAction = (action: any) => {
+  const handleTriggerAction = (action: any, defaultParams?: Record<string, string>) => {
     if (action.name === 'action_open_site' || action.actionName === 'action_open_site') {
       setShowSiteScreen(true);
       return;
@@ -934,7 +934,8 @@ ${membersYaml}
       const initialParams: Record<string, string> = {};
       action.params.forEach((p: any) => {
         const paramName = typeof p === 'string' ? p : p.name;
-        initialParams[paramName] = '';
+        const defaultVal = typeof p === 'object' ? p.default || '' : '';
+        initialParams[paramName] = defaultParams?.[paramName] ?? defaultVal ?? '';
       });
       if (action.name === 'action_add_contact') {
         setInitialContactType('Customer');
@@ -954,7 +955,7 @@ ${membersYaml}
         return;
       }
 
-      setFormParams(initialParams);
+      setFormParams({ ...initialParams, ...(defaultParams || {}) });
       setSelectedAction(action);
       setActionResultMessage(null);
     } else {
@@ -1003,7 +1004,11 @@ ${membersYaml}
         selectedAction.actionName === 'action_add_flow'
       ) {
         const titleVal = cleanParams.name || cleanParams.title || 'New Flow';
-        const contactId = cleanParams.contact_id || cleanParams.customer_id || '';
+        const rawContact = cleanParams.contact_id || cleanParams.customer_id || '';
+        const matchedContact = (allEntities || []).find((e: any) => e.id === rawContact || e.title === rawContact || e.name === rawContact || e.data?.fn === rawContact);
+        const contactId = matchedContact?.id || rawContact;
+        const contactName = matchedContact?.title || matchedContact?.name || matchedContact?.data?.fn || rawContact;
+
         const stageVal = cleanParams.stage || 'New / Intake';
         const pipelineVal = cleanParams.pipeline || 'Sales & Client Deals';
         const valueNum = cleanParams.value || cleanParams.amount || 0;
@@ -1017,6 +1022,8 @@ ${membersYaml}
               ...cleanParams,
               name: titleVal,
               contact_id: contactId,
+              customer_id: contactId,
+              customer: contactName,
               stage: stageVal,
               pipeline: pipelineVal,
             },
@@ -2217,12 +2224,14 @@ ${membersYaml}
           }
 
           if (targetAction) {
-            handleTriggerAction({
-              name: targetAction.name || targetAction.actionName,
-              purpose: targetAction.purpose || targetAction.whatHappened,
-              params: targetAction.params,
-            });
-            setFormParams(initialParams);
+            handleTriggerAction(
+              {
+                name: targetAction.name || targetAction.actionName,
+                purpose: targetAction.purpose || targetAction.whatHappened,
+                params: targetAction.params,
+              },
+              initialParams
+            );
           }
         }}
         onEditEntity={(entity) => {

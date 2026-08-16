@@ -7,13 +7,13 @@ import {
   TouchableOpacity,
   ScrollView,
   Modal,
-  ActivityIndicator,
   Platform,
   KeyboardAvoidingView,
   Pressable,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { TarLogoLoader } from '@/components/TarLogoLoader';
 
 export const CONTACT_SUBTYPES = [
   { label: 'Customer', value: 'Customer', subtitle: 'External Buyer, Client or Individual' },
@@ -161,7 +161,7 @@ export default function ContactCreateModal({
               style={[styles.saveBtn, { opacity: isFormValid && !submitting ? 1 : 0.4 }]}
             >
               {submitting ? (
-                <ActivityIndicator size="small" color={theme.primary} />
+                <TarLogoLoader size={16} color={theme.primary} />
               ) : (
                 <Text style={[styles.saveText, { color: theme.primary }]}>Save</Text>
               )}

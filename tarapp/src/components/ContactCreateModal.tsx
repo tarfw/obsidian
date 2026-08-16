@@ -110,6 +110,7 @@ export default function ContactCreateModal({
 
   const handleSave = () => {
     if (!isFormValid || submitting) return;
+    try { require('react-native').Keyboard.dismiss(); } catch {}
     const payload = {
       name: name.trim(),
       role,
@@ -135,7 +136,7 @@ export default function ContactCreateModal({
       <View style={[styles.container, { backgroundColor: theme.background, paddingTop: Math.max(insets.top, 12) }]}>
         <KeyboardAvoidingView
           style={{ flex: 1 }}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
           {/* Top Bar */}
           <View style={[styles.headerBar, { borderBottomColor: theme.border }]}>

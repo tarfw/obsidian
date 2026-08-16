@@ -108,11 +108,11 @@ export async function syncAllActiveDbs(): Promise<void> {
 }
 
 export function getLocalPrivateDb(userId: string): Database {
-  return createLocalDbConnection(`private_${userId}`, `user_${userId}.db`);
+  return createLocalDbConnection(userId, `${userId}.db`);
 }
 
 export function getUserSyncDb(userId: string, url: string, authToken: string): Database {
-  return createSyncDbConnection(`private_${userId}`, `user_${userId}.db`, url, authToken);
+  return createSyncDbConnection(userId, `${userId}.db`, url, authToken);
 }
 
 export function getGlobalDb(): Database {
@@ -122,9 +122,8 @@ export function getGlobalDb(): Database {
 export function getUserDb(): Database {
   const userId = cachedSelfId || "guest";
   // Return sync DB if available, otherwise local
-  const syncKey = `private_${userId}`;
-  if (dbConnections[syncKey]?.isSync) {
-    return dbConnections[syncKey];
+  if (dbConnections[userId]?.isSync) {
+    return dbConnections[userId];
   }
   return getLocalPrivateDb(userId);
 }
@@ -144,12 +143,12 @@ function extractScopeId(scope: string): string {
 
 export function getWorkspaceDb(workspaceId: string): Database {
   const id = extractScopeId(workspaceId);
-  return createLocalDbConnection(`workspace_${id}`, `workspace_${id}.db`);
+  return createLocalDbConnection(id, `${id}.db`);
 }
 
 export function getOrderDb(orderId: string): Database {
   const id = extractScopeId(orderId);
-  return createLocalDbConnection(`order_${id}`, `order_${id}.db`);
+  return createLocalDbConnection(id, `${id}.db`);
 }
 
 /**
@@ -177,18 +176,16 @@ export function routeDbForEntity(_type: string | null, scope: string | null): Da
 
   if (prefix === 'w' && scope) {
     const subdomain = scope.replace('w:', '');
-    const syncKey = `workspace_${subdomain}`;
-    if (dbConnections[syncKey]) {
-      return dbConnections[syncKey];
+    if (dbConnections[subdomain]) {
+      return dbConnections[subdomain];
     }
     return getWorkspaceDb(subdomain);
   }
 
   if (prefix === 'o' && scope) {
     const subdomain = scope.replace('o:', '').split('_')[0];
-    const syncKey = `workspace_${subdomain}`;
-    if (dbConnections[syncKey]) {
-      return dbConnections[syncKey];
+    if (dbConnections[subdomain]) {
+      return dbConnections[subdomain];
     }
     return getWorkspaceDb(subdomain);
   }
@@ -240,6 +237,32 @@ export async function switchUser(userId: string): Promise<Database> {
   console.log(`[DB] switchUser START: switching session to user = ${userId}`);
   cachedSelfId = userId;
 
+  try {
+    // 1. Try to get or create remote Personal Turso DB
+    console.log(`[DB] switchUser: fetching Turso creds from ${TARFLUE_URL}/user-db`);
+    const res = await fetch(`${TARFLUE_URL}/user-db?userId=${encodeURIComponent(userId)}`);
+    if (res.ok) {
+      const data = await res.json();
+      const { url, authToken } = data;
+      if (url && authToken) {
+        console.log(`[DB] switchUser: got Turso creds for user ${userId}: ${url}`);
+        await closeConnection(userId);
+        const syncDb = getUserSyncDb(userId, url, authToken);
+        await syncDb.connect();
+        await migrateMemoryTable(syncDb, userId);
+        for (const sql of SCHEMA_STATEMENTS) {
+          try { await syncDb.exec(sql); } catch (_) {}
+        }
+        syncReadyResolve?.();
+        console.log(`[DB] switchUser DONE: remote sync initialized in ${Date.now() - t0}ms`);
+        return syncDb;
+      }
+    }
+  } catch (syncErr) {
+    console.warn(`[DB] switchUser: failed to initialize remote Turso sync, falling back to local:`, syncErr);
+  }
+
+  // 2. Fallback to local SQLite replica
   const db = getLocalPrivateDb(userId);
   try {
     await db.connect();
@@ -252,7 +275,8 @@ export async function switchUser(userId: string): Promise<Database> {
     throw e;
   }
 
-  console.log(`[DB] switchUser DONE: switched and initialized in ${Date.now() - t0}ms`);
+  syncReadyResolve?.();
+  console.log(`[DB] switchUser DONE: local switched in ${Date.now() - t0}ms`);
   return db;
 }
 
@@ -272,13 +296,12 @@ export async function closeConnection(key: string): Promise<void> {
 }
 
 export function getWorkspaceSyncDb(subdomain: string, url: string, authToken: string): Database {
-  return createSyncDbConnection(`workspace_${subdomain}`, `workspace_${subdomain}.db`, url, authToken);
+  return createSyncDbConnection(subdomain, `${subdomain}.db`, url, authToken);
 }
 
 export async function initWorkspaceSync(subdomain: string): Promise<void> {
   const t0 = Date.now();
-  const syncKey = `workspace_${subdomain}`;
-  if (dbConnections[syncKey] && dbConnections[syncKey].isSync) {
+  if (dbConnections[subdomain] && dbConnections[subdomain].isSync) {
     console.log(`[DB] initWorkspaceSync: connection already exists and is sync-enabled for ${subdomain}, reuse it`);
     syncReadyResolve?.();
     return;
@@ -302,7 +325,7 @@ export async function initWorkspaceSync(subdomain: string): Promise<void> {
     }
 
     console.log(`[DB] initWorkspaceSync: closing old connection if exists...`);
-    await closeConnection(syncKey);
+    await closeConnection(subdomain);
 
     console.log(`[DB] initWorkspaceSync: creating sync DB connection...`);
     const db = getWorkspaceSyncDb(subdomain, url, authToken);

@@ -13,18 +13,7 @@ export default function Index() {
         setTarget('/auth');
         return;
       }
-      try {
-        const data = await tar.listWorkspaces();
-        const list = data.workspaces || [];
-        if (list.length > 0) {
-          setTarget('/(tabs)/workspaces');
-        } else {
-          setTarget('/(tabs)/workspaces?action=new');
-        }
-      } catch (e) {
-        console.warn('[Index] Failed to check workspaces:', e);
-        setTarget('/(tabs)/workspaces');
-      }
+      setTarget('/(tabs)/workspaces');
     });
   }, []);
 

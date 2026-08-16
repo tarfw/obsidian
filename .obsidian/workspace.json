@@ -207,6 +207,9 @@
   },
   "active": "460c72c35b77fba8",
   "lastOpenFiles": [
+    "taragent/scratch_list_turso.js",
+    "taragent/scratch_clean.js",
+    "taragent/migrations/0001_init.sql",
     "Tar app fixes..md",
     "plan6.md",
     "tarapp/src/components/JoinWorkspaceModal.tsx",

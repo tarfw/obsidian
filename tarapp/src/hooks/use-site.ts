@@ -68,22 +68,22 @@ export function useSite(storeIdInput?: string) {
   const refresh = useCallback(async () => {
     try {
       let d = await db.getFirstAsync<LayoutRow>(
-        "SELECT id, data FROM matter WHERE (form = ? OR form = ? OR scope = ? OR scope = ?) AND type IN ('site_draft', 'storefront_draft') AND active = 1 ORDER BY rowid DESC LIMIT 1",
-        storeId, cleanId, scope, `s:${cleanId}`
+        "SELECT id, data FROM matter WHERE (scope = ? OR scope = ?) AND type IN ('site_draft', 'storefront_draft', 6) AND deleted_at IS NULL ORDER BY rowid DESC LIMIT 1",
+        scope, `s:${cleanId}`
       );
       if (!d) {
         d = await db.getFirstAsync<LayoutRow>(
-          "SELECT id, data FROM matter WHERE type IN ('site_draft', 'storefront_draft') AND active = 1 ORDER BY rowid DESC LIMIT 1"
+          "SELECT id, data FROM matter WHERE type IN ('site_draft', 'storefront_draft', 6) AND deleted_at IS NULL ORDER BY rowid DESC LIMIT 1"
         );
       }
 
       let p = await db.getFirstAsync<LayoutRow>(
-        "SELECT id, data FROM matter WHERE (form = ? OR form = ? OR scope = ? OR scope = ?) AND type IN ('site_published', 'storefront_published') AND active = 1 ORDER BY rowid DESC LIMIT 1",
-        storeId, cleanId, scope, `s:${cleanId}`
+        "SELECT id, data FROM matter WHERE (scope = ? OR scope = ?) AND type IN ('site_published', 'storefront_published', 6) AND deleted_at IS NULL ORDER BY rowid DESC LIMIT 1",
+        scope, `s:${cleanId}`
       );
       if (!p) {
         p = await db.getFirstAsync<LayoutRow>(
-          "SELECT id, data FROM matter WHERE type IN ('site_published', 'storefront_published') AND active = 1 ORDER BY rowid DESC LIMIT 1"
+          "SELECT id, data FROM matter WHERE type IN ('site_published', 'storefront_published', 6) AND deleted_at IS NULL ORDER BY rowid DESC LIMIT 1"
         );
       }
 
@@ -113,12 +113,11 @@ export function useSite(storeIdInput?: string) {
 
   const saveDraft = useCallback(async (layout: SiteLayout) => {
     const json = JSON.stringify(layout);
-    const targetForm = cleanId;
     let currentId = draftId;
     if (!currentId) {
       const existing = await db.getFirstAsync<LayoutRow>(
-        "SELECT id FROM matter WHERE (form = ? OR form = ? OR scope = ?) AND type IN ('site_draft', 'storefront_draft') AND active = 1 LIMIT 1",
-        targetForm, cleanId, scope
+        "SELECT id FROM matter WHERE (scope = ? OR scope = ?) AND type IN ('site_draft', 'storefront_draft', 6) AND deleted_at IS NULL LIMIT 1",
+        scope, cleanId
       );
       if (existing?.id) currentId = existing.id;
     }
@@ -128,8 +127,8 @@ export function useSite(storeIdInput?: string) {
     } else {
       const newId = `matter_${Date.now()}`;
       await db.runAsync(
-        "INSERT INTO matter (id, form, type, scope, data, active) VALUES (?, ?, 'site_draft', ?, ?, 1)",
-        newId, targetForm, scope, json
+        "INSERT INTO matter (id, type, scope, data) VALUES (?, 6, ?, ?)",
+        newId, scope, json
       );
       setDraftId(newId);
     }
@@ -140,18 +139,17 @@ export function useSite(storeIdInput?: string) {
   const publish = useCallback(async (subdomainOverride?: string, workspaceName?: string) => {
     const activeLayout = draft || DEFAULT_LAYOUT;
     const json = JSON.stringify(activeLayout);
-    const targetForm = cleanId;
     const existing = await db.getFirstAsync<LayoutRow>(
-      "SELECT id FROM matter WHERE (form = ? OR form = ? OR scope = ?) AND type IN ('site_published', 'storefront_published') AND active = 1 LIMIT 1",
-      targetForm, cleanId, scope
+      "SELECT id FROM matter WHERE (scope = ? OR scope = ?) AND type IN ('site_published', 'storefront_published', 6) AND deleted_at IS NULL LIMIT 1",
+      scope, cleanId
     );
     if (existing?.id) {
       await db.runAsync('UPDATE matter SET data = ? WHERE id = ?', json, existing.id);
     } else {
       const id = `matter_${Date.now()}`;
       await db.runAsync(
-        "INSERT INTO matter (id, form, type, scope, data, active) VALUES (?, ?, 'site_published', ?, ?, 1)",
-        id, targetForm, scope, json
+        "INSERT INTO matter (id, type, scope, data) VALUES (?, 6, ?, ?)",
+        id, scope, json
       );
     }
     setPublished(activeLayout);

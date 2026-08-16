@@ -53,6 +53,14 @@ interface Workspace {
   type?: string;
 }
 
+const PERSONAL_WORKSPACE: Workspace = {
+  subdomain: 'personal',
+  scope: 'p',
+  name: 'Personal Workspace',
+  role: 'owner',
+  type: 'personal',
+};
+
 interface CardItem {
   id: string;
   type: 'user_text' | 'assistant_text' | 'error' | 'product_list' | 'product_created' | 'order_list' | 'stats' | 'site_card';
@@ -240,6 +248,10 @@ export default function WorkspacesScreen() {
   };
 
   const handleSelectMentionContact = (contact: ContactItem) => {
+    const raw = (contact as any).rawEntity || contact;
+    if (raw?.isPersonalContact && currentWorkspace?.scope && currentWorkspace.scope !== 'p') {
+      autoBridgeContactToWorkspace(raw, currentWorkspace.scope).catch(() => null);
+    }
     setInput(prev => {
       const match = prev.match(/([@#])([a-zA-Z0-9_\s.-]*)$/);
       if (match) {
@@ -257,6 +269,11 @@ export default function WorkspacesScreen() {
     setShowMentionPopover(false);
     setShowMentionModal(false);
     if (!entity) return;
+    const raw = entity.rawEntity || entity;
+    if (raw?.isPersonalContact && currentWorkspace?.scope && currentWorkspace.scope !== 'p') {
+      autoBridgeContactToWorkspace(raw, currentWorkspace.scope).catch(() => null);
+    }
+
     const typeCode = typeof entity.type === 'number' ? entity.type : undefined;
     const typeLower = String(entity.type || entity.category || '').toLowerCase();
     const isItem =
@@ -273,8 +290,6 @@ export default function WorkspacesScreen() {
       typeLower.includes('listing') ||
       typeLower.includes('document') ||
       entity.data?.item_subtype;
-
-    const raw = entity.rawEntity || entity;
 
     if (isItem) {
       setItemInitialData(raw);
@@ -396,26 +411,25 @@ export default function WorkspacesScreen() {
     setLoadingWorkspaces(true);
     try {
       const data = await tar.listWorkspaces();
-      const list: Workspace[] = data.workspaces || [];
+      const rawList: Workspace[] = data.workspaces || [];
+      const list: Workspace[] = [
+        PERSONAL_WORKSPACE,
+        ...rawList.filter((w) => w.subdomain !== 'personal'),
+      ];
       setWorkspaces(list);
 
-      if (list.length > 0) {
-        // Prioritize route parameters (deep-linking), fallback to SecureStore
-        const targetSub = paramSubdomain || await SecureStore.getItemAsync('active_workspace_subdomain').catch(() => null);
-        const found = list.find((w) => w.subdomain === targetSub);
-        if (found) {
-          setCurrentWorkspace(found);
-          if (paramSubdomain) {
-            await SecureStore.setItemAsync('active_workspace_subdomain', paramSubdomain).catch(() => null);
-          }
-        } else {
-          // Default to first
-          setCurrentWorkspace(list[0]);
-          await SecureStore.setItemAsync('active_workspace_subdomain', list[0].subdomain).catch(() => null);
-        }
+      // Prioritize route parameters (deep-linking), fallback to SecureStore, default to Personal
+      const targetSub = paramSubdomain || await SecureStore.getItemAsync('active_workspace_subdomain').catch(() => null);
+      const found = list.find((w) => w.subdomain === targetSub);
+      if (found) {
+        setCurrentWorkspace(found);
+      } else {
+        setCurrentWorkspace(PERSONAL_WORKSPACE);
       }
     } catch (e) {
       console.warn('[Workspaces] Failed to fetch workspaces:', e);
+      setWorkspaces([PERSONAL_WORKSPACE]);
+      setCurrentWorkspace(PERSONAL_WORKSPACE);
     } finally {
       setLoadingWorkspaces(false);
     }
@@ -532,9 +546,9 @@ ${membersYaml}
     }
   }, [paramSubdomain, workspaces]);
 
-  // Sync current workspace database when selected workspace changes
+  // Sync current workspace database when selected workspace changes (skip personal workspace)
   useEffect(() => {
-    if (currentWorkspace?.subdomain) {
+    if (currentWorkspace?.subdomain && currentWorkspace.subdomain !== 'personal' && currentWorkspace.subdomain !== 'p') {
       import('@/lib/db').then(({ initWorkspaceSync }) => {
         initWorkspaceSync(currentWorkspace.subdomain).catch(err => {
           console.warn('[Workspace] Failed to initialize sync for', currentWorkspace.subdomain, err);
@@ -586,10 +600,95 @@ ${membersYaml}
     }
   };
 
+  const autoBridgeContactToWorkspace = async (personalContact: any, workspaceScope: string) => {
+    if (!personalContact || !workspaceScope || workspaceScope === 'p') return personalContact;
+    const name = personalContact.title || personalContact.name || personalContact.data?.fn || 'Contact';
+    const phone = personalContact.data?.ph || personalContact.data?.phone || personalContact.phone || '';
+    const email = personalContact.data?.em || personalContact.data?.email || personalContact.email || '';
+
+    try {
+      // 1. Insert into Workspace DB as client
+      const res = await tar.tool('create', {
+        table: 'matter',
+        type: 1, // Person
+        title: name,
+        role: 'client',
+        scope: workspaceScope,
+        data: {
+          fn: name,
+          ph: phone,
+          em: email,
+          src_personal_id: personalContact.id,
+        },
+      });
+
+      // 2. Link in Personal DB graph (rel=13 linked_to)
+      if (res?.id && personalContact.id) {
+        await tar.tool('create', {
+          table: 'graph',
+          src: personalContact.id,
+          rel: 13,
+          tgt: res.id,
+          scope: 'p',
+        }).catch(() => null);
+      }
+
+      await refreshEntities(workspaceScope);
+      return res;
+    } catch (err) {
+      console.warn('[AutoBridge] Error auto-bridging contact:', err);
+      return personalContact;
+    }
+  };
+
   const refreshEntities = async (scope: string) => {
     try {
-      const result = await tar.tool('read', { table: 'matter', scope });
-      setAllEntities(filterActiveRows(result?.rows || []));
+      // 1. Fetch active workspace entities
+      const wsResult = await tar.tool('read', { table: 'matter', scope }).catch(() => null);
+      const wsRows = filterActiveRows(wsResult?.rows || []);
+
+      // 2. If inside a commercial workspace, also load personal contacts for zero-switching
+      let personalRows: any[] = [];
+      if (scope !== 'p') {
+        const pResult = await tar.tool('read', { table: 'matter', scope: 'p' }).catch(() => null);
+        personalRows = filterActiveRows(pResult?.rows || []).filter((r: any) => {
+          const typeCode = typeof r.type === 'number' ? r.type : undefined;
+          const typeStr = String(r.type || r.role || '').toLowerCase();
+          return typeCode === 1 || typeStr === 'person' || typeStr === 'customer' || typeStr === 'contact';
+        });
+      }
+
+      // 3. Smart Deduplication by phone, email, and name
+      const seenPhones = new Set<string>();
+      const seenEmails = new Set<string>();
+      const seenNames = new Set<string>();
+
+      wsRows.forEach((r: any) => {
+        const ph = String(r.data?.ph || r.data?.phone || r.phone || '').trim().toLowerCase();
+        const em = String(r.data?.em || r.data?.email || r.email || '').trim().toLowerCase();
+        const nm = String(r.title || r.name || r.data?.fn || '').trim().toLowerCase();
+        if (ph) seenPhones.add(ph);
+        if (em) seenEmails.add(em);
+        if (nm) seenNames.add(nm);
+      });
+
+      const deduplicatedPersonal: any[] = [];
+      personalRows.forEach((pr: any) => {
+        const ph = String(pr.data?.ph || pr.data?.phone || pr.phone || '').trim().toLowerCase();
+        const em = String(pr.data?.em || pr.data?.email || pr.email || '').trim().toLowerCase();
+        const nm = String(pr.title || pr.name || pr.data?.fn || '').trim().toLowerCase();
+
+        const isDuplicate = (ph && seenPhones.has(ph)) || (em && seenEmails.has(em)) || (nm && seenNames.has(nm));
+        if (!isDuplicate) {
+          deduplicatedPersonal.push({
+            ...pr,
+            isPersonalContact: true,
+            role: 'Personal Contact',
+          });
+        }
+      });
+
+      setAllEntities([...wsRows, ...deduplicatedPersonal]);
     } catch (e) {
       console.warn('[Workspace] Failed to fetch directory entities:', e);
     }
@@ -1491,13 +1590,13 @@ ${membersYaml}
   }
 
   // Determine if workspace creation modal should be visible
-  const showCreateModal = isCreatingWorkspace || paramAction === 'new' || (workspaces.length === 0 && !loadingWorkspaces);
+  const showCreateModal = isCreatingWorkspace;
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <KeyboardAvoidingView
         style={{ flex: 1, paddingTop: insets.top }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         {/* Main Content — scrollable with keyboard */}
         <KeyboardAwareScrollView
@@ -1727,28 +1826,30 @@ ${membersYaml}
         {/* Suggested Actions popup list when typing */}
         {input.trim().length > 0 && getFilteredActions().length > 0 ? (
           <View style={{
-            backgroundColor: theme.backgroundElement,
-            borderColor: theme.border,
+            backgroundColor: '#ffffff',
+            borderColor: '#e2e8f0',
             borderWidth: 1,
-            borderRadius: 12,
+            borderRadius: 16,
             marginBottom: 8,
-            marginHorizontal: 12,
+            marginHorizontal: 10,
             padding: 4,
           }}>
-            <Text style={{ fontSize: 10, fontWeight: '700', color: theme.textMuted, paddingHorizontal: 12, paddingVertical: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+            <Text style={{ fontSize: 11, fontWeight: '700', color: '#94a3b8', paddingHorizontal: 12, paddingTop: 8, paddingBottom: 4, textTransform: 'uppercase', letterSpacing: 0.8 }}>
               Suggested Actions
             </Text>
-            {getFilteredActions().slice(0, 6).map((hint, idx) => (
+            {getFilteredActions().slice(0, 6).map((hint, idx, arr) => (
               <TouchableOpacity
                 key={idx}
+                activeOpacity={0.65}
                 style={{
+                  minHeight: 46,
                   paddingVertical: 10,
                   paddingHorizontal: 12,
-                  borderBottomWidth: idx < getFilteredActions().slice(0, 6).length - 1 ? StyleSheet.hairlineWidth : 0,
-                  borderBottomColor: theme.border,
+                  borderRadius: 12,
                   flexDirection: 'row',
                   alignItems: 'center',
-                  justifyContent: 'space-between'
+                  borderBottomWidth: idx < arr.length - 1 ? StyleSheet.hairlineWidth : 0,
+                  borderBottomColor: '#f1f5f9',
                 }}
                 onPress={() => {
                   setInput('');
@@ -1775,31 +1876,34 @@ ${membersYaml}
                   }
                 }}
               >
-                <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 8, gap: 10 }}>
-                  {hint.icon && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: 12 }}>
+                  {hint.icon ? (
                     <View style={{
-                      width: 28,
-                      height: 28,
-                      borderRadius: 14,
-                      backgroundColor: theme.primary + '15',
+                      width: 32,
+                      height: 32,
+                      borderRadius: 10,
+                      backgroundColor: '#eff6ff',
                       alignItems: 'center',
                       justifyContent: 'center',
                     }}>
-                      <Ionicons name={hint.icon as any} size={15} color={theme.primary} />
+                      <Ionicons name={hint.icon as any} size={17} color="#2563eb" />
+                    </View>
+                  ) : (
+                    <View style={{
+                      width: 32,
+                      height: 32,
+                      borderRadius: 10,
+                      backgroundColor: '#f8fafc',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}>
+                      <Ionicons name="flash-outline" size={16} color="#64748b" />
                     </View>
                   )}
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 13, color: theme.text, fontWeight: '600' }} numberOfLines={1}>
-                      {hint.label}
-                    </Text>
-                    {hint.subtitle && (
-                      <Text style={{ fontSize: 11, color: theme.textMuted, marginTop: 1 }} numberOfLines={1}>
-                        {hint.subtitle}
-                      </Text>
-                    )}
-                  </View>
+                  <Text style={{ fontSize: 14.5, color: '#1e293b', fontWeight: '600', flex: 1 }} numberOfLines={1}>
+                    {hint.label}
+                  </Text>
                 </View>
-                <Ionicons name="arrow-forward-outline" size={14} color={theme.textMuted} />
               </TouchableOpacity>
             ))}
           </View>
@@ -1826,78 +1930,7 @@ ${membersYaml}
           }}
         />
 
-        {/* Quick Symbol Accessory Bar with @ and # chips and Globe icon at right end */}
-        <View style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          paddingHorizontal: 16,
-          paddingVertical: 6,
-          backgroundColor: theme.background,
-          borderTopWidth: 1,
-          borderTopColor: theme.border + '60',
-        }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <TouchableOpacity
-              onPress={() => {
-                setInput(prev => (prev ? (prev.endsWith(' ') ? prev + '@' : prev + ' @') : '@'));
-                setMentionPrefix('@');
-                setShowMentionPopover(true);
-                setMentionQuery('');
-              }}
-              style={{
-                paddingHorizontal: 12,
-                paddingVertical: 4,
-                borderRadius: 12,
-                backgroundColor: theme.primary + '18',
-                borderWidth: 1,
-                borderColor: theme.primary + '35',
-              }}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Text style={{ fontSize: 15, fontWeight: '800', color: theme.primary }}>@</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={() => {
-                setInput(prev => (prev ? (prev.endsWith(' ') ? prev + '#' : prev + ' #') : '#'));
-                setMentionPrefix('#');
-                setShowMentionPopover(true);
-                setMentionQuery('');
-              }}
-              style={{
-                paddingHorizontal: 12,
-                paddingVertical: 4,
-                borderRadius: 12,
-                backgroundColor: theme.primary + '18',
-                borderWidth: 1,
-                borderColor: theme.primary + '35',
-              }}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Text style={{ fontSize: 15, fontWeight: '800', color: theme.primary }}>#</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Globe Icon Button at Right End (Opens Explore Overlay) */}
-          <TouchableOpacity
-            activeOpacity={0.7}
-            onPress={() => setShowExploreOverlay(true)}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            style={{
-              paddingHorizontal: 8,
-              paddingVertical: 4,
-              borderRadius: 12,
-              backgroundColor: showExploreOverlay ? theme.primary + '18' : 'transparent',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <Ionicons name="globe-outline" size={20} color={showExploreOverlay ? theme.primary : theme.textSecondary} />
-          </TouchableOpacity>
-        </View>
-
-        {/* Text Input Bar — Full Width, Square Corners */}
+        {/* Text Input Bar — Full Width, Clean & Uncluttered */}
         <View style={[
           styles.textInputWrapper,
           {
@@ -1914,21 +1947,39 @@ ${membersYaml}
             paddingBottom: Math.max(insets.bottom + 10, 20),
             alignItems: 'center',
             flexDirection: 'row',
+            gap: 10,
           }
         ]}>
           <TextInput
             value={input}
             onChangeText={handleInputChange}
-            placeholder="Type a message or @ to mention..."
+            placeholder="Type an action, search, or message..."
             placeholderTextColor={theme.textMuted}
             style={[styles.textInput, { color: theme.text, flex: 1 }]}
             multiline={true}
-            keyboardType="twitter"
-            inputMode="email"
+            keyboardType="default"
+            inputMode="text"
             autoCapitalize="none"
             onSubmitEditing={() => handleSend()}
           />
-          <View style={{ flexDirection: 'row', alignItems: 'center', paddingRight: 4 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingRight: 4 }}>
+            {/* Globe (Explore) Button */}
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => setShowExploreOverlay(true)}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 18,
+                backgroundColor: showExploreOverlay ? theme.primary + '18' : theme.backgroundElement,
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Ionicons name="globe-outline" size={18} color={showExploreOverlay ? theme.primary : theme.textSecondary} />
+            </TouchableOpacity>
+
             {/* Colored Touch-Friendly Canvas Button */}
             <Pressable
               onPress={() => setShowCanvasOverlay(true)}
@@ -2362,13 +2413,17 @@ ${membersYaml}
         allEntities={allEntities}
         editEntity={editContactEntity}
         onClose={() => {
+          Keyboard.dismiss();
           setShowContactModal(false);
           setContactResultMessage(null);
           setEditContactEntity(null);
         }}
         onSave={async (contactData: { name: string; role: string; email: string; phone: string; org: string; notes?: string }) => {
           if (!currentWorkspace?.scope) return;
-          setSubmittingContact(true);
+          Keyboard.dismiss();
+          setShowContactModal(false);
+          setContactResultMessage(null);
+          setEditContactEntity(null);
           try {
             let matterType = 'customer';
             if (['Company', 'Vendor', 'Partner'].includes(contactData.role)) {
@@ -2382,21 +2437,17 @@ ${membersYaml}
               scope: currentWorkspace.scope,
             });
             await refreshEntities(currentWorkspace.scope);
-            setContactResultMessage('Contact saved successfully!');
-            setTimeout(() => {
-              setShowContactModal(false);
-              setSubmittingContact(false);
-              setContactResultMessage(null);
-            }, 1000);
           } catch (errContact) {
             console.error('[Workspace] Contact creation failed:', errContact);
-            setContactResultMessage('Failed to save contact.');
-            setSubmittingContact(false);
           }
         }}
         onUpdate={async (contactData: { name: string; role: string; email: string; phone: string; org: string; notes?: string }) => {
           if (!currentWorkspace?.scope || !editContactEntity?.id) return;
-          setSubmittingContact(true);
+          Keyboard.dismiss();
+          setSelectedEntityDetails(null);
+          setShowContactModal(false);
+          setContactResultMessage(null);
+          setEditContactEntity(null);
           try {
             let matterType = 'customer';
             if (['Company', 'Vendor', 'Partner'].includes(contactData.role)) {
@@ -2413,18 +2464,8 @@ ${membersYaml}
               },
             });
             await refreshEntities(currentWorkspace.scope);
-            setContactResultMessage('Contact updated successfully!');
-            setTimeout(() => {
-              setSelectedEntityDetails(null);
-              setShowContactModal(false);
-              setSubmittingContact(false);
-              setContactResultMessage(null);
-              setEditContactEntity(null);
-            }, 1000);
           } catch (errContact) {
             console.error('[Workspace] Contact update failed:', errContact);
-            setContactResultMessage('Failed to update contact.');
-            setSubmittingContact(false);
           }
         }}
       />

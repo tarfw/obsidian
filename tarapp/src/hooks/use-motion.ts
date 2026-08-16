@@ -119,9 +119,9 @@ export function useMotion(urgency?: string) {
     const taskMatters: Record<string, { subtasks: any[]; status: string }> = {};
     for (const tid of taskIds) {
       const m = await db.getFirstAsync<{ data: string }>(
-        "SELECT data FROM matter WHERE form = ? AND type = 'task_state' AND active = 1 LIMIT 1",
-        tid
-      );
+        "SELECT data FROM matter WHERE (scope = ? OR id = ?) AND type IN ('task_state', 10) AND deleted_at IS NULL LIMIT 1",
+        tid, tid
+      ).catch(() => null);
       if (m) {
         const md = parseData(m.data);
         taskMatters[tid] = {

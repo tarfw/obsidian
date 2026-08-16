@@ -68,9 +68,15 @@ export async function pushToPersonalInbox(
     const env = envContext.getStore();
     if (env?.DB) {
       try {
-        const userDbRecord = await (env.DB as any).prepare(
-          'SELECT turso_url, turso_auth_token FROM workspaces WHERE scope = ? OR subdomain = ?'
-        ).bind(`u:${params.userId}`, `user-${params.userId}`).first();
+        let userDbRecord = await (env.DB as any).prepare(
+          'SELECT turso_url, turso_auth_token FROM users WHERE user_id = ?'
+        ).bind(params.userId).first();
+
+        if (!userDbRecord) {
+          userDbRecord = await (env.DB as any).prepare(
+            'SELECT turso_url, turso_auth_token FROM workspaces WHERE scope = ? OR subdomain = ?'
+          ).bind(`u:${params.userId}`, params.userId).first();
+        }
 
         if (userDbRecord?.turso_url && userDbRecord?.turso_auth_token) {
           await executeWorkspaceTursoQuery(

@@ -3,28 +3,30 @@ import { useDb } from '@/db/provider';
 
 export interface MatterRow {
   id: string;
-  form: string;
-  type: string;
-  qty: number;
-  value: number;
-  data: string;
-  time: string;
-  active: number;
+  type: number | string;
+  status?: number;
+  parent_id?: string;
+  title?: string;
+  data?: string;
+  scope?: string;
+  created_at?: string;
+  updated_at?: string;
+  deleted_at?: string;
 }
 
-export function useMatter(formId?: string) {
+export function useMatter(scope?: string) {
   const db = useDb();
   const [rows, setRows] = useState<MatterRow[]>([]);
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
-    let query = 'SELECT * FROM matter WHERE active = 1';
+    let query = 'SELECT * FROM matter WHERE deleted_at IS NULL';
     const params: any[] = [];
-    if (formId) { query += ' AND form = ?'; params.push(formId); }
-    query += ' ORDER BY time DESC';
-    setRows(await db.getAllAsync<MatterRow>(query, params));
+    if (scope) { query += ' AND scope = ?'; params.push(scope); }
+    query += ' ORDER BY created_at DESC';
+    setRows(await db.getAllAsync<MatterRow>(query, params).catch(() => []));
     setLoading(false);
-  }, [db, formId]);
+  }, [db, scope]);
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { refresh(); }, [refresh]);

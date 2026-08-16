@@ -49,17 +49,7 @@ async function publishToWorker(subdomain: string, layout: StorefrontLayout): Pro
  * Resolve a store's subdomain from its form row.
  */
 async function getSubdomain(storeId: string): Promise<string | null> {
-  try {
-    const db = await getDb();
-    const row = await db.getFirstAsync(
-      'SELECT data FROM form WHERE id = ? AND active = 1',
-      storeId
-    );
-    const subdomain = row ? JSON.parse(row.data || '{}').subdomain : null;
-    return subdomain || null;
-  } catch {
-    return null;
-  }
+  return storeId ? storeId.replace(/^w:/, '') : null;
 }
 
 /**
@@ -88,19 +78,7 @@ async function syncToTurso(
   layout: StorefrontLayout
 ): Promise<void> {
   try {
-    // Get store subdomain from local DB
-    const db = await getDb();
-    const row = (await db.getFirstAsync(
-      'SELECT data FROM form WHERE id = ? AND active = 1',
-      storeId
-    )) as { data: string } | null;
-    if (!row) {
-      console.warn('[Storefront] Store not found locally');
-      return;
-    }
-
-    const storeData = JSON.parse(row.data || '{}');
-    const subdomain = storeData.subdomain;
+    const subdomain = await getSubdomain(storeId);
     if (!subdomain) {
       console.warn('[Storefront] Store has no subdomain');
       return;
@@ -112,13 +90,6 @@ async function syncToTurso(
   }
 }
 
-/**
- * Load/save a store's storefront layout (draft + published) in the `matter` table.
- * Draft is what the owner edits via AI chat; published is what customers see.
- * On publish, syncs to Turso so the Worker can serve the page.
- *
- * Scoped to `s:{storeId}` per docs/plan.md.
- */
 export function useStorefront(storeId?: string) {
   const db = useDb();
   dbRef = db;
@@ -127,23 +98,23 @@ export function useStorefront(storeId?: string) {
   const [draftId, setDraftId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const scope = storeId ? `s:${storeId}` : 'p';
+  const scope = storeId ? (storeId.startsWith('w:') ? storeId : `w:${storeId}`) : 'p';
 
   const refresh = useCallback(async () => {
     if (!storeId) { setLoading(false); return; }
     const d = await db.getFirstAsync<LayoutRow>(
-      "SELECT id, data FROM matter WHERE form = ? AND type = 'storefront_draft' AND active = 1 LIMIT 1",
-      storeId
-    );
+      "SELECT id, data FROM matter WHERE (scope = ? OR scope = ?) AND type IN ('storefront_draft', 6) AND deleted_at IS NULL LIMIT 1",
+      scope, `s:${storeId}`
+    ).catch(() => null);
     const p = await db.getFirstAsync<LayoutRow>(
-      "SELECT id, data FROM matter WHERE form = ? AND type = 'storefront_published' AND active = 1 LIMIT 1",
-      storeId
-    );
+      "SELECT id, data FROM matter WHERE (scope = ? OR scope = ?) AND type IN ('storefront_published', 6) AND deleted_at IS NULL LIMIT 1",
+      scope, `s:${storeId}`
+    ).catch(() => null);
     setDraftId(d?.id ?? null);
     setDraft(parseLayout(d?.data ? JSON.parse(d.data) : null));
     setPublished(parseLayout(p?.data ? JSON.parse(p.data) : null));
     setLoading(false);
-  }, [db, storeId]);
+  }, [db, storeId, scope]);
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { refresh(); }, [refresh]);
@@ -157,8 +128,8 @@ export function useStorefront(storeId?: string) {
     } else {
       const id = `matter_${Date.now()}`;
       await db.runAsync(
-        "INSERT INTO matter (id, form, type, scope, data, active) VALUES (?, ?, 'storefront_draft', ?, ?, 1)",
-        id, storeId, scope, json
+        "INSERT INTO matter (id, type, scope, data) VALUES (?, 6, ?, ?)",
+        id, scope, json
       );
     }
     // Mirror to the desktop live editor (non-blocking).
@@ -171,9 +142,18 @@ export function useStorefront(storeId?: string) {
     if (!storeId || !draft) return;
     const json = JSON.stringify(draft);
     const existing = await db.getFirstAsync<LayoutRow>(
-      "SELECT id FROM matter WHERE form = ? AND type = 'storefront_published' AND active = 1 LIMIT 1",
-      storeId
-    );
+      "SELECT id FROM matter WHERE (scope = ? OR scope = ?) AND type IN ('storefront_published', 6) AND deleted_at IS NULL LIMIT 1",
+      scope, `s:${storeId}`
+    ).catch(() => null);
+    if (existing?.id) {
+      await db.runAsync('UPDATE matter SET data = ? WHERE id = ?', json, existing.id);
+    } else {
+      const id = `matter_${Date.now()}`;
+      await db.runAsync(
+        "INSERT INTO matter (id, type, scope, data) VALUES (?, 6, ?, ?)",
+        id, scope, json
+      );
+    }
     if (existing?.id) {
       await db.runAsync('UPDATE matter SET data = ? WHERE id = ?', json, existing.id);
     } else {

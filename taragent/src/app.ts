@@ -9,7 +9,7 @@ import { uploadWorkspaceFile, readWorkspaceFile, readWorkspaceIndex, deleteWorks
 import { CORE_MODULES } from './lib/core-modules';
 import { extractBusinessInfo } from './lib/extract-business';
 import { writeEvent, getUserInbox, markTaskDone } from './lib/events';
-import { getOrCreateWorkspaceDb } from './lib/workspace-db';
+import { getOrCreateWorkspaceDb, getOrCreateUserDb } from './lib/workspace-db';
 import { parseSkillMarkdown, generateCompactActionIndex } from './lib/skill-parser';
 import { executeAITask } from './lib/action-executor';
 
@@ -422,10 +422,31 @@ app.post('/workspaces/create', async (c) => {
 // User Database Routes (per-user Turso DB for sync)
 // ============================================================
 
+// GET /user-db — get or create user's Personal Turso DB credentials
+app.get('/user-db', async (c) => {
+  const userId = c.req.query('userId') || c.req.header('X-User-Id') || '';
+  if (!userId) return c.json({ error: 'Missing userId' }, 400);
+
+  const platformToken = c.env.TURSO_PLATFORM_TOKEN;
+  if (!platformToken) {
+    return c.json({ error: 'Turso platform token not configured', synced: false }, 200);
+  }
+
+  try {
+    const { url, authToken } = await getOrCreateUserDb(c.env.DB, userId, platformToken);
+    return c.json({ url, authToken });
+  } catch (e: any) {
+    console.error('[user-db] Error:', e.message);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
 // GET /workspace-db — get or create workspace's Turso DB credentials
 app.get('/workspace-db', async (c) => {
   const subdomain = c.req.query('subdomain') || c.req.header('X-Subdomain') || '';
-  if (!subdomain) return c.json({ error: 'Missing subdomain' }, 400);
+  if (!subdomain || subdomain === 'personal' || subdomain === 'p') {
+    return c.json({ error: 'Personal workspace uses personal user database, not workspace DB' }, 400);
+  }
 
   const scope = `w:${subdomain}`;
   const platformToken = c.env.TURSO_PLATFORM_TOKEN;
@@ -481,32 +502,53 @@ app.post('/tools/:name', async (c) => {
 
   const body = await c.req.json();
   const scope = body.scope || body.stream || body.src || body.tgt || '';
+  const userId = c.req.header('X-User-Id') || body.user_id || body.userId || '';
+  const isPersonalScope = !scope || scope === 'p' || scope === 'personal' || scope.startsWith('p:');
 
   let dbUrl = '';
   let dbToken = '';
 
-  if (c.env.DB && scope) {
-    const subdomain = scope.startsWith('w:')
-      ? scope.replace('w:', '')
-      : scope.startsWith('o:')
-      ? scope.replace('o:', '').split('_')[0]
-      : scope;
+  if (c.env.DB) {
+    if (isPersonalScope && userId && userId !== 'guest') {
+      try {
+        const userRec = await c.env.DB.prepare(
+          'SELECT turso_url, turso_auth_token FROM users WHERE user_id = ?'
+        ).bind(userId).first<{ turso_url?: string; turso_auth_token?: string }>();
 
-    try {
-      const ws = await c.env.DB.prepare(
-        'SELECT turso_url, turso_auth_token FROM workspaces WHERE subdomain = ?'
-      ).bind(subdomain).first();
-
-      if (ws?.turso_url && ws?.turso_auth_token) {
-        dbUrl = ws.turso_url;
-        dbToken = ws.turso_auth_token;
-      } else if (c.env.TURSO_PLATFORM_TOKEN) {
-        const credentials = await getOrCreateWorkspaceDb(c.env.DB, subdomain, `w:${subdomain}`, c.env.TURSO_PLATFORM_TOKEN);
-        dbUrl = credentials.url;
-        dbToken = credentials.authToken;
+        if (userRec?.turso_url && userRec?.turso_auth_token) {
+          dbUrl = userRec.turso_url;
+          dbToken = userRec.turso_auth_token;
+        } else if (c.env.TURSO_PLATFORM_TOKEN) {
+          const creds = await getOrCreateUserDb(c.env.DB, userId, c.env.TURSO_PLATFORM_TOKEN);
+          dbUrl = creds.url;
+          dbToken = creds.authToken;
+        }
+      } catch (err) {
+        console.warn('[tools] Failed to resolve personal user DB credentials:', err);
       }
-    } catch (err) {
-      console.warn('[tools] Failed to resolve Turso workspace DB credentials:', err);
+    } else if (scope && !isPersonalScope) {
+      const subdomain = scope.startsWith('w:')
+        ? scope.replace('w:', '')
+        : scope.startsWith('o:')
+        ? scope.replace('o:', '').split('_')[0]
+        : scope;
+
+      try {
+        const ws = await c.env.DB.prepare(
+          'SELECT turso_url, turso_auth_token FROM workspaces WHERE subdomain = ?'
+        ).bind(subdomain).first<{ turso_url?: string; turso_auth_token?: string }>();
+
+        if (ws?.turso_url && ws?.turso_auth_token) {
+          dbUrl = ws.turso_url;
+          dbToken = ws.turso_auth_token;
+        } else if (c.env.TURSO_PLATFORM_TOKEN) {
+          const credentials = await getOrCreateWorkspaceDb(c.env.DB, subdomain, `w:${subdomain}`, c.env.TURSO_PLATFORM_TOKEN);
+          dbUrl = credentials.url;
+          dbToken = credentials.authToken;
+        }
+      } catch (err) {
+        console.warn('[tools] Failed to resolve Turso workspace DB credentials:', err);
+      }
     }
   }
 

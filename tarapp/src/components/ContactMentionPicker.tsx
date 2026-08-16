@@ -121,11 +121,13 @@ export function ContactMentionPicker(props: ContactMentionPickerProps) {
         // Contacts Mode (@)
         const isContactType = contactTypes.includes(typeStr) || !typeStr;
         if (isContactType) {
-          const name = e.name || e.title || e.data?.name || e.data?.title || '';
+          const name = e.name || e.title || e.data?.name || e.data?.title || e.data?.fn || '';
           const normKey = String(name).toLowerCase().trim();
           if (name && !seenNames.has(normKey)) {
             seenNames.add(normKey);
-            const displayType = getEntityDisplayType(e, 'Customer');
+            const displayType = e.isPersonalContact
+              ? 'Personal Contact'
+              : (e.role ? (e.role.charAt(0).toUpperCase() + e.role.slice(1)) : getEntityDisplayType(e, 'Customer'));
             parsed.push({
               id: e.id || `ent_contact_${index}`,
               name,

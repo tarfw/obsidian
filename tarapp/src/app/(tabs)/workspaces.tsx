@@ -1596,7 +1596,8 @@ ${membersYaml}
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <KeyboardAvoidingView
         style={{ flex: 1, paddingTop: insets.top }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
       >
         {/* Main Content — scrollable with keyboard */}
         <KeyboardAwareScrollView

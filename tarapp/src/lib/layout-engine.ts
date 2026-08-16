@@ -266,13 +266,20 @@ export function parseCanvasMarkdown(content: string): { title: string; blocks: C
       }
 
       if (trimmed.startsWith('-')) {
-        if (currentBlock && currentBlock.type) {
+        if (currentBlock && (currentBlock.type || currentBlock.title)) {
           blocks.push(currentBlock);
         }
         currentBlock = { title: '', type: '', props: {} };
-        // Check if there are inline fields, otherwise wait for next lines
-        const typeMatch = trimmed.match(/type:\s*["']?([^"\n\r']+)["']?/);
-        if (typeMatch) currentBlock.type = typeMatch[1];
+        const cleanTrimmed = trimmed.replace(/^-\s*/, '');
+        if (cleanTrimmed.startsWith('title:')) {
+          currentBlock.title = cleanTrimmed.replace('title:', '').trim().replace(/^['"]|['"]$/g, '');
+        } else if (cleanTrimmed.startsWith('type:')) {
+          currentBlock.type = cleanTrimmed.replace('type:', '').trim().replace(/^['"]|['"]$/g, '');
+        }
+        const propsMatch = cleanTrimmed.match(/props:\s*({.+})/);
+        if (propsMatch) {
+          try { currentBlock.props = JSON.parse(propsMatch[1]); } catch {}
+        }
       } else if (trimmed.startsWith('type:') && currentBlock) {
         currentBlock.type = trimmed.replace('type:', '').trim().replace(/^['"]|['"]$/g, '');
       } else if (trimmed.startsWith('title:') && currentBlock) {
@@ -290,7 +297,7 @@ export function parseCanvasMarkdown(content: string): { title: string; blocks: C
     }
   }
 
-  if (currentBlock && currentBlock.type) {
+  if (currentBlock && (currentBlock.type || currentBlock.title)) {
     blocks.push(currentBlock);
   }
 

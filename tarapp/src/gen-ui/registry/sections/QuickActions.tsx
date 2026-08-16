@@ -32,11 +32,16 @@ export default function QuickActions({ props, designTokens, onExecuteAction }: S
             ]}
             onPress={() => onExecuteAction?.(action.name, {})}
           >
-            <Ionicons
-              name={(action.icon || 'flash-outline') as any}
-              size={16}
-              color={colors.primary}
-            />
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Ionicons
+                name={(action.icon || 'flash-outline') as any}
+                size={16}
+                color={colors.primary}
+              />
+              <Text style={{ fontSize: 12, fontWeight: '600', color: colors.primary }}>
+                {action.label || action.name}
+              </Text>
+            </View>
           </Pressable>
         ))}
       </View>

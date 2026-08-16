@@ -38,6 +38,7 @@ import WorkspaceSiteScreen from '@/components/WorkspaceSiteScreen';
 import { ContactMentionPicker, ContactMentionModal, ContactItem } from '@/components/ContactMentionPicker';
 import ExploreOverlay from '@/components/ExploreOverlay';
 import CanvasOverlay from '@/components/CanvasOverlay';
+import CanvasCustomizerModal from '@/components/CanvasCustomizerModal';
 import CreateWorkspace from '@/components/CreateWorkspace';
 import ChannelConnectModal from '@/components/ChannelConnectModal';
 import JoinWorkspaceModal from '@/components/JoinWorkspaceModal';
@@ -186,7 +187,7 @@ export default function WorkspacesScreen() {
   const [canvasLayouts, setCanvasLayouts] = useState<any[]>([]);
   const [canvasBlocks, setCanvasBlocks] = useState<any[]>([]);
   const [loadingCanvas, setLoadingCanvas] = useState(false);
-  const [activeWidget, setActiveWidget] = useState<{ moduleName: string } | null>(null);
+  const [showCanvasCustomizer, setShowCanvasCustomizer] = useState(false);
   const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false);
   const [newWsName, setNewWsName] = useState('');
   const [newWsCreating, setNewWsCreating] = useState(false);
@@ -540,7 +541,6 @@ ${membersYaml}
       if (found && found.subdomain !== currentWorkspace?.subdomain) {
         setCurrentWorkspace(found);
         SecureStore.setItemAsync('active_workspace_subdomain', paramSubdomain).catch(() => null);
-        setActiveWidget(null);
         setAgentFeedback(null);
       }
     }
@@ -781,7 +781,6 @@ ${membersYaml}
       refreshEntities(scope);
       refreshInboxTasks(scope);
       setAgentFeedback(null);
-      setActiveWidget(null);
     }
   }, [currentWorkspace?.scope]);
 
@@ -859,7 +858,6 @@ ${membersYaml}
     if (item.subdomain === currentWorkspace?.subdomain) return;
     
     setCurrentWorkspace(item);
-    setActiveWidget(null);
     await SecureStore.setItemAsync('active_workspace_subdomain', item.subdomain).catch(() => null);
     setAgentFeedback(null);
   };
@@ -885,9 +883,8 @@ ${membersYaml}
       const resolved = resolveIntent(textToSend, activeModules);
       if (resolved.match) {
         if (resolved.action === 'clear') {
-          setActiveWidget(null);
           setExecuting(false);
-          setAgentFeedback({ text: resolved.feedbackText || 'Cleared active widgets.', type: 'success' });
+          setAgentFeedback({ text: resolved.feedbackText || 'Cleared workspace state.', type: 'success' });
           return;
         } else if (resolved.action === 'show_module' && resolved.moduleName) {
           if (resolved.moduleName === 'site' || resolved.moduleName === 'storefront' || resolved.moduleName === 'website') {
@@ -905,9 +902,8 @@ ${membersYaml}
           } else if (resolved.moduleName === 'orders') {
             await refreshOrders(scope);
           }
-          setActiveWidget({ moduleName: resolved.moduleName });
           setExecuting(false);
-          setAgentFeedback({ text: resolved.feedbackText || `Loaded ${resolved.moduleName} widget.`, type: 'success' });
+          setAgentFeedback({ text: resolved.feedbackText || `Updated ${resolved.moduleName}.`, type: 'success' });
           return;
         } else if (resolved.action === 'add_module' && resolved.moduleName) {
           await tar.canvas.add(scope, resolved.moduleName);
@@ -916,9 +912,8 @@ ${membersYaml}
             const { blocks } = parseCanvasMarkdown(canvasRes.content);
             setCanvasBlocks(blocks);
           }
-          setActiveWidget({ moduleName: resolved.moduleName });
           setExecuting(false);
-          setAgentFeedback({ text: resolved.feedbackText || `Added ${resolved.moduleName} skill to canvas.`, type: 'success' });
+          setAgentFeedback({ text: resolved.feedbackText || `Added ${resolved.moduleName} card to Canvas. Tap the Canvas button to view.`, type: 'success' });
           return;
         } else if (resolved.action === 'remove_module' && resolved.moduleName) {
           await tar.canvas.remove(scope, resolved.moduleName);
@@ -927,11 +922,8 @@ ${membersYaml}
             const { blocks } = parseCanvasMarkdown(canvasRes.content);
             setCanvasBlocks(blocks);
           }
-          if (activeWidget?.moduleName === resolved.moduleName) {
-            setActiveWidget(null);
-          }
           setExecuting(false);
-          setAgentFeedback({ text: resolved.feedbackText || `Removed ${resolved.moduleName} skill from canvas.`, type: 'success' });
+          setAgentFeedback({ text: resolved.feedbackText || `Removed ${resolved.moduleName} card from Canvas.`, type: 'success' });
           return;
         } else if (resolved.action === 'compose_item' && resolved.itemData) {
           setItemInitialData(resolved.itemData);
@@ -979,7 +971,6 @@ ${membersYaml}
             data: { category: 'General' }
           });
           await refreshProducts(scope);
-          setActiveWidget({ moduleName: 'inventory' });
           setAgentFeedback({ text: `Successfully added "${title}" at ₹${val} to your inventory.`, type: 'success' });
         }
       }
@@ -1025,9 +1016,6 @@ ${membersYaml}
     if (action.name === 'action_create_workspace' || action.actionName === 'action_create_workspace' || action.name === 'action_open_create_workspace') {
       setIsCreatingWorkspace(true);
       return;
-    }
-    if (action.moduleName) {
-      setActiveWidget({ moduleName: action.moduleName });
     }
     if (action.params && action.params.length > 0) {
       const initialParams: Record<string, string> = {};
@@ -1440,145 +1428,14 @@ ${membersYaml}
   };
 
   const getFilteredActions = () => {
-    const resultList: Array<{
-      label: string;
-      subtitle?: string;
-      icon?: string;
-      action?: any;
-      text?: string;
-      route?: string;
-      entity?: any;
-      openModal?: 'contact' | 'company' | 'item';
-    }> = [];
-
-    const query = input.trim().toLowerCase();
-
-    // 1. Search existing entities (Contacts, Companies, Items) from live database
-    if (query && allEntities && allEntities.length > 0) {
-      const cleanQ = query.replace(/^[@#+]\s*/, '').trim();
-      if (cleanQ) {
-        const matchingEntities = allEntities.filter((ent: any) => {
-          const name = String(ent.name || ent.title || ent.data?.fn || '').toLowerCase();
-          const handle = String(ent.handle || ent.data?.hdl || '').toLowerCase();
-          const phone = String(ent.phone || ent.data?.ph || ent.data?.phone || '').toLowerCase();
-          const email = String(ent.email || ent.data?.em || ent.data?.email || '').toLowerCase();
-          const role = String(ent.role || ent.data?.role || '').toLowerCase();
-          const typeStr = typeof ent.type === 'string' ? ent.type.toLowerCase() : '';
-          const category = String(ent.category || '').toLowerCase();
-          const company = String(ent.company || ent.data?.company || '').toLowerCase();
-          return (
-            name.includes(cleanQ) ||
-            handle.includes(cleanQ) ||
-            phone.includes(cleanQ) ||
-            email.includes(cleanQ) ||
-            role.includes(cleanQ) ||
-            typeStr.includes(cleanQ) ||
-            category.includes(cleanQ) ||
-            company.includes(cleanQ)
-          );
-        });
-
-        for (const ent of matchingEntities.slice(0, 4)) {
-          const typeCode = typeof ent.type === 'number' ? ent.type : undefined;
-          const typeStr = typeof ent.type === 'string' ? ent.type.toLowerCase() : '';
-          const categoryStr = String(ent.category || '').toLowerCase();
-          
-          const isItem =
-            ent.kind === 'item' ||
-            typeCode === 3 || // product
-            typeCode === 4 || // service
-            typeCode === 5 || // listing
-            typeCode === 6 || // document
-            typeCode === 7 || // asset
-            typeStr.includes('product') ||
-            typeStr.includes('item') ||
-            typeStr.includes('service') ||
-            typeStr.includes('asset') ||
-            typeStr.includes('listing') ||
-            typeStr.includes('document') ||
-            categoryStr.includes('item') ||
-            categoryStr.includes('product');
-          const isCompany = typeCode === 2 || typeStr.includes('company') || categoryStr.includes('company');
-
-          const icon = isItem ? 'cube-outline' : isCompany ? 'business-outline' : 'person-outline';
-          const title = ent.name || ent.title || ent.data?.fn || (isCompany ? 'Company' : 'Contact');
-          const sub = ent.phone || ent.email || ent.role || (isItem ? 'Product / Item' : isCompany ? 'Company Account' : 'Contact');
-
-          resultList.push({
-            label: title,
-            subtitle: `${sub} • Tap to view profile & flows`,
-            icon,
-            entity: ent,
-          });
-        }
-      }
-    }
-
-    // 2. Direct creation action cards
-    resultList.push(
+    return [
       {
-        label: 'Add Contact',
-        subtitle: 'Create a new person / customer / staff • Form modal',
-        icon: 'person-add-outline',
-        openModal: 'contact',
+        label: '🎨 Canvas Studio / AI Customizer',
+        subtitle: 'Configure tools, modules, and role layout with AI',
+        icon: 'sparkles',
+        openModal: 'canvas_customizer' as const,
       },
-      {
-        label: 'Add Company',
-        subtitle: 'Create business account / partner • Form modal',
-        icon: 'business-outline',
-        openModal: 'company',
-      },
-      {
-        label: 'Add Item / Product',
-        subtitle: 'Catalog a product, service, or asset • Form modal',
-        icon: 'pricetag-outline',
-        openModal: 'item',
-      }
-    );
-
-    // 3. System Event Motions (excluding direct modal actions already handled above)
-    const directModalEvents = new Set(['Add Contact', 'Add Company', 'Add Item', 'Add Product']);
-    PLAN5_EVENT_MOTIONS.forEach((item) => {
-      if (!directModalEvents.has(item.event)) {
-        resultList.push({
-          label: item.event,
-          subtitle: `${item.whatHappened} • ${item.linksTo}`,
-          action: {
-            name: item.actionName,
-            purpose: item.whatHappened,
-            params: item.params,
-          },
-        });
-      }
-    });
-
-    // 4. Settings
-    resultList.push({
-      label: 'Settings',
-      subtitle: 'App preferences & configuration • Settings',
-      route: '/settings',
-    });
-
-    const matches = query
-      ? resultList.filter(
-          (h) =>
-            h.label.toLowerCase().includes(query) ||
-            (h.subtitle && h.subtitle.toLowerCase().includes(query)) ||
-            (h.action?.name && h.action.name.toLowerCase().includes(query)) ||
-            (h.route && h.route.toLowerCase().includes(query))
-        )
-      : resultList;
-
-    // Strict deduplication by normalized key
-    const seen = new Set<string>();
-    return matches.filter((h) => {
-      const key = h.entity?.id
-        ? `entity::${h.entity.id}`
-        : `${h.label.toLowerCase()}::${h.openModal || h.route || h.action?.name || ''}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
+    ];
   };
 
   if (loadingWorkspaces) {
@@ -1623,97 +1480,7 @@ ${membersYaml}
 
         <View style={{ height: 4 }} />
 
-        {activeWidget ? (
-          loadingCanvas ? (
-            <View style={{ paddingVertical: 40, alignItems: 'center' }}>
-              <TarLogoLoader size={32} color={theme.primary} />
-              <Text style={{ color: theme.textMuted, fontSize: 13, marginTop: 8 }}>
-                Loading...
-              </Text>
-            </View>
-          ) : (
-            (() => {
-            const effectiveTokens = designTokens || {
-              colors: { primary: theme.primary || '#0f172a', secondary: '#3b82f6', background: '#ffffff' },
-              rounded: { sm: 8, md: 12, lg: 16 },
-              spacing: { sm: 8, md: 16 },
-              typography: {}
-            };
-            const modName = activeWidget.moduleName.toLowerCase();
-            let widgetBlocks = canvasBlocks.filter(
-              b => b.props?.type === modName || b.type === modName || b.title?.toLowerCase() === modName
-            );
-            let widgetLayouts = canvasLayouts.filter(l => l.moduleName.toLowerCase() === modName);
-
-            if (widgetBlocks.length === 0 && widgetLayouts.length === 0) {
-              if (['directory', 'crm', 'entity-directory', 'plan5-directory', 'people', 'companies', 'items'].includes(modName)) {
-                widgetBlocks = [{ title: 'Entity Directory', type: 'entity-directory', props: {} }];
-              } else if (['explore', 'explore-feed'].includes(modName)) {
-                widgetBlocks = [{ title: 'Explore Public Workspaces', type: 'explore-feed', props: {} }];
-              } else if (modName === 'orders') {
-                widgetBlocks = [{ title: 'Orders & POS', type: 'pos-sale', props: { type: 'order' } }];
-              } else if (modName === 'inventory') {
-                widgetBlocks = [{ title: 'Product Catalog', type: 'catalog-grid', props: { type: 'product' } }];
-              } else {
-                widgetBlocks = [{ title: activeWidget.moduleName.toUpperCase(), type: 'data-grid', props: { type: activeWidget.moduleName } }];
-              }
-            }
-
-            return (
-              <WorkspaceCanvas
-                designTokens={effectiveTokens}
-                blocks={widgetBlocks}
-                layouts={widgetLayouts}
-                onExecuteAction={async (actionName, params) => {
-                  if (actionName === 'view_entity' && params?.entity) {
-                    setSelectedEntityDetails(params.entity);
-                    return { success: true };
-                  }
-                  if (actionName.startsWith('action_add_') || actionName === 'create_entity') {
-                    handleTriggerAction({
-                      name: actionName,
-                      params: [
-                        { name: 'name', type: 'text', required: true },
-                        { name: 'role', type: 'text', required: true },
-                        { name: 'company', type: 'text', required: false },
-                        { name: 'value', type: 'number', required: false },
-                      ],
-                    });
-                    setFormParams({
-                      role: params?.category || 'person',
-                    });
-                    return { success: true };
-                  }
-                  if (currentWorkspace?.scope) {
-                    console.log(`[Canvas] Action "${actionName}" triggered — local execution.`);
-                    Promise.all([
-                      refreshProducts(currentWorkspace.scope),
-                      refreshOrders(currentWorkspace.scope),
-                      refreshEntities(currentWorkspace.scope),
-                    ]).catch(() => null);
-                    return { success: true };
-                  }
-                  throw new Error('No active workspace scope');
-                }}
-                metricsData={{
-                  'orders': orders.length,
-                  'inventory': products.length,
-                  'bookings': orders.filter(o => o.type === 'booking').length
-                }}
-                tableData={{
-                  'orders': orders,
-                  'inventory': products,
-                  'order': orders,
-                  'product': products,
-                  'directory': allEntities,
-                  'entity-directory': allEntities,
-                  'plan5-directory': allEntities
-                }}
-              />
-            );
-          })())
-        ) : (
-          <LinearInboxList
+        <LinearInboxList
             tasks={inboxTasks}
             loading={loadingInbox}
             headerLeft={(
@@ -1802,7 +1569,6 @@ ${membersYaml}
               }
             }}
           />
-        )}
       </KeyboardAwareScrollView>
 
       {/* Blur Overlay over background content when typing/inputting */}
@@ -1855,26 +1621,7 @@ ${membersYaml}
                 onPress={() => {
                   setInput('');
                   Keyboard.dismiss();
-                  if (hint.openModal === 'contact') {
-                    setInitialContactType('Customer');
-                    setEditContactEntity(null);
-                    setShowContactModal(true);
-                  } else if (hint.openModal === 'company') {
-                    setInitialContactType('Company');
-                    setEditContactEntity(null);
-                    setShowContactModal(true);
-                  } else if (hint.openModal === 'item') {
-                    setItemInitialData({ item_subtype: 'Product' });
-                    setShowItemModal(true);
-                  } else if (hint.entity) {
-                    handleOpenEntityOrItemDetails(hint.entity);
-                  } else if (hint.route) {
-                    router.push(hint.route as any);
-                  } else if (hint.action) {
-                    handleTriggerAction(hint.action);
-                  } else if (hint.text) {
-                    handleSend(hint.text);
-                  }
+                  setShowCanvasCustomizer(true);
                 }}
               >
                 <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: 12 }}>
@@ -1957,48 +1704,68 @@ ${membersYaml}
             placeholder="Type an action, search, or message..."
             placeholderTextColor={theme.textMuted}
             style={[styles.textInput, { color: theme.text, flex: 1 }]}
-            multiline={true}
+            multiline={false}
             keyboardType="default"
+            returnKeyType="send"
             inputMode="text"
             autoCapitalize="none"
             onSubmitEditing={() => handleSend()}
           />
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingRight: 4 }}>
-            {/* Globe (Explore) Button */}
-            <TouchableOpacity
-              activeOpacity={0.7}
-              onPress={() => setShowExploreOverlay(true)}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              style={{
-                width: 36,
-                height: 36,
-                borderRadius: 18,
-                backgroundColor: showExploreOverlay ? theme.primary + '18' : theme.backgroundElement,
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <Ionicons name="globe-outline" size={18} color={showExploreOverlay ? theme.primary : theme.textSecondary} />
-            </TouchableOpacity>
-
-            {/* Colored Touch-Friendly Canvas Button */}
-            <Pressable
-              onPress={() => setShowCanvasOverlay(true)}
-              style={({ pressed }) => [
-                {
+            {input.trim().length > 0 ? (
+              <TouchableOpacity
+                activeOpacity={0.7}
+                onPress={() => handleSend()}
+                style={{
                   width: 40,
                   height: 40,
                   borderRadius: 20,
                   backgroundColor: theme.primary,
                   alignItems: 'center',
                   justifyContent: 'center',
-                  opacity: pressed ? 0.8 : 1,
-                },
-              ]}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              <TarLogo size={20} color="#ffffff" />
-            </Pressable>
+                }}
+              >
+                <Ionicons name="arrow-up" size={20} color="#ffffff" />
+              </TouchableOpacity>
+            ) : (
+              <>
+                {/* Globe (Explore) Button */}
+                <TouchableOpacity
+                  activeOpacity={0.7}
+                  onPress={() => setShowExploreOverlay(true)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 18,
+                    backgroundColor: showExploreOverlay ? theme.primary + '18' : theme.backgroundElement,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Ionicons name="globe-outline" size={18} color={showExploreOverlay ? theme.primary : theme.textSecondary} />
+                </TouchableOpacity>
+
+                {/* Colored Touch-Friendly Canvas Button */}
+                <Pressable
+                  onPress={() => setShowCanvasOverlay(true)}
+                  style={({ pressed }) => [
+                    {
+                      width: 40,
+                      height: 40,
+                      borderRadius: 20,
+                      backgroundColor: theme.primary,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      opacity: pressed ? 0.8 : 1,
+                    },
+                  ]}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <TarLogo size={20} color="#ffffff" />
+                </Pressable>
+              </>
+            )}
           </View>
         </View>
       </View>
@@ -2508,6 +2275,35 @@ ${membersYaml}
         theme={theme}
         scope={currentWorkspace?.scope}
         subdomain={currentWorkspace?.subdomain}
+        workspaceName={currentWorkspace?.name || currentWorkspace?.subdomain || 'Workspace'}
+        onOpenAddProduct={() => {
+          setShowCanvasOverlay(false);
+          setItemInitialData({ item_subtype: 'Product' });
+          setShowItemModal(true);
+        }}
+        onOpenAddContact={() => {
+          setShowCanvasOverlay(false);
+          setInitialContactType('Customer');
+          setEditContactEntity(null);
+          setShowContactModal(true);
+        }}
+      />
+
+      <CanvasCustomizerModal
+        visible={showCanvasCustomizer}
+        onClose={() => setShowCanvasCustomizer(false)}
+        scope={currentWorkspace?.scope || ''}
+        workspaceName={currentWorkspace?.name || currentWorkspace?.subdomain || 'Workspace'}
+        activeBlocks={canvasBlocks}
+        onUpdated={async () => {
+          if (currentWorkspace?.scope) {
+            const canvasRes = await tar.okf.read(currentWorkspace.scope, 'team/canvas.md').catch(() => null);
+            if (canvasRes?.content) {
+              const { blocks } = parseCanvasMarkdown(canvasRes.content);
+              setCanvasBlocks(blocks);
+            }
+          }
+        }}
       />
     </View>
   );

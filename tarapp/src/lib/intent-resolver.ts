@@ -55,16 +55,23 @@ export function resolveIntent(text: string, activeModules: string[]): IntentResu
     };
   }
 
-  // 2. Add module skill
-  const addMatch = cleanText.match(/^(add|enable|install|pin)\s+(skill\s+)?([a-zA-Z0-9_-]+)/i);
+  // 2. Add module skill / canvas block (e.g. "add a new sale card", "add inventory to canvas", "enable bookings")
+  const addMatch = cleanText.match(/^(?:add|enable|install|pin)\s+(?:a\s+)?(?:new\s+)?(?:skill\s+)?([a-zA-Z0-9_-]+)(?:\s+(?:card|tool|skill|widget|block))?(?:\s+(?:to\s+)?canvas)?$/i);
   if (addMatch) {
-    const modName = addMatch[3].toLowerCase();
+    let rawMod = addMatch[1].toLowerCase();
+    let modName = rawMod;
+    if (['sale', 'sales', 'order', 'orders', 'pos', 'billing'].includes(rawMod)) modName = 'orders';
+    if (['inventory', 'product', 'products', 'stock', 'menu', 'catalog'].includes(rawMod)) modName = 'inventory';
+    if (['booking', 'bookings', 'reservation', 'reservations', 'appointment', 'appointments'].includes(rawMod)) modName = 'bookings';
+    if (['crm', 'customer', 'customers', 'client', 'clients', 'contact', 'contacts'].includes(rawMod)) modName = 'crm';
+    if (['report', 'reports', 'analytics', 'stat', 'stats'].includes(rawMod)) modName = 'reports';
+
     const displayName = modName.charAt(0).toUpperCase() + modName.slice(1);
     return {
       match: true,
       action: 'add_module',
       moduleName: modName,
-      feedbackText: `Added ${displayName} skill to canvas.`
+      feedbackText: `Added ${displayName} card to canvas.`
     };
   }
 

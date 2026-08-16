@@ -1,8 +1,7 @@
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import type { SectionProps } from '../ComponentRegistry';
 
-export default function DataTable({ props, designTokens, data = [] }: SectionProps) {
+export default function DataTable({ props, designTokens, data = [], onExecuteAction }: SectionProps) {
   const { title, emptyMessage } = props;
   const { colors, rounded } = designTokens;
 
@@ -25,9 +24,19 @@ export default function DataTable({ props, designTokens, data = [] }: SectionPro
         ]}
       >
         {data.length === 0 ? (
-          <Text style={[styles.empty, { color: '#94a3b8' }]}>
-            {emptyMessage || 'No records'}
-          </Text>
+          <View style={styles.emptyContainer}>
+            <Text style={[styles.empty, { color: '#94a3b8' }]}>
+              {emptyMessage || `No ${props?.type || 'items'} recorded`}
+            </Text>
+            {onExecuteAction && (
+              <TouchableOpacity
+                style={styles.addStarterBtn}
+                onPress={() => onExecuteAction('create_item', { type: props?.type || 'item' })}
+              >
+                <Text style={styles.addStarterText}>+ Add {props?.type ? props.type.charAt(0).toUpperCase() + props.type.slice(1) : 'Item'}</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         ) : (
           data.map((row: any, idx: number) => {
             let rowDataObj: any = {};
@@ -90,7 +99,16 @@ const styles = StyleSheet.create({
   container: {},
   title: { fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5, color: '#94a3b8' },
   table: { borderWidth: 1 },
-  empty: { fontSize: 12, padding: 10, textAlign: 'center' },
+  emptyContainer: { paddingVertical: 14, alignItems: 'center', justifyContent: 'center' },
+  empty: { fontSize: 12, color: '#94a3b8', textAlign: 'center' },
+  addStarterBtn: {
+    marginTop: 8,
+    backgroundColor: '#eff6ff',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  addStarterText: { fontSize: 11, fontWeight: '700', color: '#2563eb' },
   row: {},
   rowContent: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   rowSubContent: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 2 },

@@ -16,9 +16,9 @@ import { parseDesignMD } from './design-md-parser';
 import { parseSkillMarkdown } from './skill-parser';
 import type { ExtractedBusiness } from './extract-business';
 
-// S3 keys can't contain colons — replace with hyphens
+// S3 keys use clean subdomain without w: or s: prefixes
 function s3Scope(scope: string): string {
-  return scope.replace(/:/g, '-');
+  return scope.replace(/^[ws]:/, '').replace(/:/g, '-');
 }
 
 // ── Write ──────────────────────────────────────────────────────────
@@ -37,7 +37,14 @@ export async function uploadWorkspaceFile(
 // ── Read ───────────────────────────────────────────────────────────
 
 export async function readWorkspaceFile(env: any, scope: string, path: string): Promise<string | null> {
-  return s3Get(env, `workspaces/${s3Scope(scope)}/${path}`);
+  const content = await s3Get(env, `workspaces/${s3Scope(scope)}/${path}`);
+  if (content !== null) return content;
+  // Fallback for legacy workspaces created with w- prefix
+  const legacyScope = scope.replace(/:/g, '-');
+  if (legacyScope !== s3Scope(scope)) {
+    return s3Get(env, `workspaces/${legacyScope}/${path}`);
+  }
+  return null;
 }
 
 export async function readWorkspaceIndex(env: any, scope: string): Promise<string | null> {
@@ -204,14 +211,26 @@ export async function scaffoldOkfFolders(
   workspaceName: string,
   modules: string[]
 ): Promise<void> {
-  const folders = ['business', 'products', 'policies', 'faqs', 'team', 'skills', 'site'];
+  // 1. Root index.md (plan6.md §4 WorkspaceRoot)
+  const rootIndex = `---
+type: WorkspaceRoot
+name: "${workspaceName}"
+subdomain: "${s3Scope(scope)}"
+modules: [${modules.map(m => `"${m}"`).join(', ')}]
+tier: "free"
+created_at: "${new Date().toISOString()}"
+---
 
-  // Root index.md
-  const moduleLinks = modules.map(m => `- [${m}](./skills/${m}.md)`).join('\n');
-  const rootIndex = `# ${workspaceName}\n\n**Modules:** ${modules.join(', ')}\n\n## Folders\n${folders.map(f => `- [${f}](./${f}/index.md)`).join('\n')}\n`;
+# ${workspaceName}
+
+Welcome to ${workspaceName}. This workspace is powered by Tar Operating System.
+
+## Active Modules
+${modules.map(m => `- **${m.charAt(0).toUpperCase() + m.slice(1)}**: [skills/${m}.md](./skills/${m}.md)`).join('\n')}
+`;
   await uploadWorkspaceFile(env, scope, 'index.md', rootIndex);
 
-  // Root types.md (plan6.md canonical type map)
+  // 2. Root types.md (plan6.md canonical type map)
   const typesMd = `# types.md — Canonical Type Map (plan6.md)
 
 ## Matter Types
@@ -284,13 +303,71 @@ export async function scaffoldOkfFolders(
 `;
   await uploadWorkspaceFile(env, scope, 'types.md', typesMd);
 
-  // Folder index.md files
-  for (const folder of folders) {
-    const folderIndex = `# ${folder.charAt(0).toUpperCase() + folder.slice(1)}\n`;
-    await uploadWorkspaceFile(env, scope, `${folder}/index.md`, folderIndex);
-  }
+  // 3. business/profile.md
+  const profileMd = `---
+type: BusinessProfile
+name: "${workspaceName}"
+currency: "USD"
+tax_rate: 0.05
+---
 
-  // Root team/canvas.md
+# ${workspaceName} Profile
+
+| Attribute | Details |
+|---|---|
+| Business Name | ${workspaceName} |
+| Currency | USD |
+| Tax Rate | 5% |
+| Operating Hours | 09:00 - 22:00 |
+`;
+  await uploadWorkspaceFile(env, scope, 'business/profile.md', profileMd);
+
+  // 4. people/roles.md (Role Blueprints)
+  const rolesMd = `---
+type: RoleBlueprints
+roles:
+  waiter:
+    label: "Floor Waiter"
+    modules: ["table_grid", "order_tracker"]
+    permissions: ["create_order", "view_menu", "table_status"]
+  chef:
+    label: "Kitchen Chef"
+    modules: ["order_queue", "prep_timer"]
+    permissions: ["mark_ready", "view_tickets"]
+  cashier:
+    label: "Cashier & Billing"
+    modules: ["payment_terminal", "daily_sales"]
+    permissions: ["process_payment", "print_receipt", "daily_close"]
+  manager:
+    label: "Operations Manager"
+    modules: ["daily_sales", "inventory_audit", "team_roster"]
+    permissions: ["all"]
+---
+
+# Role Blueprints
+Defines operational permissions and canvas modules for each role in the workspace.
+`;
+  await uploadWorkspaceFile(env, scope, 'people/roles.md', rolesMd);
+
+  // 5. team/members.md
+  const defaultMembers = `---
+type: TeamConfiguration
+title: Team Access & Channel Mappings
+timestamp: "${new Date().toISOString()}"
+roles:
+  staff: [orders, inventory]
+  manager: [*]
+members: []
+---
+
+# Channel Mappings
+
+| Channel Name | Platform | Channel ID | Mapped Role |
+|--------------|----------|------------|-------------|
+`;
+  await uploadWorkspaceFile(env, scope, 'team/members.md', defaultMembers);
+
+  // 6. team/canvas.md
   const defaultBlocks = modules.map(mod => {
     const title = mod.charAt(0).toUpperCase() + mod.slice(1);
     if (mod === 'orders') {
@@ -303,8 +380,8 @@ export async function scaffoldOkfFolders(
 
   const defaultCanvas = `---
 type: CanvasLayout
-title: ${workspaceName} Canvas
-timestamp: ${new Date().toISOString()}
+title: "${workspaceName} Canvas"
+timestamp: "${new Date().toISOString()}"
 blocks:
 ${defaultBlocks}
 ---
@@ -313,55 +390,19 @@ ${defaultBlocks}
 `;
   await uploadWorkspaceFile(env, scope, 'team/canvas.md', defaultCanvas);
 
-  // Root team/members.md
-  const defaultMembers = `---
-type: TeamConfiguration
-title: Team Access & Channel Mappings
-timestamp: ${new Date().toISOString()}
-roles:
-  Staff: [orders, inventory]
-  Delivery: [logistics]
-  Admin: [*]
-members:
-  - email: "owner@gmail.com"
-    role: "Admin"
-    status: "verified"
----
+  // 7. Core skills based on active modules
+  for (const mod of modules) {
+    if (mod in CORE_MODULES) {
+      await uploadWorkspaceFile(env, scope, `skills/${mod}.md`, CORE_MODULES[mod]);
+    }
+  }
 
-# Channel Mappings
+  // 8. wiki/policies/returns.md & wiki/faqs/common.md
+  const returnsMd = `# Return & Service Policy\n\nStandard customer return and cancellation policy for ${workspaceName}.\n`;
+  await uploadWorkspaceFile(env, scope, 'wiki/policies/returns.md', returnsMd);
 
-| Channel Name | Platform | Channel ID | Mapped Role |
-|--------------|----------|------------|-------------|
-`;
-  await uploadWorkspaceFile(env, scope, 'team/members.md', defaultMembers);
-
-  // Starter site layout home.json
-  const defaultHomeLayout = {
-    workspaceId: scope.replace('w:', ''),
-    target: 'web',
-    revision: 'v1',
-    theme: { font: 'Inter', primary: '#1B4332', background: '#FFFFFF' },
-    sections: [
-      {
-        type: 'hero_banner',
-        title: workspaceName,
-        subtitle: `Welcome to ${workspaceName}. Explore our products and services.`,
-        ctaText: 'Contact Us',
-        ctaUrl: '#contact',
-      },
-      {
-        type: 'contact_form',
-        title: 'Get in Touch',
-        subtitle: 'Send us a message or inquiry directly from our website.',
-      },
-      {
-        type: 'footer',
-        text: `© ${new Date().getFullYear()} ${workspaceName}. All rights reserved.`,
-      },
-    ],
-  };
-  await uploadWorkspaceFile(env, scope, 'site/layouts/home.json', JSON.stringify(defaultHomeLayout));
-  await uploadWorkspaceFile(env, scope, 'site/layouts/.gitkeep', '');
+  const faqsMd = `# Common FAQs\n\nQ: What are the hours?\nA: 09:00 - 22:00 daily.\n`;
+  await uploadWorkspaceFile(env, scope, 'wiki/faqs/common.md', faqsMd);
 }
 
 // ── OKF Content Generator ───────────────────────────────────────────
@@ -555,54 +596,98 @@ export async function addCanvasBlock(
   moduleOrBlock: string | { title?: string; type: string; props?: Record<string, any> }
 ): Promise<{ ok: boolean }> {
   const canvasContent = await readWorkspaceFile(env, scope, 'team/canvas.md');
-  const modName = typeof moduleOrBlock === 'string' ? moduleOrBlock : moduleOrBlock.type;
-  const title = typeof moduleOrBlock === 'string'
-    ? modName.charAt(0).toUpperCase() + modName.slice(1)
-    : (moduleOrBlock.title || modName);
+  const modId = typeof moduleOrBlock === 'string' ? moduleOrBlock.toLowerCase() : (moduleOrBlock.props?.type || moduleOrBlock.type).toLowerCase();
+  
+  let title = typeof moduleOrBlock === 'string'
+    ? modId.charAt(0).toUpperCase() + modId.slice(1) + ' List'
+    : (moduleOrBlock.title || modId);
+  let blockType = 'data-grid';
+  let propsObj: Record<string, any> = { type: modId, mode: 'table' };
 
-  const blockType = modName === 'orders' ? 'pos-sale' : 'data-grid';
-  const typeKey = modName === 'inventory' ? 'product' : modName === 'bookings' ? 'booking' : modName;
-  const modeVal = modName === 'bookings' ? 'calendar' : 'table';
-  const propsObj = typeof moduleOrBlock === 'object' && moduleOrBlock.props
-    ? moduleOrBlock.props
-    : { type: typeKey, mode: modeVal };
+  if (modId === 'orders' || modId === 'order' || modId === 'sale') {
+    title = 'Orders Tool';
+    blockType = 'pos-sale';
+    propsObj = { catalogType: 'product', taxRate: 0.05 };
+  } else if (modId === 'inventory' || modId === 'product') {
+    title = 'Inventory List';
+    blockType = 'data-grid';
+    propsObj = { type: 'product', mode: 'table' };
+  } else if (modId === 'bookings' || modId === 'booking') {
+    title = 'Bookings List';
+    blockType = 'data-grid';
+    propsObj = { type: 'booking', mode: 'calendar' };
+  } else if (modId === 'crm' || modId === 'contact' || modId === 'customer') {
+    title = 'CRM List';
+    blockType = 'data-grid';
+    propsObj = { type: 'crm', mode: 'table' };
+  } else if (modId === 'reports' || modId === 'report' || modId === 'metrics') {
+    title = 'Daily Sales';
+    blockType = 'metric-card';
+    propsObj = { title: 'Daily Sales', type: 'report' };
+  } else if (modId === 'tables' || modId === 'table') {
+    title = 'Table Grid POS';
+    blockType = 'data-grid';
+    propsObj = { type: 'table', mode: 'grid' };
+  } else if (modId === 'expenses' || modId === 'expense') {
+    title = 'Expense Tracker';
+    blockType = 'data-grid';
+    propsObj = { type: 'expense', mode: 'table' };
+  }
 
-  const newBlockStr = `  - title: "${title}"\n    type: "${blockType}"\n    props: ${JSON.stringify(propsObj)}`;
+  if (typeof moduleOrBlock === 'object') {
+    if (moduleOrBlock.title) title = moduleOrBlock.title;
+    if (moduleOrBlock.type) blockType = moduleOrBlock.type;
+    if (moduleOrBlock.props) propsObj = moduleOrBlock.props;
+  }
 
-  let updatedContent = '';
-  if (canvasContent && canvasContent.includes('blocks:')) {
-    if (canvasContent.includes(`"${title}"`) || canvasContent.includes(`"${blockType}"`)) {
-      return { ok: true };
+  // Parse existing blocks from YAML frontmatter
+  let existingBlocks: Array<{ title: string; type: string; props: Record<string, any> }> = [];
+  if (canvasContent) {
+    const match = canvasContent.match(/blocks:\s*\n([\s\S]*?)(?:---|\n\n#|$)/);
+    if (match && match[1]) {
+      const blockEntries = match[1].split(/\n\s*-\s+/).filter(Boolean);
+      for (const entry of blockEntries) {
+        const eTitle = (entry.match(/title:\s*["']?([^"'\n]+)["']?/) || [])[1]?.trim() || '';
+        const eType = (entry.match(/type:\s*["']?([^"'\n]+)["']?/) || [])[1]?.trim() || 'data-grid';
+        let eProps: any = {};
+        const propsMatch = entry.match(/props:\s*(\{.*\})/);
+        if (propsMatch) {
+          try { eProps = JSON.parse(propsMatch[1]); } catch {}
+        }
+        if (eTitle || eType) {
+          existingBlocks.push({ title: eTitle, type: eType, props: eProps });
+        }
+      }
     }
-    updatedContent = canvasContent.replace('blocks:\n', `blocks:\n${newBlockStr}\n`);
-  } else {
-    updatedContent = `---
+  }
+
+  // Check if module already exists by title or props.type
+  const alreadyExists = existingBlocks.some(b => 
+    b.title.toLowerCase() === title.toLowerCase() ||
+    (b.props?.type && String(b.props.type).toLowerCase() === modId) ||
+    (b.type === 'pos-sale' && (modId === 'orders' || modId === 'order'))
+  );
+
+  if (!alreadyExists) {
+    existingBlocks.push({ title, type: blockType, props: propsObj });
+  }
+
+  // Serialize updated canvas.md
+  const blocksYaml = existingBlocks.map(b => 
+    `  - title: "${b.title}"\n    type: "${b.type}"\n    props: ${JSON.stringify(b.props)}`
+  ).join('\n');
+
+  const sScope = s3Scope(scope);
+  const updatedContent = `---
 type: CanvasLayout
-title: Workspace Canvas
-timestamp: ${new Date().toISOString()}
+title: "${sScope} Canvas"
+timestamp: "${new Date().toISOString()}"
 blocks:
-${newBlockStr}
+${blocksYaml}
 ---
 
 # Workspace Canvas
 `;
-  }
-
-  // 1. Ensure skills/<modName>.md exists in S3
-  const skillFileContent = await readWorkspaceFile(env, scope, `skills/${modName}.md`);
-  if (!skillFileContent && CORE_MODULES[modName]) {
-    await uploadWorkspaceFile(env, scope, `skills/${modName}.md`, CORE_MODULES[modName]);
-  }
-
-  // 2. Ensure index.md frontmatter includes the module
-  const indexContent = await readWorkspaceFile(env, scope, 'index.md');
-  if (indexContent && !indexContent.includes(modName)) {
-    const updatedIndex = indexContent.replace(
-      /(\*\*Modules:\*\*.*)$/m,
-      `$1, ${modName}`
-    );
-    await uploadWorkspaceFile(env, scope, 'index.md', updatedIndex);
-  }
 
   await uploadWorkspaceFile(env, scope, 'team/canvas.md', updatedContent);
   return { ok: true };
@@ -616,28 +701,49 @@ export async function removeCanvasBlock(
   const canvasContent = await readWorkspaceFile(env, scope, 'team/canvas.md');
   if (!canvasContent) return { ok: true };
 
-  const lines = canvasContent.split('\n');
-  const filteredLines = [];
-  let skipping = false;
+  const target = moduleOrTitle.toLowerCase().trim();
 
-  for (let line of lines) {
-    if (line.trim().startsWith('-') && line.toLowerCase().includes(moduleOrTitle.toLowerCase())) {
-      skipping = true;
-      continue;
-    }
-    if (skipping) {
-      if (line.trim().startsWith('-') || (line.search(/\S/) === 0 && line.trim() !== '')) {
-        skipping = false;
-        filteredLines.push(line);
-      } else {
-        continue;
+  let existingBlocks: Array<{ title: string; type: string; props: Record<string, any> }> = [];
+  const match = canvasContent.match(/blocks:\s*\n([\s\S]*?)(?:---|\n\n#|$)/);
+  if (match && match[1]) {
+    const blockEntries = match[1].split(/\n\s*-\s+/).filter(Boolean);
+    for (const entry of blockEntries) {
+      const eTitle = (entry.match(/title:\s*["']?([^"'\n]+)["']?/) || [])[1]?.trim() || '';
+      const eType = (entry.match(/type:\s*["']?([^"'\n]+)["']?/) || [])[1]?.trim() || 'data-grid';
+      let eProps: any = {};
+      const propsMatch = entry.match(/props:\s*(\{.*\})/);
+      if (propsMatch) {
+        try { eProps = JSON.parse(propsMatch[1]); } catch {}
       }
-    } else {
-      filteredLines.push(line);
+      if (eTitle || eType) {
+        existingBlocks.push({ title: eTitle, type: eType, props: eProps });
+      }
     }
   }
 
-  await uploadWorkspaceFile(env, scope, 'team/canvas.md', filteredLines.join('\n'));
+  const filtered = existingBlocks.filter(b => {
+    const bTitle = b.title.toLowerCase();
+    const bType = (b.props?.type || b.type || '').toLowerCase();
+    return !bTitle.includes(target) && !bType.includes(target);
+  });
+
+  const blocksYaml = filtered.map(b => 
+    `  - title: "${b.title}"\n    type: "${b.type}"\n    props: ${JSON.stringify(b.props)}`
+  ).join('\n');
+
+  const sScope = s3Scope(scope);
+  const updatedContent = `---
+type: CanvasLayout
+title: "${sScope} Canvas"
+timestamp: "${new Date().toISOString()}"
+blocks:
+${blocksYaml}
+---
+
+# Workspace Canvas
+`;
+
+  await uploadWorkspaceFile(env, scope, 'team/canvas.md', updatedContent);
   return { ok: true };
 }
 

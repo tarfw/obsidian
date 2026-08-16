@@ -1,28 +1,32 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Modal, View, Pressable, StyleSheet, Text, ScrollView, RefreshControl } from 'react-native';
+import {
+  Modal,
+  View,
+  Pressable,
+  StyleSheet,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  RefreshControl,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as SecureStore from 'expo-secure-store';
 
 import { tar } from '@/lib/tar';
+import { parseCanvasMarkdown, parseYamlFrontmatter } from '@/lib/layout-engine';
 import { parseDesignTokens } from '@/lib/design-tokens';
-import { parseYamlFrontmatter, parseCanvasMarkdown, buildModuleLayout } from '@/lib/layout-engine';
 import { TarLogoLoader } from '@/components/TarLogoLoader';
 import WorkspaceCanvas from '@/components/WorkspaceCanvas';
 import ContactDetailsModal from '@/components/ContactDetailsModal';
-
-function parseModules(md: string): string[] {
-  const match = md.match(/\*\*Modules:\*\*\s*(.+)/i);
-  if (!match) return [];
-  return match[1].split(',').map((m) => m.trim().toLowerCase()).filter(Boolean);
-}
+import CanvasCustomizerModal from '@/components/CanvasCustomizerModal';
 
 function filterActiveRows(rows: any[]) {
   return (rows || []).filter((r: any) => {
     if (!r) return false;
     const statusStr = String(r.status || '').toLowerCase();
     const typeStr = String(r.type || '').toLowerCase();
-    return statusStr !== 'deleted' && statusStr !== 'archived' && typeStr !== 'deleted' && !r.deleted;
+    return statusStr !== 'deleted' && statusStr !== 'archived' && typeStr !== 'deleted' && !r.deleted_at;
   });
 }
 
@@ -32,19 +36,34 @@ interface CanvasOverlayProps {
   theme: any;
   scope?: string;
   subdomain?: string;
+  workspaceName?: string;
+  onOpenAddProduct?: () => void;
+  onOpenAddContact?: () => void;
 }
 
-export default function CanvasOverlay({ visible, onClose, theme, scope: propScope, subdomain: propSubdomain }: CanvasOverlayProps) {
+export default function CanvasOverlay({
+  visible,
+  onClose,
+  theme,
+  scope: propScope,
+  subdomain: propSubdomain,
+  workspaceName: propWorkspaceName,
+  onOpenAddProduct,
+  onOpenAddContact,
+}: CanvasOverlayProps) {
   const insets = useSafeAreaInsets();
 
   const [scope, setScope] = useState<string | null>(propScope ?? null);
   const [subdomain, setSubdomain] = useState(propSubdomain ?? '');
-  const [loading, setLoading] = useState(true);
-  const [designTokens, setDesignTokens] = useState<any>(null);
+  const [canvasTitle, setCanvasTitle] = useState('Workspace Canvas');
   const [blocks, setBlocks] = useState<any[]>([]);
-  const [layouts, setLayouts] = useState<any[]>([]);
-  const [entities, setEntities] = useState<any[]>([]);
+  const [designTokens, setDesignTokens] = useState<any>(null);
+  const [tableData, setTableData] = useState<Record<string, any[]>>({});
+  const [metricsData, setMetricsData] = useState<Record<string, number>>({});
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [selectedEntity, setSelectedEntity] = useState<any | null>(null);
+  const [showCustomizer, setShowCustomizer] = useState(false);
 
   useEffect(() => {
     if (!visible) return;
@@ -63,15 +82,14 @@ export default function CanvasOverlay({ visible, onClose, theme, scope: propScop
     })();
   }, [visible, propScope, propSubdomain]);
 
-  const load = useCallback(async () => {
+  const loadData = useCallback(async () => {
     if (!scope) return;
-    setLoading(true);
     try {
-      const [designRes, indexRes, canvasRes, matterRes] = await Promise.all([
-        tar.okf.read(scope, 'DESIGN.md').catch(() => null),
-        tar.okf.readIndex(scope).catch(() => null),
+      const [canvasRes, designRes, matterRes, motionRes] = await Promise.all([
         tar.okf.read(scope, 'team/canvas.md').catch(() => null),
-        tar.tool('read', { table: 'matter', scope }).catch(() => null),
+        tar.okf.read(scope, 'DESIGN.md').catch(() => null),
+        tar.tool('read', { table: 'matter', scope }).catch(() => ({ rows: [] })),
+        tar.tool('read', { table: 'motion', scope }).catch(() => ({ rows: [] })),
       ]);
 
       if (designRes?.content) {
@@ -79,49 +97,92 @@ export default function CanvasOverlay({ visible, onClose, theme, scope: propScop
         setDesignTokens(parseDesignTokens(frontmatter));
       }
 
-      const rows = filterActiveRows(matterRes?.rows || []);
-      setEntities(rows);
+      const activeMatter = filterActiveRows(matterRes?.rows || []);
+      const activeMotion = filterActiveRows(motionRes?.rows || []);
 
-      let modules: string[] = [];
-      if (indexRes?.content) {
-        modules = parseModules(indexRes.content);
-        const fetched = await Promise.all(
-          modules.map(async (mod) => {
-            const fileRes = await tar.okf.read(scope, `skills/${mod}.md`).catch(() => null);
-            return fileRes?.content ? buildModuleLayout(mod, fileRes.content) : null;
-          })
-        );
-        setLayouts(fetched.filter(Boolean) as any[]);
+      // Group table data by type
+      const groupedData: Record<string, any[]> = {
+        matter: activeMatter,
+        motion: activeMotion,
+        all: activeMatter,
+      };
+
+      for (const row of activeMatter) {
+        const tStr = String(row.type || '').toLowerCase();
+        let cat = tStr;
+        if (row.type === 1 || row.type === 'person' || row.type === 'customer') cat = 'crm';
+        if (row.type === 2 || row.type === 'company' || row.type === 'vendor') cat = 'company';
+        if (row.type === 3 || row.type === 'product' || row.type === 'item') cat = 'product';
+        if (row.type === 4 || row.type === 'service') cat = 'service';
+        if (row.type === 14 || row.type === 'order') cat = 'order';
+
+        if (!groupedData[cat]) groupedData[cat] = [];
+        groupedData[cat].push(row);
+
+        if (!groupedData[tStr]) groupedData[tStr] = [];
+        groupedData[tStr].push(row);
       }
 
+      // Group motions by type
+      for (const row of activeMotion) {
+        const tStr = String(row.type || '').toLowerCase();
+        let cat = tStr;
+        if (row.type === 101 || row.type === 124) cat = 'order';
+        if (row.type === 112) cat = 'booking';
+
+        if (!groupedData[cat]) groupedData[cat] = [];
+        groupedData[cat].push(row);
+      }
+
+      // Populate aliases
+      groupedData['inventory'] = groupedData['product'] || [];
+      groupedData['bookings'] = groupedData['booking'] || [];
+      groupedData['orders'] = groupedData['order'] || [];
+      groupedData['contacts'] = groupedData['crm'] || [];
+
+      setTableData(groupedData);
+
+      setMetricsData({
+        'Products': groupedData['product']?.length || 0,
+        'Active Orders': groupedData['order']?.length || 0,
+        'Bookings': groupedData['booking']?.length || 0,
+        'Clients / Team': groupedData['crm']?.length || 0,
+      });
+
+      // Parse blocks directly from OKF team/canvas.md
       if (canvasRes?.content) {
-        setBlocks(parseCanvasMarkdown(canvasRes.content).blocks);
+        const parsed = parseCanvasMarkdown(canvasRes.content);
+        setCanvasTitle(parsed.title || 'Workspace Canvas');
+        setBlocks(parsed.blocks || []);
       } else {
-        const activeList = modules.length > 0 ? modules : ['orders', 'inventory', 'crm', 'reports'];
-        setBlocks(
-          activeList.map((mod) => ({
-            title: mod.charAt(0).toUpperCase() + mod.slice(1),
-            type: mod === 'orders' || mod === 'transactions' ? 'pos-sale' : 'data-grid',
-            props: {
-              type: mod === 'orders' || mod === 'transactions' ? 'order' : mod === 'inventory' ? 'product' : mod,
-              mode: 'table',
-            },
-          }))
-        );
+        // Fallback default blocks if canvas.md doesn't exist yet
+        setBlocks([
+          { title: 'Inventory List', type: 'data-grid', props: { type: 'product', mode: 'table' } },
+          { title: 'Orders List', type: 'data-grid', props: { type: 'order', mode: 'table' } },
+          { title: 'CRM List', type: 'data-grid', props: { type: 'crm', mode: 'table' } },
+        ]);
       }
-    } catch (e) {
-      console.warn('[CanvasOverlay] Failed to load workspace specs:', e);
+    } catch (err) {
+      console.warn('[Canvas] Failed to load data:', err);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, [scope]);
 
   useEffect(() => {
-    if (visible && scope) load();
-  }, [visible, scope, load]);
+    if (visible && scope) {
+      setLoading(true);
+      loadData();
+    }
+  }, [visible, scope, loadData]);
 
-  const products = entities.filter((e) => e.type === 'product');
-  const orders = entities.filter((e) => e.type === 'order');
+  const handleRefresh = () => {
+    setRefreshing(true);
+    loadData();
+  };
+
+  const displayName = propWorkspaceName || (subdomain ? subdomain.charAt(0).toUpperCase() + subdomain.slice(1) : 'Workspace');
 
   const effectiveTokens = designTokens || {
     colors: { primary: theme.primary || '#0f172a', secondary: '#3b82f6', background: '#ffffff' },
@@ -130,59 +191,79 @@ export default function CanvasOverlay({ visible, onClose, theme, scope: propScop
     typography: {},
   };
 
-  return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={[styles.panel, { backgroundColor: theme.background, paddingTop: insets.top + 8 }]}>
-        {/* Close button */}
-        <Pressable onPress={onClose} hitSlop={12} style={styles.closeBtn}>
-          <Ionicons name="close" size={22} color={theme.textMuted} />
-        </Pressable>
+  const handleExecuteAction = async (actionName: string, params: Record<string, any>) => {
+    if (actionName === 'create_item' || actionName === 'add_product') {
+      const itemType = params?.type;
+      if (itemType === 'crm' || itemType === 'person' || itemType === 'contact' || itemType === 'customer') {
+        if (onOpenAddContact) onOpenAddContact();
+      } else {
+        if (onOpenAddProduct) onOpenAddProduct();
+      }
+      return { success: true };
+    }
+    if (actionName === 'view_entity' && params?.entity) {
+      setSelectedEntity(params.entity);
+      return { success: true };
+    }
+    handleRefresh();
+    return { success: true };
+  };
 
-        {/* Content */}
-        <View style={styles.content}>
-          {loading ? (
-            <View style={{ paddingVertical: 40, alignItems: 'center' }}>
-              <TarLogoLoader size={36} color={theme.primary} />
-            </View>
-          ) : !scope ? (
-            <View style={{ paddingVertical: 40, alignItems: 'center' }}>
-              <Text style={{ color: theme.textMuted, fontSize: 13 }}>Select a workspace first.</Text>
-            </View>
-          ) : (
-            <ScrollView
-              contentContainerStyle={{ paddingBottom: 16 }}
-              refreshControl={<RefreshControl refreshing={false} onRefresh={load} colors={[theme.primary]} />}
+  return (
+    <Modal visible={visible} transparent={false} animationType="slide" onRequestClose={onClose}>
+      <View style={[styles.container, { backgroundColor: '#ffffff', paddingTop: Math.max(insets.top, 12) }]}>
+        
+        {/* Top Header */}
+        <View style={styles.header}>
+          <View>
+            <Text style={styles.headerTitle}>{displayName}</Text>
+            <Text style={styles.headerSubtitle}>{canvasTitle}</Text>
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <TouchableOpacity
+              onPress={() => setShowCustomizer(true)}
+              hitSlop={8}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 4,
+                backgroundColor: '#f5f3ff',
+                paddingHorizontal: 10,
+                paddingVertical: 6,
+                borderRadius: 8,
+              }}
             >
-              <WorkspaceCanvas
-                designTokens={effectiveTokens}
-                blocks={blocks}
-                layouts={layouts}
-                onExecuteAction={async (actionName, params) => {
-                  if (actionName === 'view_entity' && params?.entity) {
-                    setSelectedEntity(params.entity);
-                    return { success: true };
-                  }
-                  await load();
-                  return { success: true };
-                }}
-                metricsData={{
-                  orders: orders.length,
-                  inventory: products.length,
-                  bookings: entities.filter((e) => e.type === 'booking').length,
-                }}
-                tableData={{
-                  orders,
-                  inventory: products,
-                  order: orders,
-                  product: products,
-                  directory: entities,
-                  'entity-directory': entities,
-                  'plan5-directory': entities,
-                }}
-              />
-            </ScrollView>
-          )}
+              <Ionicons name="sparkles" size={14} color="#7c3aed" />
+              <Text style={{ fontSize: 12, fontWeight: '700', color: '#7c3aed' }}>Customize</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={handleRefresh} hitSlop={12} style={styles.iconBtn}>
+              <Ionicons name="refresh-outline" size={20} color="#0f172a" />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={onClose} hitSlop={12} style={styles.iconBtn}>
+              <Ionicons name="close" size={22} color="#0f172a" />
+            </TouchableOpacity>
+          </View>
         </View>
+
+        {loading ? (
+          <View style={styles.center}>
+            <TarLogoLoader size={36} color={theme.primary || '#2563eb'} />
+          </View>
+        ) : (
+          <ScrollView
+            style={styles.scroll}
+            contentContainerStyle={styles.scrollContent}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[theme.primary || '#2563eb']} />}
+          >
+            <WorkspaceCanvas
+              designTokens={effectiveTokens}
+              blocks={blocks}
+              tableData={tableData}
+              metricsData={metricsData}
+              onExecuteAction={handleExecuteAction}
+            />
+          </ScrollView>
+        )}
 
         <ContactDetailsModal
           visible={selectedEntity !== null}
@@ -190,7 +271,18 @@ export default function CanvasOverlay({ visible, onClose, theme, scope: propScop
           scope={scope ?? undefined}
           theme={theme}
           onClose={() => setSelectedEntity(null)}
-          onRefresh={load}
+          onRefresh={loadData}
+        />
+
+        <CanvasCustomizerModal
+          visible={showCustomizer}
+          onClose={() => setShowCustomizer(false)}
+          scope={scope || ''}
+          workspaceName={displayName}
+          activeBlocks={blocks}
+          onUpdated={() => {
+            loadData();
+          }}
         />
       </View>
     </Modal>
@@ -198,17 +290,43 @@ export default function CanvasOverlay({ visible, onClose, theme, scope: propScop
 }
 
 const styles = StyleSheet.create({
-  panel: {
+  container: {
     flex: 1,
-    paddingHorizontal: 12,
   },
-  closeBtn: {
-    alignSelf: 'flex-end',
-    marginRight: 16,
-    marginTop: 4,
-    padding: 4,
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
   },
-  content: {
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  headerSubtitle: {
+    fontSize: 12,
+    color: '#64748b',
+    marginTop: 1,
+  },
+  iconBtn: {
+    padding: 6,
+    borderRadius: 8,
+    backgroundColor: '#f8fafc',
+  },
+  center: {
     flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  scroll: {
+    flex: 1,
+  },
+  scrollContent: {
+    padding: 16,
+    paddingBottom: 40,
   },
 });

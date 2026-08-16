@@ -44,8 +44,6 @@ export default function WorkspaceCanvas({
     <View style={styles.container}>
       {hasBlocks ? (
         blocks.map((block, idx) => {
-          if (block.type === 'quick-actions') return null;
-
           if (!hasComponent(block.type)) {
             console.warn(`[WorkspaceCanvas] Unknown component type: ${block.type}`);
             return null;

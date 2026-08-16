@@ -22,3 +22,4 @@ SECRETS.md
 # Wrangler local state
 .wrangler/
 .mimocode/
+.freebuff/

@@ -142,14 +142,15 @@ export default function EntityDetailsModal({
     { id: 'viber', name: 'call-outline', color: '#7360F2' },
   ];
 
-  const DEAL_STAGE_ICONS = [
-    { id: 'new_inquiry', stageName: 'New Inquiry', icon: 'checkmark-circle-outline', isEmoji: false, color: '#3B82F6' },
-    { id: 'qualified', stageName: 'Qualified', icon: 'ribbon-outline', isEmoji: false, color: '#06B6D4' },
-    { id: 'proposal', stageName: 'Proposal', icon: 'document-text-outline', isEmoji: false, color: '#8B5CF6' },
-    { id: 'negotiation', stageName: 'Negotiation', icon: 'disc-outline', isEmoji: false, color: '#F59E0B' },
-    { id: 'closed_won', stageName: 'Closed Won', icon: '🎉', isEmoji: true, color: '#10B981' },
-    { id: 'closed_lost', stageName: 'Closed Lost', icon: 'close-circle-outline', isEmoji: false, color: '#EF4444' },
+  const FLOW_STAGE_ICONS = [
+    { id: 'new_inquiry', stageName: 'New / Intake', icon: 'checkmark-circle-outline', isEmoji: false, color: '#3B82F6' },
+    { id: 'qualified', stageName: 'In Progress', icon: 'ribbon-outline', isEmoji: false, color: '#06B6D4' },
+    { id: 'proposal', stageName: 'Review / Proposal', icon: 'document-text-outline', isEmoji: false, color: '#8B5CF6' },
+    { id: 'negotiation', stageName: 'Action Required', icon: 'disc-outline', isEmoji: false, color: '#F59E0B' },
+    { id: 'closed_won', stageName: 'Completed / Won', icon: '🎉', isEmoji: true, color: '#10B981' },
+    { id: 'closed_lost', stageName: 'Dropped / Cancelled', icon: 'close-circle-outline', isEmoji: false, color: '#EF4444' },
   ];
+  const DEAL_STAGE_ICONS = FLOW_STAGE_ICONS;
 
   const POPULAR_EMOJIS = ['🤝', '📞', '📅', '📝', '☕', '🍴', '🥂', '💼', '💡', '🎯', '🚀', '🔥', '✅', '📍', '📧', '📱', '💬', '🏆', '🎉', '📌', '📎'];
 
@@ -362,7 +363,9 @@ export default function EntityDetailsModal({
 
   if (!visible || !entity) return null;
 
-  const typeStr = (entity.type || entity.subRole || '').toLowerCase();
+  const typeCode = typeof entity.type === 'number' ? entity.type : undefined;
+  const rawTypeStr = typeof entity.type === 'string' ? entity.type : typeCode === 2 ? 'company' : typeCode === 1 ? 'customer' : '';
+  const typeStr = String(rawTypeStr || entity.subRole || '').toLowerCase();
   const categoryName = entity.category || (
     ['lead', 'leads', 'prospect'].includes(typeStr) ? 'leads' :
     ['customer', 'staff', 'person', 'contact'].includes(typeStr) ? 'people' :
@@ -560,9 +563,9 @@ export default function EntityDetailsModal({
               }}
             />
 
-            {/* Notes Section (Omitted for Deals in View Mode — Notes live dynamically in History timeline) */}
+            {/* Notes Section (Omitted for Flows in View Mode — Notes live dynamically in History timeline) */}
             {(() => {
-              if (typeStr === 'deal' && !isEditing) return null;
+              if ((typeStr === 'flow' || typeStr === '10' || typeStr === 'deal') && !isEditing) return null;
               const notesDisplay = notes || entity.notes || entity.data?.notes || entity.data?.description || entity.data?.details || entity.data?.summary || '';
               if (!isEditing && !notesDisplay) {
                 return (
@@ -962,10 +965,10 @@ export default function EntityDetailsModal({
                     </View>
                   </View>
 
-                  {/* Category 3: Deal stage pipeline */}
+                  {/* Category 3: Flow stage milestone */}
                   <View style={{ gap: 8 }}>
                     <Text style={{ fontSize: 13, fontWeight: '600', color: theme.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                      Deal stage pipeline
+                      Flow stages & milestones
                     </Text>
                     <View style={{ gap: 8 }}>
                       {DEAL_STAGE_ICONS.map((stg) => (

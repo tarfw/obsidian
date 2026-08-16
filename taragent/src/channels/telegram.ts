@@ -119,16 +119,53 @@ export async function handleTelegramUpdate(
 
   // Parse Slash Commands — locate command token
   const tokens = text.split(/\s+/);
-  const cmdIndex = tokens.findIndex(t => t.startsWith('/') || t.includes('/link') || t.includes('/unlink') || t.includes('/role') || t.includes('/team') || t.includes('/remove'));
+  const cmdIndex = tokens.findIndex(t => t.startsWith('/') || t.includes('/start') || t.includes('/link') || t.includes('/unlink') || t.includes('/role') || t.includes('/team') || t.includes('/remove'));
 
   if (cmdIndex !== -1 || text.startsWith('/')) {
     const parts = cmdIndex !== -1 ? tokens.slice(cmdIndex) : tokens;
     const command = (parts[0] || '').toLowerCase().replace(/@\w+/, '');
 
     // ────────────────────────────────────────────────────────────────
+    // 0. /start [claim_CODE] (Private DM Code Retrieval)
+    // ────────────────────────────────────────────────────────────────
+    if (command === '/start' || command.startsWith('/start')) {
+      const startArg = parts[1] || '';
+      let targetCode = startArg.replace(/^claim_/i, '').trim();
+
+      if (env.DB) {
+        let invite: any = null;
+        if (targetCode) {
+          invite = await env.DB.prepare(
+            'SELECT * FROM member_invites WHERE code = ? AND expires_at > ?'
+          ).bind(targetCode, Date.now()).first();
+        }
+
+        if (!invite) {
+          // Look up latest pending invite by userHandle or username
+          invite = await env.DB.prepare(
+            `SELECT * FROM member_invites 
+             WHERE (LOWER(handle) = ? OR LOWER(handle) = ? OR LOWER(REPLACE(handle, '@', '')) = ?)
+               AND expires_at > ?
+             ORDER BY created_at DESC LIMIT 1`
+          ).bind(userHandle.toLowerCase(), `@${userHandle.toLowerCase().replace('@', '')}`, userHandle.toLowerCase().replace('@', ''), Date.now()).first();
+        }
+
+        if (invite) {
+          let details = `Role: <b>${invite.role}</b>`;
+          if (invite.section) details += ` | Section: <b>${invite.section}</b>`;
+          if (invite.tables) details += ` | Tables: <b>${invite.tables}</b>`;
+
+          responseText = `👋 Hi <b>${userName}</b>!\nHere is your private join code for <b>${invite.subdomain}</b>:\n\n🔢 <code>${invite.code}</code>\n\n${details}\n⏱️ Valid for 15 minutes.\n\n<b>How to join:</b>\n1. Open <b>TarApp</b> (logged in with Google)\n2. Tap workspace header → <b>Join Code</b>\n3. Enter <code>${invite.code}</code> to bind your account!`;
+        } else {
+          responseText = `🤖 <b>Welcome to Tar Bot!</b>\n\n• To link a group to your workspace, run <code>/link &lt;CODE&gt;</code> in your group.\n• If you received an invitation, tap the invite link in your group to view your private claim code.`;
+        }
+      }
+    }
+
+    // ────────────────────────────────────────────────────────────────
     // 1. /link <CODE> (Flow 2: Secure Pairing Code)
     // ────────────────────────────────────────────────────────────────
-    if (command === '/link' || command.startsWith('/link')) {
+    else if (command === '/link' || command.startsWith('/link')) {
       const targetCodeRaw = (parts[1] || '').toUpperCase().trim();
       if (!targetCodeRaw) {
         responseText = '⚠️ Usage: <code>/link &lt;PAIRING_CODE&gt;</code> (e.g. <code>/link TAR-7K92</code>)\n\nGenerate your 6-character code in <b>TarApp</b> (tap <i>Connect Chat</i>).';
@@ -197,7 +234,7 @@ export async function handleTelegramUpdate(
       } else if (env.DB) {
         const subdomain = extractSubdomain(rawScope);
         const scope = `w:${subdomain}`;
-        const senderRole = await getUserRole(env, scope, userHandle);
+        const senderRole = await getUserRole(env, scope, userHandle, userId, chatId);
         if (senderRole !== 'owner' && senderRole !== 'admin') {
           responseText = `❌ Only workspace owners or admins can unlink this group. (Your role: <code>${senderRole}</code>)`;
         } else {
@@ -228,7 +265,7 @@ export async function handleTelegramUpdate(
           const cleanHandle = targetHandle.toLowerCase();
 
           // 1. Verify sender is Channel Admin / Owner
-          const senderRole = await getUserRole(env, scope, userHandle);
+          const senderRole = await getUserRole(env, scope, userHandle, userId, chatId);
           if (senderRole !== 'owner' && senderRole !== 'admin') {
             responseText = `❌ Only workspace owners or admins can assign roles in this group. (Your role: <code>${senderRole}</code>)`;
           } else {
@@ -280,7 +317,7 @@ export async function handleTelegramUpdate(
             if (sectionArg) details += ` | Section: <b>${sectionArg}</b>`;
             if (tablesArg) details += ` | Tables: <b>${tablesArg}</b>`;
 
-            responseText = `👋 <b>${targetHandle}</b> assigned to <b>${subdomain}</b>!\n${details}\n\n📩 <b>Private join code sent in DM.</b>\n<i>(Staff member opens TarApp, enters the 4-digit code to claim with Google Sign-In)</i>`;
+            responseText = `👋 <b>${targetHandle}</b> assigned to <b>${subdomain}</b>!\n${details}\n\n🔑 <b>Private Join Code:</b>\n👉 <a href="https://t.me/tarbee_bot?start=claim_${claimCode}"><b>Tap here to view code in @tarbee_bot</b></a>\n\n<i>(Tap the link to get your 4-digit code in private DM, then enter it in TarApp)</i>`;
           }
         }
       }
@@ -371,10 +408,10 @@ export async function handleTelegramUpdate(
     } else {
       const subdomain = extractSubdomain(rawScope);
       const scope = `w:${subdomain}`;
-      const userRole = await getUserRole(env, scope, userHandle);
+      const userRole = await getUserRole(env, scope, userHandle, userId, chatId);
       const lowerText = text.toLowerCase();
 
-      // Case A: Clock in / Clock out (motion type 118 / 119)
+      // Case A: Fast-path Clock in / Clock out (motion type 118 / 119)
       if (lowerText === 'clock in' || lowerText.startsWith('clock in')) {
         const motId = generateEntityId('motion');
         const idemKey = `${subdomain}:${userHandle}:${Date.now()}:clockin`;
@@ -403,8 +440,17 @@ export async function handleTelegramUpdate(
         responseText = `🏁 <b>${userHandle}</b> clocked out. Shift logged & handover notes queued.`;
       }
 
-      // Case B: Contact / Customer Creation (matter type 1)
-      else if (lowerText.includes('contact') || lowerText.includes('customer') || lowerText.startsWith('add customer')) {
+      // Case B: OKF Skill-Driven Dynamic Intent Resolution (plan6.md §15)
+      else {
+        const { resolveAndExecuteChannelIntent } = await import('./channel-intent');
+        const skillIntent = await resolveAndExecuteChannelIntent(env, scope, userHandle, userRole, text);
+
+        if (skillIntent.handled && skillIntent.replyText) {
+          responseText = skillIntent.replyText;
+        }
+
+        // Case C: Contact / Customer Creation (matter type 1) fallback
+        else if (lowerText.includes('contact') || lowerText.includes('customer') || lowerText.startsWith('add customer')) {
         const nameClean = text.replace(/add|create|new|contact|customer/gi, '').trim() || 'New Contact';
         const phoneMatch = text.match(/(\+?\d[\d\s-]{7,}\d)/);
         const phone = phoneMatch ? phoneMatch[1].replace(/\s+/g, '') : null;
@@ -559,6 +605,7 @@ export async function handleTelegramUpdate(
       }
     }
   }
+}
 
   return {
     message: channelMsg,
@@ -610,14 +657,57 @@ async function getScopeForChat(env: { DB?: D1Database }, chatId: string): Promis
 }
 
 /**
- * Helper to get user's role for a scope.
+ * Helper to get user's role for a scope with robust creator & handle matching.
  */
-async function getUserRole(env: { DB?: D1Database }, scope: string, handle: string): Promise<string> {
-  if (!env.DB || !handle) return 'staff';
-  const row = await env.DB.prepare(
-    'SELECT role FROM members WHERE scope = ? AND LOWER(handle) = ?'
-  ).bind(scope, handle.toLowerCase()).first();
-  return (row?.role as string) || 'staff';
+async function getUserRole(
+  env: { DB?: D1Database },
+  scope: string,
+  handle: string,
+  userId?: string,
+  chatId?: string
+): Promise<string> {
+  if (!env.DB) return 'owner';
+
+  const cleanHandle = (handle || '').replace(/^@/, '').toLowerCase().trim();
+  const withAt = `@${cleanHandle}`;
+
+  // 1. Check if user is the channel creator who linked this group
+  if (chatId) {
+    const chan = (await env.DB.prepare('SELECT created_by FROM channels WHERE chat_id = ?').bind(chatId).first()) as {
+      created_by?: string;
+    } | null;
+    if (chan?.created_by) {
+      const chanCreator = chan.created_by.replace(/^@/, '').toLowerCase().trim();
+      if (chanCreator === cleanHandle || chanCreator === (handle || '').toLowerCase().trim()) {
+        return 'owner';
+      }
+    }
+  }
+
+  // 2. Check members table by handle variants or userId
+  const row = (await env.DB.prepare(
+    `SELECT role FROM members 
+     WHERE scope = ? 
+       AND (
+         LOWER(handle) = ? 
+         OR LOWER(handle) = ? 
+         OR LOWER(REPLACE(handle, '@', '')) = ?
+         OR user_id = ?
+       )
+     LIMIT 1`
+  ).bind(scope, withAt, cleanHandle, cleanHandle, userId || '').first()) as { role?: string } | null;
+
+  if (row?.role) return row.role;
+
+  // 3. Fallback: If workspace has <= 1 member, sender is the primary creator/owner
+  const countRow = (await env.DB.prepare('SELECT COUNT(*) as cnt FROM members WHERE scope = ?').bind(scope).first()) as {
+    cnt: number;
+  } | null;
+  if (!countRow || countRow.cnt <= 1) {
+    return 'owner';
+  }
+
+  return 'staff';
 }
 
 /**

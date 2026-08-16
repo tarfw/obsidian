@@ -80,7 +80,31 @@ function createSyncDbConnection(key: string, dbName: string, url: string, authTo
   });
   dbConnections[key] = db;
   notifyDbChange(db);
+  startPeriodicSync();
   return db;
+}
+
+let syncIntervalTimer: ReturnType<typeof setInterval> | null = null;
+
+export function startPeriodicSync(intervalMs: number = 5000): void {
+  if (syncIntervalTimer) return;
+  syncIntervalTimer = setInterval(() => {
+    syncAllActiveDbs().catch(() => {});
+  }, intervalMs);
+}
+
+export async function syncAllActiveDbs(): Promise<void> {
+  const syncConns = Object.values(dbConnections).filter(db => db && db.isSync);
+  await Promise.all(
+    syncConns.map(async (db) => {
+      try {
+        await db.push().catch(() => {});
+        await db.pull().catch(() => {});
+      } catch (e) {
+        console.warn('[DB] sync error on active connection:', e);
+      }
+    })
+  );
 }
 
 export function getLocalPrivateDb(userId: string): Database {

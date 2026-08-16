@@ -43,9 +43,10 @@ export function filterModulesByRole(
 
   const { roles, members } = parseMembersConfig(membersMarkdown);
 
-  // Find member matching email
+  // Find member matching email safely
+  const cleanUserEmail = (userEmail || '').toLowerCase().trim();
   const member = members.find(
-    (m) => m.email.toLowerCase() === userEmail.toLowerCase() && m.status === 'verified'
+    (m) => m?.email && cleanUserEmail && m.email.toLowerCase().trim() === cleanUserEmail && m.status === 'verified'
   );
 
   if (!member) {

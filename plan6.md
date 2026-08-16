@@ -93,9 +93,9 @@ WORKSPACE DB (ws_{subdomain})
 │   type=7  asset     equipment, vehicles, tools, furniture
 │   type=8  location  warehouse, store room, branch, zone
 │
-│   CONTACTS & PIPELINES
-│   type=9  pipeline  a named workflow with stages (workspace-defined)
-│   type=10 card      a contact's entry in a pipeline
+│   CONTACTS & FLOWS
+│   type=9  flow_def  a named workflow with stages (workspace-defined blueprint)
+│   type=10 flow      a contact's active journey/entry in a flow
 │
 ├── motion    → workspace events (type stored as INTEGER, see §13)
 │               type=101  sale               order completed
@@ -113,13 +113,13 @@ WORKSPACE DB (ws_{subdomain})
 │               type=113  booking_cancel     booking cancelled
 │               type=114  shipment           delivery dispatched
 │               type=115  delivery           delivery completed
-│               type=116  activity           call, meeting, note on contact/card
+│               type=116  activity           call, meeting, note on contact/flow
 │               type=117  assignment         task assigned to staff
 │               type=118  clock_in           staff arrived
 │               type=119  clock_out          staff left
-│               type=120  card_stage         pipeline card moved to next stage
-│               type=121  card_won           pipeline card closed as won
-│               type=122  card_lost          pipeline card closed as lost
+│               type=120  flow_stage         contact moved to next stage in flow
+│               type=121  flow_complete      flow finished successfully (won/completed)
+│               type=122  flow_dropped       flow closed without progress (lost/cancelled)
 │               type=123  status_change      any entity state updated
 │
 ├── graph     → STRUCTURAL relationships only (rel stored as INTEGER, see §14)
@@ -135,10 +135,10 @@ WORKSPACE DB (ws_{subdomain})
 │               src=person      rel=5  tgt=location    (assigned_to section/tables)
 │               src=product     rel=6  tgt=location    (stored_at warehouse)
 │               src=vendor_bill rel=7  tgt=company     (from vendor)
-│               src=card        rel=8  tgt=person      (for_contact)
-│               src=card        rel=9  tgt=pipeline    (in_pipeline)
-│               src=card        rel=10 tgt=person      (owned_by staff)
-│               src=activity    rel=11 tgt=card/person (about)
+│               src=flow        rel=8  tgt=person      (for_contact)
+│               src=flow        rel=9  tgt=flow_def    (in_flow)
+│               src=flow        rel=10 tgt=person      (owned_by staff)
+│               src=activity    rel=11 tgt=flow/person (about)
 │
 │               REMOVED: src=order rel=2 tgt=product (contains item)
 │               → Store as JSON in motion type=101 data field:
@@ -599,51 +599,51 @@ taragent (Cloudflare Worker)
 
 ---
 
-## 10. Contacts & Pipelines
+## 10. Contacts & Flows
 
 Replaces CRM. Two separate, clean concepts.
 
 **Contacts** — everyone the workspace interacts with (not just customers).
-**Pipelines** — workspace-defined workflows a contact moves through.
+**Flows** — workspace-defined workflows a contact moves through.
 
 ```
 CONTACTS (matter)
   type=1  person    role=customer/contact/patient/tenant/applicant/...
   type=2  company   subtype=client/vendor/partner
 
-PIPELINES (matter)
-  type=9  pipeline  name, stages[], workspace_id
-  e.g. { name: "Sales", stages: ["Lead","Proposal","Won"] }
-  e.g. { name: "Support", stages: ["Open","In Progress","Closed"] }
+FLOW DEFINITIONS (matter)
+  type=9  flow_def  name, stages[], workspace_id
+  e.g. { name: "Sales Flow", stages: ["Lead","Proposal","Won"] }
+  e.g. { name: "Support Flow", stages: ["Open","In Progress","Closed"] }
 
-CARDS (matter)
-  type=10 card      a contact's journey in one pipeline
-                    links to: contact + pipeline + stage + owner (staff)
+ACTIVE FLOWS (matter)
+  type=10 flow      a contact's active journey in one flow
+                    links to: contact + flow_def + stage + owner (staff)
 
 EVENTS (motion)
-  type=120  card_stage   card moved to next stage
-  type=121  card_won     completed successfully
-  type=122  card_lost    dropped / not progressed
-  type=116  activity     call, meeting, note logged against a card or contact
+  type=120  flow_stage     contact moved to next stage in flow
+  type=121  flow_complete  completed successfully (won/resolved)
+  type=122  flow_dropped   dropped / cancelled / lost
+  type=116  activity       call, meeting, note logged against a flow or contact
 ```
 
-**Key rule:** A contact can be in multiple pipelines at the same time.
+**Key rule:** A contact can be in multiple flows at the same time.
 
-| Business | Pipeline Examples |
+| Business | Flow Examples |
 |---|---|
-| Restaurant | Reservation Pipeline, Complaint Pipeline |
-| Clinic | Patient Onboarding, Insurance Approval |
-| Real Estate | Buyer Pipeline, Landlord Pipeline |
-| B2B Sales | Sales Pipeline, Renewal Pipeline |
-| HR | Recruitment Pipeline, Onboarding Pipeline |
+| Restaurant | Reservation Flow, Complaint Flow |
+| Clinic | Patient Intake Flow, Insurance Approval Flow |
+| Real Estate | Buyer Flow, Landlord Flow, Lease Flow |
+| B2B Sales | Enterprise Sales Flow, Renewal Flow |
+| HR | Recruitment Flow, Onboarding Flow |
 
-**OKF files for Contacts & Pipelines:**
+**OKF files for Contacts & Flows:**
 ```
 skills/contacts.md     → how contacts are added, searched, tagged
-skills/pipelines.md    → how cards are created and moved
-wiki/pipelines/
-  └── {name}.md        → stage rules per pipeline
-                          (e.g. flag card if no activity for 7 days)
+skills/flow.md         → how flows are started and moved
+wiki/flows/
+  └── {name}.md        → stage rules per flow
+                          (e.g. flag flow if no activity for 7 days)
 ```
 
 ---
@@ -819,8 +819,8 @@ MATTER TYPES                        RANGE RESERVATION
 6  = document
 7  = asset
 8  = location
-9  = pipeline
-10 = card
+9  = flow_def
+10 = flow
 11 = note
 12 = goal
 13 = expense
@@ -847,9 +847,9 @@ MOTION TYPES                        RANGE RESERVATION
 117 = assignment
 118 = clock_in
 119 = clock_out
-120 = card_stage
-121 = card_won
-122 = card_lost
+120 = flow_stage
+121 = flow_complete
+122 = flow_dropped
 123 = status_change
 124 = order_placed   order created, kitchen not yet started
 125 = order_ready    kitchen finished, waiting for service
@@ -880,14 +880,14 @@ GRAPH REL TYPES (rel column)        STRUCTURAL RELATIONSHIPS ONLY
 5  = assigned_to   person → location/tables
 6  = stored_at     product → location
 7  = from          vendor_bill → company
-8  = for_contact   card → person/company
-9  = in_pipeline   card → pipeline
-10 = owned_by      card → person (staff)
-11 = about         activity → card/person
+8  = for_contact   flow → person/company
+9  = in_flow       flow → flow_def
+10 = owned_by      flow → person (staff)
+11 = about         activity → flow/person
 12 = member_of     user → workspace (membership registry)
 13 = linked_to     contact → goal
 14 = variant_of    variant → parent product
-15 = served_by      order → person (staff who served it)
+15 = served_by     order → person (staff who served it)
 16–49              reserved for future core rel types
 50+                workspace-defined custom rel types
 ```
@@ -1036,72 +1036,71 @@ NEW ARCHITECTURE (plan6)
 
 ---
 
-## 16. Channel-First Member Management & Zero-UI Onboarding
+## 16. Capabilities-Based Onboarding & Dynamic Chat Multi-Roles
 
-### The Problem with Traditional App Member Management
-In typical business software:
-1. Owner has to open an admin dashboard, type staff emails/phones, configure permissions, and send email invites.
-2. Staff must receive an email, click a link, create a password, download the app, and log in.
-3. Owner *also* has to create a Telegram or Discord group for daily team chatter.
-4. When someone joins, leaves, or changes shifts, owner must update both the chat group and the app dashboard (dual management, inevitable desync).
-5. Mobile app UI gets cluttered with bulky "Manage Team", "Permissions Matrix", and "Invite Staff" forms.
-
-### The Tar Solution: Channel-First, Zero-UI Onboarding
-**The Telegram/Discord group is the primary interface for team management.**
-There are no member invitation screens in `tarapp`. The chat channel serves as the single source of truth.
+### The Unified Team Architecture
+This architecture cleanly separates **Static Capabilities** (configured once during hiring in TarApp Contact/Pipeline) from **Dynamic Shift Roles & Multi-Roles** (assigned, switched, and combined naturally in team chat groups).
 
 ```
-┌──────────────────────────────────────────────────────────────────────────────┐
-│                    ZERO-UI MEMBER ONBOARDING LIFECYCLE                       │
-└──────────────────────────────────────────────────────────────────────────────┘
-
- 1. LINK WORKSPACE (One-Time)
-    Owner in Telegram/Discord group:
-    👉 /link alnoor
-    └─ taragent binds group chat_id to workspace `alnoor`
-
- 2. ASSIGN ROLE IN CHAT
-    Owner in chat:
-    👉 /role @ahmed waiter tables:12-15
-    ├─ 1. taragent writes to OKF `team/members.md`
-    ├─ 2. Turso Workspace DB: creates matter type=1 (person: Ahmed, handle: @ahmed)
-    └─ 3. Turso Workspace DB: creates graph rel=5 (assigned_to tables 12-15)
-
- 3. ZERO-FRICTION 1-TAP BINDING
-    Bot replies in chat (or DMs Ahmed):
-    "👋 Ahmed, you've been assigned Waiter at Al Noor Restaurant!
-     Tap to open your workspace: [Open in TarApp](https://alnoor.tarai.space/join?token=xyz)"
-    └─ Ahmed taps link → opens tarapp → binds Ahmed's user_{id}
-    └─ Ahmed's Personal DB: graph src=ahmed rel=12(member_of) tgt=ws_alnoor
-
- 4. INSTANT READY CANVAS
-    Ahmed opens tarapp:
-    ├─ Workspace Switcher shows: "Al Noor Restaurant"
-    └─ Canvas auto-loads Waiter layout (Table Grid 12-15, Order Queue) from OKF
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 1. ONBOARDING (TarApp Contact / Hiring Pipeline)                             │
+│    • Name: Ahmed Khan                                                       │
+│    • Google Email: ahmed@gmail.com (TarApp Google Auth)                     │
+│    • Telegram Handle / Phone: @ahmed / +91 9876543210 (Chat Identity)       │
+│    • Capabilities: [ "orders", "tables", "bar", "pos", "inventory" ]        │
+└──────────────────────────────────────┬──────────────────────────────────────┘
+                                       │
+                                       ▼ (Stored in Turso `matter` type=1)
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 2. ZERO-EFFORT CHAT PAIRING & DYNAMIC SHIFT ROLES (In Chat Group)           │
+│    Admin naturally types in group chat:                                     │
+│    • "@ahmed you are on Bar and Cashier tonight"                            │
+│    • "@ahmed take Tables 1 to 6"                                            │
+│    • "@sara switch from Prep to Kitchen Lead"                               │
+│                                                                             │
+│    👉 TarAgent Execution:                                                   │
+│    • Matches @ahmed with Contact record via phone / handle                  │
+│    • Dynamically sets active shift roles: [ "bar", "cashier" ]              │
+│    • Links graph assigned_to -> tables 1-6                                  │
+│    • Pushes live shift briefing directly into Ahmed's TarApp Inbox          │
+└──────────────────────────────────────┬──────────────────────────────────────┘
+                                       │
+                                       ▼ (Instant Ready Canvas)
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 3. INSTANT READY TARAPP ACCESS                                               │
+│    Ahmed opens TarApp with his Google account:                              │
+│    • Workspace is already unlocked in Workspace Switcher                    │
+│    • Canvas dynamically renders Table POS + Bar Terminal based on roles     │
+│    • ZERO manual codes, ZERO OTPs, ZERO friction                            │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Complete Lifecycle Actions via Channel
+### Complete Lifecycle: Capabilities vs. Dynamic Shift Roles
 
-| Owner / Admin Action in Chat | What taragent Automatically Executes | tarapp UI / System Impact |
-|---|---|---|
-| `/role @fatima chef` | 1. OKF `team/members.md` updated with `@fatima` as `chef`<br>2. Workspace Turso `matter` creates `type=1` person record<br>3. Bot DMs Fatima magic join link | When Fatima taps link, `tarapp` automatically mounts the **Kitchen Order Queue Canvas** |
-| `/role @ahmed manager` | 1. OKF `team/members.md` role updated to `manager`<br>2. Workspace Turso `matter` updated | Next time Ahmed opens `tarapp`, Canvas switches from Table Grid to **Manager Dashboard Canvas** |
-| `/remove @ahmed`<br>*(or Ahmed leaves group)* | 1. `taragent` marks Ahmed `status=0` in workspace `matter`<br>2. Graph `rel=4 (works_at)` deleted<br>3. Ahmed's personal DB `graph` `rel=12 (member_of)` removed | Workspace disappears from Ahmed's `tarapp` Workspace Switcher immediately. Access revoked. |
-| `/team` | `taragent` queries OKF `team/members.md` + Turso `matter` | Bot displays live list of team members, active roles, and table/zone assignments in chat |
+| Lifecycle Event | Where Action Happens | What TarAgent Automatically Executes | System & TarApp Impact |
+|---|---|---|---|
+| **Hiring & Capabilities** | TarApp Contact / Hiring Pipeline | 1. Contact card created with Google Email + Telegram handle<br>2. Sets allowed Capabilities `["pos", "tables", "bar"]`<br>3. Saves in Turso `matter` (`type=1` person) | Sets security ceiling. When user logs in with Google, workspace is already bound. |
+| **Shift Role Assignment (Multi-Role)** | Chat: `@ahmed you are Waiter and Cashier tonight` | 1. Checks Ahmed's capabilities<br>2. Sets `members.role = 'waiter,cashier'`<br>3. Pushes shift task to Ahmed's inbox | TarApp Canvas mounts both **Table Grid** and **POS Register** widgets simultaneously. |
+| **Station / Table Assignment** | Chat: `@ahmed take Tables 1 to 6` | 1. Turso `graph` links `src=usr_ahmed rel=5(assigned_to) tgt=tables:1-6`<br>2. Records assignment motion | Ahmed's Table POS live-filters to Tables 1–6 with live order queue. |
+| **Dynamic Shift Switch** | Chat: `@ahmed switch to Bar section` | 1. Updates active station in `matter` to `bar`<br>2. Pushes instant notification to Ahmed's phone | Ahmed's Canvas updates to Bar Drink Dispense Queue in real time. |
+| **Shift Handoff** | Chat: `Handing over tables 1-4 to @omar` | 1. Rebinds `rel=5 (assigned_to)` to `@omar`<br>2. Records shift handoff motion (`type=117`) | Tables 1–4 move from Ahmed's active list to Omar's active list. |
+| **Attendance / Clock-In** | Chat: `Clock in` / `Clock out` | 1. Logs motion `type=118 (clock_in)` / `type=119 (clock_out)`<br>2. Updates live status in Owner dashboard | Records timestamps for payroll and active shift tracking. |
+| **Revoking Access** | TarApp Contact status set to Inactive *(or removed from chat)* | 1. Sets person record `status=0` in Turso `matter`<br>2. Deletes `graph` `rel=4 (works_at)` | Workspace instantly disappears from member's Workspace Switcher. Access revoked. |
 
-### Why This Design is Uncluttered & Perfect
+---
 
-1. **Zero UI Clutter in `tarapp`**:
-   - `tarapp` contains zero forms for managing staff, passwords, or permission toggles.
-   - Mobile app focuses 100% on what matters: the **Unified Inbox** (tasks to act on) and the **GenUI Canvas** (tools to do work).
-2. **Zero Dual Management**:
-   - Adding, promoting, or removing staff happens right where the team already communicates (Telegram / Discord).
-   - Leaving the Telegram group automatically revokes app access.
-3. **No Setup Friction for Staff**:
-   - Staff don't need manual invites or credential setup. Tapping the bot's magic link securely binds their personal DB to the workspace in 1 click.
-4. **Channel-Only Staff Supported**:
-   - Part-time staff or drivers who don't want to install `tarapp` can still receive tasks and log sales/motions directly inside Telegram.
-   - Staff who use `tarapp` get the rich interactive Canvas and unified inbox. Both share the exact same Turso DB.
+### Decoupled Workspace Creation & Site Agent Add-on
+
+```
+1. WORKSPACE CREATION (In TarApp)
+   • Clean 2-step setup: Business Type (Restaurant, Retail, Salon, etc.) + Workspace Name
+   • Automatically provisions Turso workspace database, OKF skill folders, and default tools
+   • Pure, uncluttered business operating system setup (zero forced website creation)
+
+2. SITE AGENT ADD-ON (₹500/month Skill Add-on)
+   • Public storefront (*.tarai.space) is an optional Site Agent Skill
+   • Owner previews visual themes (Planhat, Milo, Kith, etc.) and activates live publishing only when desired
+```
 
 ---
 
@@ -1147,7 +1146,7 @@ ACTIVE MODE  (things the user intentionally navigates to — requires focus)
 | View unified inbox (all tasks) | ❌ Cannot render prioritised list | ✅ Inbox Screen | Priority + multi-workspace sorting; one-tap actions |
 | Approve a pending task | ✅ `approve ibx_xyz` (works) | ✅ Inbox — better with context | Approval card shows full details before confirming |
 | Check daily sales / report | ✅ Bot can summarise in text | ✅ Canvas — better with charts | Numbers with trends are faster to read visually |
-| Manage pipeline / card stages | ❌ Too relational for text | ✅ Canvas — Pipeline module | Kanban stages; visual state of all active deals |
+| Manage flow / stage progression | ❌ Too relational for text | ✅ Canvas — Flow / Status Board | Kanban stages; visual state of all active flows |
 | Browse / search product catalog | ❌ Long lists break in text | ✅ Canvas — Stock Lookup / POS | Searchable, filterable, image-capable list |
 | View delivery map | ❌ Impossible in text | ✅ Canvas — Live Map module | GPS positions + delivery sequence require a map |
 | Shift handover note | ✅ Bot auto-posts to group | ✅ Canvas — Handover panel | Both: AI writes the note; surfaces on channel and app |
@@ -1187,7 +1186,7 @@ TEAM COLLABORATION (channels do this)
 
 OPERATIONS (tarapp does this)
   ├── Inbox:      all tasks across all workspaces, prioritised, actionable
-  ├── Canvas:     live work surface — tables, queues, POS, maps, pipelines
+  ├── Canvas:     live work surface — tables, queues, POS, maps, flows
   └── Reports:    sales, hours, trends — always current, always visual
 ```
 

@@ -77,11 +77,19 @@ export default function ContactCreateModal({
   useEffect(() => {
     if (visible) {
       if (editEntity) {
-        setName(editEntity.name || editEntity.title || '');
-        const entityType = (editEntity.type || editEntity.subRole || initialType || 'Customer');
+        setName(editEntity.name || editEntity.title || editEntity.data?.fn || '');
+        const typeCode = typeof editEntity.type === 'number' ? editEntity.type : undefined;
+        const rawType =
+          editEntity.subRole ||
+          editEntity.data?.role ||
+          editEntity.role ||
+          (typeCode === 2 ? 'Company' : typeCode === 1 ? 'Customer' : typeof editEntity.type === 'string' ? editEntity.type : undefined) ||
+          initialType ||
+          'Customer';
+        const entityType = String(rawType);
         setRole(entityType.charAt(0).toUpperCase() + entityType.slice(1));
-        setEmail(editEntity.data?.email || '');
-        setPhone(editEntity.data?.phone || '');
+        setEmail(editEntity.email || editEntity.data?.email || editEntity.data?.em || '');
+        setPhone(editEntity.phone || editEntity.data?.phone || editEntity.data?.ph || '');
         setOrg(editEntity.company || editEntity.data?.company || editEntity.data?.org || '');
         setNotes(editEntity.notes || editEntity.data?.notes || editEntity.data?.description || '');
       } else {
@@ -370,15 +378,16 @@ export default function ContactCreateModal({
           <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: Math.max(insets.bottom + 24, 32) }}>
             {(() => {
               const rawCompanies = (allEntities || []).filter((e: any) => {
-                const t = (e.type || e.category || '').toLowerCase();
-                const r = (e.role || e.subtype || '').toLowerCase();
-                return t === 'company' || t === 'business' || r === 'company' || r === 'vendor' || r === 'partner';
+                const typeCode = typeof e.type === 'number' ? e.type : undefined;
+                const t = String(e.type || e.category || '').toLowerCase();
+                const r = String(e.role || e.subtype || '').toLowerCase();
+                return typeCode === 2 || t === 'company' || t === 'business' || r === 'company' || r === 'vendor' || r === 'partner';
               });
 
               // Deduplicate by normalized name
               const uniqueMap = new Map<string, any>();
               rawCompanies.forEach((comp: any) => {
-                const compName = (comp.title || comp.name || comp.data?.name || comp.data?.title || '').trim();
+                const compName = String(comp.title || comp.name || comp.data?.name || comp.data?.title || comp.data?.fn || '').trim();
                 if (compName && !uniqueMap.has(compName.toLowerCase())) {
                   uniqueMap.set(compName.toLowerCase(), { ...comp, displayName: compName });
                 }

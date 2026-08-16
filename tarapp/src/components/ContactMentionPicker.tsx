@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { MATTER_TYPE_NAMES } from '@/constants/types-config';
 
 export interface MentionItem {
   id: string;
@@ -32,6 +33,25 @@ function getInitials(name: string): string {
   const parts = name.trim().split(/\s+/);
   if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+function getEntityTypeName(e: any): string {
+  if (!e) return '';
+  const rawType = e.type !== undefined ? e.type : (e.category !== undefined ? e.category : '');
+  if (typeof rawType === 'number') {
+    return (MATTER_TYPE_NAMES[rawType] || 'person').toLowerCase();
+  }
+  return String(rawType || '').toLowerCase();
+}
+
+function getEntityDisplayType(e: any, fallback: string): string {
+  if (!e) return fallback;
+  const rawType = e.type !== undefined ? e.type : (e.category !== undefined ? e.category : '');
+  if (typeof rawType === 'number') {
+    const name = MATTER_TYPE_NAMES[rawType] || fallback;
+    return name.charAt(0).toUpperCase() + name.slice(1);
+  }
+  return String(rawType || fallback);
 }
 
 interface ContactMentionPickerProps {
@@ -75,18 +95,18 @@ export function ContactMentionPicker(props: ContactMentionPickerProps) {
     ];
 
     (entities || []).forEach((e: any, index: number) => {
-      const typeStr = (e.type || e.category || '').toLowerCase();
+      const typeStr = getEntityTypeName(e);
 
       if (isItemsMode) {
         // Items Mode (#)
         const isItemType = itemTypes.includes(typeStr) || (!contactTypes.includes(typeStr) && !typeStr);
         if (isItemType) {
           const name = e.title || e.name || e.data?.title || e.data?.name || (e.id ? `Item #${e.id}` : '');
-          const normKey = name.toLowerCase().trim();
+          const normKey = String(name).toLowerCase().trim();
           if (name && !seenNames.has(normKey)) {
             seenNames.add(normKey);
             const price = e.price || e.data?.price ? `$${e.price || e.data?.price}` : '';
-            const category = e.type || e.category || 'Product';
+            const category = getEntityDisplayType(e, 'Product');
             parsed.push({
               id: e.id || `ent_item_${index}`,
               name,
@@ -102,14 +122,15 @@ export function ContactMentionPicker(props: ContactMentionPickerProps) {
         const isContactType = contactTypes.includes(typeStr) || !typeStr;
         if (isContactType) {
           const name = e.name || e.title || e.data?.name || e.data?.title || '';
-          const normKey = name.toLowerCase().trim();
+          const normKey = String(name).toLowerCase().trim();
           if (name && !seenNames.has(normKey)) {
             seenNames.add(normKey);
+            const displayType = getEntityDisplayType(e, 'Customer');
             parsed.push({
               id: e.id || `ent_contact_${index}`,
               name,
-              type: e.type || e.category || 'Customer',
-              subtitle: e.type || e.category || 'Customer',
+              type: displayType,
+              subtitle: displayType,
               avatarColor: getAvatarColor(name),
               rawEntity: e,
               kind: 'contact',
@@ -124,12 +145,12 @@ export function ContactMentionPicker(props: ContactMentionPickerProps) {
 
   // Filter by search query after @ or #
   const filteredItems = useMemo(() => {
-    const cleanQuery = (query || '').toLowerCase().trim();
+    const cleanQuery = String(query || '').toLowerCase().trim();
     if (!cleanQuery) return allItems;
     return allItems.filter(c =>
-      c.name.toLowerCase().includes(cleanQuery) ||
-      (c.type && c.type.toLowerCase().includes(cleanQuery)) ||
-      (c.subtitle && c.subtitle.toLowerCase().includes(cleanQuery))
+      String(c.name || '').toLowerCase().includes(cleanQuery) ||
+      (c.type && String(c.type).toLowerCase().includes(cleanQuery)) ||
+      (c.subtitle && String(c.subtitle).toLowerCase().includes(cleanQuery))
     );
   }, [allItems, query]);
 
@@ -144,7 +165,7 @@ export function ContactMentionPicker(props: ContactMentionPickerProps) {
         title: item.name,
         name: item.name,
         type: item.type,
-        category: item.type?.toLowerCase() || (item.kind === 'item' ? 'product' : 'customer'),
+        category: String(item.type || (item.kind === 'item' ? 'product' : 'customer')).toLowerCase(),
         kind: item.kind,
         data: { name: item.name, type: item.type }
       });
@@ -245,17 +266,17 @@ export function ContactMentionModal(props: ContactMentionModalProps) {
     ];
 
     (entities || []).forEach((e: any, index: number) => {
-      const typeStr = (e.type || e.category || '').toLowerCase();
+      const typeStr = getEntityTypeName(e);
 
       if (isItemsMode) {
         const isItemType = itemTypes.includes(typeStr) || (!contactTypes.includes(typeStr) && !typeStr);
         if (isItemType) {
           const name = e.title || e.name || e.data?.title || e.data?.name || (e.id ? `Item #${e.id}` : '');
-          const normKey = name.toLowerCase().trim();
+          const normKey = String(name).toLowerCase().trim();
           if (name && !seenNames.has(normKey)) {
             seenNames.add(normKey);
             const price = e.price || e.data?.price ? `$${e.price || e.data?.price}` : '';
-            const category = e.type || e.category || 'Product';
+            const category = getEntityDisplayType(e, 'Product');
             parsed.push({
               id: e.id || `modal_item_${index}`,
               name,
@@ -270,14 +291,15 @@ export function ContactMentionModal(props: ContactMentionModalProps) {
         const isContactType = contactTypes.includes(typeStr) || !typeStr;
         if (isContactType) {
           const name = e.name || e.title || e.data?.name || e.data?.title || '';
-          const normKey = name.toLowerCase().trim();
+          const normKey = String(name).toLowerCase().trim();
           if (name && !seenNames.has(normKey)) {
             seenNames.add(normKey);
+            const displayType = getEntityDisplayType(e, 'Customer');
             parsed.push({
               id: e.id || `modal_contact_${index}`,
               name,
-              type: e.type || e.category || 'Customer',
-              subtitle: e.type || e.category || 'Customer',
+              type: displayType,
+              subtitle: displayType,
               avatarColor: getAvatarColor(name),
               rawEntity: e,
               kind: 'contact',
@@ -291,11 +313,11 @@ export function ContactMentionModal(props: ContactMentionModalProps) {
   }, [entities, isItemsMode]);
 
   const filtered = useMemo(() => {
-    const q = search.toLowerCase().trim();
+    const q = String(search || '').toLowerCase().trim();
     if (!q) return allItems;
     return allItems.filter(c =>
-      c.name.toLowerCase().includes(q) ||
-      (c.type && c.type.toLowerCase().includes(q))
+      String(c.name || '').toLowerCase().includes(q) ||
+      (c.type && String(c.type).toLowerCase().includes(q))
     );
   }, [allItems, search]);
 
@@ -307,7 +329,7 @@ export function ContactMentionModal(props: ContactMentionModalProps) {
         title: item.name,
         name: item.name,
         type: item.type,
-        category: item.type?.toLowerCase() || (item.kind === 'item' ? 'product' : 'customer'),
+        category: String(item.type || (item.kind === 'item' ? 'product' : 'customer')).toLowerCase(),
         kind: item.kind,
         data: { name: item.name, type: item.type }
       });

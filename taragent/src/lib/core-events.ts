@@ -215,10 +215,10 @@ steps:
 2. create(table='motion', type='cancel', ref={booking_id}, data={reason: {reason}}, by='agent:taragent')
 `,
 
-  pipeline: `---
+  flow: `---
 type: skill
-name: pipeline
-version: 1.1.0
+name: flow
+version: 1.2.0
 actions:
   - name: action_add_contact
     params: [name, phone, email, company_id, role]
@@ -229,64 +229,137 @@ actions:
   - name: action_link_contact_company
     params: [contact_id, company_id, role]
     icon: link
-  - name: action_add_deal
+  - name: action_add_flow
     params: [name, value, stage, expected_close_date, contact_id]
     icon: cash
-  - name: action_update_deal_stage
-    params: [deal_id, stage, win_loss_reason]
+  - name: action_update_flow_stage
+    params: [flow_id, stage, win_loss_reason]
     icon: trending-up
   - name: action_log_activity
-    params: [type, description, contact_id, deal_id]
+    params: [type, description, contact_id, flow_id]
     icon: time
 app_layout:
   primary_action: action_add_contact
   layout: dashboard
   sections:
     - type: quick-actions
-      actions: [action_add_contact, action_add_company, action_add_deal, action_update_deal_stage, action_log_activity]
+      actions: [action_add_contact, action_add_company, action_add_flow, action_update_flow_stage, action_log_activity]
     - type: metric-card
-      title: "Pipeline Value"
-      data: "SELECT SUM(value) FROM matter WHERE type='deal' AND status='active'"
+      title: "Active Flow Value"
+      data: "SELECT SUM(value) FROM matter WHERE type=10 AND status=1"
     - type: status-board
-      title: "Deal Pipeline"
-      props: { type: "deal", groupBy: "stage" }
+      title: "Flow Status Board"
+      props: { type: "flow", groupBy: "stage" }
 ---
 
-# Pipeline Event Module
+# Contact & Flow Event Module
 
 ### action_add_company
 Add a new business account / company entity.
 steps:
-1. create(table='matter', type='company', title={name}, data={industry: {industry}, website: {website}, annual_revenue: {annual_revenue}, employee_count: {employee_count}}, status='active')
+1. create(table='matter', type=2, title={name}, data={industry: {industry}, website: {website}, annual_revenue: {annual_revenue}, employee_count: {employee_count}}, status=1)
 
 ### action_link_contact_company
-Link an existing customer contact to a company account.
+Link an existing contact to a company account.
 steps:
-1. link(src={contact_id}, rel='company', tgt={company_id})
-2. update(table='matter', id={contact_id}, type='customer', data={role: {role}})
+1. link(src={contact_id}, rel=4, tgt={company_id})
+2. update(table='matter', id={contact_id}, type=1, data={role: {role}})
 
 ### action_add_contact
-Add a new customer contact.
+Add a new contact (person).
 steps:
-1. create(table='matter', type='customer', title={name}, data={phone: {phone}, email: {email}, role: {role}}, status='active')
+1. create(table='matter', type=1, title={name}, data={phone: {phone}, email: {email}, role: {role}}, status=1)
 
-### action_add_deal
-Create a new sales deal in pipeline.
+### action_add_flow
+Add a contact into an active flow.
 steps:
-1. create(table='matter', type='deal', title={name}, value={value}, data={stage: {stage}, expected_close_date: {expected_close_date}}, status='active')
-2. link(src={id}, rel='customer', tgt={contact_id})
-3. create(table='motion', type='stage', ref={id}, data={stage: {stage}, value: {value}}, by='agent:taragent')
+1. create(table='matter', type=10, title={name}, value={value}, data={stage: {stage}, expected_close_date: {expected_close_date}}, status=1)
+2. link(src={id}, rel=8, tgt={contact_id})
+3. create(table='motion', type=120, ref={id}, data={stage: {stage}, value: {value}}, by='agent:taragent')
 
-### action_update_deal_stage
-Advance pipeline deal stage.
+### action_update_flow_stage
+Advance flow stage.
 steps:
-1. update(table='matter', id={deal_id}, type='deal', data={stage: {stage}, win_loss_reason: {win_loss_reason}})
-2. create(table='motion', type='stage', ref={deal_id}, data={stage: {stage}}, by='agent:taragent')
+1. update(table='matter', id={flow_id}, type=10, data={stage: {stage}, win_loss_reason: {win_loss_reason}})
+2. create(table='motion', type=120, ref={flow_id}, data={stage: {stage}}, by='agent:taragent')
 
 ### action_log_activity
-Log customer call or meeting activity.
+Log interaction or activity against contact / flow.
 steps:
-1. create(table='motion', type='activity', ref={deal_id}, data={activity_type: {type}, description: {description}, contact_id: {contact_id}}, by='agent:taragent')
+1. create(table='motion', type=116, ref={flow_id}, data={activity_type: {type}, description: {description}, contact_id: {contact_id}}, by='agent:taragent')
+`,
+  pipeline: `---
+type: skill
+name: flow
+version: 1.2.0
+actions:
+  - name: action_add_contact
+    params: [name, phone, email, company_id, role]
+    icon: person-add
+  - name: action_add_company
+    params: [name, industry, website, annual_revenue, employee_count]
+    icon: business
+  - name: action_link_contact_company
+    params: [contact_id, company_id, role]
+    icon: link
+  - name: action_add_flow
+    params: [name, value, stage, expected_close_date, contact_id]
+    icon: cash
+  - name: action_update_flow_stage
+    params: [flow_id, stage, win_loss_reason]
+    icon: trending-up
+  - name: action_log_activity
+    params: [type, description, contact_id, flow_id]
+    icon: time
+app_layout:
+  primary_action: action_add_contact
+  layout: dashboard
+  sections:
+    - type: quick-actions
+      actions: [action_add_contact, action_add_company, action_add_flow, action_update_flow_stage, action_log_activity]
+    - type: metric-card
+      title: "Active Flow Value"
+      data: "SELECT SUM(value) FROM matter WHERE type=10 AND status=1"
+    - type: status-board
+      title: "Flow Status Board"
+      props: { type: "flow", groupBy: "stage" }
+---
+
+# Contact & Flow Event Module
+
+### action_add_company
+Add a new business account / company entity.
+steps:
+1. create(table='matter', type=2, title={name}, data={industry: {industry}, website: {website}, annual_revenue: {annual_revenue}, employee_count: {employee_count}}, status=1)
+
+### action_link_contact_company
+Link an existing contact to a company account.
+steps:
+1. link(src={contact_id}, rel=4, tgt={company_id})
+2. update(table='matter', id={contact_id}, type=1, data={role: {role}})
+
+### action_add_contact
+Add a new contact (person).
+steps:
+1. create(table='matter', type=1, title={name}, data={phone: {phone}, email: {email}, role: {role}}, status=1)
+
+### action_add_flow
+Add a contact into an active flow.
+steps:
+1. create(table='matter', type=10, title={name}, value={value}, data={stage: {stage}, expected_close_date: {expected_close_date}}, status=1)
+2. link(src={id}, rel=8, tgt={contact_id})
+3. create(table='motion', type=120, ref={id}, data={stage: {stage}, value: {value}}, by='agent:taragent')
+
+### action_update_flow_stage
+Advance flow stage.
+steps:
+1. update(table='matter', id={flow_id}, type=10, data={stage: {stage}, win_loss_reason: {win_loss_reason}})
+2. create(table='motion', type=120, ref={flow_id}, data={stage: {stage}}, by='agent:taragent')
+
+### action_log_activity
+Log interaction or activity against contact / flow.
+steps:
+1. create(table='motion', type=116, ref={flow_id}, data={activity_type: {type}, description: {description}, contact_id: {contact_id}}, by='agent:taragent')
 `,
 
   logistics: `---

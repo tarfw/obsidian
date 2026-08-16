@@ -519,3 +519,5 @@ export async function executeAITask(
     };
   }
 }
+
+export const executeSkillAction = executeAITask;

@@ -36,7 +36,6 @@ import ItemComposeModal from '@/components/ItemComposeModal';
 import ContactCreateModal from '@/components/ContactCreateModal';
 import WorkspaceSiteScreen from '@/components/WorkspaceSiteScreen';
 import { ContactMentionPicker, ContactMentionModal, ContactItem } from '@/components/ContactMentionPicker';
-import DirectoryOverlay from '@/components/DirectoryOverlay';
 import ExploreOverlay from '@/components/ExploreOverlay';
 import CanvasOverlay from '@/components/CanvasOverlay';
 import CreateWorkspace from '@/components/CreateWorkspace';
@@ -108,6 +107,10 @@ const BUSINESS_VERTICALS = [
 ];
 
 export const PLAN5_EVENT_MOTIONS = [
+  { event: 'Add Contact', actionName: 'action_add_contact', whatHappened: 'Add a new person / contact', linksTo: 'Person', params: [{ name: 'name', type: 'text', required: true }, { name: 'phone', type: 'text', required: false }, { name: 'email', type: 'text', required: false }, { name: 'role', type: 'text', required: false }] },
+  { event: 'Add Company', actionName: 'action_add_company', whatHappened: 'Add business account / partner', linksTo: 'Company', params: [{ name: 'name', type: 'text', required: true }, { name: 'industry', type: 'text', required: false }, { name: 'website', type: 'text', required: false }] },
+  { event: 'Start Flow', actionName: 'action_add_flow', whatHappened: 'Add contact to a workflow', linksTo: 'Flow', params: [{ name: 'contact_id', type: 'text', required: true }, { name: 'pipeline', type: 'text', required: true }, { name: 'name', type: 'text', required: true }, { name: 'stage', type: 'text', required: false }, { name: 'value', type: 'number', required: false }] },
+  { event: 'Advance Flow', actionName: 'action_update_flow_stage', whatHappened: 'Advance stage in workflow', linksTo: 'Flow', params: [{ name: 'flow_id', type: 'text', required: true }, { name: 'stage', type: 'text', required: true }] },
   { event: 'Sale', actionName: 'action_record_sale', whatHappened: 'Transaction completed', linksTo: 'Order', params: [{ name: 'customer_id', type: 'text', required: true }, { name: 'items', type: 'text', required: true }, { name: 'payment_method', type: 'text', required: true }, { name: 'total', type: 'number', required: true }] },
   { event: 'Refund', actionName: 'action_refund_order', whatHappened: 'Money returned', linksTo: 'Order', params: [{ name: 'customer_id', type: 'text', required: false }, { name: 'order_id', type: 'text', required: true }, { name: 'amount', type: 'number', required: true }, { name: 'reason', type: 'text', required: false }] },
   { event: 'Quote', actionName: 'action_create_quote', whatHappened: 'Quotation issued', linksTo: 'Order', params: [{ name: 'customer_id', type: 'text', required: true }, { name: 'items', type: 'text', required: true }, { name: 'total', type: 'number', required: true }, { name: 'valid_until', type: 'text', required: false }] },
@@ -254,9 +257,15 @@ export default function WorkspacesScreen() {
     setShowMentionPopover(false);
     setShowMentionModal(false);
     if (!entity) return;
-    const typeLower = (entity.type || entity.category || '').toLowerCase();
+    const typeCode = typeof entity.type === 'number' ? entity.type : undefined;
+    const typeLower = String(entity.type || entity.category || '').toLowerCase();
     const isItem =
       entity.kind === 'item' ||
+      typeCode === 3 ||
+      typeCode === 4 ||
+      typeCode === 5 ||
+      typeCode === 6 ||
+      typeCode === 7 ||
       typeLower.includes('product') ||
       typeLower.includes('item') ||
       typeLower.includes('service') ||
@@ -279,7 +288,6 @@ export default function WorkspacesScreen() {
   const [resolvingTaskId, setResolvingTaskId] = useState<string | null>(null);
 
   // Overlay panel state (bottom bar triggers)
-  const [showDirectoryOverlay, setShowDirectoryOverlay] = useState(false);
   const [showExploreOverlay, setShowExploreOverlay] = useState(false);
   const [showCanvasOverlay, setShowCanvasOverlay] = useState(false);
 
@@ -990,7 +998,102 @@ ${membersYaml}
 
       console.log(`[Workspace] ⚡ handleActionFormSubmit — action: "${selectedAction.name}", scope: "${currentWorkspace?.scope}", params:`, cleanParams);
 
-      if (selectedAction.name === 'action_add_contact' ||
+      if (
+        selectedAction.name === 'action_add_flow' ||
+        selectedAction.actionName === 'action_add_flow'
+      ) {
+        const titleVal = cleanParams.name || cleanParams.title || 'New Flow';
+        const contactId = cleanParams.contact_id || cleanParams.customer_id || '';
+        const stageVal = cleanParams.stage || 'New / Intake';
+        const pipelineVal = cleanParams.pipeline || 'Sales & Client Deals';
+        const valueNum = cleanParams.value || cleanParams.amount || 0;
+        try {
+          const flowRes = await tar.tool('create', {
+            table: 'matter',
+            type: 10,
+            title: titleVal,
+            value: valueNum,
+            data: {
+              ...cleanParams,
+              name: titleVal,
+              contact_id: contactId,
+              stage: stageVal,
+              pipeline: pipelineVal,
+            },
+            scope: currentWorkspace.scope,
+          });
+
+          if (flowRes?.id && contactId) {
+            await tar.tool('create', {
+              table: 'graph',
+              src: flowRes.id,
+              rel: 8,
+              tgt: contactId,
+              scope: currentWorkspace.scope,
+            }).catch(() => null);
+          }
+
+          if (flowRes?.id) {
+            await tar.tool('create', {
+              table: 'motion',
+              type: 120,
+              ref: flowRes.id,
+              data: {
+                title: `Started flow: ${titleVal}`,
+                stage: stageVal,
+                pipeline: pipelineVal,
+                flow_id: flowRes.id,
+                date_str: new Date().toLocaleDateString(),
+              },
+              scope: currentWorkspace.scope,
+            }).catch(() => null);
+          }
+
+          await refreshEntities(currentWorkspace.scope);
+        } catch (errFlow) {
+          console.warn('[Workspace] Flow creation error:', errFlow);
+        }
+      } else if (
+        selectedAction.name === 'action_update_flow_stage' ||
+        selectedAction.name === 'action_update_deal_stage'
+      ) {
+        try {
+          const flowId = cleanParams.flow_id || cleanParams.deal_id;
+          if (flowId && currentWorkspace?.scope) {
+            const newStage = cleanParams.stage || 'In Progress';
+            let motionType = 120;
+            if (newStage.toLowerCase().includes('complete') || newStage.toLowerCase().includes('won')) {
+              motionType = 121;
+            } else if (newStage.toLowerCase().includes('drop') || newStage.toLowerCase().includes('cancel') || newStage.toLowerCase().includes('lost')) {
+              motionType = 122;
+            }
+
+            await tar.tool('update', {
+              table: 'matter',
+              id: flowId,
+              scope: currentWorkspace.scope,
+              patch: {
+                data: { stage: newStage },
+              },
+            });
+            await tar.tool('create', {
+              table: 'motion',
+              type: motionType,
+              ref: flowId,
+              data: {
+                title: `Advanced to ${newStage}`,
+                stage: newStage,
+                flow_id: flowId,
+                date_str: new Date().toLocaleDateString(),
+              },
+              scope: currentWorkspace.scope,
+            });
+            await refreshEntities(currentWorkspace.scope);
+          }
+        } catch (eStage) {
+          console.warn('[Workspace] Flow stage update error:', eStage);
+        }
+      } else if (selectedAction.name === 'action_add_contact' ||
         selectedAction.name === 'action_add_company' ||
         selectedAction.name === 'action_add_deal' ||
         selectedAction.name === 'action_add_product' ||
@@ -1231,33 +1334,145 @@ ${membersYaml}
   };
 
   const getFilteredActions = () => {
-    const resultList: Array<{ label: string; subtitle?: string; action?: any; text?: string; route?: string }> = [
-      {
-        label: 'Settings',
-        subtitle: 'App preferences & configuration • Settings',
-        route: '/settings',
-      },
-      ...PLAN5_EVENT_MOTIONS.map((item) => ({
-        label: item.event,
-        subtitle: `${item.whatHappened} • ${item.linksTo}`,
-        action: {
-          name: item.actionName,
-          purpose: item.whatHappened,
-          params: item.params,
-        },
-      })),
-    ];
-
-    if (!input.trim()) return resultList;
+    const resultList: Array<{
+      label: string;
+      subtitle?: string;
+      icon?: string;
+      action?: any;
+      text?: string;
+      route?: string;
+      entity?: any;
+      openModal?: 'contact' | 'company' | 'item';
+    }> = [];
 
     const query = input.trim().toLowerCase();
-    return resultList.filter(
-      (h) =>
-        h.label.toLowerCase().includes(query) ||
-        (h.subtitle && h.subtitle.toLowerCase().includes(query)) ||
-        (h.action?.name && h.action.name.toLowerCase().includes(query)) ||
-        (h.route && h.route.toLowerCase().includes(query))
+
+    // 1. Search existing entities (Contacts, Companies, Items) from live database
+    if (query && allEntities && allEntities.length > 0) {
+      const cleanQ = query.replace(/^[@#+]\s*/, '').trim();
+      if (cleanQ) {
+        const matchingEntities = allEntities.filter((ent: any) => {
+          const name = String(ent.name || ent.title || ent.data?.fn || '').toLowerCase();
+          const handle = String(ent.handle || ent.data?.hdl || '').toLowerCase();
+          const phone = String(ent.phone || ent.data?.ph || ent.data?.phone || '').toLowerCase();
+          const email = String(ent.email || ent.data?.em || ent.data?.email || '').toLowerCase();
+          const role = String(ent.role || ent.data?.role || '').toLowerCase();
+          const typeStr = typeof ent.type === 'string' ? ent.type.toLowerCase() : '';
+          const category = String(ent.category || '').toLowerCase();
+          const company = String(ent.company || ent.data?.company || '').toLowerCase();
+          return (
+            name.includes(cleanQ) ||
+            handle.includes(cleanQ) ||
+            phone.includes(cleanQ) ||
+            email.includes(cleanQ) ||
+            role.includes(cleanQ) ||
+            typeStr.includes(cleanQ) ||
+            category.includes(cleanQ) ||
+            company.includes(cleanQ)
+          );
+        });
+
+        for (const ent of matchingEntities.slice(0, 4)) {
+          const typeCode = typeof ent.type === 'number' ? ent.type : undefined;
+          const typeStr = typeof ent.type === 'string' ? ent.type.toLowerCase() : '';
+          const categoryStr = String(ent.category || '').toLowerCase();
+          
+          const isItem =
+            ent.kind === 'item' ||
+            typeCode === 3 || // product
+            typeCode === 4 || // service
+            typeCode === 5 || // listing
+            typeCode === 6 || // document
+            typeCode === 7 || // asset
+            typeStr.includes('product') ||
+            typeStr.includes('item') ||
+            typeStr.includes('service') ||
+            typeStr.includes('asset') ||
+            typeStr.includes('listing') ||
+            typeStr.includes('document') ||
+            categoryStr.includes('item') ||
+            categoryStr.includes('product');
+          const isCompany = typeCode === 2 || typeStr.includes('company') || categoryStr.includes('company');
+
+          const icon = isItem ? 'cube-outline' : isCompany ? 'business-outline' : 'person-outline';
+          const title = ent.name || ent.title || ent.data?.fn || (isCompany ? 'Company' : 'Contact');
+          const sub = ent.phone || ent.email || ent.role || (isItem ? 'Product / Item' : isCompany ? 'Company Account' : 'Contact');
+
+          resultList.push({
+            label: title,
+            subtitle: `${sub} • Tap to view profile & flows`,
+            icon,
+            entity: ent,
+          });
+        }
+      }
+    }
+
+    // 2. Direct creation action cards
+    resultList.push(
+      {
+        label: 'Add Contact',
+        subtitle: 'Create a new person / customer / staff • Form modal',
+        icon: 'person-add-outline',
+        openModal: 'contact',
+      },
+      {
+        label: 'Add Company',
+        subtitle: 'Create business account / partner • Form modal',
+        icon: 'business-outline',
+        openModal: 'company',
+      },
+      {
+        label: 'Add Item / Product',
+        subtitle: 'Catalog a product, service, or asset • Form modal',
+        icon: 'pricetag-outline',
+        openModal: 'item',
+      }
     );
+
+    // 3. System Event Motions (excluding direct modal actions already handled above)
+    const directModalEvents = new Set(['Add Contact', 'Add Company', 'Add Item', 'Add Product']);
+    PLAN5_EVENT_MOTIONS.forEach((item) => {
+      if (!directModalEvents.has(item.event)) {
+        resultList.push({
+          label: item.event,
+          subtitle: `${item.whatHappened} • ${item.linksTo}`,
+          action: {
+            name: item.actionName,
+            purpose: item.whatHappened,
+            params: item.params,
+          },
+        });
+      }
+    });
+
+    // 4. Settings
+    resultList.push({
+      label: 'Settings',
+      subtitle: 'App preferences & configuration • Settings',
+      route: '/settings',
+    });
+
+    const matches = query
+      ? resultList.filter(
+          (h) =>
+            h.label.toLowerCase().includes(query) ||
+            (h.subtitle && h.subtitle.toLowerCase().includes(query)) ||
+            (h.action?.name && h.action.name.toLowerCase().includes(query)) ||
+            (h.route && h.route.toLowerCase().includes(query))
+        )
+      : resultList;
+
+    // Strict deduplication by normalized key
+    const seen = new Set<string>();
+    return matches.filter((h) => {
+      const key = h.entity?.id
+        ? `entity::${h.entity.id}`
+        : `${h.label.toLowerCase()}::${h.openModal || h.route || h.action?.name || ''}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
   };
 
   if (loadingWorkspaces) {
@@ -1516,13 +1731,13 @@ ${membersYaml}
             <Text style={{ fontSize: 10, fontWeight: '700', color: theme.textMuted, paddingHorizontal: 12, paddingVertical: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>
               Suggested Actions
             </Text>
-            {getFilteredActions().slice(0, 5).map((hint, idx) => (
+            {getFilteredActions().slice(0, 6).map((hint, idx) => (
               <TouchableOpacity
                 key={idx}
                 style={{
                   paddingVertical: 10,
                   paddingHorizontal: 12,
-                  borderBottomWidth: idx < getFilteredActions().slice(0, 5).length - 1 ? StyleSheet.hairlineWidth : 0,
+                  borderBottomWidth: idx < getFilteredActions().slice(0, 6).length - 1 ? StyleSheet.hairlineWidth : 0,
                   borderBottomColor: theme.border,
                   flexDirection: 'row',
                   alignItems: 'center',
@@ -1530,7 +1745,21 @@ ${membersYaml}
                 }}
                 onPress={() => {
                   setInput('');
-                  if (hint.route) {
+                  Keyboard.dismiss();
+                  if (hint.openModal === 'contact') {
+                    setInitialContactType('Customer');
+                    setEditContactEntity(null);
+                    setShowContactModal(true);
+                  } else if (hint.openModal === 'company') {
+                    setInitialContactType('Company');
+                    setEditContactEntity(null);
+                    setShowContactModal(true);
+                  } else if (hint.openModal === 'item') {
+                    setItemInitialData({ item_subtype: 'Product' });
+                    setShowItemModal(true);
+                  } else if (hint.entity) {
+                    handleOpenEntityOrItemDetails(hint.entity);
+                  } else if (hint.route) {
                     router.push(hint.route as any);
                   } else if (hint.action) {
                     handleTriggerAction(hint.action);
@@ -1539,15 +1768,29 @@ ${membersYaml}
                   }
                 }}
               >
-                <View style={{ flex: 1, marginRight: 8 }}>
-                  <Text style={{ fontSize: 13, color: theme.text, fontWeight: '600' }} numberOfLines={1}>
-                    {hint.label}
-                  </Text>
-                  {hint.subtitle && (
-                    <Text style={{ fontSize: 11, color: theme.textMuted, marginTop: 1 }} numberOfLines={1}>
-                      {hint.subtitle}
-                    </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 8, gap: 10 }}>
+                  {hint.icon && (
+                    <View style={{
+                      width: 28,
+                      height: 28,
+                      borderRadius: 14,
+                      backgroundColor: theme.primary + '15',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}>
+                      <Ionicons name={hint.icon as any} size={15} color={theme.primary} />
+                    </View>
                   )}
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 13, color: theme.text, fontWeight: '600' }} numberOfLines={1}>
+                      {hint.label}
+                    </Text>
+                    {hint.subtitle && (
+                      <Text style={{ fontSize: 11, color: theme.textMuted, marginTop: 1 }} numberOfLines={1}>
+                        {hint.subtitle}
+                      </Text>
+                    )}
+                  </View>
                 </View>
                 <Ionicons name="arrow-forward-outline" size={14} color={theme.textMuted} />
               </TouchableOpacity>
@@ -1920,12 +2163,14 @@ ${membersYaml}
         onLogEventForEntity={(ent, eventKind) => {
           setSelectedEntityDetails(null);
           const entityName = ent.title || ent.name || ent.id || '';
-          const entityCategory = (ent.category || ent.type || '').toLowerCase();
+          const typeCode = typeof ent.type === 'number' ? ent.type : undefined;
+          const rawType = typeof ent.type === 'string' ? ent.type : typeCode === 10 ? 'flow' : typeCode === 2 ? 'company' : typeCode === 1 ? 'customer' : '';
+          const entityCategory = String(ent.category || rawType || '').toLowerCase();
 
-          let targetAction: any = PLAN5_EVENT_MOTIONS.find(m => m.actionName === 'action_record_sale');
-          let initialParams: Record<string, string> = { customer_id: entityName };
+          let targetAction: any = null;
+          let initialParams: Record<string, string> = {};
 
-          if (entityCategory.includes('deal')) {
+          if (entityCategory.includes('flow') || entityCategory.includes('deal') || typeCode === 10) {
             if (eventKind === 'activity') {
               targetAction = PLAN5_EVENT_MOTIONS.find(m => m.actionName === 'action_log_activity') || {
                 name: 'action_log_activity',
@@ -1933,41 +2178,42 @@ ${membersYaml}
                 params: [
                   { name: 'type', type: 'text', required: true },
                   { name: 'description', type: 'text', required: true },
-                  { name: 'deal_id', type: 'text', required: false },
+                  { name: 'contact_id', type: 'text', required: false },
+                  { name: 'flow_id', type: 'text', required: false },
                 ],
               };
-              initialParams = { deal_id: ent.id, type: 'Call / Meeting', description: '' };
+              initialParams = { flow_id: ent.id, type: 'Call / Meeting', description: '' };
             } else {
               targetAction = {
-                name: 'action_update_deal_stage',
-                purpose: 'Advance Deal Stage',
+                name: 'action_update_flow_stage',
+                purpose: 'Advance Flow Stage',
                 params: [
-                  { name: 'deal_id', type: 'text', required: true },
+                  { name: 'flow_id', type: 'text', required: true },
                   { name: 'stage', type: 'text', required: true },
-                  { name: 'win_loss_reason', type: 'text', required: false },
                 ],
               };
-              initialParams = { deal_id: ent.id, stage: ent.data?.stage || 'Proposal' };
+              initialParams = { flow_id: ent.id, stage: ent.data?.stage || 'In Progress' };
             }
-          } else if (entityCategory.includes('item') || entityCategory.includes('product')) {
+          } else if (entityCategory.includes('item') || entityCategory.includes('product') || (typeCode && typeCode >= 3 && typeCode <= 7)) {
             targetAction = PLAN5_EVENT_MOTIONS.find(m => m.actionName === 'action_adjust_stock');
             initialParams = { product_id: entityName, qty: '1', reason: 'Manual Adjustment' };
           } else if (entityCategory.includes('order') || entityCategory.includes('booking')) {
             targetAction = PLAN5_EVENT_MOTIONS.find(m => m.actionName === 'action_record_sale');
             initialParams = { customer_id: entityName, total: '0' };
           } else {
-            // Customer / Person / Contact / Company -> Open Add Deal Modal linked with this contact
-            targetAction = PLAN5_EVENT_MOTIONS.find(m => m.actionName === 'action_add_deal') || {
-              name: 'action_add_deal',
-              purpose: 'Create a new sales deal in pipeline',
+            // Customer / Person / Contact / Company -> Open Add Flow for this contact
+            targetAction = PLAN5_EVENT_MOTIONS.find(m => m.actionName === 'action_add_flow') || {
+              name: 'action_add_flow',
+              purpose: 'Add contact to a workflow',
               params: [
-                { name: 'name', type: 'text', required: true, default: '' },
-                { name: 'value', type: 'text', required: true, default: '' },
-                { name: 'stage', type: 'text', required: true, default: 'New Inquiry' },
                 { name: 'contact_id', type: 'text', required: true, default: ent.id },
+                { name: 'pipeline', type: 'text', required: true, default: 'Sales & Client Deals' },
+                { name: 'name', type: 'text', required: true, default: '' },
+                { name: 'stage', type: 'text', required: false, default: 'New / Intake' },
+                { name: 'value', type: 'number', required: false, default: '' },
               ],
             };
-            initialParams = { contact_id: ent.id, name: '', stage: 'New Inquiry', value: '' };
+            initialParams = { contact_id: ent.id, pipeline: 'Sales & Client Deals', name: '', stage: 'New / Intake', value: '' };
           }
 
           if (targetAction) {
@@ -2199,42 +2445,6 @@ ${membersYaml}
       />
 
       {/* Overlay Panels — Bottom Bar triggers */}
-      <DirectoryOverlay
-        visible={showDirectoryOverlay}
-        onClose={() => setShowDirectoryOverlay(false)}
-        entities={allEntities}
-        theme={theme}
-        onSelectEntity={(entity) => {
-          setShowDirectoryOverlay(false);
-          const typeLower = (entity.type || entity.category || '').toLowerCase();
-          if (
-            typeLower.includes('product') ||
-            typeLower.includes('item') ||
-            typeLower.includes('service') ||
-            typeLower.includes('asset') ||
-            typeLower.includes('listing') ||
-            typeLower.includes('document') ||
-            entity.data?.item_subtype
-          ) {
-            setItemInitialData(entity);
-            setShowItemModal(true);
-          } else {
-            setSelectedEntityDetails(entity);
-          }
-        }}
-        onAddNewEntity={(category) => {
-          setShowDirectoryOverlay(false);
-          if (category === 'items') {
-            setItemInitialData({ item_subtype: 'Product' });
-            setShowItemModal(true);
-            return;
-          }
-          setInitialContactType(category === 'companies' ? 'Company' : 'Customer');
-          setEditContactEntity(null);
-          setShowContactModal(true);
-        }}
-      />
-
       <ExploreOverlay
         visible={showExploreOverlay}
         onClose={() => setShowExploreOverlay(false)}

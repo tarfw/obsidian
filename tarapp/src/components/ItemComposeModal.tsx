@@ -154,8 +154,12 @@ export default function ItemComposeModal({
 
         console.log(`[ItemComposeModal] 🎯 Live product sync: "${liveProduct.title}" (id: ${liveProduct.id}), value/stock: ${liveQty}`);
         setStock(String(liveQty));
-        if (liveProduct.title) setTitle(liveProduct.title);
-        if (liveProduct.type) setSubType(liveProduct.type.charAt(0).toUpperCase() + liveProduct.type.slice(1));
+        if (liveProduct.type) {
+          const typeCode = typeof liveProduct.type === 'number' ? liveProduct.type : undefined;
+          const mappedType = typeCode === 4 ? 'Service' : typeCode === 5 ? 'Listing' : typeCode === 6 ? 'Document' : typeCode === 7 ? 'Asset' : typeof liveProduct.type === 'string' ? liveProduct.type : 'Product';
+          const typeStr = String(mappedType);
+          setSubType(typeStr.charAt(0).toUpperCase() + typeStr.slice(1));
+        }
         if (liveData.price !== undefined) setPrice(String(liveData.price));
         if (liveData.sku) setSku(liveData.sku);
         if (liveData.category) setCategory(liveData.category);

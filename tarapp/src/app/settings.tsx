@@ -220,18 +220,6 @@ export default function SettingsScreen() {
           </View>
         </View>
 
-        <View style={[styles.divider, { backgroundColor: theme.border }]} />
-
-        <TouchableOpacity
-          style={styles.row}
-          activeOpacity={0.7}
-          onPress={() => router.push("/chat")}>
-          <View style={styles.rowLeftWithIcon}>
-            <Ionicons name="chatbubble-ellipses-outline" size={20} color={theme.primary} style={styles.rowIcon} />
-            <Text style={[styles.rowTitle, { color: theme.text }]}>Open AI Chat</Text>
-          </View>
-          <Ionicons name="chevron-forward" size={16} color={theme.textSecondary} />
-        </TouchableOpacity>
       </View>
 
       {/* Section 3: Account */}

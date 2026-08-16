@@ -15,8 +15,11 @@ export const MATTER_TYPES = {
   document: 6,
   asset: 7,
   location: 8,
+  flow_def: 9,
   pipeline: 9,
+  flow: 10,
   card: 10,
+  deal: 10,
   note: 11,
   goal: 12,
   expense: 13,
@@ -26,9 +29,22 @@ export const MATTER_TYPES = {
 export type MatterTypeName = keyof typeof MATTER_TYPES;
 export type MatterTypeCode = typeof MATTER_TYPES[MatterTypeName];
 
-export const MATTER_TYPE_NAMES: Record<number, MatterTypeName> = Object.fromEntries(
-  Object.entries(MATTER_TYPES).map(([k, v]) => [v, k as MatterTypeName])
-);
+export const MATTER_TYPE_NAMES: Record<number, MatterTypeName> = {
+  1: 'person',
+  2: 'company',
+  3: 'product',
+  4: 'service',
+  5: 'listing',
+  6: 'document',
+  7: 'asset',
+  8: 'location',
+  9: 'flow_def',
+  10: 'flow',
+  11: 'note',
+  12: 'goal',
+  13: 'expense',
+  14: 'order',
+};
 
 // ── Motion Types (101–199 workspace, 200–299 personal) ───────────────
 export const MOTION_TYPES = {
@@ -52,8 +68,13 @@ export const MOTION_TYPES = {
   assignment: 117,
   clock_in: 118,
   clock_out: 119,
+  flow_stage: 120,
   card_stage: 120,
+  flow_complete: 121,
+  flow_won: 121,
   card_won: 121,
+  flow_dropped: 122,
+  flow_lost: 122,
   card_lost: 122,
   status_change: 123,
   order_placed: 124,
@@ -70,9 +91,38 @@ export const MOTION_TYPES = {
 export type MotionTypeName = keyof typeof MOTION_TYPES;
 export type MotionTypeCode = typeof MOTION_TYPES[MotionTypeName];
 
-export const MOTION_TYPE_NAMES: Record<number, MotionTypeName> = Object.fromEntries(
-  Object.entries(MOTION_TYPES).map(([k, v]) => [v, k as MotionTypeName])
-);
+export const MOTION_TYPE_NAMES: Record<number, MotionTypeName> = {
+  101: 'sale',
+  102: 'refund',
+  103: 'quote',
+  104: 'invoice',
+  105: 'purchase_order',
+  106: 'vendor_bill',
+  107: 'payment',
+  108: 'stock_receive',
+  109: 'stock_transfer',
+  110: 'stock_adjust',
+  111: 'stock_writeoff',
+  112: 'booking',
+  113: 'booking_cancel',
+  114: 'shipment',
+  115: 'delivery',
+  116: 'activity',
+  117: 'assignment',
+  118: 'clock_in',
+  119: 'clock_out',
+  120: 'flow_stage',
+  121: 'flow_complete',
+  122: 'flow_dropped',
+  123: 'status_change',
+  124: 'order_placed',
+  125: 'order_ready',
+  126: 'order_served',
+  201: 'expense_log',
+  202: 'reminder_triggered',
+  203: 'goal_update',
+  204: 'personal_note',
+};
 
 // ── Inbox Types (1–9 core, 10+ reserved) ─────────────────────────────
 export const INBOX_TYPES = {
@@ -100,6 +150,7 @@ export const GRAPH_REL_TYPES = {
   stored_at: 6,
   from: 7,
   for_contact: 8,
+  in_flow: 9,
   in_pipeline: 9,
   owned_by: 10,
   about: 11,
@@ -112,9 +163,22 @@ export const GRAPH_REL_TYPES = {
 export type GraphRelTypeName = keyof typeof GRAPH_REL_TYPES;
 export type GraphRelTypeCode = typeof GRAPH_REL_TYPES[GraphRelTypeName];
 
-export const GRAPH_REL_TYPE_NAMES: Record<number, GraphRelTypeName> = Object.fromEntries(
-  Object.entries(GRAPH_REL_TYPES).map(([k, v]) => [v, k as GraphRelTypeName])
-);
+export const GRAPH_REL_TYPE_NAMES: Record<number, GraphRelTypeName> = {
+  1: 'placed_by',
+  3: 'fulfills',
+  4: 'works_at',
+  5: 'assigned_to',
+  6: 'stored_at',
+  7: 'from',
+  8: 'for_contact',
+  9: 'in_flow',
+  10: 'owned_by',
+  11: 'about',
+  12: 'member_of',
+  13: 'linked_to',
+  14: 'variant_of',
+  15: 'served_by',
+};
 
 // ── Helper Resolvers ─────────────────────────────────────────────────
 export function toMatterTypeCode(type?: string | number | null): number {

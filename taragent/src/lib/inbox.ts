@@ -190,6 +190,21 @@ export async function routeWorkspaceMotionToInbox(
       }
     }
 
+    // 3. Fallback: If no specific staff assigned, route to all active staff in workspace
+    if (targetUserIds.length === 0) {
+      const allStaff = await executeWorkspaceTursoQuery(
+        workspaceDbUrl,
+        workspaceAuthToken,
+        `SELECT src FROM graph WHERE rel = ? AND deleted_at IS NULL`,
+        [GRAPH_REL_TYPES.works_at]
+      );
+      if (Array.isArray(allStaff)) {
+        for (const row of allStaff) {
+          if (row.src) targetUserIds.push(row.src);
+        }
+      }
+    }
+
     // Deduplicate
     targetUserIds = Array.from(new Set(targetUserIds.filter(Boolean)));
 

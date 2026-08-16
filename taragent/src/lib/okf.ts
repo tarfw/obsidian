@@ -223,8 +223,8 @@ export async function scaffoldOkfFolders(
 6 = document
 7 = asset
 8 = location
-9 = pipeline
-10 = card
+9 = flow_def
+10 = flow
 11 = note
 12 = goal
 13 = expense
@@ -250,9 +250,9 @@ export async function scaffoldOkfFolders(
 117 = assignment
 118 = clock_in
 119 = clock_out
-120 = card_stage
-121 = card_won
-122 = card_lost
+120 = flow_stage
+121 = flow_complete
+122 = flow_dropped
 123 = status_change
 124 = order_placed
 125 = order_ready
@@ -274,7 +274,7 @@ export async function scaffoldOkfFolders(
 6 = stored_at
 7 = from
 8 = for_contact
-9 = in_pipeline
+9 = in_flow
 10 = owned_by
 11 = about
 12 = member_of
@@ -640,4 +640,124 @@ export async function removeCanvasBlock(
   await uploadWorkspaceFile(env, scope, 'team/canvas.md', filteredLines.join('\n'));
   return { ok: true };
 }
+
+// ── Catalog 100-Item Chunking Operations (plan6.md §5) ───────────────
+
+export interface CatalogProductDef {
+  sku: string;
+  name: string;
+  category?: string;
+  description?: string;
+  price?: number;
+  min_stock?: number;
+  options?: string[];
+  image?: string;
+}
+
+/**
+ * Determine chunk filename for a product based on category or SKU index.
+ */
+function getProductChunkFilename(category?: string): string {
+  if (!category) return 'products/general.md';
+  const cleanCategory = category.toLowerCase().replace(/[^a-z0-9]/g, '_').trim();
+  return `products/${cleanCategory || 'general'}.md`;
+}
+
+/**
+ * Save or update a product in OKF catalog with automatic 100-item chunking.
+ */
+export async function saveCatalogProduct(
+  env: any,
+  scope: string,
+  product: CatalogProductDef
+): Promise<{ ok: boolean; chunkFile: string }> {
+  const chunkFile = getProductChunkFilename(product.category);
+
+  // 1. Read or initialize products/index.md
+  let indexContent = await readWorkspaceFile(env, scope, 'products/index.md') || '# Product Index\n\n| SKU | Name | Category | Chunk |\n|---|---|---|---|\n';
+
+  // 2. Read or initialize target chunk file
+  let chunkContent = await readWorkspaceFile(env, scope, chunkFile) || `# Products: ${product.category || 'General'}\n\n`;
+
+  // 3. Format product YAML frontmatter / block
+  const prodBlock = `
+## ${product.name} (SKU: ${product.sku})
+- **SKU**: ${product.sku}
+- **Category**: ${product.category || 'General'}
+- **Default Price**: $${product.price ?? 0}
+- **Min Stock Threshold**: ${product.min_stock ?? 5}
+- **Description**: ${product.description || ''}
+${product.options && product.options.length ? `- **Options**: ${product.options.join(', ')}` : ''}
+`;
+
+  // Update chunk content (replace if existing SKU found, else append)
+  const skuRegex = new RegExp(`## .*?\\(SKU: ${product.sku}\\)[\\s\\S]*?(?=(?:\\n## |$))`, 'i');
+  if (skuRegex.test(chunkContent)) {
+    chunkContent = chunkContent.replace(skuRegex, prodBlock.trim());
+  } else {
+    chunkContent += `\n${prodBlock.trim()}\n`;
+  }
+
+  // Update products/index.md
+  const indexRow = `| ${product.sku} | ${product.name} | ${product.category || 'General'} | ${chunkFile} |`;
+  const indexRowRegex = new RegExp(`\\|\\s*${product.sku}\\s*\\|.*\\|`, 'i');
+  if (indexRowRegex.test(indexContent)) {
+    indexContent = indexContent.replace(indexRowRegex, indexRow);
+  } else {
+    indexContent += `${indexRow}\n`;
+  }
+
+  // Upload chunk file and index
+  await uploadWorkspaceFile(env, scope, chunkFile, chunkContent);
+  await uploadWorkspaceFile(env, scope, 'products/index.md', indexContent);
+
+  return { ok: true, chunkFile };
+}
+
+/**
+ * Read product definition from OKF chunked files.
+ */
+export async function readCatalogProduct(
+  env: any,
+  scope: string,
+  sku: string
+): Promise<CatalogProductDef | null> {
+  const indexContent = await readWorkspaceFile(env, scope, 'products/index.md');
+  if (!indexContent) return null;
+
+  // Find chunk file for SKU from index
+  const lines = indexContent.split('\n');
+  let targetChunk = '';
+  for (const line of lines) {
+    if (line.includes(`| ${sku} `) || line.includes(`|${sku}|`)) {
+      const parts = line.split('|').map(s => s.trim()).filter(Boolean);
+      if (parts.length >= 4) {
+        targetChunk = parts[3];
+      }
+      break;
+    }
+  }
+
+  if (!targetChunk) targetChunk = 'products/general.md';
+  const chunkContent = await readWorkspaceFile(env, scope, targetChunk);
+  if (!chunkContent) return null;
+
+  const skuMatch = chunkContent.match(new RegExp(`## (.*?)\\s*\\(SKU: ${sku}\\)[\\s\\S]*?(?=(?:\\n## |$))`, 'i'));
+  if (!skuMatch) return null;
+
+  const blockText = skuMatch[0];
+  const name = skuMatch[1];
+  const catMatch = blockText.match(/\*\*Category\*\*:\s*(.*)/i);
+  const priceMatch = blockText.match(/\*\*Default Price\*\*:\s*\$?([\d.]+)/i);
+  const descMatch = blockText.match(/\*\*Description\*\*:\s*(.*)/i);
+
+  return {
+    sku,
+    name: name.trim(),
+    category: catMatch ? catMatch[1].trim() : undefined,
+    price: priceMatch ? parseFloat(priceMatch[1]) : 0,
+    description: descMatch ? descMatch[1].trim() : undefined,
+  };
+}
+
 

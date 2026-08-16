@@ -186,7 +186,14 @@ export async function processDiscordMessage(
 
     const lowerText = promptText.toLowerCase();
 
-    // 1. Add Item / Product to Turso DB
+    // 1. Skill-Driven Dynamic Intent Resolution (plan6.md §15)
+    const { resolveAndExecuteChannelIntent } = await import('./channel-intent');
+    const skillIntent = await resolveAndExecuteChannelIntent(env, scope, userName, 'staff', promptText);
+    if (skillIntent.handled && skillIntent.replyText) {
+      return skillIntent.replyText.replace(/<[^>]*>/g, ''); // Convert HTML tags to plain text for Discord
+    }
+
+    // 2. Add Item / Product to Turso DB fallback
     if (lowerText.includes('add product') || lowerText.includes('create item') || lowerText.includes('add item')) {
       const cleanItem = promptText.replace(/^(add product|create item|add item)\s*:?/i, '').trim();
       const priceMatch = cleanItem.match(/\$?(\d+(\.\d+)?)/);

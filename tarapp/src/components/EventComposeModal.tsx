@@ -39,9 +39,93 @@ export const PLAN5_EVENT_MOTIONS = [
   { event: 'Expense', actionName: 'action_record_expense', whatHappened: 'Cost recorded', linksTo: 'Expense', params: [{ name: 'category', type: 'text', required: true }, { name: 'amount', type: 'number', required: true }, { name: 'description', type: 'text', required: false }, { name: 'date', type: 'text', required: false }] },
   { event: 'Receive Stock', actionName: 'action_receive_po', whatHappened: 'Stock added from supplier', linksTo: 'Product', params: [{ name: 'product_id', type: 'text', required: true }, { name: 'qty', type: 'number', required: true }, { name: 'po_id', type: 'text', required: false }] },
   { event: 'Site', actionName: 'action_open_site', whatHappened: 'View/edit live website storefront', linksTo: 'Storefront', params: [] },
-  { event: 'Add Item', actionName: 'action_add_product', whatHappened: 'Item cataloged', linksTo: 'Item', params: [{ name: 'title', type: 'text', required: true }, { name: 'item_subtype', type: 'text', required: true }, { name: 'price', type: 'number', required: false }, { name: 'stock', type: 'number', required: false }, { name: 'category', type: 'text', required: false }] },
   { event: 'Assignment', actionName: 'action_create_task', whatHappened: 'Task assigned', linksTo: 'Project', params: [{ name: 'title', type: 'text', required: true }, { name: 'description', type: 'text', required: false }, { name: 'assignee_id', type: 'text', required: false }, { name: 'due_date', type: 'text', required: false }] },
+  { event: 'Start Flow', actionName: 'action_add_flow', whatHappened: 'Start workflow or deal for contact', linksTo: 'Flow', params: [{ name: 'name', type: 'text', required: true }, { name: 'contact_id', type: 'text', required: true }, { name: 'pipeline', type: 'text', required: false }, { name: 'stage', type: 'text', required: false }, { name: 'value', type: 'number', required: false }] },
+  { event: 'Advance Flow', actionName: 'action_update_flow_stage', whatHappened: 'Move flow to next milestone stage', linksTo: 'Flow', params: [{ name: 'deal_id', type: 'text', required: true }, { name: 'stage', type: 'text', required: true }] },
 ];
+
+export interface OKFPipelineDef {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  for_type: string;
+  stages: Array<{ id: string; label: string; color: string; icon: string }>;
+}
+
+export const OKF_PIPELINES: OKFPipelineDef[] = [
+  {
+    id: 'sales_pipeline',
+    name: 'Sales & Client Deals',
+    description: 'Track prospect leads, proposals, quotes and deals',
+    icon: 'cash-outline',
+    for_type: 'customer',
+    stages: [
+      { id: 'intake', label: 'New / Intake', color: '#3B82F6', icon: 'checkmark-circle-outline' },
+      { id: 'qualified', label: 'Qualified', color: '#06B6D4', icon: 'sync-outline' },
+      { id: 'proposal', label: 'Proposal Sent', color: '#8B5CF6', icon: 'document-text-outline' },
+      { id: 'negotiation', label: 'Negotiation', color: '#F59E0B', icon: 'alert-circle-outline' },
+      { id: 'won', label: 'Closed Won', color: '#10B981', icon: 'checkmark-done-circle-outline' },
+      { id: 'lost', label: 'Closed Lost', color: '#EF4444', icon: 'close-circle-outline' },
+    ],
+  },
+  {
+    id: 'procurement_pipeline',
+    name: 'Vendor & Procurement',
+    description: 'Track supplier RFQs, quotes, POs and deliveries',
+    icon: 'cart-outline',
+    for_type: 'vendor',
+    stages: [
+      { id: 'rfq_sent', label: 'RFQ Sent', color: '#3B82F6', icon: 'paper-plane-outline' },
+      { id: 'quote_received', label: 'Quote Received', color: '#06B6D4', icon: 'document-attach-outline' },
+      { id: 'po_issued', label: 'PO Issued', color: '#8B5CF6', icon: 'receipt-outline' },
+      { id: 'goods_received', label: 'Goods Received', color: '#F59E0B', icon: 'cube-outline' },
+      { id: 'completed', label: 'Billed & Paid', color: '#10B981', icon: 'checkmark-done-circle-outline' },
+    ],
+  },
+  {
+    id: 'onboarding_pipeline',
+    name: 'Team & Staff Onboarding',
+    description: 'Manage hiring, interviews, training and employee tasks',
+    icon: 'people-outline',
+    for_type: 'staff',
+    stages: [
+      { id: 'applied', label: 'Application / Intake', color: '#3B82F6', icon: 'person-add-outline' },
+      { id: 'interview', label: 'Interviewing', color: '#06B6D4', icon: 'chatbubbles-outline' },
+      { id: 'offer', label: 'Offer Extended', color: '#8B5CF6', icon: 'ribbon-outline' },
+      { id: 'training', label: 'Onboarding & Training', color: '#F59E0B', icon: 'school-outline' },
+      { id: 'active', label: 'Active Staff', color: '#10B981', icon: 'checkmark-done-circle-outline' },
+    ],
+  },
+  {
+    id: 'project_pipeline',
+    name: 'Project & Milestone Delivery',
+    description: 'Track partner projects, deliverables and milestones',
+    icon: 'git-network-outline',
+    for_type: 'partner',
+    stages: [
+      { id: 'scoping', label: 'Scoping & Planning', color: '#3B82F6', icon: 'compass-outline' },
+      { id: 'in_dev', label: 'In Execution', color: '#06B6D4', icon: 'construct-outline' },
+      { id: 'client_review', label: 'Review & QA', color: '#8B5CF6', icon: 'eye-outline' },
+      { id: 'delivered', label: 'Delivered & Complete', color: '#10B981', icon: 'checkmark-done-circle-outline' },
+    ],
+  },
+  {
+    id: 'support_pipeline',
+    name: 'Customer Support & Service',
+    description: 'Resolve client support tickets and requests',
+    icon: 'help-buoy-outline',
+    for_type: 'customer',
+    stages: [
+      { id: 'ticket_opened', label: 'Ticket Opened', color: '#EF4444', icon: 'alert-circle-outline' },
+      { id: 'investigating', label: 'Investigating', color: '#F59E0B', icon: 'search-outline' },
+      { id: 'waiting_client', label: 'Pending Client', color: '#8B5CF6', icon: 'time-outline' },
+      { id: 'resolved', label: 'Resolved & Closed', color: '#10B981', icon: 'checkmark-done-circle-outline' },
+    ],
+  },
+];
+
+export const FLOW_STAGES = OKF_PIPELINES[0].stages;
 
 export interface EventComposeModalProps {
   visible: boolean;
@@ -320,13 +404,16 @@ export default function EventComposeModal({
   const actionName = rawActionName.replace(/\b\w/g, (c: string) => c.toUpperCase());
   const paramList: any[] = action?.params || [];
 
-  // Categorize & Order Params: 1. To/Vendor, 2. Items/Products/Entity, 3. Total/Amount, 4. Intermediate, 99. Payment Method/Carrier (last)
+  // Categorize & Order Params: 1. To/Contact, 2. Pipeline, 3. Name, 4. Stage, 5. Value/Total, 99. Payment Method/Carrier
   const getParamRank = (name: string) => {
     const n = name.toLowerCase();
     if (n === 'customer_id' || n === 'contact_id' || n === 'vendor_id' || n === 'staff_id' || n === 'assignee_id' || n === 'person_id' || n === 'to') return 1;
-    if (n === 'items' || n === 'product_id' || n === 'service' || n === 'order_id' || n === 'po_id' || n === 'invoice_id' || n === 'booking_id' || n === 'shipment_id' || n === 'deal_id') return 2;
-    if (n === 'total' || n === 'amount' || n === 'qty' || n === 'price') return 3;
-    if (n === 'payment_method' || n === 'carrier') return 99; // Payment method & Carrier always last before notes
+    if (n === 'pipeline') return 2;
+    if (n === 'name' || n === 'title') return 3;
+    if (n === 'stage') return 4;
+    if (n === 'items' || n === 'product_id' || n === 'service' || n === 'order_id' || n === 'po_id' || n === 'invoice_id' || n === 'booking_id' || n === 'shipment_id' || n === 'deal_id') return 5;
+    if (n === 'total' || n === 'amount' || n === 'qty' || n === 'price' || n === 'value') return 6;
+    if (n === 'payment_method' || n === 'carrier') return 99;
     return 10;
   };
 
@@ -698,20 +785,26 @@ export default function EventComposeModal({
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
           {/* Ultra-Minimalist Top Bar */}
-          <View style={[styles.headerBar, { borderBottomColor: theme.border }]}>
-            {/* Interactive Left-Aligned Event Selector (Noise-Free) */}
-            <Pressable
-              onPress={openEventPicker}
-              hitSlop={8}
-              style={({ pressed }) => [
-                styles.headerEventPill,
-                { opacity: pressed ? 0.6 : 1 },
-              ]}
-            >
-              <Text style={[styles.headerEventText, { color: '#000000' }]}>
-                {actionName}
-              </Text>
-            </Pressable>
+          <View style={[styles.headerBar, { borderBottomColor: theme.border + '30', paddingHorizontal: 16, height: 48 }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <TouchableOpacity onPress={onClose} hitSlop={12} style={{ width: 32, height: 32, alignItems: 'center', justifyContent: 'center' }}>
+                <Ionicons name="close" size={20} color={theme.text} />
+              </TouchableOpacity>
+
+              {/* Interactive Left-Aligned Event Selector (Noise-Free) */}
+              <Pressable
+                onPress={openEventPicker}
+                hitSlop={8}
+                style={({ pressed }) => [
+                  styles.headerEventPill,
+                  { opacity: pressed ? 0.6 : 1 },
+                ]}
+              >
+                <Text style={[styles.headerEventText, { color: theme.text }]}>
+                  {actionName}
+                </Text>
+              </Pressable>
+            </View>
 
             {/* Right Send Action Button */}
             <TouchableOpacity
@@ -723,7 +816,9 @@ export default function EventComposeModal({
               {submitting ? (
                 <ActivityIndicator size="small" color={theme.primary} />
               ) : (
-                <Text style={[styles.sendText, { color: theme.primary }]}>Submit</Text>
+                <Text style={[styles.sendText, { color: theme.primary, fontWeight: '700' }]}>
+                  {action?.actionName === 'action_add_flow' ? 'Start Flow' : 'Submit'}
+                </Text>
               )}
             </TouchableOpacity>
           </View>
@@ -984,6 +1079,137 @@ export default function EventComposeModal({
                 );
               }
 
+              // Pipeline Blueprint Selector Cards / Chips
+              if (info.key === 'pipeline') {
+                const targetContact = (allEntities || []).find((e) => e?.id === params.contact_id || e?.title === params.contact_id || e?.name === params.contact_id);
+                const targetRole = String(targetContact?.subRole || targetContact?.role || targetContact?.type || '').toLowerCase();
+                const defaultPip =
+                  targetRole.includes('vendor') || targetRole.includes('supplier')
+                    ? OKF_PIPELINES[1]
+                    : targetRole.includes('staff') || targetRole.includes('member') || targetRole.includes('employee')
+                    ? OKF_PIPELINES[2]
+                    : targetRole.includes('partner')
+                    ? OKF_PIPELINES[3]
+                    : OKF_PIPELINES[0];
+                const activePip = OKF_PIPELINES.find((p) => p.name.toLowerCase() === (value || defaultPip.name).toLowerCase()) || defaultPip;
+
+                return (
+                  <View key={info.key} style={[styles.fieldRow, { borderBottomColor: theme.border + '30', flexDirection: 'column', alignItems: 'flex-start', gap: 10, paddingVertical: 12 }]}>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: hintTextColor, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                      OKF Workflow Pipeline
+                    </Text>
+                    <View style={{ width: '100%', gap: 8 }}>
+                      {OKF_PIPELINES.map((p) => {
+                        const isSelected = activePip.id === p.id;
+                        return (
+                          <TouchableOpacity
+                            key={p.id}
+                            onPress={() => {
+                              handleTextChange('pipeline', p.name);
+                              handleTextChange('stage', p.stages[0].label);
+                            }}
+                            activeOpacity={0.7}
+                            style={{
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                              gap: 12,
+                              padding: 10,
+                              borderRadius: 10,
+                              backgroundColor: isSelected ? theme.primary + '14' : theme.backgroundElement,
+                              borderWidth: 1,
+                              borderColor: isSelected ? theme.primary : theme.border + '35',
+                            }}
+                          >
+                            <View
+                              style={{
+                                width: 34,
+                                height: 34,
+                                borderRadius: 17,
+                                backgroundColor: isSelected ? theme.primary : theme.border + '20',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                              }}
+                            >
+                              <Ionicons
+                                name={p.icon as any}
+                                size={17}
+                                color={isSelected ? '#ffffff' : theme.textSecondary}
+                              />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                              <Text style={{ fontSize: 13.5, fontWeight: '700', color: isSelected ? theme.primary : theme.text }}>
+                                {p.name}
+                              </Text>
+                              <Text style={{ fontSize: 11, color: theme.textMuted, marginTop: 1 }}>
+                                {p.description}
+                              </Text>
+                            </View>
+                            {isSelected && (
+                              <Ionicons name="checkmark-circle" size={18} color={theme.primary} />
+                            )}
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
+                );
+              }
+
+              // Flow Stage Milestone Selector Chips (Dynamic based on selected pipeline)
+              if (info.key === 'stage' || info.key.includes('stage')) {
+                const targetContact = (allEntities || []).find((e) => e?.id === params.contact_id || e?.title === params.contact_id || e?.name === params.contact_id);
+                const targetRole = String(targetContact?.subRole || targetContact?.role || targetContact?.type || '').toLowerCase();
+                const defaultPip =
+                  targetRole.includes('vendor') || targetRole.includes('supplier')
+                    ? OKF_PIPELINES[1]
+                    : targetRole.includes('staff') || targetRole.includes('member') || targetRole.includes('employee')
+                    ? OKF_PIPELINES[2]
+                    : targetRole.includes('partner')
+                    ? OKF_PIPELINES[3]
+                    : OKF_PIPELINES[0];
+                const activePip = OKF_PIPELINES.find((p) => p.name.toLowerCase() === (params.pipeline || defaultPip.name).toLowerCase()) || defaultPip;
+
+                return (
+                  <View key={info.key} style={[styles.fieldRow, { borderBottomColor: theme.border + '30', flexDirection: 'column', alignItems: 'flex-start', gap: 8, paddingVertical: 10 }]}>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: hintTextColor, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                      Initial Stage
+                    </Text>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                      {activePip.stages.map((stg) => {
+                        const isSelected = (value || activePip.stages[0].label).toLowerCase() === stg.label.toLowerCase();
+                        return (
+                          <TouchableOpacity
+                            key={stg.id}
+                            onPress={() => handleTextChange(info.key, stg.label)}
+                            activeOpacity={0.7}
+                            style={{
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                              gap: 5,
+                              paddingHorizontal: 10,
+                              paddingVertical: 6,
+                              borderRadius: 8,
+                              backgroundColor: isSelected ? stg.color : theme.border + '18',
+                              borderWidth: 1,
+                              borderColor: isSelected ? stg.color : theme.border + '35',
+                            }}
+                          >
+                            <Ionicons
+                              name={stg.icon as any}
+                              size={13}
+                              color={isSelected ? '#ffffff' : theme.textSecondary}
+                            />
+                            <Text style={{ fontSize: 12, fontWeight: '600', color: isSelected ? '#ffffff' : theme.text }}>
+                              {stg.label}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
+                );
+              }
+
               // D. Other Selectable Fields (Ultra Minimal Hint Rows)
               if (info.isSelectable) {
                 const matchedEnt = (allEntities || []).find((e) => e?.id === value || e?.title === value || e?.name === value);
@@ -1006,6 +1232,13 @@ export default function EventComposeModal({
               }
 
               // D. Standard Text / Numeric Input Fields (Ultra Minimal Placeholder Hint)
+              const customPlaceholder =
+                action?.actionName === 'action_add_flow' && info.key === 'name'
+                  ? 'Flow name (e.g. Website Redesign, Q3 Enterprise Deal) *'
+                  : action?.actionName === 'action_add_flow' && info.key === 'value'
+                  ? 'Estimated Value ($)'
+                  : `${hintLabel} ${info.isRequired ? '*' : ''}`;
+
               return (
                 <View key={info.key} style={[styles.fieldRow, { borderBottomColor: theme.border }]}>
                   <TextInput
@@ -1013,7 +1246,7 @@ export default function EventComposeModal({
                     value={value}
                     keyboardType={isNumeric ? 'numeric' : 'default'}
                     onChangeText={(val) => handleTextChange(info.key, val)}
-                    placeholder={`${hintLabel} ${info.isRequired ? '*' : ''}`}
+                    placeholder={customPlaceholder}
                     placeholderTextColor={hintTextColor}
                   />
                 </View>

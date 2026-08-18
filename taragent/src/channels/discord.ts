@@ -186,9 +186,22 @@ export async function processDiscordMessage(
 
     const lowerText = promptText.toLowerCase();
 
+    // ── PRE-LLM CODE GATE (< 2ms, 0 Tokens Spent) ──────────────────
+    const { getCachedMember } = await import('../lib/cache');
+    const member = await getCachedMember(env, scope, userName || channelMsg.userId);
+    if (member?.status === 'former') {
+      return `🚫 **Access Revoked:** \`${userName}\` is marked as former staff.`;
+    }
+
+    const userRole = member?.role || 'staff';
+    const isSensitiveFinancial = lowerText.includes('today sales') || lowerText.includes("today's sales") || lowerText.includes('daily sales') || lowerText.includes('revenue') || lowerText.includes('profit');
+    if (isSensitiveFinancial && userRole !== 'owner' && userRole !== 'manager') {
+      return `🔒 **Restricted:** Financial & revenue metrics are only accessible to Managers & Owners.`;
+    }
+
     // 1. Skill-Driven Dynamic Intent Resolution (plan6.md §15)
     const { resolveAndExecuteChannelIntent } = await import('./channel-intent');
-    const skillIntent = await resolveAndExecuteChannelIntent(env, scope, userName, 'staff', promptText);
+    const skillIntent = await resolveAndExecuteChannelIntent(env, scope, userName, userRole, promptText);
     if (skillIntent.handled && skillIntent.replyText) {
       return skillIntent.replyText.replace(/<[^>]*>/g, ''); // Convert HTML tags to plain text for Discord
     }

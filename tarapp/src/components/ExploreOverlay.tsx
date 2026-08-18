@@ -5,14 +5,6 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { tar } from '@/lib/tar';
 import { TarLogoLoader } from '@/components/TarLogoLoader';
 
-const MOCK_PUBLIC_WORKSPACES = [
-  { subdomain: 'croissant-bakery', scope: 's:croissant-bakery', type: 'bakery', name: 'Croissant & Cafe', description: 'Artisanal French pastries, fresh sourdough bread, and premium coffee.' },
-  { subdomain: 'quick-ride', scope: 's:quick-ride', type: 'taxi', name: 'Quick Ride', description: 'Reliable airport transfers and city rides with tracked drivers.' },
-  { subdomain: 'glow-salon', scope: 's:glow-salon', type: 'beauty', name: 'Glow Salon', description: 'Premium unisex salon for hair, skin, and nail treatments.' },
-  { subdomain: 'fashion-hub', scope: 's:fashion-hub', type: 'retail', name: 'Fashion Hub', description: 'Curated fashion collections with express home delivery.' },
-  { subdomain: 'spice-garden', scope: 's:spice-garden', type: 'restaurant', name: 'Spice Garden', description: 'Authentic South Indian thalis and biryanis, delivered hot.' },
-];
-
 const CATEGORIES = [
   { id: 'all', label: 'All' },
   { id: 'bakery', label: 'Bakery' },
@@ -23,11 +15,11 @@ const CATEGORIES = [
 ];
 
 const VERTICAL_EMOJI: Record<string, string> = {
-  bakery: '\u{1F35A}',
-  taxi: '\u{1F695}',
-  beauty: '\u{1F487}',
-  retail: '\u{1F6CD}',
-  restaurant: '\u{1F37D}',
+  bakery: '🥐',
+  taxi: '🚕',
+  beauty: '💇',
+  retail: '🛍️',
+  restaurant: '🍽️',
 };
 
 interface ExploreOverlayProps {
@@ -54,17 +46,9 @@ export default function ExploreOverlay({ visible, onClose, theme }: ExploreOverl
         name: w.name || w.subdomain,
         description: `${w.type || 'Business'} services and storefront.`,
       }));
-
-      const userSubdomains = new Set(systemWorkspaces.map((w: any) => w.subdomain));
-      const merged = [...systemWorkspaces];
-      MOCK_PUBLIC_WORKSPACES.forEach((mock) => {
-        if (!userSubdomains.has(mock.subdomain)) {
-          merged.push(mock);
-        }
-      });
-      setWorkspaces(merged);
+      setWorkspaces(systemWorkspaces);
     } catch {
-      setWorkspaces(MOCK_PUBLIC_WORKSPACES);
+      setWorkspaces([]);
     } finally {
       setLoading(false);
     }

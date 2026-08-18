@@ -11,6 +11,7 @@ import {
   PanResponder,
   Dimensions,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -19,6 +20,7 @@ import { getComponent, hasComponent, type SectionProps } from './registry/Compon
 import './registry/builtins';
 import { CanvasLifeMode, CanvasBlock, CanvasDocument } from '@/lib/layout-engine';
 import { resolveIntent } from '@/lib/intent-resolver';
+import { tar } from '@/lib/tar';
 import AdBanner from '@/components/AdBanner';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -47,6 +49,7 @@ export interface GenUIScreenProps {
   onSelectWorkspace?: (workspace: any) => void;
   onCreateWorkspace?: () => void;
   onOpenSwitcher?: () => void;
+  onOpenCanvasCustomizer?: () => void;
 }
 
 const DEFAULT_LIFE_MODES: CanvasLifeMode[] = [];
@@ -86,6 +89,7 @@ function getAutoRoutineMode(modes: CanvasLifeMode[]): string {
 
 function getChipIcon(label: string): any {
   const l = (label || '').toLowerCase();
+  if (l.includes('customize') || l.includes('canvas')) return 'color-palette-outline';
   if (l.includes('call') || l.includes('phone')) return 'call-outline';
   if (l.includes('note') || l.includes('memo')) return 'document-text-outline';
   if (l.includes('expense') || l.includes('budget') || l.includes('money')) return 'wallet-outline';
@@ -109,6 +113,7 @@ export default function GenUIScreen({
   onSelectWorkspace,
   onCreateWorkspace,
   onOpenSwitcher,
+  onOpenCanvasCustomizer,
 }: GenUIScreenProps) {
   const insets = useSafeAreaInsets();
 
@@ -133,6 +138,8 @@ export default function GenUIScreen({
   // Bottom dock input state
   const [inputText, setInputText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [isRecordingVoice, setIsRecordingVoice] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
 
   // Slide-Up Card state
   const [slideCardVisible, setSlideCardVisible] = useState(false);
@@ -181,20 +188,41 @@ export default function GenUIScreen({
 
   // Contextual Chips for active mode in idle state
   const idleChips = useMemo(() => {
+    const isOwnerOrManager = currentWorkspace?.role === 'owner' || currentWorkspace?.role === 'admin' || currentWorkspace?.role === 'manager';
+    let baseChips: any[] = [];
     if (canvasDoc?.chips && canvasDoc.chips.length > 0) {
-      return canvasDoc.chips;
+      baseChips = [...canvasDoc.chips];
+    } else if (currentMode?.chips && currentMode.chips.length > 0) {
+      baseChips = [...currentMode.chips];
+    } else {
+      baseChips = [
+        { label: 'New Sale', target: 'quick-pos' },
+        { label: 'Check Stock', target: 'stock-sheet' },
+        { label: 'Contacts', target: 'contact-card' },
+      ];
     }
-    if (currentMode?.chips && currentMode.chips.length > 0) {
-      return currentMode.chips;
+
+    // Admin/Owner Exclusive Suggestion Chip [ 🎨 Customize Canvas ] (genuiteam.md §5)
+    if (isOwnerOrManager) {
+      const alreadyHas = baseChips.some(c => c.action === 'customize_canvas' || String(c.label || '').toLowerCase().includes('customize'));
+      if (!alreadyHas) {
+        baseChips.push({
+          label: 'Customize Canvas',
+          action: 'customize_canvas',
+        });
+      }
     }
-    return [
-      { label: 'New Sale', target: 'quick-pos' },
-      { label: 'Check Stock', target: 'stock-sheet' },
-      { label: 'Contacts', target: 'contact-card' },
-    ];
-  }, [canvasDoc, currentMode]);
+
+    return baseChips;
+  }, [canvasDoc, currentMode, currentWorkspace?.role]);
 
   const handleChipPress = (chip: any) => {
+    if (chip.action === 'customize_canvas' || chip.label?.toLowerCase().includes('customize canvas')) {
+      if (onOpenCanvasCustomizer) {
+        onOpenCanvasCustomizer();
+        return;
+      }
+    }
     if (chip.target) {
       openSlideCard(chip.target, chip.props || {}, chip.label);
     } else if (chip.action === 'quick_pos') {
@@ -210,28 +238,36 @@ export default function GenUIScreen({
     }
   };
 
-  const handleVoicePress = () => {
+  const handleVoicePress = async () => {
     if (onVoiceRecord) {
       onVoiceRecord();
+      return;
+    }
+
+    if (isRecordingVoice) {
+      setIsRecordingVoice(false);
+      setIsTranscribing(true);
+      try {
+        const res = await tar.ai.transcribe('', 'audio/m4a').catch(() => ({ text: '' }));
+        const text = (res.text || '').trim();
+        if (text) {
+          setInputText(text);
+          setIsTyping(true);
+        }
+      } catch (err) {
+        console.warn('[GenUIScreen] Voice error:', err);
+      } finally {
+        setIsTranscribing(false);
+      }
     } else {
-      openSlideCard('action-confirm', {
-        payload: {
-          intentType: 'order',
-          title: 'Voice Intent Confirmation',
-          subtitle: 'Spoken request: "Order restock from supplier"',
-          recipient: 'Primary Supplier',
-          totalAmount: '$45.00',
-          items: [{ name: 'Restock Supply Pack', qty: '1 batch', price: '$45.00' }],
-          actionName: 'record_sale',
-          actionParams: { title: 'Voice Restock Order', total: 45 },
-        },
-      }, 'Confirm Voice Order');
+      setIsRecordingVoice(true);
     }
   };
 
-  const handleInputSubmit = async () => {
-    if (!inputText.trim()) return;
-    const sentence = inputText.trim();
+  const handleInputSubmit = async (overrideText?: string) => {
+    const textToSubmit = typeof overrideText === 'string' ? overrideText : inputText;
+    if (!textToSubmit.trim()) return;
+    const sentence = textToSubmit.trim();
     setInputText('');
     setIsTyping(false);
 
@@ -371,44 +407,6 @@ export default function GenUIScreen({
           },
         ]}
       >
-        {/* Suggestion Chips matching the clean ChatGPT-style icons and typography */}
-        <View style={styles.chipsContainer}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.chipsScroll}
-            keyboardShouldPersistTaps="handled"
-          >
-            {isTyping && liveMatches.length > 0
-              ? liveMatches.map((match: any, idx: number) => (
-                  <TouchableOpacity
-                    key={`match_${idx}`}
-                    activeOpacity={0.7}
-                    onPress={() => {
-                      setInputText('');
-                      setIsTyping(false);
-                      openSlideCard(match.target || match.type, match.props || {}, match.label);
-                    }}
-                    style={styles.chip}
-                  >
-                    <Ionicons name="flash-outline" size={15} color="#18181b" />
-                    <Text style={styles.chipText}>{match.label}</Text>
-                  </TouchableOpacity>
-                ))
-              : idleChips.map((chip: any, idx: number) => (
-                  <TouchableOpacity
-                    key={`chip_${idx}`}
-                    activeOpacity={0.7}
-                    onPress={() => handleChipPress(chip)}
-                    style={styles.chip}
-                  >
-                    <Ionicons name={getChipIcon(chip.label)} size={15} color="#18181b" />
-                    <Text style={styles.chipText}>{chip.label}</Text>
-                  </TouchableOpacity>
-                ))}
-          </ScrollView>
-        </View>
-
         {/* Modern Minimal Input Dock matching ChatGPT design */}
         <View style={styles.dockBar}>
           {/* Plus Add Button */}
@@ -435,7 +433,7 @@ export default function GenUIScreen({
               setInputText(txt);
               setIsTyping(txt.length > 0);
             }}
-            onSubmitEditing={handleInputSubmit}
+            onSubmitEditing={() => handleInputSubmit()}
             returnKeyType="go"
           />
 
@@ -443,18 +441,26 @@ export default function GenUIScreen({
           {inputText.trim().length > 0 ? (
             <TouchableOpacity
               activeOpacity={0.8}
-              onPress={handleInputSubmit}
+              onPress={() => handleInputSubmit()}
               style={styles.sendBtnCircle}
             >
-              <Ionicons name="arrow-up" size={17} color="#ffffff" />
+              <Ionicons name="arrow-up" size={17} color="#18181b" />
             </TouchableOpacity>
           ) : (
             <TouchableOpacity
               activeOpacity={0.85}
               onPress={handleVoicePress}
-              style={styles.voiceOrbBtn}
+              disabled={isTranscribing}
+              style={[
+                styles.voiceOrbBtn,
+                isRecordingVoice && styles.voiceOrbBtnRecording,
+              ]}
             >
-              <Ionicons name="mic" size={18} color="#ffffff" />
+              <Ionicons
+                name={isRecordingVoice ? 'stop' : 'mic'}
+                size={isRecordingVoice ? 16 : 18}
+                color="#18181b"
+              />
             </TouchableOpacity>
           )}
         </View>
@@ -651,23 +657,30 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#2563eb',
+    backgroundColor: '#e4e4e7',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 2.2,
     marginLeft: 2,
   },
+  voiceOrbBtnRecording: {
+    backgroundColor: '#d4d4d8',
+  },
+  voiceOrbBtnTranscribing: {
+    backgroundColor: '#f4f4f5',
+    opacity: 0.7,
+  },
   waveBar: {
     width: 2.5,
     borderRadius: 2,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#18181b',
   },
   sendBtnCircle: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#0f172a',
+    backgroundColor: '#e4e4e7',
     alignItems: 'center',
     justifyContent: 'center',
   },

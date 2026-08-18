@@ -1,28 +1,37 @@
 /**
  * tar — client API for tarflue-v2 backend (Cloudflare Workers).
- * Every backend call goes through this one module.
+ * Single unified client gateway for Turso SQLite queries, OKF vault, Team Roster, and GenUI AI.
  */
 
 const TAR_URL = process.env.EXPO_PUBLIC_TARFLUE_URL || 'https://taragent.tar-54d.workers.dev';
 
 let _userId = 'guest';
+let _userEmail = '';
 
 /** Set the current user ID (called from app init). */
 export function setUserId(id: string) {
-  console.log(`[tar] setUserId: ${id}`);
   _userId = id;
+}
+
+/** Set the current user Google Email. */
+export function setUserEmail(email: string) {
+  _userEmail = (email || '').toLowerCase().trim();
 }
 
 // ── Internal helpers ──────────────────────────────────────────
 
 async function post<T = any>(path: string, body?: Record<string, any>): Promise<T> {
-  console.log(`[tar] POST ${path} with X-User-Id: ${_userId}`);
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'X-User-Id': _userId,
+  };
+  if (_userEmail) {
+    headers['X-User-Email'] = _userEmail;
+  }
+
   const res = await fetch(`${TAR_URL}${path}`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-User-Id': _userId,
-    },
+    headers,
     body: body ? JSON.stringify(body) : undefined,
   });
   if (!res.ok) {
@@ -35,8 +44,16 @@ async function post<T = any>(path: string, body?: Record<string, any>): Promise<
 async function get<T = any>(path: string, params?: Record<string, string>): Promise<T> {
   const url = new URL(`${TAR_URL}${path}`);
   if (params) Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
+  
+  const headers: Record<string, string> = {
+    'X-User-Id': _userId,
+  };
+  if (_userEmail) {
+    headers['X-User-Email'] = _userEmail;
+  }
+
   const res = await fetch(url.toString(), {
-    headers: { 'X-User-Id': _userId },
+    headers,
   });
   if (!res.ok) throw new Error(`GET ${path} failed: ${await res.text()}`);
   return res.json() as Promise<T>;
@@ -67,7 +84,7 @@ export const tar = {
     post('/ai-tasks/execute', { action, params, scope }),
 
   /**
-   * Run one of the 6 generic tools: create, read, update, delete, link, search.
+   * Run one of the generic tools: create, read, update, delete, link, search.
    * POST /tools/:name
    */
   tool: (name: string, input: Record<string, any>) =>
@@ -140,11 +157,14 @@ export const tar = {
     post(`/inbox/${taskId}`, { scope }),
 
   /**
-   * List user's workspaces.
+   * List user's workspaces (Google email matching with zero join codes).
    * GET /workspaces
    */
-  listWorkspaces: () =>
-    get('/workspaces'),
+  listWorkspaces: (email?: string) => {
+    const params: Record<string, string> = {};
+    if (email) params.email = email;
+    return get('/workspaces', Object.keys(params).length ? params : undefined);
+  },
 
   /**
    * Get user's personal timeline (motions across all workspaces).
@@ -155,6 +175,29 @@ export const tar = {
     if (opts?.limit) params.limit = String(opts.limit);
     if (opts?.since) params.since = opts.since;
     return get('/timeline', Object.keys(params).length ? params : undefined);
+  },
+
+  // ── Turso Database API (genuiteam.md §1, §4) ─────────────────
+
+  db: {
+    /**
+     * Executes arbitrary parametric SQL query against workspace Turso SQLite DB.
+     * POST /db/query
+     */
+    query: async (sql: string, args: any[] = [], scope?: string): Promise<any[]> => {
+      const activeScope = scope || 'p';
+      try {
+        const res = await post<{ success: boolean; rows: any[] }>('/db/query', {
+          scope: activeScope,
+          sql,
+          args,
+        });
+        return res?.rows || [];
+      } catch (err) {
+        console.warn(`[tar.db.query] Remote query error, fallback to tool read:`, err);
+        return [];
+      }
+    },
   },
 
   // ── OKF (Open Knowledge Format) files ─────────────────────
@@ -177,7 +220,23 @@ export const tar = {
       post('/okf/edit', { scope, path, content }),
   },
 
-  // ── Canvas Operations ─────────────────────────────────────
+  // ── Declarative Team Roster (genuiteam.md §3) ──────────────
+
+  team: {
+    /** Fetch workspace team roster from OKF/D1 */
+    getRoster: (scope: string) =>
+      get('/team/roster', { scope }),
+
+    /** Sync a member or member roster */
+    sync: (scope: string, memberOrMembers: any) => {
+      if (Array.isArray(memberOrMembers)) {
+        return post('/team/sync', { scope, members: memberOrMembers });
+      }
+      return post('/team/sync', { scope, member: memberOrMembers });
+    },
+  },
+
+  // ── Canvas Operations & Customizer ────────────────────────
 
   canvas: {
     /** Add a skill or block to active canvas.md */
@@ -187,5 +246,28 @@ export const tar = {
     /** Remove a skill or block from active canvas.md */
     remove: (scope: string, moduleOrTitle: string) =>
       post('/canvas/remove', { scope, module: moduleOrTitle }),
+  },
+
+  // ── AI Engine (Groq Whisper & Canvas Layouts) ──────────────
+
+  ai: {
+    /**
+     * Near-instant voice transcription with Groq Whisper whisper-large-v3-turbo (<300ms)
+     */
+    transcribe: async (audioBase64: string, mimeType = 'audio/m4a') => {
+      return post<{ text: string }>('/ai/transcribe', { audioBase64, mimeType });
+    },
+
+    /**
+     * AI Canvas layout generator for Admin Customizer
+     */
+    planCanvas: async (prompt: string, workspaceName?: string, vertical?: string, scope?: string) => {
+      return post<{ success: boolean; chips: any[]; blocks: any[]; canvasMarkdown: string }>('/ai/canvas-plan', {
+        prompt,
+        workspaceName,
+        vertical,
+        scope,
+      });
+    },
   },
 };

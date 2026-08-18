@@ -4,21 +4,21 @@
     "type": "split",
     "children": [
       {
-        "id": "e740c8dc25ea8457",
+        "id": "126dc637a51bc83d",
         "type": "tabs",
         "children": [
           {
-            "id": "bb6a6437d4b41399",
+            "id": "910a140f0db8029d",
             "type": "leaf",
             "state": {
               "type": "markdown",
               "state": {
-                "file": "revenue.md",
+                "file": "genuiteam.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "revenue"
+              "title": "genuiteam"
             }
           }
         ]
@@ -83,7 +83,8 @@
       }
     ],
     "direction": "horizontal",
-    "width": 300
+    "width": 300,
+    "collapsed": true
   },
   "right": {
     "id": "10dfbf46ea29c050",
@@ -189,23 +190,53 @@
       "github-sync:Sync with Remote": false
     }
   },
-  "active": "bb6a6437d4b41399",
+  "active": "910a140f0db8029d",
   "lastOpenFiles": [
-    "genui.md",
+    "tarapp/src/lib/team.ts",
+    "taragent/src/lib/team.ts",
     "revenue.md",
-    "tarapp/src/gen-ui/GenUIScreen.tsx",
-    "tarapp/src/gen-ui/registry/sections/ActionConfirm.tsx",
-    "tarapp/src/gen-ui/registry/sections/ContactCard.tsx",
-    "tarapp/src/gen-ui/registry/sections/PipelineCard.tsx",
-    "tarapp/src/gen-ui/registry/sections/StockSheet.tsx",
-    "tarapp/src/gen-ui/registry/sections/QuickPos.tsx",
-    "tarapp/src/gen-ui/registry/sections/TaskInbox.tsx",
-    "plan6.md",
-    "Tar app fixes..md",
-    "canvas.md",
-    "tarapp/src/components/CanvasCustomizerModal.tsx",
-    "taragent/scratch_list_turso.js",
-    "taragent/scratch_clean.js",
-    "plan6 1.md"
+    "genuiteam.md",
+    "brandingsite/node_modules/astro/dist/runtime/client/dev-toolbar/apps/audit/ui/audit-ui.d.ts",
+    "brandingsite/node_modules/astro/dist/runtime/client/dev-toolbar/apps/audit/ui/audit-list-window.d.ts",
+    "brandingsite/node_modules/astro/dist/runtime/client/dev-toolbar/apps/audit/ui/audit-list-window.js",
+    "brandingsite/node_modules/astro/dist/runtime/client/dev-toolbar/apps/audit/ui/audit-ui.js",
+    "brandingsite/node_modules/astro/dist/runtime/client/dev-toolbar/apps/audit/ui/audit-list-item.js",
+    "brandingsite/node_modules/astro/dist/runtime/client/dev-toolbar/apps/audit/ui/audit-list-item.d.ts",
+    "brandingsite/node_modules/astro/dist/runtime/client/dev-toolbar/apps/audit/rules/perf.d.ts",
+    "brandingsite/node_modules/astro/dist/runtime/client/dev-toolbar/apps/audit/rules/index.d.ts",
+    "brandingsite/node_modules/astro/dist/runtime/client/dev-toolbar/apps/audit/rules/a11y.d.ts",
+    "brandingsite/node_modules/csso/node_modules/mdn-data/css/readme.md",
+    "brandingsite/node_modules/is-inside-container/node_modules/is-docker/readme.md",
+    "brandingsite/node_modules/get-tsconfig/skills/get-tsconfig/SKILL.md",
+    "brandingsite/node_modules/dom-serializer/node_modules/entities/readme.md",
+    "brandingsite/node_modules/csso/node_modules/css-tree/README.md",
+    "brandingsite/node_modules/csso/node_modules/mdn-data/README.md",
+    "brandingsite/node_modules/csso/node_modules/mdn-data/CHANGELOG.md",
+    "brandingsite/node_modules/anymatch/node_modules/picomatch/README.md",
+    "brandingsite/node_modules/@types/nlcst/README.md",
+    "brandingsite/node_modules/@ungap/structured-clone/README.md",
+    "brandingsite/node_modules/@types/unist/README.md",
+    "brandingsite/node_modules/@types/mdast/README.md",
+    "brandingsite/node_modules/@types/ms/README.md",
+    "brandingsite/node_modules/@types/estree/README.md",
+    "brandingsite/node_modules/@types/hast/README.md",
+    "brandingsite/node_modules/@types/debug/README.md",
+    "brandingsite/node_modules/@oslojs/encoding/README.md",
+    "brandingsite/node_modules/@shikijs/vscode-textmate/README.md",
+    "brandingsite/node_modules/@shikijs/vscode-textmate/LICENSE.md",
+    "brandingsite/node_modules/@shikijs/types/README.md",
+    "brandingsite/node_modules/@shikijs/themes/README.md",
+    "brandingsite/node_modules/@shikijs/engine-oniguruma/README.md",
+    "brandingsite/node_modules/@shikijs/langs/README.md",
+    "brandingsite/public/icons/whatsapp.png",
+    "brandingsite/public/icons/telegram.png",
+    "brandingsite/public/icons/slack.png",
+    "brandingsite/public/icons/instagram.png",
+    "brandingsite/public/icons/imessage.svg",
+    "brandingsite/public/icons/discord.png",
+    "brandingsite/dist/icons/telegram.png",
+    "brandingsite/dist/icons/whatsapp.png",
+    "brandingsite/dist/icons/slack.png",
+    "brandingsite/dist/icons/instagram.png"
   ]
 }

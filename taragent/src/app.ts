@@ -90,6 +90,319 @@ app.get('/workspaces', async (c) => {
   return c.json({ workspaces: Array.from(workspacesMap.values()) });
 });
 
+// POST /db/query — Parametric SQL query execution for GenUI Native Components (genuiteam.md §1, §4)
+app.post('/db/query', async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const { scope, sql, args = [] } = body;
+  if (!scope || !sql) {
+    return c.json({ error: 'Missing scope or sql query' }, 400);
+  }
+
+  try {
+    const result = await executeWorkspaceTursoQuery(c.env.DB, c.env, scope, sql, args);
+    return c.json({ success: true, rows: result || [], count: (result || []).length });
+  } catch (err: any) {
+    console.error('[db/query] Error executing query:', err);
+    return c.json({ error: err.message || 'Database query execution failed' }, 500);
+  }
+});
+
+// POST /team/sync — Sync team members from Contacts / Pipelines to team.md and D1 (genuiteam.md §3)
+app.post('/team/sync', async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const { scope, member, members } = body;
+  if (!scope) return c.json({ error: 'Missing scope' }, 400);
+
+  const { updateOrAddTeamMember, syncTeamRosterToD1AndCache, getAndSyncTeamRoster } = await import('./lib/team');
+  try {
+    if (member) {
+      const roster = await updateOrAddTeamMember(c.env, scope, member);
+      return c.json({ success: true, roster });
+    } else if (members && Array.isArray(members)) {
+      const roster = await getAndSyncTeamRoster(c.env, scope);
+      for (const m of members) {
+        const existingIdx = roster.members.findIndex((ex: any) =>
+          (m.email && ex.email && ex.email.toLowerCase() === m.email.toLowerCase()) ||
+          (m.handle && ex.handle && ex.handle.toLowerCase() === m.handle.toLowerCase())
+        );
+        if (existingIdx !== -1) {
+          roster.members[existingIdx] = { ...roster.members[existingIdx], ...m };
+        } else {
+          roster.members.push(m);
+        }
+      }
+      const { serializeTeamMarkdown } = await import('./lib/team');
+      const { uploadWorkspaceFile } = await import('./lib/okf');
+      await uploadWorkspaceFile(c.env, scope, 'team/team.md', serializeTeamMarkdown(roster));
+      await syncTeamRosterToD1AndCache(c.env, scope, roster);
+      return c.json({ success: true, roster });
+    }
+    return c.json({ error: 'Missing member or members payload' }, 400);
+  } catch (err: any) {
+    return c.json({ error: err.message || 'Failed to sync team member' }, 500);
+  }
+});
+
+// GET /team/roster — Fetch parsed declarative team roster (genuiteam.md §3)
+app.get('/team/roster', async (c) => {
+  const scope = c.req.query('scope') || 'w:default';
+  const { getAndSyncTeamRoster } = await import('./lib/team');
+  try {
+    const roster = await getAndSyncTeamRoster(c.env, scope);
+    return c.json({ success: true, roster });
+  } catch (err: any) {
+    return c.json({ error: err.message || 'Failed to get team roster' }, 500);
+  }
+});
+
+// POST /ai/transcribe — Groq Whisper near-instant (<300ms) voice transcription (genuiteam.md §5)
+app.post('/ai/transcribe', async (c) => {
+  const groqKey = c.env.GROQ_API_KEY;
+  if (!groqKey) {
+    return c.json({ error: 'GROQ_API_KEY not configured' }, 500);
+  }
+
+  try {
+    const contentType = c.req.header('content-type') || '';
+    let formData = new FormData();
+
+    if (contentType.includes('multipart/form-data')) {
+      const incomingForm = await c.req.formData();
+      const file = incomingForm.get('file');
+      if (!file) return c.json({ error: 'Missing audio file in form data' }, 400);
+      formData.append('file', file);
+      formData.append('model', 'whisper-large-v3-turbo');
+    } else {
+      const body = await c.req.json().catch(() => ({}));
+      if (body.audioBase64) {
+        const rawBytes = Uint8Array.from(atob(body.audioBase64), ch => ch.charCodeAt(0));
+        const blob = new Blob([rawBytes], { type: body.mimeType || 'audio/m4a' });
+        formData.append('file', blob, 'audio.m4a');
+        formData.append('model', 'whisper-large-v3-turbo');
+      } else if (body.text) {
+        return c.json({ text: body.text });
+      } else {
+        return c.json({ error: 'Missing audioBase64 or file payload' }, 400);
+      }
+    }
+
+    const res = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${groqKey}`,
+      },
+      body: formData,
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      return c.json({ error: `Groq Whisper failed: ${errText}` }, res.status as any);
+    }
+
+    const data = await res.json() as { text?: string };
+    return c.json({ text: data.text || '' });
+  } catch (err: any) {
+    console.error('[ai/transcribe] Error:', err);
+    return c.json({ error: err.message || 'Transcription failed' }, 500);
+  }
+});
+
+// POST /ai/canvas-plan — AI Canvas layout generator with registered native components (genuiteam.md §4, §5)
+app.post('/ai/canvas-plan', async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const { prompt, workspaceName = 'Workspace' } = body;
+  if (!prompt) return c.json({ error: 'Missing prompt' }, 400);
+
+  const cleanPrompt = prompt.toLowerCase();
+  let blocks: any[] = [];
+  let chips: any[] = [];
+
+  if (cleanPrompt.includes('clinic') || cleanPrompt.includes('doctor') || cleanPrompt.includes('patient') || cleanPrompt.includes('health') || cleanPrompt.includes('appointment')) {
+    chips = [
+      { label: 'New Booking', target: 'data-grid' },
+      { label: 'Patient Queue', target: 'task-inbox' },
+      { label: 'Client Directory', target: 'contact-card' }
+    ];
+    blocks = [
+      {
+        id: 'blk_patient_queue',
+        title: 'Patient Queue',
+        type: 'task-inbox',
+        roles: ['owner', 'doctor', 'receptionist'],
+        props: {
+          title: 'Patient Queue',
+          query: "SELECT id, title, status, data FROM matter WHERE type = 10 AND status = 'pending' ORDER BY at ASC"
+        }
+      },
+      {
+        id: 'blk_appointments',
+        title: 'Today Appointments',
+        type: 'data-grid',
+        roles: ['owner', 'doctor', 'receptionist'],
+        props: {
+          title: 'Appointments',
+          query: "SELECT id, title, ref, price, status FROM matter WHERE type = 14 ORDER BY updated DESC LIMIT 10",
+          columns: ['title', 'ref', 'price', 'status']
+        }
+      },
+      {
+        id: 'blk_contacts',
+        title: 'Patient Directory',
+        type: 'contact-card',
+        roles: ['owner', 'doctor', 'receptionist'],
+        props: {
+          title: 'Patient Directory',
+          query: "SELECT id, title, data FROM matter WHERE type = 1 ORDER BY title ASC LIMIT 20"
+        }
+      }
+    ];
+  } else if (cleanPrompt.includes('restaurant') || cleanPrompt.includes('cafe') || cleanPrompt.includes('table') || cleanPrompt.includes('food') || cleanPrompt.includes('kitchen')) {
+    chips = [
+      { label: 'New Sale', target: 'quick-pos' },
+      { label: 'Check Stock', target: 'stock-sheet' },
+      { label: 'Kitchen Queue', target: 'task-inbox' }
+    ];
+    blocks = [
+      {
+        id: 'blk_revenue_pulse',
+        title: 'Total Shift Revenue',
+        type: 'metric-card',
+        roles: ['owner', 'manager'],
+        props: {
+          title: "Today's Net Total",
+          query: "SELECT COALESCE(SUM(amount), 0) AS value, COUNT(*) AS count FROM motion WHERE at >= unixepoch('start of day')",
+          valueFormat: 'currency'
+        }
+      },
+      {
+        id: 'blk_table_pos',
+        title: 'Floor Register',
+        type: 'quick-pos',
+        roles: ['owner', 'manager', 'cashier', 'staff'],
+        props: {
+          title: 'Floor Table POS',
+          catalogType: 'product'
+        }
+      },
+      {
+        id: 'blk_kitchen_inbox',
+        title: 'Live Order Queue',
+        type: 'task-inbox',
+        roles: ['owner', 'manager', 'staff'],
+        props: {
+          title: 'Active Orders',
+          query: "SELECT id, title, status, data FROM matter WHERE type = 10 AND status = 'pending' ORDER BY at ASC"
+        }
+      }
+    ];
+  } else if (cleanPrompt.includes('delivery') || cleanPrompt.includes('fleet') || cleanPrompt.includes('logistics') || cleanPrompt.includes('driver')) {
+    chips = [
+      { label: 'Delivery Queue', target: 'task-inbox' },
+      { label: 'Trip Review', target: 'action-confirm' },
+      { label: 'Client Contact', target: 'contact-card' }
+    ];
+    blocks = [
+      {
+        id: 'blk_delivery_queue',
+        title: 'Delivery Queue',
+        type: 'task-inbox',
+        roles: ['owner', 'fleet_manager', 'driver'],
+        props: {
+          title: 'Delivery Stops',
+          query: "SELECT id, title, status, data FROM matter WHERE type = 10 AND status = 'pending' ORDER BY at ASC"
+        }
+      },
+      {
+        id: 'blk_trip_review',
+        title: 'Trip Review & Confirm',
+        type: 'action-confirm',
+        roles: ['owner', 'fleet_manager', 'driver'],
+        props: {
+          title: 'Trip Dispatch Review'
+        }
+      },
+      {
+        id: 'blk_client_dir',
+        title: 'Consignee Directory',
+        type: 'contact-card',
+        roles: ['owner', 'fleet_manager', 'driver'],
+        props: {
+          title: 'Customer Directory'
+        }
+      }
+    ];
+  } else {
+    chips = [
+      { label: 'New Sale', target: 'quick-pos' },
+      { label: 'Check Stock', target: 'stock-sheet' },
+      { label: 'Contacts', target: 'contact-card' }
+    ];
+    blocks = [
+      {
+        id: 'blk_sales_kpi',
+        title: 'Total Shift Revenue',
+        type: 'metric-card',
+        roles: ['owner', 'manager'],
+        props: {
+          title: "Today's Net Total",
+          query: "SELECT COALESCE(SUM(amount), 0) AS value, COUNT(*) AS count FROM motion WHERE at >= unixepoch('start of day')",
+          valueFormat: 'currency'
+        }
+      },
+      {
+        id: 'blk_stock_sheet',
+        title: 'Low Stock Watch',
+        type: 'stock-sheet',
+        roles: ['owner', 'manager', 'staff'],
+        props: {
+          title: 'Critical Stock Stepper',
+          query: "SELECT id, title, qty, min_qty, price FROM matter WHERE type = 1 AND qty <= min_qty ORDER BY qty ASC"
+        }
+      },
+      {
+        id: 'blk_action_inbox',
+        title: 'Station Tasks',
+        type: 'task-inbox',
+        roles: ['owner', 'manager', 'staff'],
+        props: {
+          title: 'Action Inbox',
+          query: "SELECT id, title, status, data FROM matter WHERE type = 10 AND status = 'pending' ORDER BY at ASC"
+        }
+      }
+    ];
+  }
+
+  const chipsYaml = chips.map(c => `  - label: "${c.label}"\n    target: "${c.target}"`).join('\n');
+  const blocksYaml = blocks.map(b => {
+    let blk = `  - id: "${b.id}"\n    title: "${b.title}"\n    type: "${b.type}"`;
+    if (b.roles && b.roles.length > 0) {
+      blk += `\n    roles: [${b.roles.map((r: string) => `"${r}"`).join(', ')}]`;
+    }
+    blk += `\n    props: ${JSON.stringify(b.props)}`;
+    return blk;
+  }).join('\n');
+
+  const canvasMarkdown = `---
+type: CanvasLayout
+title: "${workspaceName} Canvas"
+timestamp: "${new Date().toISOString()}"
+chips:
+${chipsYaml}
+blocks:
+${blocksYaml}
+---
+
+# Workspace Canvas
+`;
+
+  return c.json({
+    success: true,
+    chips,
+    blocks,
+    canvasMarkdown,
+  });
+});
+
 // POST /channels/pair/generate — generate 10-minute 6-character pairing code
 app.post('/channels/pair/generate', async (c) => {
   const userId = c.req.header('X-User-Id') || 'guest';

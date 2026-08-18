@@ -225,8 +225,10 @@ export function buildModuleLayout(moduleName: string, mdContent: string): Worksp
 }
 
 export interface CanvasBlock {
+  id?: string;
   title: string;
   type: string;
+  roles?: string[];
   props: Record<string, any>;
 }
 
@@ -278,6 +280,8 @@ export function parseCanvasMarkdown(content: string): CanvasDocument {
   let inChips = false;
   let currentMode: CanvasLifeMode | null = null;
   let currentBlock: any = null;
+  let inBlockProps = false;
+  let inBlockRoles = false;
   let rootChips: CanvasChip[] = [];
 
   for (let i = 0; i < lines.length; i++) {
@@ -339,122 +343,84 @@ export function parseCanvasMarkdown(content: string): CanvasDocument {
       }
     }
 
-    // Parse Life Modes
-    if (inLifeModes) {
-      // Check for mode declaration: e.g. "  my_shop:" or "  personal:"
-      const modeKeyMatch = rawLine.match(/^(\s{2,4})([a-zA-Z0-9_-]+)\s*:\s*$/);
-      if (modeKeyMatch) {
-        if (currentMode) {
-          if (currentBlock && (currentBlock.type || currentBlock.title)) {
-            currentMode.blocks.push(currentBlock);
-            currentBlock = null;
-          }
-          lifeModes.push(currentMode);
-        }
-        const modeId = modeKeyMatch[2];
-        const readableLabel = modeId
-          .replace(/[_-]/g, ' ')
-          .replace(/\b\w/g, (c) => c.toUpperCase());
-        currentMode = {
-          id: modeId,
-          label: readableLabel,
-          blocks: [],
-        };
-        continue;
-      }
-
-      if (currentMode) {
-        if (trimmed.startsWith('label:')) {
-          currentMode.label = trimmed.replace('label:', '').trim().replace(/^['"]|['"]$/g, '');
-        } else if (trimmed.startsWith('schedule:')) {
-          currentMode.schedule = trimmed.replace('schedule:', '').trim().replace(/^['"]|['"]$/g, '');
-        } else if (trimmed.startsWith('icon:')) {
-          currentMode.icon = trimmed.replace('icon:', '').trim().replace(/^['"]|['"]$/g, '');
-        } else if (trimmed.startsWith('chips:')) {
-          const chipsMatch = trimmed.match(/chips\s*:\s*\[(.*)\]/);
-          if (chipsMatch) {
-            currentMode.chips = chipsMatch[1]
-              .split(',')
-              .map((c) => ({ label: c.trim().replace(/^['"]|['"]$/g, '') }))
-              .filter((c) => c.label.length > 0);
-          }
-        } else if (trimmed.startsWith('blocks:')) {
-          const inlineBlocksMatch = trimmed.match(/blocks\s*:\s*\[(.*)\]/);
-          if (inlineBlocksMatch) {
-            const rawTypes = inlineBlocksMatch[1]
-              .split(',')
-              .map((t) => t.trim().replace(/^['"]|['"]$/g, ''))
-              .filter(Boolean);
-            rawTypes.forEach((t) => {
-              currentMode?.blocks.push({
-                title: t.replace(/[_-]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
-                type: t,
-                props: {},
-              });
-            });
-          }
-        } else if (trimmed.startsWith('- type:') || trimmed.startsWith('- title:')) {
-          if (currentBlock && (currentBlock.type || currentBlock.title)) {
-            currentMode.blocks.push(currentBlock);
-          }
-          currentBlock = { title: '', type: '', props: {} };
-          const cleanTrimmed = trimmed.replace(/^-\s*/, '');
-          if (cleanTrimmed.startsWith('title:')) {
-            currentBlock.title = cleanTrimmed.replace('title:', '').trim().replace(/^['"]|['"]$/g, '');
-          } else if (cleanTrimmed.startsWith('type:')) {
-            currentBlock.type = cleanTrimmed.replace('type:', '').trim().replace(/^['"]|['"]$/g, '');
-          }
-        } else if (trimmed.startsWith('type:') && currentBlock) {
-          currentBlock.type = trimmed.replace('type:', '').trim().replace(/^['"]|['"]$/g, '');
-        } else if (trimmed.startsWith('title:') && currentBlock) {
-          currentBlock.title = trimmed.replace('title:', '').trim().replace(/^['"]|['"]$/g, '');
-        } else if (trimmed.startsWith('props:') && currentBlock) {
-          const propsMatch = trimmed.match(/props:\s*({.+})/);
-          if (propsMatch) {
-            try { currentBlock.props = JSON.parse(propsMatch[1]); } catch {}
-          }
-        }
-      }
-    }
-
     // Parse Root Blocks
     if (inBlocks) {
       if (trimmed.startsWith('-')) {
         if (currentBlock && (currentBlock.type || currentBlock.title)) {
           blocks.push(currentBlock);
         }
-        currentBlock = { title: '', type: '', props: {} };
+        currentBlock = { title: '', type: '', roles: [], props: {} };
+        inBlockProps = false;
+        inBlockRoles = false;
+
         const cleanTrimmed = trimmed.replace(/^-\s*/, '');
-        if (cleanTrimmed.startsWith('title:')) {
+        if (cleanTrimmed.startsWith('id:')) {
+          currentBlock.id = cleanTrimmed.replace('id:', '').trim().replace(/^['"]|['"]$/g, '');
+        } else if (cleanTrimmed.startsWith('title:')) {
           currentBlock.title = cleanTrimmed.replace('title:', '').trim().replace(/^['"]|['"]$/g, '');
         } else if (cleanTrimmed.startsWith('type:')) {
           currentBlock.type = cleanTrimmed.replace('type:', '').trim().replace(/^['"]|['"]$/g, '');
+        }
+        const rolesMatch = cleanTrimmed.match(/roles\s*:\s*\[(.*)\]/);
+        if (rolesMatch) {
+          currentBlock.roles = rolesMatch[1].split(',').map(r => r.trim().replace(/^['"]|['"]$/g, '')).filter(Boolean);
         }
         const propsMatch = cleanTrimmed.match(/props:\s*({.+})/);
         if (propsMatch) {
           try { currentBlock.props = JSON.parse(propsMatch[1]); } catch {}
         }
-      } else if (trimmed.startsWith('type:') && currentBlock) {
-        currentBlock.type = trimmed.replace('type:', '').trim().replace(/^['"]|['"]$/g, '');
-      } else if (trimmed.startsWith('title:') && currentBlock) {
-        currentBlock.title = trimmed.replace('title:', '').trim().replace(/^['"]|['"]$/g, '');
-      } else if (trimmed.startsWith('props:') && currentBlock) {
-        const propsMatch = trimmed.match(/props:\s*({.+})/);
-        if (propsMatch) {
-          try { currentBlock.props = JSON.parse(propsMatch[1]); } catch {}
+      } else if (currentBlock) {
+        if (trimmed.startsWith('id:')) {
+          currentBlock.id = trimmed.replace('id:', '').trim().replace(/^['"]|['"]$/g, '');
+          inBlockProps = false;
+          inBlockRoles = false;
+        } else if (trimmed.startsWith('title:')) {
+          currentBlock.title = trimmed.replace('title:', '').trim().replace(/^['"]|['"]$/g, '');
+          inBlockProps = false;
+          inBlockRoles = false;
+        } else if (trimmed.startsWith('type:')) {
+          currentBlock.type = trimmed.replace('type:', '').trim().replace(/^['"]|['"]$/g, '');
+          inBlockProps = false;
+          inBlockRoles = false;
+        } else if (trimmed.startsWith('roles:')) {
+          const rolesMatch = trimmed.match(/roles\s*:\s*\[(.*)\]/);
+          if (rolesMatch) {
+            currentBlock.roles = rolesMatch[1].split(',').map(r => r.trim().replace(/^['"]|['"]$/g, '')).filter(Boolean);
+            inBlockRoles = false;
+          } else {
+            inBlockRoles = true;
+            inBlockProps = false;
+          }
+        } else if (inBlockRoles && trimmed.startsWith('-')) {
+          const roleVal = trimmed.replace(/^-\s*/, '').trim().replace(/^['"]|['"]$/g, '');
+          if (roleVal) currentBlock.roles.push(roleVal);
+        } else if (trimmed.startsWith('props:')) {
+          const propsMatch = trimmed.match(/props:\s*({.+})/);
+          if (propsMatch) {
+            try { currentBlock.props = JSON.parse(propsMatch[1]); } catch {}
+            inBlockProps = false;
+          } else {
+            inBlockProps = true;
+            inBlockRoles = false;
+          }
+        } else if (inBlockProps) {
+          const kvMatch = trimmed.match(/^([a-zA-Z0-9_-]+)\s*:\s*(.*)/);
+          if (kvMatch) {
+            const [_, k, v] = kvMatch;
+            const cleanVal = v.trim().replace(/^['"]|['"]$/g, '');
+            if (cleanVal.startsWith('[') && cleanVal.endsWith(']')) {
+              currentBlock.props[k] = cleanVal.slice(1, -1).split(',').map(s => s.trim().replace(/^['"]|['"]$/g, '')).filter(Boolean);
+            } else if (cleanVal === 'true') currentBlock.props[k] = true;
+            else if (cleanVal === 'false') currentBlock.props[k] = false;
+            else if (!isNaN(Number(cleanVal)) && cleanVal !== '') currentBlock.props[k] = Number(cleanVal);
+            else currentBlock.props[k] = cleanVal;
+          }
         }
       }
     }
   }
 
-  // Push lingering blocks/modes
-  if (currentMode) {
-    if (currentBlock && (currentBlock.type || currentBlock.title)) {
-      currentMode.blocks.push(currentBlock);
-      currentBlock = null;
-    }
-    lifeModes.push(currentMode);
-  } else if (currentBlock && (currentBlock.type || currentBlock.title)) {
+  if (currentBlock && (currentBlock.type || currentBlock.title)) {
     blocks.push(currentBlock);
   }
 

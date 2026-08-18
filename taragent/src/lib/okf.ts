@@ -349,23 +349,30 @@ Defines operational permissions and canvas modules for each role in the workspac
 `;
   await uploadWorkspaceFile(env, scope, 'people/roles.md', rolesMd);
 
-  // 5. team/members.md
-  const defaultMembers = `---
-type: TeamConfiguration
-title: Team Access & Channel Mappings
+  // 5. team/team.md & team/members.md (genuiteam.md §1, §3)
+  const defaultTeamMd = `---
+type: TeamRoster
+title: "${workspaceName} Team Roster"
 timestamp: "${new Date().toISOString()}"
 roles:
-  staff: [orders, inventory]
-  manager: [*]
-members: []
+  owner: ["*"]
+  manager: ["pos", "inventory", "crm", "view_reports", "manage_team", "customize_canvas"]
+  staff: ["pos", "inventory", "task_inbox"]
+members:
+  - user_id: "${s3Scope(scope)}_owner"
+    name: "${workspaceName} Owner"
+    email: ""
+    handle: ""
+    role: "owner"
+    status: "active"
+    permissions: ["*"]
 ---
 
-# Channel Mappings
-
-| Channel Name | Platform | Channel ID | Mapped Role |
-|--------------|----------|------------|-------------|
+# Team Roster & Permissions
+Single source of truth for workspace staff roster, permissions, and connected channel handles.
 `;
-  await uploadWorkspaceFile(env, scope, 'team/members.md', defaultMembers);
+  await uploadWorkspaceFile(env, scope, 'team/team.md', defaultTeamMd);
+  await uploadWorkspaceFile(env, scope, 'team/members.md', defaultTeamMd);
 
   // 6. team/canvas.md — 3-Zone Declarative Blueprint (genui.md §2, §5, §8)
   const isOrdersWs = modules.includes('orders') || modules.includes('transactions') || modules.includes('pos');

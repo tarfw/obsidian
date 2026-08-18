@@ -41,7 +41,6 @@ import CanvasOverlay from '@/components/CanvasOverlay';
 import CanvasCustomizerModal from '@/components/CanvasCustomizerModal';
 import CreateWorkspace from '@/components/CreateWorkspace';
 import ChannelConnectModal from '@/components/ChannelConnectModal';
-import JoinWorkspaceModal from '@/components/JoinWorkspaceModal';
 import { TarLogo } from '@/components/TarLogo';
 import { TarLogoLoader } from '@/components/TarLogoLoader';
 import { updateStock } from '@/lib/inventory';
@@ -198,6 +197,7 @@ export default function WorkspacesScreen() {
   const [inboxTasks, setInboxTasks] = useState<LinearInboxItem[]>([]);
   const [loadingInbox, setLoadingInbox] = useState(false);
   const [allEntities, setAllEntities] = useState<any[]>([]);
+  const [queryResults, setQueryResults] = useState<Record<string, any[]>>({});
 
   const [selectedAction, setSelectedAction] = useState<any | null>(null);
   const [formParams, setFormParams] = useState<Record<string, string>>({});
@@ -219,7 +219,6 @@ export default function WorkspacesScreen() {
   const [contactResultMessage, setContactResultMessage] = useState<string | null>(null);
   const [editContactEntity, setEditContactEntity] = useState<any | null>(null);
   const [showConnectChatModal, setShowConnectChatModal] = useState(false);
-  const [showJoinModal, setShowJoinModal] = useState(false);
 
   // Mention (@ / #) state
   const [showMentionPopover, setShowMentionPopover] = useState(false);
@@ -408,11 +407,15 @@ export default function WorkspacesScreen() {
     }
   }, [currentWorkspace?.scope]);
 
-  // Fetch workspaces list on mount
+  // Fetch workspaces list on mount with Google email matching (genuiteam.md §3)
   const fetchWorkspacesList = useCallback(async () => {
     setLoadingWorkspaces(true);
     try {
-      const data = await tar.listWorkspaces();
+      const user = await getCurrentUser().catch(() => null);
+      if (user?.email) {
+        import('@/lib/tar').then(({ setUserEmail }) => setUserEmail(user.email));
+      }
+      const data = await tar.listWorkspaces(user?.email);
       const rawList: Workspace[] = data.workspaces || [];
       const list: Workspace[] = [
         PERSONAL_WORKSPACE,
@@ -857,6 +860,38 @@ ${membersYaml}
     }
   }, [currentWorkspace?.scope]);
 
+  // Execute parametric SQL queries across registered native components via Turso API (genuiteam.md §1, §4)
+  useEffect(() => {
+    if (!currentWorkspace?.scope || !canvasBlocks || canvasBlocks.length === 0) return;
+    const scope = currentWorkspace.scope;
+    const currentRole = currentWorkspace.role || 'staff';
+
+    const runBlockQueries = async () => {
+      const resultsMap: Record<string, any[]> = {};
+      await Promise.all(
+        canvasBlocks.map(async (b, idx) => {
+          if (b.props && typeof b.props.query === 'string' && b.props.query.trim()) {
+            try {
+              let sql = b.props.query;
+              sql = sql.replace(/:current_role/g, `'${currentRole}'`);
+              sql = sql.replace(/:scope/g, `'${scope}'`);
+              sql = sql.replace(/:subdomain/g, `'${currentWorkspace.subdomain}'`);
+              
+              const rows = await tar.db.query(sql, [], scope);
+              const key = b.id || b.title || b.type || `blk_${idx}`;
+              resultsMap[key] = rows || [];
+            } catch (qErr) {
+              console.warn('[workspaces.tsx] Error executing block query:', b.props.query, qErr);
+            }
+          }
+        })
+      );
+      setQueryResults(resultsMap);
+    };
+
+    runBlockQueries();
+  }, [canvasBlocks, currentWorkspace?.scope, currentWorkspace?.role]);
+
   const handleSelectWorkspace = async (item: Workspace) => {
     setShowDropdown(false);
     if (item.subdomain === currentWorkspace?.subdomain) return;
@@ -1219,6 +1254,20 @@ ${membersYaml}
             scope: currentWorkspace.scope,
           });
           await refreshEntities(currentWorkspace.scope);
+
+          // Auto-sync staff roles to team.md (genuiteam.md §3)
+          if (currentWorkspace.scope && currentWorkspace.scope !== 'p') {
+            const staffRole = (cleanParams.role || '').toLowerCase();
+            if (staffRole && !['customer', 'client', 'vendor', 'lead', 'supplier'].includes(staffRole)) {
+              tar.team.sync(currentWorkspace.scope, {
+                name: titleVal,
+                email: cleanParams.email,
+                handle: cleanParams.handle || cleanParams.telegram,
+                role: staffRole,
+                status: 'active',
+              }).catch((e: any) => console.warn('[team.sync] auto-sync staff warning:', e));
+            }
+          }
         } catch (errCreate) {
           console.warn('[Workspace] Fallback matter creation:', errCreate);
         }
@@ -1577,9 +1626,102 @@ ${membersYaml}
         };
       });
 
-    // 4. Enrich blocks with live database values
-    const enrichBlock = (b: CanvasBlock): CanvasBlock => {
+    // 4. Enrich blocks with live database values and parametric SQL queries (genuiteam.md §1, §4)
+    const enrichBlock = (b: CanvasBlock, index: number): CanvasBlock => {
       const type = b.type;
+      const key = b.id || b.title || b.type || `blk_${index}`;
+      const queryRows = queryResults[key];
+
+      // If parametric query results exist, bind data directly
+      if (queryRows && Array.isArray(queryRows) && queryRows.length > 0) {
+        if (type === 'metric-card' || type === 'stat-counter') {
+          const firstRow = queryRows[0];
+          const rawVal = firstRow.value !== undefined ? firstRow.value : firstRow.total !== undefined ? firstRow.total : firstRow.amount !== undefined ? firstRow.amount : (firstRow.count ?? 0);
+          const formattedVal = b.props?.valueFormat === 'currency'
+            ? `$${Number(rawVal).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+            : String(rawVal);
+          return {
+            ...b,
+            props: {
+              ...b.props,
+              value: formattedVal,
+              unit: firstRow.count !== undefined ? `${firstRow.count} records` : b.props?.unit,
+              data: queryRows,
+            },
+          };
+        }
+        if (type === 'data-grid' || type === 'data-table') {
+          return {
+            ...b,
+            props: {
+              ...b.props,
+              data: queryRows,
+              columns: b.props?.columns || Object.keys(queryRows[0] || {}).slice(0, 5),
+            },
+          };
+        }
+        if (type === 'stock-sheet') {
+          const mappedItems = queryRows.map((r: any) => ({
+            id: r.id,
+            name: r.title || r.name || 'Item',
+            stock: Number(r.qty ?? r.stock ?? 0),
+            threshold: Number(r.min_qty ?? r.threshold ?? 5),
+            price: Number(r.price || 0),
+          }));
+          return {
+            ...b,
+            props: {
+              ...b.props,
+              items: mappedItems,
+            },
+          };
+        }
+        if (type === 'task-inbox') {
+          const mappedTasks = queryRows.map((r: any) => ({
+            id: r.id,
+            title: r.title || r.name || 'Task',
+            status: r.status || 'pending',
+            data: r.data,
+          }));
+          return {
+            ...b,
+            props: {
+              ...b.props,
+              tasks: mappedTasks,
+            },
+          };
+        }
+        if (type === 'contact-card') {
+          return {
+            ...b,
+            props: {
+              ...b.props,
+              contacts: queryRows,
+              contact: queryRows[0],
+            },
+          };
+        }
+        if (type === 'pipeline-card') {
+          return {
+            ...b,
+            props: {
+              ...b.props,
+              deals: queryRows,
+            },
+          };
+        }
+        if (type === 'action-confirm') {
+          return {
+            ...b,
+            props: {
+              ...b.props,
+              payload: queryRows[0],
+            },
+          };
+        }
+      }
+
+      // Default state enrichment fallbacks
       if (type === 'task-inbox') {
         return { ...b, props: { ...b.props, tasks: inboxTasks } };
       }
@@ -1631,7 +1773,17 @@ ${membersYaml}
       lifeModes: [],
     };
 
-    const enrichedBlocks = (rawDoc.blocks || []).map(enrichBlock);
+    // Role-Based Canvas Resolution & Filtering (genuiteam.md §7)
+    const userRole = (currentWorkspace?.role || 'staff').toLowerCase();
+    const isOwner = userRole === 'owner' || userRole === 'admin';
+
+    const roleFilteredBlocks = (rawDoc.blocks || []).filter((b: CanvasBlock) => {
+      if (isOwner) return true; // Owner superview
+      if (!b.roles || b.roles.length === 0) return true; // Public block
+      return b.roles.map(r => r.toLowerCase()).includes(userRole);
+    });
+
+    const enrichedBlocks = roleFilteredBlocks.map(enrichBlock);
 
     const isPersonal = currentWorkspace?.scope === 'p' || currentWorkspace?.subdomain === 'personal' || !currentWorkspace || (currentWorkspace?.name || '').toLowerCase().includes('personal');
 
@@ -1672,7 +1824,7 @@ ${membersYaml}
       lifeModes: canvasDoc?.lifeModes || [],
       chips: activeChips,
     };
-  }, [canvasDoc, currentWorkspace, orders, products, inboxTasks, allEntities, workspaceName, canvasBlocks]);
+  }, [canvasDoc, currentWorkspace, orders, products, inboxTasks, allEntities, workspaceName, canvasBlocks, queryResults]);
 
   if (loadingWorkspaces) {
     return (
@@ -1702,6 +1854,7 @@ ${membersYaml}
         onSelectWorkspace={handleSelectWorkspace}
         onCreateWorkspace={() => setIsCreatingWorkspace(true)}
         onOpenSwitcher={() => setShowDropdown(true)}
+        onOpenCanvasCustomizer={() => setShowCanvasCustomizer(true)}
       />
 
 
@@ -1816,18 +1969,7 @@ ${membersYaml}
                 style={styles.secondaryActionBtn}
               >
                 <Ionicons name="chatbubbles-outline" size={15} color="#0f172a" />
-                <Text style={styles.secondaryActionText}>Connect Chat</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={() => {
-                  setShowDropdown(false);
-                  setShowJoinModal(true);
-                }}
-                style={styles.secondaryActionBtn}
-              >
-                <Ionicons name="key-outline" size={15} color="#0f172a" />
-                <Text style={styles.secondaryActionText}>Join Code</Text>
+                <Text style={styles.secondaryActionText}>Link Group Channel</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1850,26 +1992,13 @@ ${membersYaml}
         }}
       />
 
-      {/* Secure Channel Connect Modal (Flow 2) */}
+      {/* Channel Link Modal for Telegram / Discord / Slack (Flow 2) */}
       <ChannelConnectModal
         visible={showConnectChatModal}
         onClose={() => setShowConnectChatModal(false)}
         subdomain={currentWorkspace?.subdomain || ''}
         workspaceName={workspaceName || currentWorkspace?.subdomain || 'Workspace'}
         userId={currentWorkspace?.scope || 'guest'}
-      />
-
-      {/* Private Member Join Modal (Flow 3) */}
-      <JoinWorkspaceModal
-        visible={showJoinModal}
-        onClose={() => setShowJoinModal(false)}
-        onSuccess={async (joined) => {
-          await fetchWorkspacesList();
-          const found = workspaces.find((w) => w.subdomain === joined.subdomain);
-          if (found) {
-            setCurrentWorkspace(found);
-          }
-        }}
       />
 
 
@@ -2226,6 +2355,7 @@ ${membersYaml}
         onClose={() => setShowCanvasCustomizer(false)}
         scope={currentWorkspace?.scope || ''}
         workspaceName={currentWorkspace?.name || currentWorkspace?.subdomain || 'Workspace'}
+        vertical={selectedVertical || currentWorkspace?.type || 'business'}
         activeBlocks={canvasBlocks}
         onUpdated={async () => {
           if (currentWorkspace?.scope) {

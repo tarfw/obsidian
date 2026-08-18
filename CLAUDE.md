@@ -18,10 +18,9 @@ Real product flow (context for the pieces):
 3. **tarsite** (Cloudflare Worker) — the **UIPlan runtime engine**: compiles
    `design.md` → UIPlan AST → HTML, served at `*.tarai.space`. This is the live
    storefront server.
-4. **site** (Astro) — the marketing/dashboard website.
+4. **brandingsite** (Astro) — the marketing/branding landing page website for TAR app.
 
-Supporting dirs: `docs/` (architecture & design specs, see below), `siteskills/`
-(skill/replica reference materials for AI site generation), `config/` (workspace
+Supporting dirs: `docs/` (architecture & design specs, see below), `config/` (workspace
 type→module presets), `scripts/` (Windows cleanup/util scripts, unrelated to the
 build).
 
@@ -32,8 +31,7 @@ build).
 | `tarapp/` | Mobile app | Expo SDK 56, RN 0.85, expo-router, React 19, TypeScript |
 | `taragent/` | Backend API worker | Hono + Cloudflare Workers, D1, R2/S3, Turso (libsql) |
 | `tarsite/` | Edge storefront runtime | Hono worker, Zod, design.md→HTML compiler |
-| `site/` | Marketing/dashboard site | Astro 6 |
-| `siteskills/` | AI skill & replica reference (design.md, HTML replicas) | — |
+| `brandingsite/` | Marketing/branding landing page | Astro 6 |
 | `config/presets.yaml` | business-type → module presets | YAML |
 | `docs/` | architecture & design specs | Markdown |
 | `scripts/` | Windows cleanup/util PowerShell/bat | — |
@@ -138,7 +136,7 @@ Source in `src/pages` (`index.astro`, `dashboard.astro`, `plan.astro`),
 - `docs/setup.md` — required secrets & local dev.
 - `docs/okf.md`, `docs/turso.md`, `docs/turso`-related, `docs/*.md` — feature specs.
 - `taragent/src/modules/dbrules.md` — DB rules; `taragent/src/lib/okf.ts` — OKF system.
-- `docs/DESIGN-*.md`, `tarsite/designs/*.md`, `siteskills/DESIGN-*.md` — design specs.
+- `docs/DESIGN-*.md`, `tarsite/designs/*.md` — design specs.
 
 ## Security note
 

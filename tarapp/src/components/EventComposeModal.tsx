@@ -650,15 +650,6 @@ export default function EventComposeModal({
         { label: 'Local Courier', value: 'Local Courier', subtitle: 'Same Day Delivery' },
         { label: 'Self Pickup', value: 'Self Pickup', subtitle: 'Customer Pickup' },
       ];
-    } else if (key === 'stage' || key.includes('stage') || (action?.actionName && action.actionName.includes('deal'))) {
-      presets = [
-        { label: 'New Inquiry', value: 'New Inquiry', subtitle: 'Fresh prospect / lead inquiry' },
-        { label: 'Qualified', value: 'Qualified', subtitle: 'Confirmed interest & budget' },
-        { label: 'Proposal', value: 'Proposal', subtitle: 'Proposal / Quote issued' },
-        { label: 'Negotiation', value: 'Negotiation', subtitle: 'Terms & pricing discussion' },
-        { label: 'Closed Won', value: 'Closed Won', subtitle: 'Deal signed / Won ✅' },
-        { label: 'Closed Lost', value: 'Closed Lost', subtitle: 'Deal lost ❌' },
-      ];
     } else if (key === 'status') {
       presets = [
         { label: 'Pending', value: 'Pending', subtitle: 'Awaiting action' },
@@ -723,11 +714,22 @@ export default function EventComposeModal({
         subtitle: p.description,
       }));
     } else if (key === 'stage' || key.includes('stage')) {
-      const activePip = OKF_PIPELINES.find((p) => p.name.toLowerCase() === (params.pipeline || '').toLowerCase()) || OKF_PIPELINES[0];
+      const targetContact = (allEntities || []).find((e) => e?.id === params.contact_id || e?.title === params.contact_id || e?.name === params.contact_id);
+      const targetRole = String(targetContact?.subRole || targetContact?.role || targetContact?.type || '').toLowerCase();
+      const defaultPip =
+        targetRole.includes('vendor') || targetRole.includes('supplier')
+          ? OKF_PIPELINES[1]
+          : targetRole.includes('staff') || targetRole.includes('member') || targetRole.includes('employee')
+          ? OKF_PIPELINES[2]
+          : targetRole.includes('partner')
+          ? OKF_PIPELINES[3]
+          : OKF_PIPELINES[0];
+
+      const activePip = OKF_PIPELINES.find((p) => p.name.toLowerCase() === (params.pipeline || defaultPip.name).toLowerCase()) || defaultPip;
       presets = activePip.stages.map((stg) => ({
         label: stg.label,
         value: stg.label,
-        subtitle: `Milestone stage`,
+        subtitle: `${activePip.name} milestone`,
       }));
     }
 

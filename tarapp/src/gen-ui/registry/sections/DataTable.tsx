@@ -13,15 +13,7 @@ export default function DataTable({ props, designTokens, data = [], onExecuteAct
 
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Sample default data if none provided
-  const defaultSampleData = [
-    { id: '1', name: 'Whole Milk 1L', category: 'Dairy', price: 2.50, stock: 18, status: 'in_stock' },
-    { id: '2', name: 'Almond Butter', category: 'Spreads', price: 6.80, stock: 8, status: 'in_stock' },
-    { id: '3', name: 'Organic Eggs (12)', category: 'Poultry', price: 4.20, stock: 24, status: 'in_stock' },
-    { id: '4', name: 'Sourdough Bread', category: 'Bakery', price: 3.50, stock: 5, status: 'low_stock' },
-  ];
-
-  const rawData = data && data.length > 0 ? data : (props?.data || defaultSampleData);
+  const rawData = data && data.length > 0 ? data : (props?.data || []);
 
   const filteredData = useMemo(() => {
     return rawData.filter((row: any) => {

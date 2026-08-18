@@ -337,7 +337,7 @@ Respond strictly in valid JSON format:
       <View style={[styles.container, { backgroundColor: theme.background, paddingTop: Math.max(insets.top, 12) }]}>
         <KeyboardAvoidingView
           style={{ flex: 1 }}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
           {/* Top Bar (Rendered for EDIT and CREATE modes) */}
           {currentMode !== 'view' && (

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { SectionProps } from '../ComponentRegistry';
@@ -19,12 +19,21 @@ export default function TaskInbox({ props, designTokens, data = [], onExecuteAct
   const colors = designTokens?.colors || {};
   const rounded = designTokens?.rounded || {};
 
-  const taskList: TaskItem[] = Array.isArray(data) && data.length > 0
-    ? data
-    : (Array.isArray(props?.tasks) ? props.tasks : []);
+  const tasksProp = props?.tasks;
+  const taskList = useMemo<TaskItem[]>(() => {
+    if (Array.isArray(data) && data.length > 0) return data;
+    if (Array.isArray(tasksProp) && tasksProp.length > 0) return tasksProp;
+    return [];
+  }, [data, tasksProp]);
 
-  const [tasks, setTasks] = useState<TaskItem[]>(taskList);
+  const [removedIds, setRemovedIds] = useState<string[]>([]);
   const [actingId, setActingId] = useState<string | null>(null);
+
+  const tasks = useMemo(() => {
+    if (removedIds.length === 0) return taskList;
+    const removedSet = new Set(removedIds);
+    return taskList.filter((t) => !removedSet.has(t.id));
+  }, [taskList, removedIds]);
 
   const handleAction = async (task: TaskItem, actionId: string) => {
     setActingId(`${task.id}-${actionId}`);
@@ -35,14 +44,26 @@ export default function TaskInbox({ props, designTokens, data = [], onExecuteAct
     } catch (e) {
       console.warn('[TaskInbox] Action error:', e);
     } finally {
-      // Optimistically remove completed/rejected task
-      setTasks((prev) => prev.filter((t) => t.id !== task.id));
+      setRemovedIds((prev) => [...prev, task.id]);
       setActingId(null);
     }
   };
 
   if (tasks.length === 0) {
-    return null;
+    return (
+      <View style={styles.cardContainer}>
+        <View style={styles.headerRow}>
+          <Text style={styles.sectionTitle}>{title}</Text>
+          <View style={styles.countBadge}>
+            <Text style={styles.countBadgeText}>0 pending</Text>
+          </View>
+        </View>
+        <View style={styles.emptyState}>
+          <Ionicons name="checkmark-done-circle-outline" size={24} color="#10b981" />
+          <Text style={styles.emptyStateText}>All tasks completed · Action queue clear</Text>
+        </View>
+      </View>
+    );
   }
 
   // Display top tasks (max 2 visible in Zone 2 live action stream)
@@ -143,6 +164,14 @@ const styles = StyleSheet.create({
     color: '#64748b',
     letterSpacing: 0.8,
     textTransform: 'uppercase',
+  },
+  cardContainer: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    marginVertical: 4,
   },
   countBadge: {
     backgroundColor: '#f1f5f9',
@@ -252,5 +281,17 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#64748b',
     marginTop: 1,
+  },
+  emptyState: {
+    paddingVertical: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  emptyStateText: {
+    fontSize: 13,
+    color: '#94a3b8',
+    fontWeight: '500',
+    textAlign: 'center',
   },
 });

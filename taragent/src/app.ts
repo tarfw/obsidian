@@ -68,7 +68,8 @@ app.get('/workspaces', async (c) => {
         `SELECT m.scope, m.role, w.subdomain, w.name, w.type 
          FROM members m
          JOIN workspaces w ON (m.scope = w.scope OR m.scope = 'w:' || w.subdomain)
-         WHERE (m.email IS NOT NULL AND m.email = ?) OR (m.user_id IS NOT NULL AND m.user_id = ?)`
+         WHERE (m.status IS NULL OR m.status != 'former')
+           AND ((m.email IS NOT NULL AND LOWER(m.email) = ?) OR (m.user_id IS NOT NULL AND m.user_id = ?))`
       ).bind(email || '__none__', userId).all();
 
       for (const r of (memberRes.results || [])) {
@@ -213,66 +214,160 @@ app.post('/ai/canvas-plan', async (c) => {
   const { prompt, workspaceName = 'Workspace' } = body;
   if (!prompt) return c.json({ error: 'Missing prompt' }, 400);
 
-  const cleanPrompt = prompt.toLowerCase();
+  const cleanPrompt = prompt.toLowerCase().trim();
   let blocks: any[] = [];
   let chips: any[] = [];
 
-  if (cleanPrompt.includes('clinic') || cleanPrompt.includes('doctor') || cleanPrompt.includes('patient') || cleanPrompt.includes('health') || cleanPrompt.includes('appointment')) {
-    chips = [
-      { label: 'New Booking', target: 'data-grid' },
-      { label: 'Patient Queue', target: 'task-inbox' },
-      { label: 'Client Directory', target: 'contact-card' }
-    ];
-    blocks = [
-      {
-        id: 'blk_patient_queue',
-        title: 'Patient Queue',
-        type: 'task-inbox',
-        roles: ['owner', 'doctor', 'receptionist'],
-        props: {
-          title: 'Patient Queue',
-          query: "SELECT id, title, status, data FROM matter WHERE type = 10 AND status = 'pending' ORDER BY at ASC"
-        }
+  const hasStock = cleanPrompt.includes('stock') || cleanPrompt.includes('supply') || cleanPrompt.includes('supplies') || cleanPrompt.includes('reorder') || cleanPrompt.includes('inventory');
+  const hasCatalog = cleanPrompt.includes('catalog') || cleanPrompt.includes('menu') || cleanPrompt.includes('product') || cleanPrompt.includes('item') || cleanPrompt.includes('grid') || cleanPrompt.includes('items list');
+  const hasSales = cleanPrompt.includes('sale') || cleanPrompt.includes('revenue') || cleanPrompt.includes('kpi') || cleanPrompt.includes('metric') || cleanPrompt.includes('total') || cleanPrompt.includes('income') || cleanPrompt.includes('earnings') || cleanPrompt.includes('stats');
+  const hasPos = cleanPrompt.includes('pos') || cleanPrompt.includes('register') || cleanPrompt.includes('floor') || cleanPrompt.includes('table') || cleanPrompt.includes('billing') || cleanPrompt.includes('checkout') || cleanPrompt.includes('cashier');
+  const hasTasks = cleanPrompt.includes('task') || cleanPrompt.includes('kitchen') || cleanPrompt.includes('order queue') || cleanPrompt.includes('inbox') || cleanPrompt.includes('action inbox') || cleanPrompt.includes('ticket') || cleanPrompt.includes('approval') || cleanPrompt.includes('order');
+  const hasContacts = cleanPrompt.includes('contact') || cleanPrompt.includes('supplier') || cleanPrompt.includes('vendor') || cleanPrompt.includes('client') || cleanPrompt.includes('customer') || cleanPrompt.includes('directory') || cleanPrompt.includes('people') || cleanPrompt.includes('phone') || cleanPrompt.includes('patient');
+  const hasPipeline = cleanPrompt.includes('deal') || cleanPrompt.includes('pipeline') || cleanPrompt.includes('catering') || cleanPrompt.includes('event') || cleanPrompt.includes('lead');
+  const hasConfirm = cleanPrompt.includes('confirm') || cleanPrompt.includes('review') || cleanPrompt.includes('dispatch') || cleanPrompt.includes('trip') || cleanPrompt.includes('delivery');
+
+  // Add requested blocks additively
+  if (hasStock) {
+    blocks.push({
+      id: 'blk_stock_sheet',
+      title: 'Low Stock Inventory',
+      type: 'stock-sheet',
+      roles: ['owner', 'manager', 'staff'],
+      props: {
+        title: 'Low Stock Stepper',
+        subtitle: 'Tap [-] or [+] to adjust live quantity',
+        query: "SELECT id, title, qty, min_qty, price FROM matter WHERE type = 1 AND qty <= min_qty ORDER BY qty ASC",
       },
-      {
-        id: 'blk_appointments',
-        title: 'Today Appointments',
-        type: 'data-grid',
-        roles: ['owner', 'doctor', 'receptionist'],
-        props: {
-          title: 'Appointments',
-          query: "SELECT id, title, ref, price, status FROM matter WHERE type = 14 ORDER BY updated DESC LIMIT 10",
-          columns: ['title', 'ref', 'price', 'status']
-        }
+    });
+    chips.push({ label: 'Check Stock', target: 'stock-sheet' });
+  }
+
+  if (hasSales) {
+    blocks.push({
+      id: 'blk_sales_kpi',
+      title: 'Shift Net Total',
+      type: 'metric-card',
+      roles: ['owner', 'manager'],
+      props: {
+        title: "Today's Shift Sales",
+        query: "SELECT COALESCE(SUM(amount), 0) AS value, COUNT(*) AS count FROM motion WHERE at >= unixepoch('start of day')",
+        valueFormat: 'currency',
       },
+    });
+    chips.push({ label: 'Shift Sales', target: 'metric-card' });
+  }
+
+  if (hasPos) {
+    blocks.push({
+      id: 'blk_table_pos',
+      title: 'Floor Register',
+      type: 'quick-pos',
+      roles: ['owner', 'manager', 'cashier', 'staff'],
+      props: {
+        title: 'Floor Table POS',
+        catalogType: 'product',
+      },
+    });
+    chips.push({ label: 'New Sale', target: 'quick-pos' });
+  }
+
+  if (hasTasks) {
+    blocks.push({
+      id: 'blk_action_inbox',
+      title: 'Action Inbox',
+      type: 'task-inbox',
+      roles: ['owner', 'manager', 'staff'],
+      props: {
+        title: cleanPrompt.includes('kitchen') ? 'Active Kitchen Orders' : 'Action Inbox',
+        query: "SELECT id, title, status, data FROM matter WHERE type = 10 AND status = 'pending' ORDER BY at ASC",
+      },
+    });
+    chips.push({ label: 'Task Inbox', target: 'task-inbox' });
+  }
+
+  if (hasCatalog && !hasStock) {
+    blocks.push({
+      id: 'blk_inventory_catalog',
+      title: 'Full Product Catalog',
+      type: 'data-grid',
+      roles: ['owner', 'manager', 'staff'],
+      props: {
+        title: 'Product Catalog',
+        query: "SELECT id, title, price, status FROM matter WHERE type = 1 ORDER BY title ASC LIMIT 20",
+        columns: ['title', 'price', 'status'],
+      },
+    });
+    chips.push({ label: 'Catalog', target: 'data-grid' });
+  } else if (hasCatalog && hasStock && (cleanPrompt.includes('catalog') || cleanPrompt.includes('menu') || cleanPrompt.includes('grid'))) {
+    blocks.push({
+      id: 'blk_inventory_catalog',
+      title: 'Full Product Catalog',
+      type: 'data-grid',
+      roles: ['owner', 'manager', 'staff'],
+      props: {
+        title: 'Product Catalog',
+        query: "SELECT id, title, price, status FROM matter WHERE type = 1 ORDER BY title ASC LIMIT 20",
+        columns: ['title', 'price', 'status'],
+      },
+    });
+    chips.push({ label: 'Catalog', target: 'data-grid' });
+  }
+
+  if (hasContacts) {
+    blocks.push({
+      id: 'blk_contacts',
+      title: 'Contacts Directory',
+      type: 'contact-card',
+      roles: ['owner', 'manager', 'staff'],
+      props: {
+        title: cleanPrompt.includes('supplier') || cleanPrompt.includes('vendor') ? 'Supplier Directory' : 'Contact Directory',
+        query: "SELECT id, title, data FROM matter WHERE type = 1 ORDER BY title ASC LIMIT 20",
+      },
+    });
+    chips.push({ label: 'Contacts', target: 'contact-card' });
+  }
+
+  if (hasPipeline) {
+    blocks.push({
+      id: 'blk_pipeline',
+      title: 'Deal Pipeline',
+      type: 'pipeline-card',
+      roles: ['owner', 'manager'],
+      props: {
+        title: 'Deals & Bookings Pipeline',
+        query: "SELECT id, title, data FROM matter WHERE type = 14 ORDER BY updated DESC LIMIT 10",
+      },
+    });
+    chips.push({ label: 'Pipeline', target: 'pipeline-card' });
+  }
+
+  if (hasConfirm) {
+    blocks.push({
+      id: 'blk_action_confirm',
+      title: 'Action Review & Confirm',
+      type: 'action-confirm',
+      roles: ['owner', 'manager', 'staff'],
+      props: {
+        title: 'Review & Confirm',
+      },
+    });
+    chips.push({ label: 'Review', target: 'action-confirm' });
+  }
+
+  // If no specific keyword was recognized, provide a standard balanced starter layout
+  if (blocks.length === 0) {
+    blocks.push(
       {
-        id: 'blk_contacts',
-        title: 'Patient Directory',
-        type: 'contact-card',
-        roles: ['owner', 'doctor', 'receptionist'],
-        props: {
-          title: 'Patient Directory',
-          query: "SELECT id, title, data FROM matter WHERE type = 1 ORDER BY title ASC LIMIT 20"
-        }
-      }
-    ];
-  } else if (cleanPrompt.includes('restaurant') || cleanPrompt.includes('cafe') || cleanPrompt.includes('table') || cleanPrompt.includes('food') || cleanPrompt.includes('kitchen')) {
-    chips = [
-      { label: 'New Sale', target: 'quick-pos' },
-      { label: 'Check Stock', target: 'stock-sheet' },
-      { label: 'Kitchen Queue', target: 'task-inbox' }
-    ];
-    blocks = [
-      {
-        id: 'blk_revenue_pulse',
-        title: 'Total Shift Revenue',
+        id: 'blk_sales_kpi',
+        title: 'Shift Net Total',
         type: 'metric-card',
         roles: ['owner', 'manager'],
         props: {
-          title: "Today's Net Total",
+          title: "Today's Shift Sales",
           query: "SELECT COALESCE(SUM(amount), 0) AS value, COUNT(*) AS count FROM motion WHERE at >= unixepoch('start of day')",
-          valueFormat: 'currency'
-        }
+          valueFormat: 'currency',
+        },
       },
       {
         id: 'blk_table_pos',
@@ -281,73 +376,8 @@ app.post('/ai/canvas-plan', async (c) => {
         roles: ['owner', 'manager', 'cashier', 'staff'],
         props: {
           title: 'Floor Table POS',
-          catalogType: 'product'
-        }
-      },
-      {
-        id: 'blk_kitchen_inbox',
-        title: 'Live Order Queue',
-        type: 'task-inbox',
-        roles: ['owner', 'manager', 'staff'],
-        props: {
-          title: 'Active Orders',
-          query: "SELECT id, title, status, data FROM matter WHERE type = 10 AND status = 'pending' ORDER BY at ASC"
-        }
-      }
-    ];
-  } else if (cleanPrompt.includes('delivery') || cleanPrompt.includes('fleet') || cleanPrompt.includes('logistics') || cleanPrompt.includes('driver')) {
-    chips = [
-      { label: 'Delivery Queue', target: 'task-inbox' },
-      { label: 'Trip Review', target: 'action-confirm' },
-      { label: 'Client Contact', target: 'contact-card' }
-    ];
-    blocks = [
-      {
-        id: 'blk_delivery_queue',
-        title: 'Delivery Queue',
-        type: 'task-inbox',
-        roles: ['owner', 'fleet_manager', 'driver'],
-        props: {
-          title: 'Delivery Stops',
-          query: "SELECT id, title, status, data FROM matter WHERE type = 10 AND status = 'pending' ORDER BY at ASC"
-        }
-      },
-      {
-        id: 'blk_trip_review',
-        title: 'Trip Review & Confirm',
-        type: 'action-confirm',
-        roles: ['owner', 'fleet_manager', 'driver'],
-        props: {
-          title: 'Trip Dispatch Review'
-        }
-      },
-      {
-        id: 'blk_client_dir',
-        title: 'Consignee Directory',
-        type: 'contact-card',
-        roles: ['owner', 'fleet_manager', 'driver'],
-        props: {
-          title: 'Customer Directory'
-        }
-      }
-    ];
-  } else {
-    chips = [
-      { label: 'New Sale', target: 'quick-pos' },
-      { label: 'Check Stock', target: 'stock-sheet' },
-      { label: 'Contacts', target: 'contact-card' }
-    ];
-    blocks = [
-      {
-        id: 'blk_sales_kpi',
-        title: 'Total Shift Revenue',
-        type: 'metric-card',
-        roles: ['owner', 'manager'],
-        props: {
-          title: "Today's Net Total",
-          query: "SELECT COALESCE(SUM(amount), 0) AS value, COUNT(*) AS count FROM motion WHERE at >= unixepoch('start of day')",
-          valueFormat: 'currency'
-        }
+          catalogType: 'product',
+        },
       },
       {
         id: 'blk_stock_sheet',
@@ -356,20 +386,16 @@ app.post('/ai/canvas-plan', async (c) => {
         roles: ['owner', 'manager', 'staff'],
         props: {
           title: 'Critical Stock Stepper',
-          query: "SELECT id, title, qty, min_qty, price FROM matter WHERE type = 1 AND qty <= min_qty ORDER BY qty ASC"
-        }
-      },
-      {
-        id: 'blk_action_inbox',
-        title: 'Station Tasks',
-        type: 'task-inbox',
-        roles: ['owner', 'manager', 'staff'],
-        props: {
-          title: 'Action Inbox',
-          query: "SELECT id, title, status, data FROM matter WHERE type = 10 AND status = 'pending' ORDER BY at ASC"
-        }
+          subtitle: 'Tap [-] or [+] to adjust live quantity',
+          query: "SELECT id, title, qty, min_qty, price FROM matter WHERE type = 1 AND qty <= min_qty ORDER BY qty ASC",
+        },
       }
-    ];
+    );
+    chips.push(
+      { label: 'New Sale', target: 'quick-pos' },
+      { label: 'Check Stock', target: 'stock-sheet' },
+      { label: 'Kitchen Queue', target: 'task-inbox' }
+    );
   }
 
   const chipsYaml = chips.map(c => `  - label: "${c.label}"\n    target: "${c.target}"`).join('\n');

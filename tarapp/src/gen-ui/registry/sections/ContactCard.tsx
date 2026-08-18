@@ -32,9 +32,19 @@ export default function ContactCard({ props, data = [], onExecuteAction }: Secti
     return [];
   }, [props?.contacts, props?.contact, data]);
 
-  // Clean empty state: strictly return null if no contacts
   if (allContacts.length === 0) {
-    return null;
+    return (
+      <View style={styles.cardContainer}>
+        <View style={styles.headerRow}>
+          <Text style={styles.sectionTitle}>{props?.title || 'Contact Directory'}</Text>
+          <Text style={styles.countText}>0 contacts</Text>
+        </View>
+        <View style={styles.emptyState}>
+          <Ionicons name="people-outline" size={24} color="#94a3b8" />
+          <Text style={styles.emptyStateText}>No contacts found in workspace database.</Text>
+        </View>
+      </View>
+    );
   }
 
   const isListMode = props?.mode === 'list' || allContacts.length > 1;
@@ -236,6 +246,14 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     paddingVertical: 8,
   },
+  cardContainer: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    marginVertical: 4,
+  },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'baseline',
@@ -333,5 +351,17 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8fafc',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  emptyState: {
+    paddingVertical: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  emptyStateText: {
+    fontSize: 13,
+    color: '#94a3b8',
+    fontWeight: '500',
+    textAlign: 'center',
   },
 });

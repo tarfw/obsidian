@@ -505,9 +505,29 @@ export async function generateOkfContent(
     await uploadWorkspaceFile(env, scope, 'faqs/common.md', faqMd);
   }
 
-  // team/members.md
-  const membersMd = `# Team Members\n\n| Name | Role | User ID |\n|------|------|---------|\n| ${wsName} Owner | owner | ${userId} |\n`;
-  await uploadWorkspaceFile(env, scope, 'team/members.md', membersMd);
+  // team/team.md & team/members.md (genuiteam.md §1, §3)
+  const teamMd = `---
+type: TeamRoster
+title: "${wsName} Team Roster"
+timestamp: "${new Date().toISOString()}"
+roles:
+  owner: ["*"]
+  manager: ["pos", "inventory", "crm", "view_reports", "manage_team", "customize_canvas"]
+  staff: ["pos", "inventory", "task_inbox"]
+members:
+  - user_id: "${userId}"
+    name: "${wsName} Owner"
+    email: ""
+    handle: ""
+    role: "owner"
+    status: "active"
+    permissions: ["*"]
+---
+
+# Team Roster
+`;
+  await uploadWorkspaceFile(env, scope, 'team/team.md', teamMd);
+  await uploadWorkspaceFile(env, scope, 'team/members.md', teamMd);
 
   // site/brand.md
   const primaryColor = business.brand_color || '#1B4332';

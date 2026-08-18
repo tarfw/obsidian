@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { SectionProps } from '../ComponentRegistry';
@@ -17,27 +17,48 @@ export default function PipelineCard({ props, designTokens, data = [], onExecute
   const title = props?.title || 'Deal Pipeline';
   const rounded = designTokens?.rounded || {};
 
-  const defaultStages = ['Lead', 'Contacted', 'Proposal', 'Won'];
+  const defaultStages = useMemo(() => ['Lead', 'Contacted', 'Proposal', 'Won'], []);
 
-  const sourceDeals = Array.isArray(data) && data.length > 0
-    ? data
-    : (Array.isArray(props?.deals) ? props.deals : []);
+  const dealsProp = props?.deals;
+  const baseDeals: PipelineDeal[] = useMemo(() => {
+    const sourceDeals = Array.isArray(data) && data.length > 0
+      ? data
+      : (Array.isArray(dealsProp) ? dealsProp : []);
 
-  const deals: PipelineDeal[] = sourceDeals.map((d: any) => ({
-    id: d.id || 'deal-1',
-    title: d.title || d.name || 'Sales Deal',
-    contactName: d.contactName || d.contact || 'Client Contact',
-    company: d.company || '',
-    value: typeof d.value === 'number' ? d.value : (Number(d.amount) || 1000),
-    stageIndex: typeof d.stageIndex === 'number' ? d.stageIndex : (d.stage === 'Won' ? 3 : d.stage === 'Proposal' ? 2 : d.stage === 'Contacted' ? 1 : 0),
-    stages: Array.isArray(d.stages) ? d.stages : defaultStages,
-  }));
+    return sourceDeals.map((d: any) => ({
+      id: d.id || 'deal-1',
+      title: d.title || d.name || 'Sales Deal',
+      contactName: d.contactName || d.contact || 'Client Contact',
+      company: d.company || '',
+      value: typeof d.value === 'number' ? d.value : (Number(d.amount) || 1000),
+      stageIndex: typeof d.stageIndex === 'number' ? d.stageIndex : (d.stage === 'Won' ? 3 : d.stage === 'Proposal' ? 2 : d.stage === 'Contacted' ? 1 : 0),
+      stages: Array.isArray(d.stages) ? d.stages : defaultStages,
+    }));
+  }, [data, dealsProp, defaultStages]);
 
-  const [activeDeals, setActiveDeals] = useState<PipelineDeal[]>(deals);
+  const [stageOverrides, setStageOverrides] = useState<Record<string, number>>({});
   const [advancingId, setAdvancingId] = useState<string | null>(null);
 
+  const activeDeals = useMemo(() => {
+    return baseDeals.map((d) => {
+      const override = stageOverrides[d.id];
+      return override !== undefined ? { ...d, stageIndex: override } : d;
+    });
+  }, [baseDeals, stageOverrides]);
+
   if (activeDeals.length === 0) {
-    return null;
+    return (
+      <View style={styles.cardContainer}>
+        <View style={styles.header}>
+          <Text style={styles.title}>{title}</Text>
+          <Text style={styles.dealCount}>0 deals</Text>
+        </View>
+        <View style={styles.emptyState}>
+          <Ionicons name="git-network-outline" size={24} color="#94a3b8" />
+          <Text style={styles.emptyStateText}>No active pipeline deals found.</Text>
+        </View>
+      </View>
+    );
   }
 
   const handleAdvanceStage = async (deal: PipelineDeal) => {
@@ -46,9 +67,7 @@ export default function PipelineCard({ props, designTokens, data = [], onExecute
     const nextStage = deal.stages[nextIndex];
 
     setAdvancingId(deal.id);
-    setActiveDeals((prev) =>
-      prev.map((d) => (d.id === deal.id ? { ...d, stageIndex: nextIndex } : d))
-    );
+    setStageOverrides((prev) => ({ ...prev, [deal.id]: nextIndex }));
 
     try {
       if (onExecuteAction) {
@@ -165,6 +184,14 @@ export default function PipelineCard({ props, designTokens, data = [], onExecute
 const styles = StyleSheet.create({
   container: {
     paddingVertical: 4,
+  },
+  cardContainer: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    marginVertical: 4,
   },
   header: {
     flexDirection: 'row',
@@ -293,5 +320,17 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     color: '#059669',
+  },
+  emptyState: {
+    paddingVertical: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  emptyStateText: {
+    fontSize: 13,
+    color: '#94a3b8',
+    fontWeight: '500',
+    textAlign: 'center',
   },
 });

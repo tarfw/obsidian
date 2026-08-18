@@ -797,7 +797,7 @@ export default function EventComposeModal({
       <View style={[styles.container, { backgroundColor: theme.background, paddingTop: Math.max(insets.top, 12) }]}>
         <KeyboardAvoidingView
           style={{ flex: 1 }}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
           {/* Ultra-Minimalist Top Bar */}
           <View style={[styles.headerBar, { borderBottomColor: theme.border + '30', paddingHorizontal: 16, height: 48 }]}>

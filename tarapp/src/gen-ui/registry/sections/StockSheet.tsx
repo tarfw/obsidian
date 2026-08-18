@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { SectionProps } from '../ComponentRegistry';
@@ -18,37 +18,55 @@ export default function StockSheet({ props, designTokens, data = [], onExecuteAc
   const subtitle = props?.subtitle || 'Tap - / + to adjust quantity';
   const rounded = designTokens?.rounded || {};
 
-  const sourceItems = Array.isArray(data) && data.length > 0
-    ? data
-    : (Array.isArray(props?.items) ? props.items : []);
+  const itemsProp = props?.items;
+  const initialItems: StockItem[] = useMemo(() => {
+    const sourceItems = Array.isArray(data) && data.length > 0
+      ? data
+      : (Array.isArray(itemsProp) ? itemsProp : []);
 
-  const initialItems: StockItem[] = sourceItems.map((it: any) => ({
-    id: it.id || it.name || 'item',
-    name: it.title || it.name || 'Item',
-    unit: it.unit || 'units',
-    stock: typeof it.stock === 'number' ? it.stock : (typeof it.value === 'number' ? it.value : 0),
-    threshold: it.threshold || 5,
-    reorderPrice: it.reorderPrice || (it.price ? it.price * 5 : 25),
-    category: it.category || 'Stock',
-  }));
+    return sourceItems.map((it: any) => ({
+      id: it.id || it.name || 'item',
+      name: it.title || it.name || 'Item',
+      unit: it.unit || 'units',
+      stock: typeof it.stock === 'number' ? it.stock : (typeof it.value === 'number' ? it.value : 0),
+      threshold: it.threshold || 5,
+      reorderPrice: it.reorderPrice || (it.price ? it.price * 5 : 25),
+      category: it.category || 'Stock',
+    }));
+  }, [data, itemsProp]);
 
-  const [items, setItems] = useState<StockItem[]>(initialItems);
+  const [qtyDeltas, setQtyDeltas] = useState<Record<string, number>>({});
   const [busyItem, setBusyItem] = useState<string | null>(null);
 
+  const items = useMemo(() => {
+    return initialItems.map((item) => {
+      const delta = qtyDeltas[item.id] || 0;
+      return { ...item, stock: Math.max(0, item.stock + delta) };
+    });
+  }, [initialItems, qtyDeltas]);
+
   if (items.length === 0) {
-    return null;
+    return (
+      <View style={styles.cardContainer}>
+        <View style={styles.header}>
+          <View>
+            <Text style={styles.title}>{title}</Text>
+            <Text style={styles.subtitle}>{subtitle}</Text>
+          </View>
+        </View>
+        <View style={styles.emptyState}>
+          <Ionicons name="cube-outline" size={24} color="#94a3b8" />
+          <Text style={styles.emptyStateText}>No low stock items found in database.</Text>
+        </View>
+      </View>
+    );
   }
 
   const updateQuantity = async (itemId: string, delta: number) => {
-    setItems((prev) =>
-      prev.map((item) => {
-        if (item.id === itemId) {
-          const newQty = Math.max(0, item.stock + delta);
-          return { ...item, stock: newQty };
-        }
-        return item;
-      })
-    );
+    setQtyDeltas((prev) => ({
+      ...prev,
+      [itemId]: (prev[itemId] || 0) + delta,
+    }));
 
     try {
       if (onExecuteAction) {
@@ -172,6 +190,14 @@ const styles = StyleSheet.create({
   container: {
     paddingVertical: 4,
   },
+  cardContainer: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    marginVertical: 4,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -286,5 +312,17 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: '#ffffff',
+  },
+  emptyState: {
+    paddingVertical: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  emptyStateText: {
+    fontSize: 13,
+    color: '#94a3b8',
+    fontWeight: '500',
+    textAlign: 'center',
   },
 });

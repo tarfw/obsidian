@@ -11,8 +11,8 @@ import {
   PanResponder,
   Dimensions,
   Platform,
-  KeyboardAvoidingView,
 } from 'react-native';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { getComponent, hasComponent, type SectionProps } from './registry/ComponentRegistry';
@@ -48,117 +48,7 @@ export interface GenUIScreenProps {
   onOpenSwitcher?: () => void;
 }
 
-// Real operational life modes for workspaces when canvas.md has no custom modes
-const DEFAULT_LIFE_MODES: CanvasLifeMode[] = [
-  {
-    id: 'overview',
-    label: 'Overview',
-    chips: [
-      { label: 'New Sale', target: 'quick-pos' },
-      { label: 'Check Stock', target: 'stock-sheet' },
-      { label: 'Contacts', target: 'contact-card' },
-    ],
-    blocks: [
-      {
-        title: 'Action Inbox',
-        type: 'task-inbox',
-        props: {
-          title: 'Action Inbox',
-        },
-      },
-      {
-        title: "Today's Revenue",
-        type: 'stat-counter',
-        props: {
-          title: "Today's Revenue",
-          subtitle: 'Live Operations',
-        },
-      },
-      {
-        title: 'POS Terminal',
-        type: 'quick-pos',
-        props: {
-          title: 'Quick Billing',
-          subtitle: 'Floor Tables & Register',
-        },
-      },
-    ],
-  },
-  {
-    id: 'sales_pos',
-    label: 'Sales & POS',
-    chips: [
-      { label: 'Start Order', target: 'quick-pos' },
-      { label: 'Recent Receipts', target: 'data-grid' },
-    ],
-    blocks: [
-      {
-        title: 'POS Floor Terminal',
-        type: 'quick-pos',
-        props: {
-          title: 'POS Register',
-          subtitle: 'Tap table or order to bill',
-        },
-      },
-      {
-        title: "Today's Orders",
-        type: 'data-grid',
-        props: {
-          title: 'Recent Transactions',
-          type: 'order',
-        },
-      },
-    ],
-  },
-  {
-    id: 'inventory',
-    label: 'Inventory',
-    chips: [
-      { label: 'Stock Sheet', target: 'stock-sheet' },
-      { label: 'Product Catalog', target: 'data-grid' },
-    ],
-    blocks: [
-      {
-        title: 'Stock Counter',
-        type: 'stock-sheet',
-        props: {
-          title: 'Inventory Stock Sheet',
-          subtitle: 'Tap - / + to adjust quantity',
-        },
-      },
-      {
-        title: 'All Products',
-        type: 'data-grid',
-        props: {
-          title: 'Catalog Items',
-          type: 'product',
-        },
-      },
-    ],
-  },
-  {
-    id: 'directory',
-    label: 'Directory',
-    chips: [
-      { label: 'Add Contact', target: 'contact-card' },
-      { label: 'View Pipeline', target: 'pipeline-card' },
-    ],
-    blocks: [
-      {
-        title: 'Customer Directory',
-        type: 'contact-card',
-        props: {},
-      },
-      {
-        title: 'Deal Pipeline',
-        type: 'pipeline-card',
-        props: {
-          title: 'Active Deal Pipeline',
-        },
-      },
-    ],
-  },
-];
+const DEFAULT_LIFE_MODES: CanvasLifeMode[] = [];
 
 /**
  * Determine active life mode based on current device hour and routine schedules
@@ -250,28 +140,6 @@ export default function GenUIScreen({
     props?: Record<string, any>;
     title?: string;
   } | null>(null);
-
-  // Pan Responder for downward swipe to close Slide-Up Card (non-blocking)
-  const panY = useRef(new Animated.Value(0)).current;
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder: (_, gestureState) => gestureState.dy > 8 && Math.abs(gestureState.dy) > Math.abs(gestureState.dx),
-      onPanResponderMove: (_, gestureState) => {
-        if (gestureState.dy > 0) {
-          panY.setValue(gestureState.dy);
-        }
-      },
-      onPanResponderRelease: (_, gestureState) => {
-        if (gestureState.dy > 120 || gestureState.vy > 0.6) {
-          closeSlideCard();
-        } else {
-          Animated.spring(panY, { toValue: 0, useNativeDriver: true }).start();
-        }
-      },
-    })
-  ).current;
-
   const openSlideCard = (type: string, props: Record<string, any> = {}, title?: string) => {
     // Inherit enriched props (such as full contacts list, products, orders) from active blocks
     const matchingBlock = (currentMode?.blocks || []).find((b) => b.type === type);
@@ -281,20 +149,14 @@ export default function GenUIScreen({
       mode: 'list',
     };
     setSlideCardComponent({ type, props: mergedProps, title });
-    panY.setValue(0);
     setSlideCardVisible(true);
   };
 
   const closeSlideCard = () => {
-    Animated.timing(panY, {
-      toValue: SCREEN_HEIGHT,
-      duration: 200,
-      useNativeDriver: true,
-    }).start(() => {
-      setSlideCardVisible(false);
+    setSlideCardVisible(false);
+    setTimeout(() => {
       setSlideCardComponent(null);
-      panY.setValue(0);
-    });
+    }, 250);
   };
 
   // Live matching chips while typing
@@ -441,7 +303,11 @@ export default function GenUIScreen({
   const hasMultipleTabs = (hasWorkspacesList && (workspaces?.length || 0) > 1) || (!hasWorkspacesList && lifeModes.length > 1);
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
+      style={[styles.container, { paddingTop: insets.top }]}
+    >
       {/* ── ZONE 1: PURE MINIMAL DROPDOWN HEADER ──────────────────────── */}
       <TouchableOpacity
         activeOpacity={0.75}
@@ -464,6 +330,8 @@ export default function GenUIScreen({
       <ScrollView
         style={styles.zone2}
         contentContainerStyle={styles.streamContent}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         showsVerticalScrollIndicator={false}
       >
         {streamBlocks.map((block: CanvasBlock, index: number) => {
@@ -491,22 +359,21 @@ export default function GenUIScreen({
       </ScrollView>
 
       {/* ── ZONE 3: BOTTOM ACTION DOCK ────────────────────────────────── */}
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? insets.bottom : 0}
+      <View
         style={[
           styles.zone3,
           {
-            paddingBottom: Math.max(insets.bottom, Platform.OS === 'android' ? 24 : 16) + (Platform.OS === 'android' ? 6 : 4),
+            paddingBottom: Math.max(insets.bottom, Platform.OS === 'android' ? 14 : 10) + 4,
           },
         ]}
       >
-        {/* State 1 & 2: Quick Action Chips */}
+        {/* Suggestion Chips matching the clean ChatGPT-style icons and typography */}
         <View style={styles.chipsContainer}>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.chipsScroll}
+            keyboardShouldPersistTaps="handled"
           >
             {isTyping && liveMatches.length > 0
               ? liveMatches.map((match: any, idx: number) => (
@@ -518,10 +385,10 @@ export default function GenUIScreen({
                       setIsTyping(false);
                       openSlideCard(match.target || match.type, match.props || {}, match.label);
                     }}
-                    style={[styles.chip, styles.chipMatch]}
+                    style={styles.chip}
                   >
-                    <Ionicons name="flash" size={13} color="#2563eb" />
-                    <Text style={styles.chipMatchText}>{match.label}</Text>
+                    <Ionicons name="flash-outline" size={15} color="#18181b" />
+                    <Text style={styles.chipText}>{match.label}</Text>
                   </TouchableOpacity>
                 ))
               : idleChips.map((chip: any, idx: number) => (
@@ -531,20 +398,34 @@ export default function GenUIScreen({
                     onPress={() => handleChipPress(chip)}
                     style={styles.chip}
                   >
-                    <Ionicons name={getChipIcon(chip.label)} size={13.5} color="#475569" />
+                    <Ionicons name={getChipIcon(chip.label)} size={15} color="#18181b" />
                     <Text style={styles.chipText}>{chip.label}</Text>
                   </TouchableOpacity>
                 ))}
           </ScrollView>
         </View>
 
-        {/* Input Bar with Mic / Send Button */}
+        {/* Modern Minimal Input Dock matching ChatGPT design */}
         <View style={styles.dockBar}>
-          <Ionicons name="search-outline" size={18} color="#94a3b8" style={styles.searchIcon} />
+          {/* Plus Add Button */}
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={() => {
+              if (idleChips.length > 0) {
+                handleChipPress(idleChips[0]);
+              }
+            }}
+            style={styles.plusBtn}
+            hitSlop={6}
+          >
+            <Ionicons name="add" size={24} color="#18181b" />
+          </TouchableOpacity>
+
+          {/* Text Input Field */}
           <TextInput
             style={styles.dockInput}
-            placeholder="Search or speak intent..."
-            placeholderTextColor="#94a3b8"
+            placeholder="Ask anything..."
+            placeholderTextColor="#71717a"
             value={inputText}
             onChangeText={(txt) => {
               setInputText(txt);
@@ -554,31 +435,32 @@ export default function GenUIScreen({
             returnKeyType="go"
           />
 
+          {/* Right Action Button */}
           {inputText.trim().length > 0 ? (
             <TouchableOpacity
               activeOpacity={0.8}
               onPress={handleInputSubmit}
-              style={[styles.actionBtn, styles.sendBtn]}
+              style={styles.sendBtnCircle}
             >
-              <Ionicons name="arrow-up" size={16} color="#ffffff" />
+              <Ionicons name="arrow-up" size={17} color="#ffffff" />
             </TouchableOpacity>
           ) : (
             <TouchableOpacity
-              activeOpacity={0.8}
+              activeOpacity={0.85}
               onPress={handleVoicePress}
-              style={[styles.actionBtn, styles.micBtn]}
+              style={styles.voiceOrbBtn}
             >
-              <Ionicons name="mic" size={16} color="#ffffff" />
+              <Ionicons name="mic" size={18} color="#ffffff" />
             </TouchableOpacity>
           )}
         </View>
-      </KeyboardAvoidingView>
+      </View>
 
       {/* ── EPHEMERAL SLIDE-UP CARD MODAL ─────────────────────────────── */}
       <Modal
         visible={slideCardVisible}
         transparent
-        animationType="none"
+        animationType="slide"
         onRequestClose={closeSlideCard}
       >
         <View style={styles.modalBackdrop}>
@@ -588,21 +470,14 @@ export default function GenUIScreen({
             onPress={closeSlideCard}
           />
 
-          <Animated.View
+          <View
             style={[
               styles.slideCard,
               {
-                transform: [{ translateY: panY }],
                 paddingBottom: insets.bottom + 16,
               },
             ]}
           >
-            {/* Swipe Down Drag Handle */}
-            <View {...panResponder.panHandlers} style={styles.dragHandleZone}>
-              <View style={styles.dragBar} />
-              <Text style={styles.dragHint}>Swipe down to close</Text>
-            </View>
-
             {/* Slide-Up Component Content */}
             <ScrollView
               style={styles.slideCardContent}
@@ -637,10 +512,10 @@ export default function GenUIScreen({
                 </View>
               )}
             </ScrollView>
-          </Animated.View>
+          </View>
         </View>
       </Modal>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -715,64 +590,82 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
   },
   chip: {
-    backgroundColor: '#f8fafc',
+    backgroundColor: '#ffffff',
     paddingHorizontal: 13,
     paddingVertical: 7.5,
-    borderRadius: 20,
+    borderRadius: 999,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: '#e4e4e7',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
-  chipMatch: {
-    backgroundColor: '#eff6ff',
-    borderColor: '#bfdbfe',
-  },
   chipText: {
-    fontSize: 12.5,
-    fontWeight: '600',
-    color: '#334155',
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#18181b',
     letterSpacing: -0.1,
-  },
-  chipMatchText: {
-    fontSize: 12.5,
-    fontWeight: '700',
-    color: '#2563eb',
   },
   dockBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f8fafc',
-    borderRadius: 24,
-    paddingLeft: 14,
+    backgroundColor: '#f4f4f5',
+    borderRadius: 999,
+    paddingLeft: 10,
     paddingRight: 6,
-    paddingVertical: 4,
+    paddingVertical: 5,
+    minHeight: 52,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: '#e4e4e7',
   },
-  searchIcon: {
-    marginRight: 6,
+  plusBtn: {
+    width: 34,
+    height: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 2,
   },
   dockInput: {
     flex: 1,
-    fontSize: 13.5,
-    color: '#0f172a',
+    fontSize: 15,
+    color: '#18181b',
     paddingVertical: 6,
+    paddingHorizontal: 6,
   },
-  actionBtn: {
+  dockRightIcons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  micIconBtn: {
     width: 34,
     height: 34,
-    borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: 6,
   },
-  micBtn: {
-    backgroundColor: '#0f172a',
-  },
-  sendBtn: {
+  voiceOrbBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: '#2563eb',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2.2,
+    marginLeft: 2,
+  },
+  waveBar: {
+    width: 2.5,
+    borderRadius: 2,
+    backgroundColor: '#ffffff',
+  },
+  sendBtnCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#0f172a',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   // Ephemeral Slide-Up Card
   modalBackdrop: {
@@ -789,29 +682,11 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 20,
     borderTopWidth: 1,
     borderTopColor: '#f1f5f9',
-    maxHeight: SCREEN_HEIGHT * 0.85,
+    maxHeight: SCREEN_HEIGHT * 0.92,
     minHeight: 320,
   },
-  dragHandleZone: {
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f1f5f9',
-  },
-  dragBar: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: '#e2e8f0',
-    marginBottom: 4,
-  },
-  dragHint: {
-    fontSize: 11,
-    color: '#94a3b8',
-    fontWeight: '600',
-  },
   slideCardContent: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     paddingTop: 12,
     backgroundColor: '#ffffff',
   },

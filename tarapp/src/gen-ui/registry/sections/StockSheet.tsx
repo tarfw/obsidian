@@ -14,19 +14,16 @@ export interface StockItem {
 }
 
 export default function StockSheet({ props, designTokens, data = [], onExecuteAction }: SectionProps) {
-  const title = props?.title || 'Milk & Dairy Stock';
-  const subtitle = props?.subtitle || 'Tap - / + to adjust or order restock';
+  const title = props?.title || 'Stock Inventory';
+  const subtitle = props?.subtitle || 'Tap - / + to adjust quantity';
   const rounded = designTokens?.rounded || {};
 
-  const defaultItems: StockItem[] = [
-    { id: 'item-1', name: 'Whole Milk (1L)', unit: 'units', stock: 4, threshold: 6, reorderPrice: 16.00, category: 'Dairy' },
-    { id: 'item-2', name: 'Salted Butter (500g)', unit: 'packs', stock: 12, threshold: 5, reorderPrice: 24.00, category: 'Dairy' },
-    { id: 'item-3', name: 'Cheddar Cheese Block', unit: 'kg', stock: 2, threshold: 3, reorderPrice: 32.00, category: 'Dairy' },
-    { id: 'item-4', name: 'Heavy Cream (500ml)', unit: 'bottles', stock: 8, threshold: 4, reorderPrice: 18.00, category: 'Dairy' },
-  ];
+  const sourceItems = Array.isArray(data) && data.length > 0
+    ? data
+    : (Array.isArray(props?.items) ? props.items : []);
 
-  const initialItems: StockItem[] = (data.length > 0 ? data : (props?.items || defaultItems)).map((it: any) => ({
-    id: it.id || it.name,
+  const initialItems: StockItem[] = sourceItems.map((it: any) => ({
+    id: it.id || it.name || 'item',
     name: it.title || it.name || 'Item',
     unit: it.unit || 'units',
     stock: typeof it.stock === 'number' ? it.stock : (typeof it.value === 'number' ? it.value : 0),
@@ -37,6 +34,10 @@ export default function StockSheet({ props, designTokens, data = [], onExecuteAc
 
   const [items, setItems] = useState<StockItem[]>(initialItems);
   const [busyItem, setBusyItem] = useState<string | null>(null);
+
+  if (items.length === 0) {
+    return null;
+  }
 
   const updateQuantity = async (itemId: string, delta: number) => {
     setItems((prev) =>

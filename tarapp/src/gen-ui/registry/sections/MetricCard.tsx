@@ -23,8 +23,8 @@ export default function MetricCard({ props }: MetricCardProps) {
   const trend = props?.trend;
   const trendPositive = props?.trendPositive !== false;
 
-  const dataPoints = Array.isArray(props?.data) && props.data.length > 0 ? props.data : [12, 18, 15, 24, 28, 35, 42];
-  const maxVal = Math.max(...dataPoints, 1);
+  const dataPoints = Array.isArray(props?.data) ? props.data : [];
+  const maxVal = dataPoints.length > 0 ? Math.max(...dataPoints, 1) : 1;
 
   return (
     <View style={styles.card}>
@@ -57,18 +57,20 @@ export default function MetricCard({ props }: MetricCardProps) {
           <Text style={styles.unitText}>{unit}</Text>
         </View>
 
-        {/* Compact Clean Sparkline */}
-        <View style={styles.sparklineContainer}>
-          {dataPoints.map((val, idx) => {
-            const heightPct = Math.max(18, (val / maxVal) * 100);
-            const isLast = idx === dataPoints.length - 1;
-            return (
-              <View key={idx} style={styles.sparkCol}>
-                <View style={[styles.sparkBar, { height: `${heightPct}%` }, isLast && styles.sparkBarActive]} />
-              </View>
-            );
-          })}
-        </View>
+        {/* Compact Clean Sparkline (only rendered if real data is provided) */}
+        {dataPoints.length > 0 ? (
+          <View style={styles.sparklineContainer}>
+            {dataPoints.map((val, idx) => {
+              const heightPct = Math.max(18, (val / maxVal) * 100);
+              const isLast = idx === dataPoints.length - 1;
+              return (
+                <View key={idx} style={styles.sparkCol}>
+                  <View style={[styles.sparkBar, { height: `${heightPct}%` }, isLast && styles.sparkBarActive]} />
+                </View>
+              );
+            })}
+          </View>
+        ) : null}
       </View>
     </View>
   );

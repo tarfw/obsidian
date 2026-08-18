@@ -838,27 +838,20 @@ ${membersYaml}
           try {
             const parsedDoc = parseCanvasMarkdown(canvasRes.content);
             setCanvasDoc(parsedDoc);
-            setCanvasBlocks(parsedDoc.blocks);
+            setCanvasBlocks(parsedDoc.blocks || []);
           } catch (err) {
             console.warn('[Canvas] Failed to parse team/canvas.md:', err);
-          }
-        } else {
-          const isPers = scope === 'p' || scope?.includes('personal') || currentWorkspace?.scope === 'p' || currentWorkspace?.subdomain === 'personal';
-          if (isPers) {
             setCanvasDoc(null);
             setCanvasBlocks([]);
-          } else {
-            const activeList = modulesList.length > 0 ? modulesList : ['orders', 'inventory', 'crm', 'reports'];
-            const fallbackBlocks = activeList.map(mod => ({
-              title: mod.charAt(0).toUpperCase() + mod.slice(1),
-              type: mod === 'orders' || mod === 'transactions' ? 'quick-pos' : 'data-grid',
-              props: { type: (mod === 'orders' || mod === 'transactions') ? 'order' : mod === 'inventory' ? 'product' : mod, mode: 'table' }
-            }));
-            setCanvasBlocks(fallbackBlocks);
           }
+        } else {
+          setCanvasDoc(null);
+          setCanvasBlocks([]);
         }
       }).catch(err => {
         console.warn('[Canvas] Failed to load workspace specs:', err);
+        setCanvasDoc(null);
+        setCanvasBlocks([]);
       }).finally(() => {
         setLoadingCanvas(false);
       });
@@ -1589,7 +1582,7 @@ ${membersYaml}
     const enrichBlock = (b: CanvasBlock): CanvasBlock => {
       const type = b.type;
       if (type === 'task-inbox') {
-        return { ...b, props: { ...b.props, tasks: inboxTasks.length > 0 ? inboxTasks : b.props?.tasks } };
+        return { ...b, props: { ...b.props, tasks: inboxTasks } };
       }
       if (type === 'metric-card' || type === 'stat-counter') {
         return {
@@ -1643,193 +1636,52 @@ ${membersYaml}
 
     const isPersonal = currentWorkspace?.scope === 'p' || currentWorkspace?.subdomain === 'personal' || !currentWorkspace || (currentWorkspace?.name || '').toLowerCase().includes('personal');
 
-    const defaultOperationalModes: CanvasLifeMode[] = isPersonal ? [
+    const defaultPersonalBlocks: CanvasBlock[] = [
       {
-        id: 'personal',
-        label: 'Personal',
-        chips: [
-          { label: 'Call Contact', target: 'contact-card' },
-          { label: 'New Note', target: 'data-grid' },
-          { label: 'Add Expense', target: 'action-confirm' },
-        ],
-        blocks: [
-          {
-            title: 'Personal Inbox',
-            type: 'task-inbox',
-            props: {
-              title: 'Personal Inbox',
-              tasks: inboxTasks,
-            },
-          },
-          {
-            title: 'Daily Budget',
-            type: 'stat-counter',
-            props: {
-              title: 'Personal Budget',
-              subtitle: 'Daily Overview',
-              value: '$0.00',
-              unit: '0 Transactions',
-            },
-          },
-          {
-            title: 'Personal Contacts',
-            type: 'contact-card',
-            props: {
-              contact: liveContacts[0] || null,
-              contacts: liveContacts,
-            },
-          },
-        ],
-      }
-    ] : [
-      {
-        id: 'overview',
-        label: 'Overview',
-        chips: [
-          { label: 'New Sale', target: 'quick-pos' },
-          { label: 'Check Stock', target: 'stock-sheet' },
-          { label: 'Contacts', target: 'contact-card' },
-        ],
-        blocks: [
-          {
-            title: 'Action Inbox',
-            type: 'task-inbox',
-            props: {
-              title: 'Action Inbox',
-              tasks: inboxTasks,
-            },
-          },
-          {
-            title: "Today's Revenue",
-            type: 'stat-counter',
-            props: {
-              title: workspaceName ? `${workspaceName} Revenue` : "Today's Revenue",
-              subtitle: 'Live Operations',
-              value: `$${todaySales.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-              unit: `${orders?.length || 0} Total Orders`,
-            },
-          },
-          {
-            title: 'POS Terminal',
-            type: 'quick-pos',
-            props: {
-              title: 'Quick Billing',
-              subtitle: 'Floor Tables & Register',
-            },
-          },
-        ],
+        title: 'Personal Inbox',
+        type: 'task-inbox',
+        props: {
+          title: 'Personal Inbox',
+          tasks: inboxTasks,
+        },
       },
       {
-        id: 'sales_pos',
-        label: 'Sales & POS',
-        chips: [
-          { label: 'Start Order', target: 'quick-pos' },
-          { label: 'Recent Receipts', target: 'data-grid' },
-        ],
-        blocks: [
-          {
-            title: 'POS Floor Terminal',
-            type: 'quick-pos',
-            props: {
-              title: 'POS Register',
-              subtitle: 'Tap table or order to bill',
-            },
-          },
-          {
-            title: "Today's Orders",
-            type: 'data-grid',
-            props: {
-              title: 'Recent Transactions',
-              type: 'order',
-              data: orders,
-            },
-          },
-        ],
+        title: 'Daily Budget',
+        type: 'stat-counter',
+        props: {
+          title: 'Personal Budget',
+          subtitle: 'Daily Overview',
+          value: '$0.00',
+          unit: '0 Transactions',
+        },
       },
       {
-        id: 'inventory',
-        label: 'Inventory',
-        chips: [
-          { label: 'Stock Sheet', target: 'stock-sheet' },
-          { label: 'Product Catalog', target: 'data-grid' },
-        ],
-        blocks: [
-          {
-            title: 'Stock Counter',
-            type: 'stock-sheet',
-            props: {
-              title: 'Inventory Stock Sheet',
-              subtitle: 'Tap - / + to adjust quantity',
-              items: lowStockItems,
-            },
-          },
-          {
-            title: 'All Products',
-            type: 'data-grid',
-            props: {
-              title: 'Catalog Items',
-              type: 'product',
-              data: products,
-            },
-          },
-        ],
-      },
-      {
-        id: 'directory',
-        label: 'Directory',
-        chips: [
-          { label: 'Add Contact', target: 'contact-card' },
-          { label: 'View Pipeline', target: 'pipeline-card' },
-        ],
-        blocks: [
-          {
-            title: 'Customer Directory',
-            type: 'contact-card',
-            props: {
-              contact: liveContacts[0] || null,
-              contacts: liveContacts,
-            },
-          },
-          {
-            title: 'Deal Pipeline',
-            type: 'pipeline-card',
-            props: {
-              title: 'Active Deal Pipeline',
-            },
-          },
-        ],
+        title: 'Personal Contacts',
+        type: 'contact-card',
+        props: {
+          contact: liveContacts[0] || null,
+          contacts: liveContacts,
+        },
       },
     ];
 
-    const finalLifeModes = (rawDoc.lifeModes && rawDoc.lifeModes.length > 0)
-      ? rawDoc.lifeModes.map((m: CanvasLifeMode) => ({
-          ...m,
-          blocks: (m.blocks || []).map(enrichBlock),
-        }))
-      : defaultOperationalModes;
-
-    // If canvasDoc has explicit custom blocks from S3 canvas.md, prioritize them (enriched)
     const hasCustomCanvasDoc = Boolean(canvasDoc && canvasDoc.blocks && canvasDoc.blocks.length > 0);
     const activeBlocks = isPersonal
-      ? defaultOperationalModes[0].blocks
-      : (hasCustomCanvasDoc ? enrichedBlocks : (finalLifeModes[0]?.blocks || enrichedBlocks));
+      ? defaultPersonalBlocks
+      : (hasCustomCanvasDoc ? enrichedBlocks : []);
 
     const activeChips = (canvasDoc?.chips && canvasDoc.chips.length > 0)
       ? canvasDoc.chips
-      : (finalLifeModes[0]?.chips || (isPersonal ? [
+      : (isPersonal ? [
           { label: 'Call Contact', target: 'contact-card' },
           { label: 'New Note', target: 'data-grid' },
           { label: 'Add Expense', target: 'action-confirm' },
-        ] : [
-          { label: 'New Sale', target: 'quick-pos' },
-          { label: 'Check Stock', target: 'stock-sheet' },
-          { label: 'Contacts', target: 'contact-card' },
-        ]));
+        ] : []);
 
     return {
-      title: rawDoc.title,
+      title: rawDoc.title || workspaceName || 'Workspace',
       blocks: activeBlocks,
-      lifeModes: finalLifeModes,
+      lifeModes: canvasDoc?.lifeModes || [],
       chips: activeChips,
     };
   }, [canvasDoc, currentWorkspace, orders, products, inboxTasks, allEntities, workspaceName, canvasBlocks]);

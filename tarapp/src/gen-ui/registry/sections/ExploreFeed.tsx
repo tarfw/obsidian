@@ -11,57 +11,18 @@ const EXPLORE_CATEGORIES = [
   { id: 'beauty', label: 'Salon & Spa', icon: 'rose-outline' },
 ];
 
-const MOCK_EXPLORE_ITEMS = [
-  {
-    id: 'exp_1',
-    name: 'Croissant & Cafe',
-    category: 'bakery',
-    description: 'Artisanal French pastries, sourdough bread, and specialty coffee.',
-    productsCount: 14,
-    rating: '4.9 ★',
-    emoji: '🥐',
-    tagColor: '#fff1f2',
-    textColor: '#e11d48',
-  },
-  {
-    id: 'exp_2',
-    name: 'Mumbai Urban Cabs',
-    category: 'taxi',
-    description: 'Airport transfers, hourly rentals, and city outstation rides.',
-    productsCount: 8,
-    rating: '4.8 ★',
-    emoji: '🚕',
-    tagColor: '#eff6ff',
-    textColor: '#2563eb',
-  },
-  {
-    id: 'exp_3',
-    name: 'Velvet Salon & Spa',
-    category: 'beauty',
-    description: 'Hair styling, facial care, manicure, and wellness therapy.',
-    productsCount: 12,
-    rating: '4.9 ★',
-    emoji: '💇',
-    tagColor: '#faf5ff',
-    textColor: '#9333ea',
-  },
-  {
-    id: 'exp_4',
-    name: 'Trendsetters Apparel',
-    category: 'retail',
-    description: 'Modern fashion collections, streetwear, and summer wear.',
-    productsCount: 32,
-    rating: '4.7 ★',
-    emoji: '🛍️',
-    tagColor: '#ecfdf5',
-    textColor: '#059669',
-  },
-];
-
-export default function ExploreFeed({ props, designTokens, onExecuteAction }: SectionProps) {
+export default function ExploreFeed({ props, data = [], onExecuteAction }: SectionProps) {
   const [selectedCat, setSelectedCat] = useState('all');
 
-  const filteredItems = MOCK_EXPLORE_ITEMS.filter(
+  const items: any[] = Array.isArray(data) && data.length > 0
+    ? data
+    : (Array.isArray(props?.items) ? props.items : []);
+
+  if (items.length === 0) {
+    return null;
+  }
+
+  const filteredItems = items.filter(
     (item) => selectedCat === 'all' || item.category === selectedCat
   );
 

@@ -19,36 +19,11 @@ export default function TaskInbox({ props, designTokens, data = [], onExecuteAct
   const colors = designTokens?.colors || {};
   const rounded = designTokens?.rounded || {};
 
-  // Sample tasks if none provided in data/props
-  const defaultTasks: TaskItem[] = [
-    {
-      id: 'task-1',
-      title: 'Customer Refund',
-      subtitle: 'Order #4102 — Returned unopened item',
-      amount: '$45.00',
-      urgency: 'high',
-      category: 'Refund',
-      actions: [
-        { id: 'reject', label: 'Reject', variant: 'secondary' },
-        { id: 'approve', label: 'Approve', variant: 'primary' },
-      ],
-    },
-    {
-      id: 'task-2',
-      title: 'Supplier Invoice Approval',
-      subtitle: 'Dairy Fresh Supplies — Due in 2 days',
-      amount: '$180.00',
-      urgency: 'medium',
-      category: 'Invoice',
-      actions: [
-        { id: 'review', label: 'Review', variant: 'secondary' },
-        { id: 'pay', label: 'Pay Now', variant: 'primary' },
-      ],
-    },
-  ];
+  const taskList: TaskItem[] = Array.isArray(data) && data.length > 0
+    ? data
+    : (Array.isArray(props?.tasks) ? props.tasks : []);
 
-  const rawTasks = data.length > 0 ? data : (props?.tasks || defaultTasks);
-  const [tasks, setTasks] = useState<TaskItem[]>(rawTasks);
+  const [tasks, setTasks] = useState<TaskItem[]>(taskList);
   const [actingId, setActingId] = useState<string | null>(null);
 
   const handleAction = async (task: TaskItem, actionId: string) => {

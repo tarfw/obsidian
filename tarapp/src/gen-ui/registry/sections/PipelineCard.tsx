@@ -19,28 +19,11 @@ export default function PipelineCard({ props, designTokens, data = [], onExecute
 
   const defaultStages = ['Lead', 'Contacted', 'Proposal', 'Won'];
 
-  const defaultDeals: PipelineDeal[] = [
-    {
-      id: 'deal-101',
-      title: 'POS Terminal Upgrade (3 units)',
-      contactName: 'Ramesh Patel',
-      company: 'Apex Cafe & Bakery',
-      value: 1250,
-      stageIndex: 2, // Proposal
-      stages: defaultStages,
-    },
-    {
-      id: 'deal-102',
-      title: 'Annual Flour & Dairy Supply Contract',
-      contactName: 'Priya Sharma',
-      company: 'Green Leaf Eatery',
-      value: 4800,
-      stageIndex: 1, // Contacted
-      stages: defaultStages,
-    },
-  ];
+  const sourceDeals = Array.isArray(data) && data.length > 0
+    ? data
+    : (Array.isArray(props?.deals) ? props.deals : []);
 
-  const deals: PipelineDeal[] = (data.length > 0 ? data : (props?.deals || defaultDeals)).map((d: any) => ({
+  const deals: PipelineDeal[] = sourceDeals.map((d: any) => ({
     id: d.id || 'deal-1',
     title: d.title || d.name || 'Sales Deal',
     contactName: d.contactName || d.contact || 'Client Contact',
@@ -52,6 +35,10 @@ export default function PipelineCard({ props, designTokens, data = [], onExecute
 
   const [activeDeals, setActiveDeals] = useState<PipelineDeal[]>(deals);
   const [advancingId, setAdvancingId] = useState<string | null>(null);
+
+  if (activeDeals.length === 0) {
+    return null;
+  }
 
   const handleAdvanceStage = async (deal: PipelineDeal) => {
     if (deal.stageIndex >= deal.stages.length - 1) return;

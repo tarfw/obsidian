@@ -407,6 +407,46 @@ export default function GenUIScreen({
           },
         ]}
       >
+        {/* Suggestion Chips Loaded Dynamically from canvas.md */}
+        {idleChips.length > 0 && (
+          <View style={styles.chipsContainer}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.chipsScroll}
+              keyboardShouldPersistTaps="handled"
+            >
+              {isTyping && liveMatches.length > 0
+                ? liveMatches.map((match: any, idx: number) => (
+                    <TouchableOpacity
+                      key={`match_${idx}`}
+                      activeOpacity={0.7}
+                      onPress={() => {
+                        setInputText('');
+                        setIsTyping(false);
+                        openSlideCard(match.target || match.type, match.props || {}, match.label);
+                      }}
+                      style={styles.chip}
+                    >
+                      <Ionicons name="flash-outline" size={14} color="#18181b" />
+                      <Text style={styles.chipText}>{match.label}</Text>
+                    </TouchableOpacity>
+                  ))
+                : idleChips.map((chip: any, idx: number) => (
+                    <TouchableOpacity
+                      key={`chip_${idx}`}
+                      activeOpacity={0.7}
+                      onPress={() => handleChipPress(chip)}
+                      style={styles.chip}
+                    >
+                      <Ionicons name={getChipIcon(chip.label)} size={14} color="#18181b" />
+                      <Text style={styles.chipText}>{chip.label}</Text>
+                    </TouchableOpacity>
+                  ))}
+            </ScrollView>
+          </View>
+        )}
+
         {/* Modern Minimal Input Dock matching ChatGPT design */}
         <View style={styles.dockBar}>
           {/* Plus Add Button */}

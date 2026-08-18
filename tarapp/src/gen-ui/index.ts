@@ -1,5 +1,5 @@
 /**
- * Gen UI module for tarapp — exports all public APIs.
+ * Gen UI module for tarapp — exports all public APIs per genui.md.
  */
 
 // Types (shared with taragent)
@@ -40,5 +40,6 @@ export {
 // Import builtins to auto-register
 import './registry/builtins';
 
-// Renderer
+// Pure Native Screen & Renderer
+export { default as GenUIScreen } from './GenUIScreen';
 export { default as NativeRenderer } from './registry/NativeRenderer';

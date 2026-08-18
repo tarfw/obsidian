@@ -367,23 +367,65 @@ members: []
 `;
   await uploadWorkspaceFile(env, scope, 'team/members.md', defaultMembers);
 
-  // 6. team/canvas.md
-  const defaultBlocks = modules.map(mod => {
-    const title = mod.charAt(0).toUpperCase() + mod.slice(1);
-    if (mod === 'orders') {
-      return `  - title: "${title} Tool"\n    type: "pos-sale"\n    props: { "catalogType": "product", "taxRate": 0.05 }`;
-    }
-    const typeKey = mod === 'inventory' ? 'product' : mod === 'bookings' ? 'booking' : mod;
-    const modeVal = mod === 'bookings' ? 'calendar' : 'table';
-    return `  - title: "${title} List"\n    type: "data-grid"\n    props: { "type": "${typeKey}", "mode": "${modeVal}" }`;
-  }).join('\n');
+  // 6. team/canvas.md — 3-Zone Declarative Blueprint (genui.md §2, §5, §8)
+  const isOrdersWs = modules.includes('orders') || modules.includes('transactions') || modules.includes('pos');
+  const isBookingsWs = modules.includes('bookings') || modules.includes('appointments') || modules.includes('schedule');
+
+  let defaultChipsYaml = `chips:
+  - label: "New Sale"
+    target: "quick-pos"
+  - label: "Check Stock"
+    target: "stock-sheet"
+  - label: "Contacts"
+    target: "contact-card"`;
+
+  if (isBookingsWs && !isOrdersWs) {
+    defaultChipsYaml = `chips:
+  - label: "New Booking"
+    target: "data-grid"
+  - label: "Client Directory"
+    target: "contact-card"
+  - label: "Services"
+    target: "data-grid"`;
+  }
+
+  const primaryToolBlock = isOrdersWs
+    ? `  - title: "Quick Billing"
+    type: "quick-pos"
+    props:
+      title: "Quick Billing"
+      subtitle: "Floor Tables & Register"
+      catalogType: "product"
+      taxRate: 0.05`
+    : isBookingsWs
+    ? `  - title: "Appointments Calendar"
+    type: "data-grid"
+    props:
+      title: "Schedule & Bookings"
+      type: "booking"
+      mode: "calendar"`
+    : `  - title: "Inventory Counter"
+    type: "stock-sheet"
+    props:
+      title: "Inventory Stock Sheet"
+      subtitle: "Tap - / + to adjust quantity"`;
 
   const defaultCanvas = `---
 type: CanvasLayout
 title: "${workspaceName} Canvas"
 timestamp: "${new Date().toISOString()}"
+${defaultChipsYaml}
 blocks:
-${defaultBlocks}
+  - title: "Action Inbox"
+    type: "task-inbox"
+    props:
+      title: "Action Inbox"
+  - title: "Today's Revenue"
+    type: "stat-counter"
+    props:
+      title: "${workspaceName} Revenue"
+      subtitle: "Live Operations"
+${primaryToolBlock}
 ---
 
 # Workspace Canvas
@@ -665,7 +707,7 @@ export async function addCanvasBlock(
   const alreadyExists = existingBlocks.some(b => 
     b.title.toLowerCase() === title.toLowerCase() ||
     (b.props?.type && String(b.props.type).toLowerCase() === modId) ||
-    (b.type === 'pos-sale' && (modId === 'orders' || modId === 'order'))
+    ((b.type === 'quick-pos' || b.type === 'pos-sale') && (modId === 'orders' || modId === 'order'))
   );
 
   if (!alreadyExists) {

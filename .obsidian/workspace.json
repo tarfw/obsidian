@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "genui.md",
+                "file": "revenue.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "genui"
+              "title": "revenue"
             }
           }
         ]
@@ -83,8 +83,7 @@
       }
     ],
     "direction": "horizontal",
-    "width": 300,
-    "collapsed": true
+    "width": 300
   },
   "right": {
     "id": "10dfbf46ea29c050",
@@ -192,19 +191,21 @@
   },
   "active": "bb6a6437d4b41399",
   "lastOpenFiles": [
-    "plan6.md",
     "genui.md",
+    "revenue.md",
+    "tarapp/src/gen-ui/GenUIScreen.tsx",
+    "tarapp/src/gen-ui/registry/sections/ActionConfirm.tsx",
+    "tarapp/src/gen-ui/registry/sections/ContactCard.tsx",
+    "tarapp/src/gen-ui/registry/sections/PipelineCard.tsx",
+    "tarapp/src/gen-ui/registry/sections/StockSheet.tsx",
+    "tarapp/src/gen-ui/registry/sections/QuickPos.tsx",
+    "tarapp/src/gen-ui/registry/sections/TaskInbox.tsx",
+    "plan6.md",
     "Tar app fixes..md",
     "canvas.md",
     "tarapp/src/components/CanvasCustomizerModal.tsx",
     "taragent/scratch_list_turso.js",
     "taragent/scratch_clean.js",
-    "taragent/migrations/0001_init.sql",
-    "tarapp/src/components/JoinWorkspaceModal.tsx",
-    "tarapp/src/components/ChannelConnectModal.tsx",
-    "tarapp/src/lib/channels.ts",
-    "tarapp/src/constants/types-config.ts",
-    "taragent/src/lib/types-config.ts",
     "plan6 1.md"
   ]
 }

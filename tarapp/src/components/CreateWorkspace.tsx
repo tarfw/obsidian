@@ -12,20 +12,9 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '@/hooks/use-theme';
 import { TarLogoLoader } from '@/components/TarLogoLoader';
 import { tar } from '@/lib/tar';
 import * as SecureStore from 'expo-secure-store';
-
-// ── 1. Business Categories ───────────────────────────────────────────
-const BUSINESS_CATEGORIES = [
-  { id: 'restaurant', label: 'Restaurant & Cafe', icon: 'restaurant-outline', starterName: 'Al Noor' },
-  { id: 'retail', label: 'Fashion & Retail', icon: 'shirt-outline', starterName: 'Metro Store' },
-  { id: 'salon', label: 'Salon & Spa', icon: 'sparkles-outline', starterName: 'Glow Studio' },
-  { id: 'clinic', label: 'Clinic & Health', icon: 'medkit-outline', starterName: 'Care Clinic' },
-  { id: 'logistics', label: 'Logistics & Delivery', icon: 'cube-outline', starterName: 'Swift Express' },
-  { id: 'business', label: 'General Business', icon: 'business-outline', starterName: 'Apex Enterprises' },
-];
 
 interface CreateWorkspaceProps {
   visible: boolean;
@@ -42,11 +31,10 @@ export default function CreateWorkspace({
   canClose,
   existingSubdomains = [],
 }: CreateWorkspaceProps) {
-  const theme = useTheme();
   const insets = useSafeAreaInsets();
 
-  const [selectedCategory, setSelectedCategory] = useState(BUSINESS_CATEGORIES[0]);
-  const [workspaceName, setWorkspaceName] = useState(BUSINESS_CATEGORIES[0].starterName);
+  const [workspaceName, setWorkspaceName] = useState('');
+  const [description, setDescription] = useState('');
 
   const [isSynthesizing, setIsSynthesizing] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
@@ -69,21 +57,17 @@ export default function CreateWorkspace({
     resolvedSlug = `${baseSlug}-${counter}`;
   }
 
-  const handleSelectCategory = (cat: typeof BUSINESS_CATEGORIES[0]) => {
-    setSelectedCategory(cat);
-    setWorkspaceName(cat.starterName);
-  };
-
   const handleCreate = async () => {
     if (isSynthesizing || !workspaceName.trim()) return;
 
     const finalName = workspaceName.trim();
+    const finalDesc = description.trim();
     setIsSynthesizing(true);
     setErrorMessage(null);
     setCurrentStep(1);
 
     try {
-      await new Promise((res) => setTimeout(res, 200));
+      await new Promise((res) => setTimeout(res, 150));
       setCurrentStep(2);
 
       let finalSlug = resolvedSlug;
@@ -91,8 +75,8 @@ export default function CreateWorkspace({
         await tar.createWorkspace({
           name: finalName,
           subdomain: finalSlug,
-          description: `${selectedCategory.label} workspace`,
-          type: selectedCategory.id,
+          description: finalDesc || undefined,
+          message: finalDesc ? `${finalName}: ${finalDesc}` : finalName,
         });
       } catch (createErr: any) {
         if (createErr?.message?.includes('already exists') || createErr?.message?.includes('duplicate')) {
@@ -100,8 +84,8 @@ export default function CreateWorkspace({
           await tar.createWorkspace({
             name: finalName,
             subdomain: finalSlug,
-            description: `${selectedCategory.label} workspace`,
-            type: selectedCategory.id,
+            description: finalDesc || undefined,
+            message: finalDesc ? `${finalName}: ${finalDesc}` : finalName,
           });
         } else {
           throw createErr;
@@ -111,10 +95,12 @@ export default function CreateWorkspace({
       await SecureStore.setItemAsync('active_workspace_subdomain', finalSlug).catch(() => null);
 
       setCurrentStep(3);
-      await new Promise((res) => setTimeout(res, 200));
+      await new Promise((res) => setTimeout(res, 150));
 
       setIsSynthesizing(false);
       setCurrentStep(0);
+      setWorkspaceName('');
+      setDescription('');
       await onSuccess(finalSlug);
     } catch (err: any) {
       console.error('[CreateWorkspace] Creation error:', err);
@@ -126,8 +112,8 @@ export default function CreateWorkspace({
 
   const stepLabels = [
     'Setting up workspace...',
-    'Initializing database...',
-    'Configuring tools & roles...',
+    'Creating database & tools...',
+    'Finalizing...',
     'Ready!',
   ];
 
@@ -138,119 +124,108 @@ export default function CreateWorkspace({
       presentationStyle="pageSheet"
       statusBarTranslucent
       onRequestClose={() => {
-        if (canClose && !isSynthesizing) onClose();
+        if (canClose && !isSynthesizing) {
+          setWorkspaceName('');
+          setDescription('');
+          onClose();
+        }
       }}
     >
-      <View style={[styles.container, { backgroundColor: theme.background }]}>
+      <View style={styles.container}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={{ flex: 1 }}
         >
           {/* Header Bar */}
-          <View style={[styles.headerBar, { paddingTop: Math.max(insets.top + 6, 14) }]}>
-            <View>
-              <Text style={[styles.headerTitle, { color: theme.text }]}>New Workspace</Text>
-              <Text style={[styles.headerSub, { color: theme.textMuted }]}>Business operating system</Text>
-            </View>
+          <View
+            style={[
+              styles.headerBar,
+              {
+                paddingTop: Math.max(insets.top, Platform.OS === 'android' ? 16 : 12) + 12,
+              },
+            ]}
+          >
+            <Text style={styles.headerTitle}>New Workspace</Text>
             {canClose && !isSynthesizing && (
-              <Pressable onPress={onClose} style={[styles.closeBtn, { borderColor: theme.border + '60' }]} hitSlop={8}>
-                <Ionicons name="close" size={18} color={theme.textSecondary} />
+              <Pressable
+                onPress={() => {
+                  setWorkspaceName('');
+                  setDescription('');
+                  onClose();
+                }}
+                style={styles.closeBtn}
+                hitSlop={8}
+              >
+                <Ionicons name="close" size={20} color="#64748b" />
               </Pressable>
             )}
           </View>
 
           {isSynthesizing ? (
-            /* Loader State */
+            /* Synthesizing Progress State */
             <View style={styles.loaderContainer}>
-              <TarLogoLoader size={40} color="#2563EB" style={{ marginBottom: 16 }} />
-              <Text style={[styles.loaderStatus, { color: theme.text }]}>
-                {stepLabels[Math.min(currentStep - 1, stepLabels.length - 1)] || 'Initializing...'}
-              </Text>
-              <Text style={[styles.loaderSub, { color: theme.textMuted }]}>
-                {resolvedSlug}
+              <TarLogoLoader size={34} color="#0f172a" style={{ marginBottom: 14 }} />
+              <Text style={styles.loaderStatus}>
+                {stepLabels[Math.min(currentStep - 1, stepLabels.length - 1)] || 'Creating Workspace...'}
               </Text>
             </View>
           ) : (
-            /* Clean Compact Form */
+            /* Clean Minimal Form */
             <ScrollView
-              contentContainerStyle={[styles.scrollContent, { paddingBottom: Math.max(insets.bottom + 16, 24) }]}
+              contentContainerStyle={[
+                styles.scrollContent,
+                {
+                  paddingBottom: Math.max(insets.bottom, Platform.OS === 'android' ? 24 : 16) + 20,
+                },
+              ]}
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
             >
               {errorMessage && (
                 <View style={styles.errorBanner}>
+                  <Ionicons name="alert-circle-outline" size={16} color="#dc2626" style={{ marginRight: 6 }} />
                   <Text style={styles.errorText}>{errorMessage}</Text>
                 </View>
               )}
 
-              {/* STEP 1: BUSINESS TYPE */}
+              {/* WORKSPACE NAME */}
               <View style={styles.sectionBlock}>
-                <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>1. BUSINESS TYPE</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.rowList}>
-                  {BUSINESS_CATEGORIES.map((cat) => {
-                    const isSelected = selectedCategory.id === cat.id;
-                    return (
-                      <Pressable
-                        key={cat.id}
-                        onPress={() => handleSelectCategory(cat)}
-                        style={[
-                          styles.catPill,
-                          {
-                            backgroundColor: isSelected ? '#2563EB15' : theme.backgroundElement,
-                            borderColor: isSelected ? '#2563EB' : theme.border + '50',
-                          },
-                        ]}
-                      >
-                        <Ionicons
-                          name={cat.icon as any}
-                          size={15}
-                          color={isSelected ? '#2563EB' : theme.textSecondary}
-                          style={{ marginRight: 6 }}
-                        />
-                        <Text style={[styles.catText, { color: isSelected ? '#2563EB' : theme.text }]}>
-                          {cat.label}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </ScrollView>
+                <Text style={styles.sectionTitle}>Name</Text>
+                <TextInput
+                  style={styles.inputField}
+                  value={workspaceName}
+                  onChangeText={setWorkspaceName}
+                  placeholder="Workspace name"
+                  placeholderTextColor="#94a3b8"
+                  autoFocus
+                />
               </View>
 
-              {/* STEP 2: WORKSPACE NAME */}
+              {/* OPTIONAL DESCRIPTION */}
               <View style={styles.sectionBlock}>
-                <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>2. WORKSPACE NAME</Text>
-                <View style={[styles.inputContainer, { backgroundColor: theme.backgroundElement, borderColor: theme.border + '60' }]}>
-                  <Ionicons name="business-outline" size={16} color={theme.textMuted} style={{ marginRight: 8 }} />
-                  <TextInput
-                    style={[styles.inputField, { color: theme.text }]}
-                    value={workspaceName}
-                    onChangeText={setWorkspaceName}
-                    placeholder="Workspace Name"
-                    placeholderTextColor={theme.textMuted}
-                  />
-                </View>
-
-                <View style={[styles.urlBadge, { backgroundColor: '#2563EB0D', borderColor: '#2563EB25' }]}>
-                  <Ionicons name="server-outline" size={13} color="#2563EB" style={{ marginRight: 5 }} />
-                  <Text style={[styles.urlLabel, { color: theme.textMuted }]}>
-                    Identifier: <Text style={{ color: '#2563EB', fontWeight: '700' }}>w:{resolvedSlug}</Text>
-                  </Text>
-                </View>
+                <Text style={styles.sectionTitle}>Description (Optional)</Text>
+                <TextInput
+                  style={[styles.inputField, styles.descField]}
+                  value={description}
+                  onChangeText={setDescription}
+                  placeholder="What is this workspace used for?"
+                  placeholderTextColor="#94a3b8"
+                  multiline
+                  numberOfLines={3}
+                />
               </View>
 
               {/* Create Button */}
               <Pressable
                 onPress={handleCreate}
+                disabled={!workspaceName.trim()}
                 style={({ pressed }) => [
                   styles.launchBtn,
                   {
-                    backgroundColor: '#0F172A',
-                    opacity: pressed || !workspaceName.trim() ? 0.8 : 1,
+                    opacity: !workspaceName.trim() ? 0.35 : pressed ? 0.85 : 1,
                   },
                 ]}
-                disabled={!workspaceName.trim()}
               >
-                <Ionicons name="add-circle-outline" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
                 <Text style={styles.launchBtnText}>Create Workspace</Text>
               </Pressable>
             </ScrollView>
@@ -264,124 +239,100 @@ export default function CreateWorkspace({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#ffffff',
   },
   headerBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingBottom: 10,
+    paddingBottom: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+    backgroundColor: '#ffffff',
   },
   headerTitle: {
     fontSize: 17,
-    fontWeight: '800',
-    letterSpacing: -0.02,
-  },
-  headerSub: {
-    fontSize: 11,
-    marginTop: 1,
+    fontWeight: '700',
+    color: '#0f172a',
+    letterSpacing: -0.2,
   },
   closeBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    borderWidth: 1,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: '#f8fafc',
   },
   scrollContent: {
     paddingHorizontal: 20,
-    paddingTop: 8,
+    paddingTop: 20,
     gap: 18,
   },
   sectionBlock: {
-    gap: 6,
+    gap: 7,
   },
   sectionTitle: {
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.06,
-    textTransform: 'uppercase',
-  },
-  rowList: {
-    gap: 8,
-    paddingVertical: 2,
-  },
-  catPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 13,
-    paddingVertical: 9,
-    borderRadius: 18,
-    borderWidth: 1,
-  },
-  catText: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '600',
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 12,
-    borderWidth: 1,
+    color: '#334155',
   },
   inputField: {
-    flex: 1,
     fontSize: 14,
-    fontWeight: '600',
-    padding: 0,
-  },
-  urlBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
+    fontWeight: '500',
+    color: '#0f172a',
+    backgroundColor: '#f8fafc',
     borderWidth: 1,
-    marginTop: 6,
+    borderColor: '#e2e8f0',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
   },
-  urlLabel: {
-    fontSize: 11.5,
+  descField: {
+    textAlignVertical: 'top',
+    height: 80,
+    lineHeight: 20,
   },
   launchBtn: {
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 14,
+    paddingVertical: 13,
     borderRadius: 12,
-    marginTop: 8,
+    backgroundColor: '#0f172a',
+    marginTop: 6,
   },
   launchBtnText: {
-    color: '#FFFFFF',
+    color: '#ffffff',
     fontSize: 14.5,
-    fontWeight: '700',
+    fontWeight: '600',
   },
   loaderContainer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     paddingBottom: 40,
+    backgroundColor: '#ffffff',
   },
   loaderStatus: {
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  loaderSub: {
-    fontSize: 12,
-    marginTop: 4,
+    fontSize: 14.5,
+    fontWeight: '600',
+    color: '#0f172a',
   },
   errorBanner: {
-    backgroundColor: '#EF444415',
-    borderColor: '#EF444440',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fef2f2',
+    borderColor: '#fecaca',
     borderWidth: 1,
-    borderRadius: 8,
-    padding: 10,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
   },
   errorText: {
-    color: '#DC2626',
-    fontSize: 12,
+    flex: 1,
+    color: '#dc2626',
+    fontSize: 12.5,
     fontWeight: '500',
   },
 });

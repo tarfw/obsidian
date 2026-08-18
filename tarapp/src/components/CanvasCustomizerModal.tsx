@@ -118,7 +118,10 @@ export default function CanvasCustomizerModal({
       const res = await tar.okf.read(scope, 'team/canvas.md');
       if (res?.content) {
         const parsed = parseCanvasMarkdown(res.content);
-        setBlocks(parsed.blocks || []);
+        const liveBlocks = parsed.blocks && parsed.blocks.length > 0
+          ? parsed.blocks
+          : (parsed.lifeModes?.[0]?.blocks || []);
+        setBlocks(liveBlocks);
       }
     } catch (e) {
       console.warn('[CanvasCustomizer] Failed to read live canvas:', e);

@@ -511,9 +511,9 @@ app.post('/tools/:name', async (c) => {
   if (c.env.DB) {
     if (isPersonalScope && userId && userId !== 'guest') {
       try {
-        const userRec = await c.env.DB.prepare(
+        const userRec = (await c.env.DB.prepare(
           'SELECT turso_url, turso_auth_token FROM users WHERE user_id = ?'
-        ).bind(userId).first<{ turso_url?: string; turso_auth_token?: string }>();
+        ).bind(userId).first()) as { turso_url?: string; turso_auth_token?: string } | null;
 
         if (userRec?.turso_url && userRec?.turso_auth_token) {
           dbUrl = userRec.turso_url;
@@ -534,9 +534,9 @@ app.post('/tools/:name', async (c) => {
         : scope;
 
       try {
-        const ws = await c.env.DB.prepare(
+        const ws = (await c.env.DB.prepare(
           'SELECT turso_url, turso_auth_token FROM workspaces WHERE subdomain = ?'
-        ).bind(subdomain).first<{ turso_url?: string; turso_auth_token?: string }>();
+        ).bind(subdomain).first()) as { turso_url?: string; turso_auth_token?: string } | null;
 
         if (ws?.turso_url && ws?.turso_auth_token) {
           dbUrl = ws.turso_url;

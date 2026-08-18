@@ -153,7 +153,10 @@ export default function CanvasOverlay({
       if (canvasRes?.content) {
         const parsed = parseCanvasMarkdown(canvasRes.content);
         setCanvasTitle(parsed.title || 'Workspace Canvas');
-        setBlocks(parsed.blocks || []);
+        const activeBlocks = parsed.blocks && parsed.blocks.length > 0
+          ? parsed.blocks
+          : (parsed.lifeModes?.[0]?.blocks || []);
+        setBlocks(activeBlocks);
       } else {
         // Fallback default blocks if canvas.md doesn't exist yet
         setBlocks([

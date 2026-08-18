@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { StyleSheet, View, Text, Pressable, ScrollView, TextInput, Modal, Platform, TouchableOpacity, Keyboard } from 'react-native';
 import { KeyboardAwareScrollView, KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -22,10 +22,11 @@ import {
   SiteCard,
 } from '@/components/cards/ResultCards';
 import { parseDesignTokens } from '@/lib/design-tokens';
-import { buildModuleLayout, parseYamlFrontmatter, parseCanvasMarkdown } from '@/lib/layout-engine';
+import { buildModuleLayout, parseYamlFrontmatter, parseCanvasMarkdown, type CanvasDocument, type CanvasBlock, type CanvasLifeMode } from '@/lib/layout-engine';
 import { resolveIntent } from '@/lib/intent-resolver';
 import { getCurrentUser } from '@/lib/auth';
 import { filterModulesByRole } from '@/lib/role-filter';
+import GenUIScreen from '@/gen-ui/GenUIScreen';
 import WorkspaceCanvas from '@/components/WorkspaceCanvas';
 import LinearInboxList, { LinearInboxItem } from '@/components/LinearInboxList';
 import { fetchInbox, markTaskDone } from '@/lib/inbox';
@@ -186,6 +187,7 @@ export default function WorkspacesScreen() {
   const [designTokens, setDesignTokens] = useState<any>(null);
   const [canvasLayouts, setCanvasLayouts] = useState<any[]>([]);
   const [canvasBlocks, setCanvasBlocks] = useState<any[]>([]);
+  const [canvasDoc, setCanvasDoc] = useState<CanvasDocument | null>(null);
   const [loadingCanvas, setLoadingCanvas] = useState(false);
   const [showCanvasCustomizer, setShowCanvasCustomizer] = useState(false);
   const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false);
@@ -793,7 +795,10 @@ ${membersYaml}
       Promise.all([
         tar.okf.read(scope, 'DESIGN.md').catch(() => null),
         tar.okf.readIndex(scope).catch(() => null),
-        tar.okf.read(scope, 'team/canvas.md').catch(() => null)
+        tar.okf.read(scope, scope === 'p' ? 'personal/canvas.md' : 'team/canvas.md')
+          .catch(() => tar.okf.read(scope, 'team/canvas.md'))
+          .catch(() => tar.okf.read(scope, 'canvas.md'))
+          .catch(() => null)
       ]).then(async ([designRes, indexRes, canvasRes]) => {
         let tokens = null;
         if (designRes && designRes.content) {
@@ -831,19 +836,26 @@ ${membersYaml}
 
         if (canvasRes && canvasRes.content) {
           try {
-            const { blocks } = parseCanvasMarkdown(canvasRes.content);
-            setCanvasBlocks(blocks);
+            const parsedDoc = parseCanvasMarkdown(canvasRes.content);
+            setCanvasDoc(parsedDoc);
+            setCanvasBlocks(parsedDoc.blocks);
           } catch (err) {
             console.warn('[Canvas] Failed to parse team/canvas.md:', err);
           }
         } else {
-          const activeList = modulesList.length > 0 ? modulesList : ['orders', 'inventory', 'crm', 'reports'];
-          const fallbackBlocks = activeList.map(mod => ({
-            title: mod.charAt(0).toUpperCase() + mod.slice(1),
-            type: mod === 'orders' || mod === 'transactions' ? 'pos-sale' : 'data-grid',
-            props: { type: (mod === 'orders' || mod === 'transactions') ? 'order' : mod === 'inventory' ? 'product' : mod, mode: 'table' }
-          }));
-          setCanvasBlocks(fallbackBlocks);
+          const isPers = scope === 'p' || scope?.includes('personal') || currentWorkspace?.scope === 'p' || currentWorkspace?.subdomain === 'personal';
+          if (isPers) {
+            setCanvasDoc(null);
+            setCanvasBlocks([]);
+          } else {
+            const activeList = modulesList.length > 0 ? modulesList : ['orders', 'inventory', 'crm', 'reports'];
+            const fallbackBlocks = activeList.map(mod => ({
+              title: mod.charAt(0).toUpperCase() + mod.slice(1),
+              type: mod === 'orders' || mod === 'transactions' ? 'quick-pos' : 'data-grid',
+              props: { type: (mod === 'orders' || mod === 'transactions') ? 'order' : mod === 'inventory' ? 'product' : mod, mode: 'table' }
+            }));
+            setCanvasBlocks(fallbackBlocks);
+          }
         }
       }).catch(err => {
         console.warn('[Canvas] Failed to load workspace specs:', err);
@@ -857,6 +869,8 @@ ${membersYaml}
     setShowDropdown(false);
     if (item.subdomain === currentWorkspace?.subdomain) return;
     
+    setCanvasDoc(null);
+    setCanvasBlocks([]);
     setCurrentWorkspace(item);
     await SecureStore.setItemAsync('active_workspace_subdomain', item.subdomain).catch(() => null);
     setAgentFeedback(null);
@@ -1429,14 +1443,396 @@ ${membersYaml}
 
   const getFilteredActions = () => {
     return [
-      {
+{
         label: '🎨 Canvas Studio / AI Customizer',
         subtitle: 'Configure tools, modules, and role layout with AI',
         icon: 'sparkles',
         openModal: 'canvas_customizer' as const,
-      },
+      }
     ];
   };
+
+  const handleGenUIAction = async (actionName: string, params: Record<string, any>) => {
+    const scope = currentWorkspace?.scope;
+    if (!scope) return { success: false };
+
+    if (actionName === 'record_sale' || actionName === 'confirm_order' || actionName === 'confirm_action') {
+      try {
+        await tar.tool('insert', {
+          table: 'motion',
+          record: {
+            type: 101,
+            title: params.tableName ? `Sale - ${params.tableName}` : (params.payload?.title || 'Order Sale'),
+            amount: params.total || params.payload?.totalAmount || 0,
+            data: JSON.stringify(params),
+          },
+          scope,
+        });
+        refreshOrders(scope);
+        setAgentFeedback({ text: 'Sale recorded successfully', type: 'success' });
+        return { success: true };
+      } catch (e) {
+        console.warn('[GenUI] record_sale error:', e);
+      }
+    }
+
+    if (actionName === 'adjust_stock') {
+      try {
+        if (params.itemId && typeof params.delta === 'number') {
+          await updateStock(scope, params.itemId, params.delta, 'adjust_stock', 'GenUI adjustment');
+        }
+        refreshProducts(scope);
+        return { success: true };
+      } catch (e) {
+        console.warn('[GenUI] adjust_stock error:', e);
+      }
+    }
+
+    if (actionName === 'create_item') {
+      setItemInitialData({ item_subtype: params.type || 'product' });
+      setShowItemModal(true);
+      return { success: true };
+    }
+
+    if (actionName === 'create_contact') {
+      setShowContactModal(true);
+      return { success: true };
+    }
+
+    if (actionName === 'view_entity' || actionName === 'select_row') {
+      if (params.row || params.entity) {
+        setSelectedEntityDetails(params.row || params.entity);
+      }
+      return { success: true };
+    }
+
+    if (actionName === 'open_site') {
+      setShowSiteScreen(true);
+      return { success: true };
+    }
+
+    if (actionName === 'create_workspace') {
+      setIsCreatingWorkspace(true);
+      return { success: true };
+    }
+
+    return { success: true };
+  };
+
+  const liveCanvasDoc = useMemo<CanvasDocument | undefined>(() => {
+    if (!canvasDoc && !currentWorkspace) return undefined;
+
+    // 1. Compute today's sales from orders / motion table
+    const todaySales = (orders || []).reduce((acc: number, o: any) => acc + (Number(o.total || o.amount || o.value) || 0), 0);
+
+    // 2. Low stock products for stock sheet
+    const lowStockItems = (products || [])
+      .filter((p: any) => (Number(p.stock ?? p.value ?? 10)) <= 8)
+      .map((p: any) => ({
+        id: p.id,
+        name: p.title || p.name || 'Product',
+        unit: p.unit || 'units',
+        stock: Number(p.stock ?? p.value ?? 0),
+        threshold: p.threshold || 5,
+        reorderPrice: (Number(p.price) || 5) * 5,
+        category: p.category || 'Stock',
+      }));
+
+    // 3. Contacts for contact card — robust extraction from root and nested .data fields
+    const liveContacts = (allEntities || [])
+      .filter((e: any) => {
+        if (!e) return false;
+        let d = e.data;
+        if (typeof d === 'string') {
+          try { d = JSON.parse(d); } catch (_) {}
+        }
+        const typeStr = String(e.type || e.role || d?.role || '').toLowerCase();
+        return (
+          e.type === 1 ||
+          typeStr === 'person' ||
+          typeStr === 'customer' ||
+          typeStr === 'supplier' ||
+          typeStr === 'contact' ||
+          typeStr === 'vendor' ||
+          typeStr === 'lead' ||
+          e.role ||
+          d?.role ||
+          d?.phone ||
+          d?.ph ||
+          e.phone ||
+          e.isPersonalContact
+        );
+      })
+      .map((e: any) => {
+        let d = e.data;
+        if (typeof d === 'string') {
+          try { d = JSON.parse(d); } catch (_) {}
+        }
+        const name = e.title || e.name || d?.name || d?.fn || 'Contact';
+        const phone = d?.phone || d?.ph || e.phone || '';
+        const whatsapp = d?.whatsapp || d?.phone || d?.ph || e.whatsapp || e.phone || '';
+        const company = d?.company || d?.org || e.company || '';
+        const role = d?.role || e.role || (e.isPersonalContact ? 'Personal Contact' : 'Contact');
+        const balance = d?.balance !== undefined ? `$${d.balance}` : e.balance;
+        return {
+          id: e.id,
+          name,
+          phone,
+          whatsapp,
+          company,
+          role,
+          balance,
+        };
+      });
+
+    // 4. Enrich blocks with live database values
+    const enrichBlock = (b: CanvasBlock): CanvasBlock => {
+      const type = b.type;
+      if (type === 'task-inbox') {
+        return { ...b, props: { ...b.props, tasks: inboxTasks.length > 0 ? inboxTasks : b.props?.tasks } };
+      }
+      if (type === 'metric-card' || type === 'stat-counter') {
+        return {
+          ...b,
+          props: {
+            ...b.props,
+            title: b.props?.title || (workspaceName ? `${workspaceName} Sales` : "Today's Sales"),
+            value: todaySales > 0 ? `$${todaySales.toLocaleString()}` : (b.props?.value || "$0.00"),
+            unit: b.props?.unit || `${orders?.length || 0} Total Orders`,
+          },
+        };
+      }
+      if (type === 'stock-sheet') {
+        return {
+          ...b,
+          props: {
+            ...b.props,
+            items: lowStockItems.length > 0 ? lowStockItems : b.props?.items,
+          },
+        };
+      }
+      if (type === 'contact-card') {
+        return {
+          ...b,
+          props: {
+            ...b.props,
+            contact: liveContacts.length > 0 ? liveContacts[0] : (b.props?.contact || null),
+            contacts: liveContacts,
+          },
+        };
+      }
+      if (type === 'data-grid' || type === 'data-table') {
+        return {
+          ...b,
+          props: {
+            ...b.props,
+            data: b.props?.type === 'order' ? orders : products,
+          },
+        };
+      }
+      return b;
+    };
+
+    const rawDoc: CanvasDocument = canvasDoc || {
+      title: workspaceName || 'Workspace',
+      blocks: canvasBlocks,
+      lifeModes: [],
+    };
+
+    const enrichedBlocks = (rawDoc.blocks || []).map(enrichBlock);
+
+    const isPersonal = currentWorkspace?.scope === 'p' || currentWorkspace?.subdomain === 'personal' || !currentWorkspace || (currentWorkspace?.name || '').toLowerCase().includes('personal');
+
+    const defaultOperationalModes: CanvasLifeMode[] = isPersonal ? [
+      {
+        id: 'personal',
+        label: 'Personal',
+        chips: [
+          { label: 'Call Contact', target: 'contact-card' },
+          { label: 'New Note', target: 'data-grid' },
+          { label: 'Add Expense', target: 'action-confirm' },
+        ],
+        blocks: [
+          {
+            title: 'Personal Inbox',
+            type: 'task-inbox',
+            props: {
+              title: 'Personal Inbox',
+              tasks: inboxTasks,
+            },
+          },
+          {
+            title: 'Daily Budget',
+            type: 'stat-counter',
+            props: {
+              title: 'Personal Budget',
+              subtitle: 'Daily Overview',
+              value: '$0.00',
+              unit: '0 Transactions',
+            },
+          },
+          {
+            title: 'Personal Contacts',
+            type: 'contact-card',
+            props: {
+              contact: liveContacts[0] || null,
+              contacts: liveContacts,
+            },
+          },
+        ],
+      }
+    ] : [
+      {
+        id: 'overview',
+        label: 'Overview',
+        chips: [
+          { label: 'New Sale', target: 'quick-pos' },
+          { label: 'Check Stock', target: 'stock-sheet' },
+          { label: 'Contacts', target: 'contact-card' },
+        ],
+        blocks: [
+          {
+            title: 'Action Inbox',
+            type: 'task-inbox',
+            props: {
+              title: 'Action Inbox',
+              tasks: inboxTasks,
+            },
+          },
+          {
+            title: "Today's Revenue",
+            type: 'stat-counter',
+            props: {
+              title: workspaceName ? `${workspaceName} Revenue` : "Today's Revenue",
+              subtitle: 'Live Operations',
+              value: `$${todaySales.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+              unit: `${orders?.length || 0} Total Orders`,
+            },
+          },
+          {
+            title: 'POS Terminal',
+            type: 'quick-pos',
+            props: {
+              title: 'Quick Billing',
+              subtitle: 'Floor Tables & Register',
+            },
+          },
+        ],
+      },
+      {
+        id: 'sales_pos',
+        label: 'Sales & POS',
+        chips: [
+          { label: 'Start Order', target: 'quick-pos' },
+          { label: 'Recent Receipts', target: 'data-grid' },
+        ],
+        blocks: [
+          {
+            title: 'POS Floor Terminal',
+            type: 'quick-pos',
+            props: {
+              title: 'POS Register',
+              subtitle: 'Tap table or order to bill',
+            },
+          },
+          {
+            title: "Today's Orders",
+            type: 'data-grid',
+            props: {
+              title: 'Recent Transactions',
+              type: 'order',
+              data: orders,
+            },
+          },
+        ],
+      },
+      {
+        id: 'inventory',
+        label: 'Inventory',
+        chips: [
+          { label: 'Stock Sheet', target: 'stock-sheet' },
+          { label: 'Product Catalog', target: 'data-grid' },
+        ],
+        blocks: [
+          {
+            title: 'Stock Counter',
+            type: 'stock-sheet',
+            props: {
+              title: 'Inventory Stock Sheet',
+              subtitle: 'Tap - / + to adjust quantity',
+              items: lowStockItems,
+            },
+          },
+          {
+            title: 'All Products',
+            type: 'data-grid',
+            props: {
+              title: 'Catalog Items',
+              type: 'product',
+              data: products,
+            },
+          },
+        ],
+      },
+      {
+        id: 'directory',
+        label: 'Directory',
+        chips: [
+          { label: 'Add Contact', target: 'contact-card' },
+          { label: 'View Pipeline', target: 'pipeline-card' },
+        ],
+        blocks: [
+          {
+            title: 'Customer Directory',
+            type: 'contact-card',
+            props: {
+              contact: liveContacts[0] || null,
+              contacts: liveContacts,
+            },
+          },
+          {
+            title: 'Deal Pipeline',
+            type: 'pipeline-card',
+            props: {
+              title: 'Active Deal Pipeline',
+            },
+          },
+        ],
+      },
+    ];
+
+    const finalLifeModes = (rawDoc.lifeModes && rawDoc.lifeModes.length > 0)
+      ? rawDoc.lifeModes.map((m: CanvasLifeMode) => ({
+          ...m,
+          blocks: (m.blocks || []).map(enrichBlock),
+        }))
+      : defaultOperationalModes;
+
+    // If canvasDoc has explicit custom blocks from S3 canvas.md, prioritize them (enriched)
+    const hasCustomCanvasDoc = Boolean(canvasDoc && canvasDoc.blocks && canvasDoc.blocks.length > 0);
+    const activeBlocks = isPersonal
+      ? defaultOperationalModes[0].blocks
+      : (hasCustomCanvasDoc ? enrichedBlocks : (finalLifeModes[0]?.blocks || enrichedBlocks));
+
+    const activeChips = (canvasDoc?.chips && canvasDoc.chips.length > 0)
+      ? canvasDoc.chips
+      : (finalLifeModes[0]?.chips || (isPersonal ? [
+          { label: 'Call Contact', target: 'contact-card' },
+          { label: 'New Note', target: 'data-grid' },
+          { label: 'Add Expense', target: 'action-confirm' },
+        ] : [
+          { label: 'New Sale', target: 'quick-pos' },
+          { label: 'Check Stock', target: 'stock-sheet' },
+          { label: 'Contacts', target: 'contact-card' },
+        ]));
+
+    return {
+      title: rawDoc.title,
+      blocks: activeBlocks,
+      lifeModes: finalLifeModes,
+      chips: activeChips,
+    };
+  }, [canvasDoc, currentWorkspace, orders, products, inboxTasks, allEntities, workspaceName, canvasBlocks]);
 
   if (loadingWorkspaces) {
     return (
@@ -1451,429 +1847,136 @@ ${membersYaml}
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <KeyboardAvoidingView
-        style={{ flex: 1, paddingTop: insets.top }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
-      >
-        {/* Main Content — scrollable with keyboard */}
-        <KeyboardAwareScrollView
-          ref={scrollViewRef}
-          style={{ flex: 1 }}
-          contentContainerStyle={{ paddingHorizontal: 12, paddingTop: 12, paddingBottom: 16 }}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="interactive"
-        >
-        {/* Top Sponsored Ad Banner */}
-        <AdBanner />
-
-        {/* 1. Live Site Status Widget */}
-        {draft && (
-          <SiteCard
-            storeName={currentWorkspace?.name || currentWorkspace?.subdomain || ''}
-            subdomain={currentWorkspace?.subdomain || ''}
-            layout={draft}
-            isDirty={true}
-            onPublish={handlePublishFromCard}
-          />
-        )}
-
-        <View style={{ height: 4 }} />
-
-        <LinearInboxList
-            tasks={inboxTasks}
-            loading={loadingInbox}
-            headerLeft={(
-              <Pressable
-                onPress={() => setShowDropdown(true)}
-                hitSlop={8}
-                style={({ pressed }) => [{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: 6,
-                  paddingHorizontal: 0,
-                  paddingVertical: 2,
-                  opacity: pressed ? 0.6 : 1,
-                }]}
-              >
-                <WorkspaceThumbnail name={workspaceName || currentWorkspace?.subdomain || ''} size={18} theme={theme} />
-                <Text style={{ color: theme.text, fontSize: 13.5, fontWeight: '600' }} numberOfLines={1}>
-                  {workspaceName || (currentWorkspace?.subdomain ? currentWorkspace.subdomain.charAt(0).toUpperCase() + currentWorkspace.subdomain.slice(1) : 'Workspace')}
-                </Text>
-              </Pressable>
-            )}
-            onToggleDone={async (taskId) => {
-              setInboxTasks(prev => prev.filter(t => t.id !== taskId));
-              if (currentWorkspace?.scope) {
-                await tar.tool('update', { table: 'inbox', id: taskId, status: 'done', scope: currentWorkspace.scope }).catch(() => null);
-                await markTaskDone(currentWorkspace.scope, taskId).catch(() => null);
-              }
-            }}
-            onSelectTask={(item) => {
-              if (item.data?.entity) {
-                setSelectedEntityDetails(item.data.entity);
-                return;
-              }
-
-              // Open EventComposeModal pre-filled to resolve the inbox task
-              setResolvingTaskId(item.id);
-              const titleLower = (item.title || '').toLowerCase();
-              const typeLower = (item.type || '').toLowerCase();
-
-              let actionObj = PLAN5_EVENT_MOTIONS.find(m => m.actionName === 'action_update_status');
-              let initialParams: Record<string, string> = {};
-
-              if (typeLower.includes('stock') || titleLower.includes('stock') || titleLower.includes('inventory')) {
-                actionObj = PLAN5_EVENT_MOTIONS.find(m => m.actionName === 'action_adjust_stock');
-                initialParams = {
-                  product_id: item.data?.product_id || item.ref || '',
-                  qty: String(item.data?.qty || '10'),
-                  reason: `Resolving ${item.title}`,
-                };
-              } else if (typeLower.includes('booking') || titleLower.includes('appointment') || titleLower.includes('booking')) {
-                actionObj = PLAN5_EVENT_MOTIONS.find(m => m.actionName === 'action_book_slot');
-                initialParams = {
-                  service: item.data?.service || item.title,
-                  customer_id: item.data?.customer_id || item.data?.customer || '',
-                  date: item.data?.date || new Date().toISOString().slice(0, 10),
-                  slot: item.data?.slot || '9:00 AM',
-                };
-              } else if (typeLower.includes('order') || titleLower.includes('order') || titleLower.includes('sale')) {
-                actionObj = PLAN5_EVENT_MOTIONS.find(m => m.actionName === 'action_record_sale');
-                initialParams = {
-                  customer_id: item.data?.customer_id || '',
-                  payment_method: item.data?.payment_method || 'Cash',
-                  total: String(item.data?.total || item.data?.value || ''),
-                };
-              } else if (typeLower.includes('shipment') || titleLower.includes('delivery')) {
-                actionObj = PLAN5_EVENT_MOTIONS.find(m => m.actionName === 'action_complete_delivery');
-                initialParams = {
-                  shipment_id: item.data?.shipment_id || item.ref || '',
-                };
-              } else {
-                actionObj = PLAN5_EVENT_MOTIONS.find(m => m.actionName === 'action_log_activity');
-                initialParams = {
-                  type: 'Resolution',
-                  description: `Resolving ${item.title}`,
-                  contact_id: item.ref || item.id,
-                };
-              }
-
-              if (actionObj) {
-                handleTriggerAction({
-                  name: actionObj.actionName,
-                  purpose: actionObj.whatHappened,
-                  params: actionObj.params,
-                });
-                setFormParams(initialParams);
-              }
-            }}
-          />
-      </KeyboardAwareScrollView>
-
-      {/* Blur Overlay over background content when typing/inputting */}
-      {input.trim().length > 0 && (
-        <Pressable
-          style={[StyleSheet.absoluteFill, { zIndex: 1 }]}
-          onPress={() => Keyboard.dismiss()}
-        >
-          <BlurView
-            intensity={90}
-            tint="light"
-            style={[
-              StyleSheet.absoluteFill,
-              { backgroundColor: theme.background + 'D8' }
-            ]}
-          />
-        </Pressable>
-      )}
-
-      {/* Input Section — confined to bottom (z-index above blur) */}
-      <View style={[styles.inputContainer, { borderTopColor: 'transparent', paddingBottom: 0, paddingTop: 0, zIndex: 2 }]}>
-        {/* Suggested Actions popup list when typing */}
-        {input.trim().length > 0 && getFilteredActions().length > 0 ? (
-          <View style={{
-            backgroundColor: '#ffffff',
-            borderColor: '#e2e8f0',
-            borderWidth: 1,
-            borderRadius: 16,
-            marginBottom: 8,
-            marginHorizontal: 10,
-            padding: 4,
-          }}>
-            <Text style={{ fontSize: 11, fontWeight: '700', color: '#94a3b8', paddingHorizontal: 12, paddingTop: 8, paddingBottom: 4, textTransform: 'uppercase', letterSpacing: 0.8 }}>
-              Suggested Actions
-            </Text>
-            {getFilteredActions().slice(0, 6).map((hint, idx, arr) => (
-              <TouchableOpacity
-                key={idx}
-                activeOpacity={0.65}
-                style={{
-                  minHeight: 46,
-                  paddingVertical: 10,
-                  paddingHorizontal: 12,
-                  borderRadius: 12,
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  borderBottomWidth: idx < arr.length - 1 ? StyleSheet.hairlineWidth : 0,
-                  borderBottomColor: '#f1f5f9',
-                }}
-                onPress={() => {
-                  setInput('');
-                  Keyboard.dismiss();
-                  setShowCanvasCustomizer(true);
-                }}
-              >
-                <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: 12 }}>
-                  {hint.icon ? (
-                    <View style={{
-                      width: 32,
-                      height: 32,
-                      borderRadius: 10,
-                      backgroundColor: '#eff6ff',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}>
-                      <Ionicons name={hint.icon as any} size={17} color="#2563eb" />
-                    </View>
-                  ) : (
-                    <View style={{
-                      width: 32,
-                      height: 32,
-                      borderRadius: 10,
-                      backgroundColor: '#f8fafc',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}>
-                      <Ionicons name="flash-outline" size={16} color="#64748b" />
-                    </View>
-                  )}
-                  <Text style={{ fontSize: 14.5, color: '#1e293b', fontWeight: '600', flex: 1 }} numberOfLines={1}>
-                    {hint.label}
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            ))}
-          </View>
-        ) : null}
-        {/* Contact Mention Picker Popover above text input */}
-        <ContactMentionPicker
-          visible={showMentionPopover}
-          query={mentionQuery}
-          prefix={mentionPrefix}
-          entities={allEntities}
-          theme={theme}
-          onSelectContact={handleSelectMentionContact}
-          onOpenContactDetails={handleOpenEntityOrItemDetails}
-          onClose={() => setShowMentionPopover(false)}
-          onOpenFullModal={() => {
-            setShowMentionPopover(false);
-            setShowMentionModal(true);
-          }}
-          onAddNewContact={() => {
-            setShowMentionPopover(false);
-            setInitialContactType('Customer');
-            setEditContactEntity(null);
-            setShowContactModal(true);
-          }}
-        />
-
-        {/* Text Input Bar — Full Width, Clean & Uncluttered */}
-        <View style={[
-          styles.textInputWrapper,
-          {
-            borderColor: theme.border,
-            backgroundColor: theme.background,
-            borderTopWidth: 1,
-            borderBottomWidth: 0,
-            borderLeftWidth: 0,
-            borderRightWidth: 0,
-            borderRadius: 0,
-            marginHorizontal: 0,
-            paddingHorizontal: 16,
-            paddingTop: 10,
-            paddingBottom: Math.max(insets.bottom + 10, 20),
-            alignItems: 'center',
-            flexDirection: 'row',
-            gap: 10,
-          }
-        ]}>
-          <TextInput
-            value={input}
-            onChangeText={handleInputChange}
-            placeholder="Type an action, search, or message..."
-            placeholderTextColor={theme.textMuted}
-            style={[styles.textInput, { color: theme.text, flex: 1 }]}
-            multiline={false}
-            keyboardType="default"
-            returnKeyType="send"
-            inputMode="text"
-            autoCapitalize="none"
-            onSubmitEditing={() => handleSend()}
-          />
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingRight: 4 }}>
-            {input.trim().length > 0 ? (
-              <TouchableOpacity
-                activeOpacity={0.7}
-                onPress={() => handleSend()}
-                style={{
-                  width: 40,
-                  height: 40,
-                  borderRadius: 20,
-                  backgroundColor: theme.primary,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <Ionicons name="arrow-up" size={20} color="#ffffff" />
-              </TouchableOpacity>
-            ) : (
-              <>
-                {/* Globe (Explore) Button */}
-                <TouchableOpacity
-                  activeOpacity={0.7}
-                  onPress={() => setShowExploreOverlay(true)}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  style={{
-                    width: 36,
-                    height: 36,
-                    borderRadius: 18,
-                    backgroundColor: showExploreOverlay ? theme.primary + '18' : theme.backgroundElement,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  <Ionicons name="globe-outline" size={18} color={showExploreOverlay ? theme.primary : theme.textSecondary} />
-                </TouchableOpacity>
-
-                {/* Colored Touch-Friendly Canvas Button */}
-                <Pressable
-                  onPress={() => setShowCanvasOverlay(true)}
-                  style={({ pressed }) => [
-                    {
-                      width: 40,
-                      height: 40,
-                      borderRadius: 20,
-                      backgroundColor: theme.primary,
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      opacity: pressed ? 0.8 : 1,
-                    },
-                  ]}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                >
-                  <TarLogo size={20} color="#ffffff" />
-                </Pressable>
-              </>
-            )}
-          </View>
-        </View>
-      </View>
-
-      </KeyboardAvoidingView>
+      <GenUIScreen
+        canvasDoc={liveCanvasDoc}
+        onExecuteAction={handleGenUIAction}
+        theme={theme}
+        designTokens={designTokens}
+        infoBarText={
+          currentWorkspace?.name
+            ? `★ ${currentWorkspace.name} · ${currentWorkspace.role === 'owner' ? 'Owner Mode' : currentWorkspace.scope === 'p' ? 'Personal Mode' : 'Staff Mode'} · Tap to switch`
+            : '★ Partner Offer: 0% POS processing fees today · Tap for details'
+        }
+        workspaces={workspaces}
+        currentWorkspace={currentWorkspace}
+        onSelectWorkspace={handleSelectWorkspace}
+        onCreateWorkspace={() => setIsCreatingWorkspace(true)}
+        onOpenSwitcher={() => setShowDropdown(true)}
+      />
 
 
 
-      {/* Workspace Switcher Selector Modal (Max Uncluttered Bottom Drawer) */}
+      {/* Workspace Switcher Selector Modal (Full Screen Top-Down Sheet) */}
       <Modal
         visible={showDropdown}
-        transparent={true}
         animationType="slide"
+        presentationStyle="fullScreen"
         onRequestClose={() => setShowDropdown(false)}
       >
-        <Pressable
-          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end' }}
-          onPress={() => setShowDropdown(false)}
-        >
-          <Pressable
-            style={{
-              backgroundColor: theme.background,
-              borderTopLeftRadius: 20,
-              borderTopRightRadius: 20,
-              borderTopWidth: 1,
-              borderColor: theme.border + '60',
-              paddingTop: 10,
-              paddingHorizontal: 16,
-              paddingBottom: Math.max(insets.bottom + 12, 24),
-              maxHeight: 340,
-            }}
-            onPress={() => {}}
+        <View style={[styles.switcherContainer, { paddingTop: Math.max(insets.top, Platform.OS === 'android' ? 16 : 12) + 8, paddingBottom: Math.max(insets.bottom, 16) }]}>
+          {/* Header with Title, 5-Limit Badge & Close / Collapse Button */}
+          <View style={styles.switcherHeader}>
+            <View style={styles.switcherTitleCol}>
+              <View style={styles.switcherTitleRow}>
+                <Text style={styles.switcherTitle}>Workspaces</Text>
+                <View style={styles.switcherLimitBadge}>
+                  <Text style={styles.switcherLimitText}>{workspaces.length} / 5</Text>
+                </View>
+              </View>
+              <Text style={styles.switcherSubtitle}>Tap to switch your active operational context</Text>
+            </View>
+
+            <TouchableOpacity
+              onPress={() => setShowDropdown(false)}
+              style={styles.switcherCloseBtn}
+              hitSlop={8}
+            >
+              <Ionicons name="chevron-up" size={20} color="#0f172a" />
+            </TouchableOpacity>
+          </View>
+
+          {/* List of Workspaces (Clean, Uncluttered, Divided by Light Lines) */}
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            style={styles.switcherScroll}
+            contentContainerStyle={styles.switcherScrollContent}
           >
-            {/* Minimal Handle */}
-            <View style={{ width: 32, height: 4, borderRadius: 2, backgroundColor: theme.textMuted + '30', alignSelf: 'center', marginBottom: 12 }} />
+            {workspaces.map((w, idx) => {
+              const isActive = w.subdomain === currentWorkspace?.subdomain;
+              const name = w.name || w.subdomain;
+              const isPersonal = w.scope === 'p' || w.subdomain === 'personal' || (w.name || '').toLowerCase().includes('personal');
+              const roleLabel = isPersonal ? 'Personal' : w.role === 'owner' ? 'Owner' : 'Collaborator';
+              const isLast = idx === workspaces.length - 1;
 
-            {/* Simple Minimal Title */}
-            <Text style={{ fontSize: 11, fontWeight: '700', color: theme.textMuted, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 8, paddingHorizontal: 4 }}>
-              Workspaces
-            </Text>
-
-            {/* List with Highlighted Active Item */}
-            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 240 }}>
-              {workspaces.map((w) => {
-                const isActive = w.subdomain === currentWorkspace?.subdomain;
-                const name = w.name || w.subdomain;
-                const roleLabel = w.role === 'owner' ? 'Owner' : (w.role || 'Member');
-                return (
-                  <Pressable
-                    key={w.scope}
-                    onPress={() => handleSelectWorkspace(w)}
-                    style={({ pressed }) => [
-                      {
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        backgroundColor: isActive ? theme.primary + '15' : 'transparent',
-                        borderRadius: 10,
-                        paddingVertical: 9,
-                        paddingHorizontal: 10,
-                        marginBottom: 2,
-                        opacity: pressed ? 0.7 : 1,
-                      }
+              return (
+                <View key={w.scope}>
+                  <TouchableOpacity
+                    activeOpacity={0.7}
+                    onPress={() => {
+                      handleSelectWorkspace(w);
+                      setShowDropdown(false);
+                    }}
+                    style={[
+                      styles.switcherItem,
+                      isActive && styles.switcherItemActive,
                     ]}
                   >
-                    <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-                      <WorkspaceThumbnail name={name} size={30} theme={theme} />
-                      <View style={{ marginLeft: 10, flex: 1 }}>
-                        <Text
-                          style={{
-                            color: isActive ? theme.primary : theme.text,
-                            fontWeight: isActive ? '700' : '500',
-                            fontSize: 14,
-                          }}
-                          numberOfLines={1}
-                        >
-                          {name}
-                        </Text>
-                        <Text style={{ fontSize: 11, color: theme.textMuted }}>
-                          {w.subdomain}.tarai.space • {roleLabel}
-                        </Text>
-                      </View>
+                    <View style={styles.switcherItemLeft}>
+                      <Text
+                        style={[
+                          styles.switcherItemName,
+                          isActive && styles.switcherItemNameActive,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {name}
+                      </Text>
+                      <Text style={styles.switcherItemSub}>
+                        {roleLabel}
+                      </Text>
                     </View>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
 
-            {/* Quick Actions (Connect Chat / Join with Code / Create Workspace) */}
-            <View style={{ flexDirection: 'row', gap: 8, marginTop: 12, borderTopWidth: 1, borderColor: theme.border + '40', paddingTop: 12 }}>
+                    <Text style={styles.switcherItemDomain} numberOfLines={1}>
+                      {isPersonal ? 'personal' : `${w.subdomain}.tarai.space`}
+                    </Text>
+                  </TouchableOpacity>
+                  {!isLast && <View style={styles.switcherDivider} />}
+                </View>
+              );
+            })}
+          </ScrollView>
+
+          {/* Bottom Actions: + Create Workspace (Limit Check), Connect Chat, Join Code */}
+          <View style={styles.switcherBottomSection}>
+            {workspaces.length < 5 ? (
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={() => {
+                  setShowDropdown(false);
+                  setIsCreatingWorkspace(true);
+                }}
+                style={styles.createWsBtn}
+              >
+                <Ionicons name="add" size={18} color="#ffffff" style={{ marginRight: 6 }} />
+                <Text style={styles.createWsBtnText}>Create Workspace</Text>
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.limitReachedNotice}>
+                <Ionicons name="information-circle-outline" size={16} color="#64748b" style={{ marginRight: 6 }} />
+                <Text style={styles.limitReachedText}>Workspace limit reached (5 of 5)</Text>
+              </View>
+            )}
+
+            <View style={styles.secondaryActionsRow}>
               <TouchableOpacity
                 onPress={() => {
                   setShowDropdown(false);
                   setShowConnectChatModal(true);
                 }}
-                style={{
-                  flex: 1,
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  backgroundColor: theme.primary + '15',
-                  paddingVertical: 10,
-                  borderRadius: 10,
-                  gap: 6,
-                }}
+                style={styles.secondaryActionBtn}
               >
-                <Ionicons name="chatbubbles-outline" size={16} color={theme.primary} />
-                <Text style={{ fontSize: 12.5, fontWeight: '600', color: theme.primary }}>Connect Chat</Text>
+                <Ionicons name="chatbubbles-outline" size={15} color="#0f172a" />
+                <Text style={styles.secondaryActionText}>Connect Chat</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -1881,25 +1984,14 @@ ${membersYaml}
                   setShowDropdown(false);
                   setShowJoinModal(true);
                 }}
-                style={{
-                  flex: 1,
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  backgroundColor: theme.backgroundElement,
-                  borderWidth: 1,
-                  borderColor: theme.border,
-                  paddingVertical: 10,
-                  borderRadius: 10,
-                  gap: 6,
-                }}
+                style={styles.secondaryActionBtn}
               >
-                <Ionicons name="key-outline" size={16} color={theme.text} />
-                <Text style={{ fontSize: 12.5, fontWeight: '600', color: theme.text }}>Join Code</Text>
+                <Ionicons name="key-outline" size={15} color="#0f172a" />
+                <Text style={styles.secondaryActionText}>Join Code</Text>
               </TouchableOpacity>
             </View>
-          </Pressable>
-        </Pressable>
+          </View>
+        </View>
       </Modal>
 
       {/* Agentic Full Screen AI Workspace Creation Experience */}
@@ -3009,6 +3101,167 @@ const styles = StyleSheet.create({
   atButtonText: {
     fontSize: 15,
     fontWeight: '800',
+  },
+  // ── Full-Screen Top-Down Workspace Switcher ──────────────────────
+  switcherContainer: {
+    flex: 1,
+    backgroundColor: '#ffffff',
+  },
+  switcherHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingBottom: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  switcherTitleCol: {
+    flex: 1,
+  },
+  switcherTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  switcherTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#0f172a',
+    letterSpacing: -0.3,
+  },
+  switcherLimitBadge: {
+    backgroundColor: '#f1f5f9',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  switcherLimitText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#475569',
+  },
+  switcherSubtitle: {
+    fontSize: 12,
+    color: '#64748b',
+    marginTop: 2,
+  },
+  switcherCloseBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 12,
+  },
+  switcherScroll: {
+    flex: 1,
+  },
+  switcherScrollContent: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 20,
+  },
+  switcherItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 10,
+  },
+  switcherItemActive: {
+    backgroundColor: '#f8fafc', // Very light grey highlight
+  },
+  switcherItemLeft: {
+    flex: 1,
+    marginRight: 12,
+  },
+  switcherItemName: {
+    fontSize: 15.5,
+    fontWeight: '600',
+    color: '#0f172a',
+    letterSpacing: -0.2,
+  },
+  switcherItemNameActive: {
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  switcherItemSub: {
+    fontSize: 12,
+    color: '#64748b',
+    marginTop: 2,
+    textTransform: 'capitalize',
+  },
+  switcherItemDomain: {
+    fontSize: 12,
+    color: '#94a3b8',
+    textAlign: 'right',
+  },
+  switcherDivider: {
+    height: 1,
+    backgroundColor: '#f1f5f9',
+    marginHorizontal: 14,
+  },
+  switcherBottomSection: {
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#f1f5f9',
+    gap: 10,
+    backgroundColor: '#ffffff',
+  },
+  createWsBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#0f172a',
+    paddingVertical: 13,
+    borderRadius: 12,
+  },
+  createWsBtnText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  limitReachedNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    paddingVertical: 11,
+    borderRadius: 12,
+  },
+  limitReachedText: {
+    fontSize: 12.5,
+    fontWeight: '600',
+    color: '#64748b',
+  },
+  secondaryActionsRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  secondaryActionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    paddingVertical: 10,
+    borderRadius: 10,
+    gap: 6,
+  },
+  secondaryActionText: {
+    fontSize: 12.5,
+    fontWeight: '600',
+    color: '#0f172a',
   },
 });
 

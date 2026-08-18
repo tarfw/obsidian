@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 
 export interface MetricCardProps {
   props?: {
@@ -7,71 +8,67 @@ export interface MetricCardProps {
     subtitle?: string;
     value?: string | number;
     unit?: string;
-    backgroundColor?: string;
-    months?: string[];
+    trend?: string;
+    trendPositive?: boolean;
     data?: number[];
   };
   designTokens?: any;
 }
 
 export default function MetricCard({ props }: MetricCardProps) {
-  const title = props?.title || 'Request';
-  const subtitle = props?.subtitle || 'Analytics';
-  const value = props?.value ?? '893,283';
-  const unit = props?.unit || 'All Time';
-  const bg = props?.backgroundColor || '#52ffe1'; // Signature Mint Cyan
-  const months = Array.isArray(props?.months) ? props.months : ['Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug'];
-  
-  // High density data points for smooth line graph wave (guarded against string/non-array props)
-  const defaultDataPoints = [
-    30, 48, 35, 52, 40, 75, 42, 58, 62, 50, 70, 38, 48, 65, 60, 78, 72, 85, 75, 80, 82, 78, 88, 85, 90
-  ];
-  const dataPoints = Array.isArray(props?.data) ? props.data : defaultDataPoints;
-  const maxVal = Math.max(...dataPoints, 100);
+  const title = props?.title || "Today's Revenue";
+  const subtitle = props?.subtitle || 'Live Operations';
+  const value = props?.value ?? '$0.00';
+  const unit = props?.unit || '0 Orders Today';
+  const trend = props?.trend;
+  const trendPositive = props?.trendPositive !== false;
+
+  const dataPoints = Array.isArray(props?.data) && props.data.length > 0 ? props.data : [12, 18, 15, 24, 28, 35, 42];
+  const maxVal = Math.max(...dataPoints, 1);
 
   return (
-    <View style={[styles.card, { backgroundColor: bg }]}>
-      {/* Top Left Title Stack */}
-      <View style={styles.titleContainer}>
-        <Text style={styles.title}>{title}</Text>
-        <Text style={styles.subtitle}>{subtitle}</Text>
+    <View style={styles.card}>
+      {/* Top Header */}
+      <View style={styles.headerRow}>
+        <View style={styles.titleGroup}>
+          <Text style={styles.titleText}>{title.toUpperCase()}</Text>
+          <Text style={styles.subtitleText}>{subtitle}</Text>
+        </View>
+        {trend ? (
+          <View style={[styles.trendBadge, trendPositive ? styles.trendPos : styles.trendNeg]}>
+            <Ionicons
+              name={trendPositive ? 'trending-up' : 'trending-down'}
+              size={12}
+              color={trendPositive ? '#059669' : '#dc2626'}
+            />
+            <Text style={[styles.trendText, trendPositive ? styles.trendTextPos : styles.trendTextNeg]}>
+              {trend}
+            </Text>
+          </View>
+        ) : null}
       </View>
 
-      {/* Middle Wave Line Chart with Soft Gradient Fill */}
-      <View style={styles.chartSection}>
-        <View style={styles.chartLineContainer}>
-          {dataPoints.map((val: number, idx: number) => {
-            const heightPct = (val / maxVal) * 100;
-            const isPeak = idx > 0 && val > dataPoints[idx - 1] && (idx < dataPoints.length - 1 ? val > dataPoints[idx + 1] : true);
+      {/* Main Metric Value & Trend/Unit */}
+      <View style={styles.metricRow}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.valueText} numberOfLines={1}>
+            {value}
+          </Text>
+          <Text style={styles.unitText}>{unit}</Text>
+        </View>
+
+        {/* Compact Clean Sparkline */}
+        <View style={styles.sparklineContainer}>
+          {dataPoints.map((val, idx) => {
+            const heightPct = Math.max(18, (val / maxVal) * 100);
+            const isLast = idx === dataPoints.length - 1;
             return (
-              <View key={idx} style={styles.chartCol}>
-                <View style={[styles.chartAreaFill, { height: `${heightPct}%` }]} />
-                <View
-                  style={[
-                    styles.chartLinePoint,
-                    { bottom: `${heightPct}%` },
-                    isPeak && styles.peakPoint
-                  ]}
-                />
+              <View key={idx} style={styles.sparkCol}>
+                <View style={[styles.sparkBar, { height: `${heightPct}%` }, isLast && styles.sparkBarActive]} />
               </View>
             );
           })}
         </View>
-
-        {/* Month Labels Axis */}
-        <View style={styles.monthsRow}>
-          {months.map((m: string, i: number) => (
-            <Text key={i} style={styles.monthLabel}>
-              {m}
-            </Text>
-          ))}
-        </View>
-      </View>
-
-      {/* Bottom Left Big Metric & Subtitle */}
-      <View style={styles.bottomRow}>
-        <Text style={styles.valueText}>{value}</Text>
-        <Text style={styles.unitText}>{unit}</Text>
       </View>
     </View>
   );
@@ -79,96 +76,94 @@ export default function MetricCard({ props }: MetricCardProps) {
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 24,
-    padding: 24,
-    minHeight: 260,
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    marginVertical: 4,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
-    marginVertical: 8,
-    borderWidth: 0,
+    marginBottom: 10,
   },
-  titleContainer: {
-    marginBottom: 8,
+  titleGroup: {
+    flex: 1,
+    marginRight: 8,
   },
-  title: {
-    fontSize: 34,
-    fontWeight: '800',
-    color: '#041d18',
-    letterSpacing: -0.8,
-    lineHeight: 38,
+  titleText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#64748b',
+    letterSpacing: 0.8,
   },
-  subtitle: {
-    fontSize: 30,
-    fontWeight: '400',
-    color: '#1a7565',
-    letterSpacing: -0.5,
-    lineHeight: 34,
+  subtitleText: {
+    fontSize: 12,
+    color: '#94a3b8',
+    marginTop: 1,
   },
-  chartSection: {
-    marginVertical: 12,
-    height: 110,
-    justifyContent: 'flex-end',
+  trendBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
   },
-  chartLineContainer: {
+  trendPos: {
+    backgroundColor: '#ecfdf5',
+  },
+  trendNeg: {
+    backgroundColor: '#fef2f2',
+  },
+  trendText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  trendTextPos: {
+    color: '#059669',
+  },
+  trendTextNeg: {
+    color: '#dc2626',
+  },
+  metricRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    height: 80,
-    width: '100%',
-    paddingHorizontal: 4,
+    justifyContent: 'space-between',
   },
-  chartCol: {
+  valueText: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: '#0f172a',
+    letterSpacing: -0.5,
+  },
+  unitText: {
+    fontSize: 12.5,
+    color: '#64748b',
+    fontWeight: '500',
+    marginTop: 2,
+  },
+  sparklineContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    height: 32,
+    width: 64,
+    gap: 4,
+    paddingBottom: 2,
+  },
+  sparkCol: {
     flex: 1,
     height: '100%',
     justifyContent: 'flex-end',
-    alignItems: 'center',
-    position: 'relative',
   },
-  chartAreaFill: {
+  sparkBar: {
     width: '100%',
-    backgroundColor: 'rgba(4, 29, 24, 0.08)',
-    borderTopLeftRadius: 2,
-    borderTopRightRadius: 2,
+    backgroundColor: '#e2e8f0',
+    borderRadius: 3,
   },
-  chartLinePoint: {
-    position: 'absolute',
-    width: 2.5,
-    height: 2.5,
-    borderRadius: 1.5,
-    backgroundColor: '#1a7565',
-  },
-  peakPoint: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: '#041d18',
-  },
-  monthsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 8,
-    paddingHorizontal: 4,
-  },
-  monthLabel: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#1a7565',
-    opacity: 0.8,
-  },
-  bottomRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    marginTop: 8,
-  },
-  valueText: {
-    fontSize: 42,
-    fontWeight: '800',
-    color: '#041d18',
-    letterSpacing: -1,
-    marginRight: 10,
-  },
-  unitText: {
-    fontSize: 26,
-    fontWeight: '400',
-    color: '#1a7565',
-    letterSpacing: -0.3,
+  sparkBarActive: {
+    backgroundColor: '#0f172a',
   },
 });

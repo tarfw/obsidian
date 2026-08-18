@@ -1,44 +1,105 @@
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { useState, useMemo } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import type { SectionProps } from '../ComponentRegistry';
 
 export default function DataTable({ props, designTokens, data = [], onExecuteAction }: SectionProps) {
-  const { title, emptyMessage } = props;
-  const { colors, rounded } = designTokens;
+  const title = props?.title || (props?.type ? `${props.type.charAt(0).toUpperCase() + props.type.slice(1)} Records` : 'Data Records');
+  const emptyMessage = props?.emptyMessage;
+  const colors = designTokens?.colors || {};
+  const rounded = designTokens?.rounded || {};
+  const columns: string[] = props?.columns || ['name', 'category', 'price', 'stock'];
+  const filterKey = props?.filter;
+
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Sample default data if none provided
+  const defaultSampleData = [
+    { id: '1', name: 'Whole Milk 1L', category: 'Dairy', price: 2.50, stock: 18, status: 'in_stock' },
+    { id: '2', name: 'Almond Butter', category: 'Spreads', price: 6.80, stock: 8, status: 'in_stock' },
+    { id: '3', name: 'Organic Eggs (12)', category: 'Poultry', price: 4.20, stock: 24, status: 'in_stock' },
+    { id: '4', name: 'Sourdough Bread', category: 'Bakery', price: 3.50, stock: 5, status: 'low_stock' },
+  ];
+
+  const rawData = data && data.length > 0 ? data : (props?.data || defaultSampleData);
+
+  const filteredData = useMemo(() => {
+    return rawData.filter((row: any) => {
+      let rowDataObj: any = {};
+      if (typeof row.data === 'string') {
+        try { rowDataObj = JSON.parse(row.data); } catch {}
+      } else if (typeof row.data === 'object' && row.data !== null) {
+        rowDataObj = row.data;
+      }
+      const itemTitle = row.title || row.name || rowDataObj.title || rowDataObj.name || row.id || '';
+      const category = rowDataObj.category || row.category || row.type || '';
+      const matchSearch = String(itemTitle).toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          String(category).toLowerCase().includes(searchQuery.toLowerCase());
+      return matchSearch;
+    });
+  }, [rawData, searchQuery]);
+
+  const handleRowPress = (row: any) => {
+    if (onExecuteAction) {
+      onExecuteAction('select_row', { row, type: props?.type });
+    }
+  };
 
   return (
     <View style={styles.container}>
-      {title && (
-        <Text style={[styles.title, { color: colors.primary, marginBottom: 6 }]}>
-          {title}
-        </Text>
-      )}
+      {/* Title and Search Bar */}
+      <View style={styles.header}>
+        <Text style={styles.title}>{title}</Text>
+        <Text style={styles.countBadge}>{filteredData.length} entries</Text>
+      </View>
+
+      {/* Quick Search Filter */}
+      <View style={[styles.searchBox, { borderRadius: rounded.sm || 10 }]}>
+        <Ionicons name="search-outline" size={16} color="#94a3b8" />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Filter records..."
+          placeholderTextColor="#94a3b8"
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+        {searchQuery.length > 0 && (
+          <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={8}>
+            <Ionicons name="close-circle" size={16} color="#94a3b8" />
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Records Card List */}
       <View
         style={[
-          styles.table,
+          styles.tableCard,
           {
-            backgroundColor: '#fff',
-            borderColor: 'rgba(0,0,0,0.06)',
-            borderRadius: rounded.sm || 8,
-            padding: 8,
+            borderRadius: rounded.md || 16,
           },
         ]}
       >
-        {data.length === 0 ? (
+        {filteredData.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <Text style={[styles.empty, { color: '#94a3b8' }]}>
-              {emptyMessage || `No ${props?.type || 'items'} recorded`}
+            <Ionicons name="folder-open-outline" size={28} color="#cbd5e1" />
+            <Text style={styles.empty}>
+              {emptyMessage || `No ${props?.type || 'records'} found`}
             </Text>
             {onExecuteAction && (
               <TouchableOpacity
                 style={styles.addStarterBtn}
                 onPress={() => onExecuteAction('create_item', { type: props?.type || 'item' })}
               >
-                <Text style={styles.addStarterText}>+ Add {props?.type ? props.type.charAt(0).toUpperCase() + props.type.slice(1) : 'Item'}</Text>
+                <Text style={styles.addStarterText}>
+                  + Add {props?.type ? props.type.charAt(0).toUpperCase() + props.type.slice(1) : 'Record'}
+                </Text>
               </TouchableOpacity>
             )}
           </View>
         ) : (
-          data.map((row: any, idx: number) => {
+          filteredData.map((row: any, idx: number) => {
             let rowDataObj: any = {};
             if (typeof row.data === 'string') {
               try { rowDataObj = JSON.parse(row.data); } catch {}
@@ -46,47 +107,46 @@ export default function DataTable({ props, designTokens, data = [], onExecuteAct
               rowDataObj = row.data;
             }
 
-            const itemTitle = row.title || row.name || rowDataObj.title || row.id;
+            const itemTitle = row.title || row.name || rowDataObj.title || rowDataObj.name || row.id;
             const price = rowDataObj.price ?? row.price;
-            const stock = row.value ?? rowDataObj.stock;
+            const stock = row.value ?? rowDataObj.stock ?? row.stock;
             const category = rowDataObj.category || row.category || row.type;
+            const status = rowDataObj.status || row.status;
 
             return (
-              <View
+              <TouchableOpacity
                 key={row.id || idx}
+                activeOpacity={0.7}
+                onPress={() => handleRowPress(row)}
                 style={[
                   styles.row,
-                  {
-                    borderBottomWidth: idx < data.length - 1 ? StyleSheet.hairlineWidth : 0,
-                    borderBottomColor: 'rgba(0,0,0,0.06)',
-                    paddingVertical: 10,
-                    paddingHorizontal: 8,
-                  },
+                  idx < filteredData.length - 1 && styles.rowDivider,
                 ]}
               >
-                <View style={styles.rowContent}>
-                  <Text style={[styles.rowTitle, { color: '#111' }]} numberOfLines={1}>
+                <View style={styles.rowMain}>
+                  <Text style={styles.rowTitle} numberOfLines={1}>
                     {itemTitle}
                   </Text>
-                  {price !== undefined && (
-                    <Text style={[styles.rowValue, { color: colors.primary || '#10b981' }]}>
-                      ₹{price}
+                  {category ? (
+                    <Text style={styles.rowSubtitle} numberOfLines={1}>
+                      {category} {status ? `· ${status}` : ''}
                     </Text>
-                  )}
+                  ) : null}
                 </View>
-                <View style={styles.rowSubContent}>
-                  {category && (
-                    <Text style={[styles.rowSubtitle, { color: '#64748b' }]} numberOfLines={1}>
-                      {category}
+
+                <View style={styles.rowMeta}>
+                  {price !== undefined && (
+                    <Text style={styles.rowPrice}>
+                      ${typeof price === 'number' ? price.toFixed(2) : price}
                     </Text>
                   )}
                   {stock !== undefined && (
-                    <Text style={[styles.rowStock, { color: '#64748b', fontSize: 11 }]}>
+                    <Text style={styles.rowStock}>
                       Stock: {stock}
                     </Text>
                   )}
                 </View>
-              </View>
+              </TouchableOpacity>
             );
           })
         )}
@@ -96,24 +156,112 @@ export default function DataTable({ props, designTokens, data = [], onExecuteAct
 }
 
 const styles = StyleSheet.create({
-  container: {},
-  title: { fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5, color: '#94a3b8' },
-  table: { borderWidth: 1 },
-  emptyContainer: { paddingVertical: 14, alignItems: 'center', justifyContent: 'center' },
-  empty: { fontSize: 12, color: '#94a3b8', textAlign: 'center' },
-  addStarterBtn: {
-    marginTop: 8,
-    backgroundColor: '#eff6ff',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+  container: {
+    marginVertical: 4,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+    paddingHorizontal: 2,
+  },
+  title: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#0f172a',
+  },
+  countBadge: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#64748b',
+    backgroundColor: '#f1f5f9',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
     borderRadius: 8,
   },
-  addStarterText: { fontSize: 11, fontWeight: '700', color: '#2563eb' },
-  row: {},
-  rowContent: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  rowSubContent: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 2 },
-  rowTitle: { fontSize: 13, fontWeight: '600', flex: 1 },
-  rowValue: { fontSize: 13, fontWeight: '700' },
-  rowSubtitle: { fontSize: 11, color: '#64748b' },
-  rowStock: { fontSize: 11, color: '#64748b' },
+  searchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    gap: 8,
+    marginBottom: 10,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 13,
+    color: '#0f172a',
+    padding: 0,
+  },
+  tableCard: {
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    overflow: 'hidden',
+  },
+  emptyContainer: {
+    paddingVertical: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  empty: {
+    fontSize: 13,
+    color: '#94a3b8',
+    textAlign: 'center',
+  },
+  addStarterBtn: {
+    marginTop: 6,
+    backgroundColor: '#0f172a',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  addStarterText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#ffffff',
+  },
+  row: {
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  rowDivider: {
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  rowMain: {
+    flex: 1,
+    marginRight: 10,
+  },
+  rowTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  rowSubtitle: {
+    fontSize: 12,
+    color: '#64748b',
+    marginTop: 2,
+  },
+  rowMeta: {
+    alignItems: 'flex-end',
+  },
+  rowPrice: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#0f172a',
+  },
+  rowStock: {
+    fontSize: 11,
+    color: '#64748b',
+    marginTop: 2,
+  },
 });

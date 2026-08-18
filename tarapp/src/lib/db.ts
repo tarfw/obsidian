@@ -85,8 +85,9 @@ function createSyncDbConnection(key: string, dbName: string, url: string, authTo
 }
 
 let syncIntervalTimer: ReturnType<typeof setInterval> | null = null;
+let isSyncing = false;
 
-export function startPeriodicSync(intervalMs: number = 5000): void {
+export function startPeriodicSync(intervalMs: number = 30000): void {
   if (syncIntervalTimer) return;
   syncIntervalTimer = setInterval(() => {
     syncAllActiveDbs().catch(() => {});
@@ -94,17 +95,21 @@ export function startPeriodicSync(intervalMs: number = 5000): void {
 }
 
 export async function syncAllActiveDbs(): Promise<void> {
-  const syncConns = Object.values(dbConnections).filter(db => db && db.isSync);
-  await Promise.all(
-    syncConns.map(async (db) => {
+  if (isSyncing) return;
+  isSyncing = true;
+  try {
+    const syncConns = Object.values(dbConnections).filter((db) => db && db.isSync);
+    for (const db of syncConns) {
       try {
         await db.push().catch(() => {});
         await db.pull().catch(() => {});
       } catch (e) {
         console.warn('[DB] sync error on active connection:', e);
       }
-    })
-  );
+    }
+  } finally {
+    isSyncing = false;
+  }
 }
 
 export function getLocalPrivateDb(userId: string): Database {

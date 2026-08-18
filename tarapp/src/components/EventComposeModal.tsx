@@ -716,6 +716,19 @@ export default function EventComposeModal({
         value: e.title || e.name || e.id,
         subtitle: `Service • ${e.data?.duration || '30 mins'}`,
       }));
+    } else if (key === 'pipeline') {
+      presets = OKF_PIPELINES.map((p) => ({
+        label: p.name,
+        value: p.name,
+        subtitle: p.description,
+      }));
+    } else if (key === 'stage' || key.includes('stage')) {
+      const activePip = OKF_PIPELINES.find((p) => p.name.toLowerCase() === (params.pipeline || '').toLowerCase()) || OKF_PIPELINES[0];
+      presets = activePip.stages.map((stg) => ({
+        label: stg.label,
+        value: stg.label,
+        subtitle: `Milestone stage`,
+      }));
     }
 
     if (presets.length > 0) {
@@ -757,14 +770,14 @@ export default function EventComposeModal({
 
     return (
       <View style={styles.gmailProfilePill}>
-        <View style={[styles.avatarCircle, { backgroundColor: getAvatarColor(displayName) }]}>
-          <Text style={styles.avatarInitials}>{getInitials(displayName)}</Text>
+        <View style={[styles.avatarCircle, { backgroundColor: '#f1f5f9' }]}>
+          <Text style={[styles.avatarInitials, { color: '#0f172a' }]}>{getInitials(displayName)}</Text>
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={[styles.profileName, { color: theme.text }]} numberOfLines={1}>
+          <Text style={[styles.profileName, { color: theme.text, fontSize: 15, fontWeight: '700' }]} numberOfLines={1}>
             {displayName}
           </Text>
-          <Text style={[styles.profileSubtitle, { color: theme.textMuted }]} numberOfLines={1}>
+          <Text style={[styles.profileSubtitle, { color: '#64748b', fontSize: 12, marginTop: 1 }]} numberOfLines={1}>
             {email}
           </Text>
         </View>
@@ -1079,7 +1092,7 @@ export default function EventComposeModal({
                 );
               }
 
-              // Pipeline Blueprint Selector Cards / Chips
+              // Pipeline Blueprint Selector Row
               if (info.key === 'pipeline') {
                 const targetContact = (allEntities || []).find((e) => e?.id === params.contact_id || e?.title === params.contact_id || e?.name === params.contact_id);
                 const targetRole = String(targetContact?.subRole || targetContact?.role || targetContact?.type || '').toLowerCase();
@@ -1092,70 +1105,31 @@ export default function EventComposeModal({
                     ? OKF_PIPELINES[3]
                     : OKF_PIPELINES[0];
                 const activePip = OKF_PIPELINES.find((p) => p.name.toLowerCase() === (value || defaultPip.name).toLowerCase()) || defaultPip;
+                const currentName = value || activePip.name;
 
                 return (
-                  <View key={info.key} style={[styles.fieldRow, { borderBottomColor: theme.border + '30', flexDirection: 'column', alignItems: 'flex-start', gap: 10, paddingVertical: 12 }]}>
-                    <Text style={{ fontSize: 11, fontWeight: '700', color: hintTextColor, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                      OKF Workflow Pipeline
+                  <Pressable
+                    key={info.key}
+                    onPress={() => openPickerForField({ ...info, label: 'Pipeline' })}
+                    style={({ pressed }) => [
+                      styles.fieldRow,
+                      { borderBottomColor: theme.border, justifyContent: 'space-between', opacity: pressed ? 0.7 : 1 },
+                    ]}
+                  >
+                    <Text style={[styles.fieldLabel, { color: hintTextColor, width: 110 }]}>
+                      Pipeline
                     </Text>
-                    <View style={{ width: '100%', gap: 8 }}>
-                      {OKF_PIPELINES.map((p) => {
-                        const isSelected = activePip.id === p.id;
-                        return (
-                          <TouchableOpacity
-                            key={p.id}
-                            onPress={() => {
-                              handleTextChange('pipeline', p.name);
-                              handleTextChange('stage', p.stages[0].label);
-                            }}
-                            activeOpacity={0.7}
-                            style={{
-                              flexDirection: 'row',
-                              alignItems: 'center',
-                              gap: 12,
-                              padding: 10,
-                              borderRadius: 10,
-                              backgroundColor: isSelected ? theme.primary + '14' : theme.backgroundElement,
-                              borderWidth: 1,
-                              borderColor: isSelected ? theme.primary : theme.border + '35',
-                            }}
-                          >
-                            <View
-                              style={{
-                                width: 34,
-                                height: 34,
-                                borderRadius: 17,
-                                backgroundColor: isSelected ? theme.primary : theme.border + '20',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                              }}
-                            >
-                              <Ionicons
-                                name={p.icon as any}
-                                size={17}
-                                color={isSelected ? '#ffffff' : theme.textSecondary}
-                              />
-                            </View>
-                            <View style={{ flex: 1 }}>
-                              <Text style={{ fontSize: 13.5, fontWeight: '700', color: isSelected ? theme.primary : theme.text }}>
-                                {p.name}
-                              </Text>
-                              <Text style={{ fontSize: 11, color: theme.textMuted, marginTop: 1 }}>
-                                {p.description}
-                              </Text>
-                            </View>
-                            {isSelected && (
-                              <Ionicons name="checkmark-circle" size={18} color={theme.primary} />
-                            )}
-                          </TouchableOpacity>
-                        );
-                      })}
+                    <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
+                      <Text style={{ fontSize: 15, fontWeight: '600', color: theme.text }} numberOfLines={1}>
+                        {currentName}
+                      </Text>
+                      <Ionicons name="chevron-forward" size={16} color="#94a3b8" />
                     </View>
-                  </View>
+                  </Pressable>
                 );
               }
 
-              // Flow Stage Milestone Selector Chips (Dynamic based on selected pipeline)
+              // Flow Stage Milestone Selector Row
               if (info.key === 'stage' || info.key.includes('stage')) {
                 const targetContact = (allEntities || []).find((e) => e?.id === params.contact_id || e?.title === params.contact_id || e?.name === params.contact_id);
                 const targetRole = String(targetContact?.subRole || targetContact?.role || targetContact?.type || '').toLowerCase();
@@ -1168,45 +1142,27 @@ export default function EventComposeModal({
                     ? OKF_PIPELINES[3]
                     : OKF_PIPELINES[0];
                 const activePip = OKF_PIPELINES.find((p) => p.name.toLowerCase() === (params.pipeline || defaultPip.name).toLowerCase()) || defaultPip;
+                const currentStage = value || activePip.stages[0].label;
 
                 return (
-                  <View key={info.key} style={[styles.fieldRow, { borderBottomColor: theme.border + '30', flexDirection: 'column', alignItems: 'flex-start', gap: 8, paddingVertical: 10 }]}>
-                    <Text style={{ fontSize: 11, fontWeight: '700', color: hintTextColor, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  <Pressable
+                    key={info.key}
+                    onPress={() => openPickerForField({ ...info, label: 'Initial Stage' })}
+                    style={({ pressed }) => [
+                      styles.fieldRow,
+                      { borderBottomColor: theme.border, justifyContent: 'space-between', opacity: pressed ? 0.7 : 1 },
+                    ]}
+                  >
+                    <Text style={[styles.fieldLabel, { color: hintTextColor, width: 110 }]}>
                       Initial Stage
                     </Text>
-                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-                      {activePip.stages.map((stg) => {
-                        const isSelected = (value || activePip.stages[0].label).toLowerCase() === stg.label.toLowerCase();
-                        return (
-                          <TouchableOpacity
-                            key={stg.id}
-                            onPress={() => handleTextChange(info.key, stg.label)}
-                            activeOpacity={0.7}
-                            style={{
-                              flexDirection: 'row',
-                              alignItems: 'center',
-                              gap: 5,
-                              paddingHorizontal: 10,
-                              paddingVertical: 6,
-                              borderRadius: 8,
-                              backgroundColor: isSelected ? stg.color : theme.border + '18',
-                              borderWidth: 1,
-                              borderColor: isSelected ? stg.color : theme.border + '35',
-                            }}
-                          >
-                            <Ionicons
-                              name={stg.icon as any}
-                              size={13}
-                              color={isSelected ? '#ffffff' : theme.textSecondary}
-                            />
-                            <Text style={{ fontSize: 12, fontWeight: '600', color: isSelected ? '#ffffff' : theme.text }}>
-                              {stg.label}
-                            </Text>
-                          </TouchableOpacity>
-                        );
-                      })}
+                    <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
+                      <Text style={{ fontSize: 15, fontWeight: '600', color: theme.text }} numberOfLines={1}>
+                        {currentStage}
+                      </Text>
+                      <Ionicons name="chevron-forward" size={16} color="#94a3b8" />
                     </View>
-                  </View>
+                  </Pressable>
                 );
               }
 
@@ -1387,7 +1343,12 @@ export default function EventComposeModal({
                           const rawData = typeof opt.rawEntity?.data === 'string' ? (JSON.parse(opt.rawEntity.data || '{}') || {}) : (opt.rawEntity?.data || {});
                           const prdPrice = Number(rawData.price ?? rawData.amount ?? 0);
                           updateLineItem(currentPicker.targetLineId, 'name', prdName);
-                          updateLineItem(currentPicker.targetLineId, 'price', prdPrice);
+                        } else if (currentPicker.paramName === 'pipeline') {
+                          const matchingPip = OKF_PIPELINES.find((p) => p.name === optVal);
+                          handleTextChange('pipeline', optVal);
+                          if (matchingPip) {
+                            handleTextChange('stage', matchingPip.stages[0].label);
+                          }
                         } else {
                           handleTextChange(currentPicker.paramName, optVal);
                         }

@@ -19,6 +19,7 @@ import { getComponent, hasComponent, type SectionProps } from './registry/Compon
 import './registry/builtins';
 import { CanvasLifeMode, CanvasBlock, CanvasDocument } from '@/lib/layout-engine';
 import { resolveIntent } from '@/lib/intent-resolver';
+import AdBanner from '@/components/AdBanner';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -325,6 +326,9 @@ export default function GenUIScreen({
           </View>
         </View>
       </TouchableOpacity>
+
+      {/* ── TOP AD / ECOSYSTEM SPONSOR BANNER ───────────────────────── */}
+      <AdBanner />
 
       {/* ── ZONE 2: LIVE ACTION STREAM (Max 3 Cards) ──────────────────── */}
       <ScrollView

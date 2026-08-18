@@ -17,7 +17,7 @@ import { tar } from '@/lib/tar';
 import { parseCanvasMarkdown, parseYamlFrontmatter } from '@/lib/layout-engine';
 import { parseDesignTokens } from '@/lib/design-tokens';
 import { TarLogoLoader } from '@/components/TarLogoLoader';
-import WorkspaceCanvas from '@/components/WorkspaceCanvas';
+import { getComponent, hasComponent } from '@/gen-ui/registry/ComponentRegistry';
 import ContactDetailsModal from '@/components/ContactDetailsModal';
 import CanvasCustomizerModal from '@/components/CanvasCustomizerModal';
 
@@ -258,13 +258,22 @@ export default function CanvasOverlay({
             contentContainerStyle={styles.scrollContent}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[theme.primary || '#2563eb']} />}
           >
-            <WorkspaceCanvas
-              designTokens={effectiveTokens}
-              blocks={blocks}
-              tableData={tableData}
-              metricsData={metricsData}
-              onExecuteAction={handleExecuteAction}
-            />
+            {blocks.map((block, index) => {
+              if (!hasComponent(block.type)) return null;
+              const entry = getComponent(block.type);
+              if (!entry) return null;
+              const Component = entry.component;
+              return (
+                <View key={`canvas_b_${index}`} style={{ marginVertical: 6 }}>
+                  <Component
+                    type={block.type}
+                    props={block.props || {}}
+                    designTokens={effectiveTokens}
+                    onExecuteAction={handleExecuteAction}
+                  />
+                </View>
+              );
+            })}
           </ScrollView>
         )}
 

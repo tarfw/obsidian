@@ -12,25 +12,24 @@ import { useTheme } from '@/hooks/use-theme';
 import { tar } from '@/lib/tar';
 import { useSite } from '@/hooks/use-site';
 import { generateSiteLayout } from '@/lib/site-ai';
-import {
-  TextCard,
-  ErrorCard,
-  ProductListCard,
-  ProductCreatedCard,
-  OrderListCard,
-  StatsCard,
-  SiteCard,
-} from '@/components/cards/ResultCards';
 import { parseDesignTokens } from '@/lib/design-tokens';
 import { buildModuleLayout, parseYamlFrontmatter, parseCanvasMarkdown, type CanvasDocument, type CanvasBlock, type CanvasLifeMode } from '@/lib/layout-engine';
 import { resolveIntent } from '@/lib/intent-resolver';
 import { getCurrentUser } from '@/lib/auth';
 import { filterModulesByRole } from '@/lib/role-filter';
 import GenUIScreen from '@/gen-ui/GenUIScreen';
-import WorkspaceCanvas from '@/components/WorkspaceCanvas';
-import LinearInboxList, { LinearInboxItem } from '@/components/LinearInboxList';
 import { fetchInbox, markTaskDone } from '@/lib/inbox';
-import AdBanner from '@/components/AdBanner';
+
+export interface LinearInboxItem {
+  id: string;
+  type: string;
+  title: string;
+  status: string;
+  ref?: string;
+  due?: number | string;
+  created_at?: string;
+  data?: any;
+}
 import EventComposeModal from '@/components/EventComposeModal';
 import ContactDetailsModal from '@/components/ContactDetailsModal';
 import ItemComposeModal from '@/components/ItemComposeModal';
@@ -1636,47 +1635,36 @@ ${membersYaml}
 
     const isPersonal = currentWorkspace?.scope === 'p' || currentWorkspace?.subdomain === 'personal' || !currentWorkspace || (currentWorkspace?.name || '').toLowerCase().includes('personal');
 
-    const defaultPersonalBlocks: CanvasBlock[] = [
-      {
+    const defaultPersonalBlocks: CanvasBlock[] = [];
+    if (inboxTasks.length > 0) {
+      defaultPersonalBlocks.push({
         title: 'Personal Inbox',
         type: 'task-inbox',
         props: {
           title: 'Personal Inbox',
           tasks: inboxTasks,
         },
-      },
-      {
-        title: 'Daily Budget',
-        type: 'stat-counter',
-        props: {
-          title: 'Personal Budget',
-          subtitle: 'Daily Overview',
-          value: '$0.00',
-          unit: '0 Transactions',
-        },
-      },
-      {
+      });
+    }
+    if (liveContacts.length > 0) {
+      defaultPersonalBlocks.push({
         title: 'Personal Contacts',
         type: 'contact-card',
         props: {
           contact: liveContacts[0] || null,
           contacts: liveContacts,
         },
-      },
-    ];
+      });
+    }
 
     const hasCustomCanvasDoc = Boolean(canvasDoc && canvasDoc.blocks && canvasDoc.blocks.length > 0);
     const activeBlocks = isPersonal
-      ? defaultPersonalBlocks
+      ? (hasCustomCanvasDoc ? enrichedBlocks : defaultPersonalBlocks)
       : (hasCustomCanvasDoc ? enrichedBlocks : []);
 
     const activeChips = (canvasDoc?.chips && canvasDoc.chips.length > 0)
       ? canvasDoc.chips
-      : (isPersonal ? [
-          { label: 'Call Contact', target: 'contact-card' },
-          { label: 'New Note', target: 'data-grid' },
-          { label: 'Add Expense', target: 'action-confirm' },
-        ] : []);
+      : [];
 
     return {
       title: rawDoc.title || workspaceName || 'Workspace',

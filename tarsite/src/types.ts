@@ -93,8 +93,8 @@ export type UINode = {
 // ── 3. Route Contract ────────────────────────────────────────────────
 
 export const UIRouteSchema = z.object({
-  id: z.string().min(1),
-  path: z.string().min(1), // e.g. "/", "/catalog", "/product/:id", "/cart"
+  id: z.string().optional().default('root'),
+  path: z.string().min(1).default('/'), // e.g. "/", "/catalog", "/product/:id", "/cart"
   title: z.string().optional(),
   nodes: z.array(UINodeSchema),
 });
@@ -115,18 +115,37 @@ export const DesignTokensSchema = z.object({
     text: z.string().default('#0F172A'),
     muted: z.string().default('#64748B'),
     border: z.string().default('rgba(0,0,0,0.08)'),
+  }).default({
+    primary: '#18181B',
+    secondary: '#475569',
+    tertiary: '#D4AF37',
+    background: '#FAFAFA',
+    surface: '#FFFFFF',
+    text: '#0F172A',
+    muted: '#64748B',
+    border: 'rgba(0,0,0,0.08)',
   }),
   typography: z.object({
     fontHeading: z.string().default('Outfit'),
     fontBody: z.string().default('Inter'),
     headingWeight: z.string().default('700'),
     bodyWeight: z.string().default('400'),
+  }).default({
+    fontHeading: 'Outfit',
+    fontBody: 'Inter',
+    headingWeight: '700',
+    bodyWeight: '400',
   }),
   radii: z.object({
-    sm: z.string().default('6px'),
-    md: z.string().default('12px'),
+    sm: z.string().default('4px'),
+    md: z.string().default('8px'),
     lg: z.string().default('16px'),
     full: z.string().default('9999px'),
+  }).default({
+    sm: '4px',
+    md: '8px',
+    lg: '16px',
+    full: '9999px',
   }),
   spacing: z.object({
     xs: z.string().default('4px'),
@@ -134,18 +153,24 @@ export const DesignTokensSchema = z.object({
     md: z.string().default('16px'),
     lg: z.string().default('24px'),
     xl: z.string().default('48px'),
+  }).default({
+    xs: '4px',
+    sm: '8px',
+    md: '16px',
+    lg: '24px',
+    xl: '48px',
   }),
-});
+}).passthrough();
 
 export type DesignTokens = z.infer<typeof DesignTokensSchema>;
 
 // ── 5. UIPlan Top-Level Contract ─────────────────────────────────────
 
 export const UIPlanSchema = z.object({
-  workspaceId: z.string().min(1),
-  revision: z.string().min(1),
+  workspaceId: z.string().min(1).default('site'),
+  revision: z.string().optional().default('rev_1'),
   target: z.enum(['web', 'native']).default('web'),
-  designTokens: DesignTokensSchema,
+  designTokens: DesignTokensSchema.optional(),
   routes: z.array(UIRouteSchema).min(1),
   createdAt: z.string().optional(),
 });

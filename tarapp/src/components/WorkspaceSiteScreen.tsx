@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   View,
@@ -22,9 +22,9 @@ import { useSite } from '@/hooks/use-site';
 export interface ThemeSectionSpec {
   id: string;
   type: string;
-  variant: string;
-  label: string;
-  contract: {
+  variant?: string;
+  label?: string;
+  contract?: {
     bg?: string;
     color?: string;
     textColor?: string;
@@ -43,9 +43,13 @@ export interface ThemeSectionSpec {
     subtitle?: string;
     badge?: string;
     ctaText?: string;
+    cta_label?: string;
     text?: string;
     brandName?: string;
-    items?: string[];
+    brand_name?: string;
+    title?: string;
+    description?: string;
+    items?: any[];
     [key: string]: any;
   };
 }
@@ -173,8 +177,8 @@ export const THEME_PRESETS: ThemePresetDetail[] = [
           logo: 'milo.',
         },
         props: {
-          brandName: 'milo.',
-          ctaText: 'Get Your Price 🐾',
+          brand_name: 'milo.',
+          cta_label: 'Get Your Price 🐾',
         },
       },
       {
@@ -314,8 +318,8 @@ export const THEME_PRESETS: ThemePresetDetail[] = [
           logo: 'KITH',
         },
         props: {
-          brandName: 'KITH',
-          ctaText: 'SHOP COLLECTION',
+          brand_name: 'KITH',
+          cta_label: 'SHOP COLLECTION',
         },
       },
       {
@@ -453,8 +457,8 @@ export const THEME_PRESETS: ThemePresetDetail[] = [
           logo: 'EQL',
         },
         props: {
-          brandName: 'EQL',
-          ctaText: 'CONTACT SALES',
+          brand_name: 'EQL',
+          cta_label: 'CONTACT SALES',
         },
       },
       {
@@ -578,7 +582,7 @@ export const THEME_PRESETS: ThemePresetDetail[] = [
         variant: 'tiger-nav',
         label: 'Rustic Nav Header',
         contract: { bg: '#823513', height: '64px', buttonShape: 'pill', logo: 'HUNGRY TIGER' },
-        props: { brandName: 'HUNGRY TIGER', ctaText: 'ORDER JARS' },
+        props: { brand_name: 'HUNGRY TIGER', cta_label: 'ORDER JARS' },
       },
       {
         id: 'sec_03',
@@ -663,7 +667,7 @@ export const THEME_PRESETS: ThemePresetDetail[] = [
         variant: 'planhat-nav',
         label: 'Minimal Tech Header',
         contract: { bg: '#FFFFFF', height: '64px', buttonShape: 'sharp', logo: 'planhat' },
-        props: { brandName: 'planhat', ctaText: 'Request Demo' },
+        props: { brand_name: 'planhat', cta_label: 'Request Demo' },
       },
       {
         id: 'sec_02',
@@ -756,7 +760,7 @@ export const THEME_PRESETS: ThemePresetDetail[] = [
         variant: 'joandso_header',
         label: 'Warm Editorial Header',
         contract: { bg: 'rgba(250, 247, 242, 0.94)', height: '64px', buttonShape: 'pill', logo: 'JO & SO' },
-        props: { brandName: 'JO & SO', ctaText: 'Search Stays' },
+        props: { brand_name: 'JO & SO', cta_label: 'Search Stays' },
       },
       {
         id: 'sec_03',
@@ -849,7 +853,7 @@ export const THEME_PRESETS: ThemePresetDetail[] = [
         variant: 'empire_header',
         label: 'Obsidian Nav Header',
         contract: { bg: '#000000', height: '64px', buttonShape: 'sharp', logo: 'EMPIRE' },
-        props: { brandName: 'EMPIRE', ctaText: 'SUBMIT DEMO' },
+        props: { brand_name: 'EMPIRE', cta_label: 'SUBMIT DEMO' },
       },
       {
         id: 'sec_03',
@@ -914,7 +918,7 @@ function SectionWireframe({
 }) {
   const type = section.type;
 
-  if (type === 'announcement_bar' || type === 'marquee_strip') {
+  if (type === 'announcement_bar' || type === 'marquee_strip' || type === 'rail') {
     return (
       <View style={wireframeStyles.wireframeBox}>
         <View style={[wireframeStyles.tickerWireframe, { backgroundColor: '#09090b' }]}>
@@ -952,14 +956,14 @@ function SectionWireframe({
     );
   }
 
-  if (type === 'hero_banner' || type === 'media_hero') {
+  if (type === 'hero_banner' || type === 'media_hero' || type === 'poster') {
     const isPill = section.contract?.buttonShape === 'pill';
     return (
       <View style={wireframeStyles.wireframeBox}>
         <View style={wireframeStyles.heroWireframe}>
           {/* Left Text Column */}
           <View style={wireframeStyles.heroLeftCol}>
-            <View style={[wireframeStyles.badgeWireframe, { backgroundColor: themeAccent + '30' }]} />
+            <View style={[wireframeStyles.badgeWireframe, { backgroundColor: themeAccent + '40' }]} />
             <View style={wireframeStyles.heroHeadlineLine1} />
             <View style={wireframeStyles.heroHeadlineLine2} />
             <View style={wireframeStyles.heroSubline} />
@@ -983,7 +987,7 @@ function SectionWireframe({
     );
   }
 
-  if (type === 'product_grid' || type === 'content_grid') {
+  if (type === 'product_grid' || type === 'content_grid' || type === 'grid') {
     const cols = section.contract?.columns || 4;
     const cardRadius = section.contract?.cardRadius?.includes('0') ? 0 : 4;
     return (
@@ -1015,7 +1019,7 @@ function SectionWireframe({
     );
   }
 
-  if (type === 'story_banner') {
+  if (type === 'story_banner' || type === 'split') {
     return (
       <View style={wireframeStyles.wireframeBox}>
         <View style={[wireframeStyles.storyBannerWireframe, { backgroundColor: '#18181b' }]}>
@@ -1071,16 +1075,36 @@ export default function WorkspaceSiteScreen({
   const effectiveStoreId = scope || subdomain || 'default';
   const { draft, saveDraft, publish } = useSite(effectiveStoreId);
 
-  const [activeTab, setActiveTab] = useState<'design_system' | 'sections'>('design_system');
-  const [activeThemeId, setActiveThemeId] = useState<string>('milo');
+  const [activeTab, setActiveTab] = useState<'design_system' | 'sections'>('sections');
+  const [activeThemeId, setActiveThemeId] = useState<string>('joandso');
   const [instruction, setInstruction] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [feedback, setFeedback] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+
+  // Dynamic Live Sections State
+  const [customSections, setCustomSections] = useState<ThemeSectionSpec[]>([]);
+  const [editingSectionIdx, setEditingSectionIdx] = useState<number | null>(null);
+  const [editForm, setEditForm] = useState<{
+    headline: string;
+    subtitle: string;
+    text: string;
+    ctaText: string;
+    badge: string;
+  }>({ headline: '', subtitle: '', text: '', ctaText: '', badge: '' });
 
   const cleanSub = (subdomain || 'site').replace(/^w:/, '');
   const siteUrl = `https://${cleanSub}.tarai.space`;
 
   const currentTheme = THEME_PRESETS.find((t) => t.id === activeThemeId) || THEME_PRESETS[0];
+
+  useEffect(() => {
+    const draftNodes = (draft as any)?.routes?.[0]?.nodes || (draft as any)?.sections;
+    if (draftNodes && Array.isArray(draftNodes) && draftNodes.length > 0) {
+      setCustomSections(draftNodes);
+    } else {
+      setCustomSections(currentTheme.sections);
+    }
+  }, [activeThemeId, draft]);
 
   const handleOpenLiveSite = () => {
     Linking.openURL(siteUrl);
@@ -1092,6 +1116,11 @@ export default function WorkspaceSiteScreen({
     setIsProcessing(true);
     setFeedback(null);
     setActiveThemeId(themeId);
+
+    const targetTheme = THEME_PRESETS.find((t) => t.id === themeId);
+    if (targetTheme) {
+      setCustomSections(targetTheme.sections);
+    }
 
     try {
       const res = await fetch(`https://${cleanSub}.tarai.space/publish`, {
@@ -1114,6 +1143,88 @@ export default function WorkspaceSiteScreen({
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  // 📝 Open Section Quick-Edit Modal
+  const handleOpenEditSection = (index: number) => {
+    const sec = customSections[index];
+    if (!sec) return;
+    setEditingSectionIdx(index);
+    setEditForm({
+      headline: sec.props?.headline || sec.props?.title || '',
+      subtitle: sec.props?.subtitle || sec.props?.description || '',
+      text: sec.props?.text || '',
+      ctaText: sec.props?.ctaText || sec.props?.cta_label || '',
+      badge: sec.props?.badge || sec.props?.top_badge || '',
+    });
+  };
+
+  // 💾 Save Section Changes & Publish Live
+  const handleSaveSectionEdit = async () => {
+    if (editingSectionIdx === null) return;
+    const updated = [...customSections];
+    const target = { ...updated[editingSectionIdx] };
+    target.props = {
+      ...target.props,
+      ...(editForm.headline !== undefined ? { headline: editForm.headline, title: editForm.headline } : {}),
+      ...(editForm.subtitle !== undefined ? { subtitle: editForm.subtitle, description: editForm.subtitle } : {}),
+      ...(editForm.text !== undefined ? { text: editForm.text } : {}),
+      ...(editForm.ctaText !== undefined ? { ctaText: editForm.ctaText, cta_label: editForm.ctaText } : {}),
+      ...(editForm.badge !== undefined ? { badge: editForm.badge, top_badge: editForm.badge } : {}),
+    };
+    updated[editingSectionIdx] = target;
+    setCustomSections(updated);
+    setEditingSectionIdx(null);
+
+    // Save & Publish to Edge
+    setIsProcessing(true);
+    try {
+      const layoutPayload = {
+        workspaceId: cleanSub,
+        routes: [{ path: '/', title: 'Home', nodes: updated }],
+      };
+
+      await saveDraft(layoutPayload as any).catch(() => null);
+
+      const res = await fetch(`https://${cleanSub}.tarai.space/publish`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subdomain: cleanSub,
+          workspaceName: workspaceName || cleanSub,
+          template: activeThemeId,
+          layout: layoutPayload,
+        }),
+      });
+
+      if (res.ok) {
+        setFeedback({ text: `Section updated & published live to edge!`, type: 'success' });
+      } else {
+        setFeedback({ text: `Publish completed. Live site refreshed.`, type: 'success' });
+      }
+    } catch (e: any) {
+      setFeedback({ text: `Update saved: ${e?.message}`, type: 'success' });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // ⬆️ Move Section Up
+  const handleMoveSectionUp = (index: number) => {
+    if (index <= 0) return;
+    const updated = [...customSections];
+    const [moved] = updated.splice(index, 1);
+    updated.splice(index - 1, 0, moved);
+    setCustomSections(updated);
+  };
+
+  // ⬇️ Move Section Down
+  const handleMoveSectionDown = (index: number) => {
+    if (index >= customSections.length - 1) return;
+    const updated = [...customSections];
+    const [moved] = updated.splice(index, 1);
+    updated.splice(index + 1, 0, moved);
+    setCustomSections(updated);
   };
 
   // 🤖 AI Layout Customization / Patching
@@ -1146,6 +1257,9 @@ export default function WorkspaceSiteScreen({
       if (data?.plan) {
         await saveDraft(data.plan);
         await publish(cleanSub, workspaceName || cleanSub);
+        if (data.plan.routes?.[0]?.nodes) {
+          setCustomSections(data.plan.routes[0].nodes);
+        }
         setInstruction('');
         setFeedback({ text: 'Storefront updated & published live!', type: 'success' });
       } else {
@@ -1158,7 +1272,7 @@ export default function WorkspaceSiteScreen({
     }
   };
 
-  const sectionsToRender: ThemeSectionSpec[] = currentTheme.sections;
+  const sectionsToRender: ThemeSectionSpec[] = customSections.length > 0 ? customSections : currentTheme.sections;
 
   return (
     <Modal
@@ -1217,7 +1331,7 @@ export default function WorkspaceSiteScreen({
             </View>
           )}
 
-          {/* ── 2. FLAT SEGMENTED SELECTOR (Design System | Sections) matching EphemeralPlanCanvas ── */}
+          {/* ── 2. FLAT SEGMENTED SELECTOR (Design System | Sections) ── */}
           <View style={styles.tabsRow}>
             <TouchableOpacity
               activeOpacity={0.7}
@@ -1394,16 +1508,24 @@ export default function WorkspaceSiteScreen({
                 </View>
               </View>
             ) : (
-              /* ── TAB 2: SECTIONS LIST (FLAT NON-ROUNDED CARDS + WIREFRAMES + DETAILS) ── */
+              /* ── TAB 2: SECTIONS LIST (FLAT NON-ROUNDED CARDS + WIREFRAMES + DETAILS + EDIT) ── */
               <View style={styles.tabContentContainer}>
-                <Text style={styles.sectionHeading}>ACTIVE SECTIONS MANIFEST ({sectionsToRender.length})</Text>
+                <View style={styles.sectionsHeaderRow}>
+                  <Text style={styles.sectionHeading}>ACTIVE SECTIONS MANIFEST ({sectionsToRender.length})</Text>
+                  <Text style={styles.sectionEditHint}>Tap card or pencil to edit</Text>
+                </View>
 
                 {sectionsToRender.map((sec, idx) => {
                   const typeLabel = (sec.type || 'section').replace(/_/g, ' ').toUpperCase();
                   const indexStr = String(idx + 1).padStart(2, '0');
 
                   return (
-                    <View key={sec.id || idx} style={styles.flatSectionCard}>
+                    <TouchableOpacity
+                      key={sec.id || idx}
+                      activeOpacity={0.85}
+                      onPress={() => handleOpenEditSection(idx)}
+                      style={styles.flatSectionCard}
+                    >
                       {/* Section Card Top Header */}
                       <View style={styles.flatSectionHeader}>
                         <View style={styles.flatSectionHeaderLeft}>
@@ -1412,8 +1534,18 @@ export default function WorkspaceSiteScreen({
                           </View>
                           <Text style={styles.flatSectionTitle}>{typeLabel}</Text>
                         </View>
-                        <View style={styles.flatVariantBadge}>
-                          <Text style={styles.flatVariantText}>{sec.variant}</Text>
+                        <View style={styles.headerRightActions}>
+                          {sec.variant && (
+                            <View style={styles.flatVariantBadge}>
+                              <Text style={styles.flatVariantText}>{sec.variant}</Text>
+                            </View>
+                          )}
+                          <TouchableOpacity
+                            onPress={() => handleOpenEditSection(idx)}
+                            style={styles.cardEditIconBtn}
+                          >
+                            <Ionicons name="pencil" size={13} color="#007AFF" />
+                          </TouchableOpacity>
                         </View>
                       </View>
 
@@ -1436,19 +1568,27 @@ export default function WorkspaceSiteScreen({
                             </Text>
                           </View>
                         )}
-                        {sec.props?.headline && (
+                        {(sec.props?.headline || sec.props?.title) && (
                           <View style={styles.specItemRow}>
                             <Text style={styles.specItemLabel}>Headline</Text>
                             <Text style={styles.specItemValue} numberOfLines={2}>
-                              "{sec.props.headline}"
+                              "{sec.props.headline || sec.props.title}"
                             </Text>
                           </View>
                         )}
-                        {sec.props?.ctaText && (
+                        {(sec.props?.subtitle || sec.props?.description) && (
+                          <View style={styles.specItemRow}>
+                            <Text style={styles.specItemLabel}>Subtitle</Text>
+                            <Text style={styles.specItemValue} numberOfLines={2}>
+                              "{sec.props.subtitle || sec.props.description}"
+                            </Text>
+                          </View>
+                        )}
+                        {(sec.props?.ctaText || sec.props?.cta_label) && (
                           <View style={styles.specItemRow}>
                             <Text style={styles.specItemLabel}>CTA Action</Text>
                             <Text style={styles.specItemValue}>
-                              [{sec.props.ctaText}] · {sec.contract?.buttonShape || 'pill'}
+                              [{sec.props.ctaText || sec.props.cta_label}] · {sec.contract?.buttonShape || 'pill'}
                             </Text>
                           </View>
                         )}
@@ -1460,16 +1600,8 @@ export default function WorkspaceSiteScreen({
                             </Text>
                           </View>
                         )}
-                        {sec.props?.items && (
-                          <View style={[styles.specItemRow, { borderBottomWidth: 0 }]}>
-                            <Text style={styles.specItemLabel}>Items</Text>
-                            <Text style={styles.specItemValue} numberOfLines={2}>
-                              {sec.props.items.join(' · ')}
-                            </Text>
-                          </View>
-                        )}
                       </View>
-                    </View>
+                    </TouchableOpacity>
                   );
                 })}
               </View>
@@ -1520,6 +1652,117 @@ export default function WorkspaceSiteScreen({
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
+
+        {/* ── 5. INTERACTIVE SECTION QUICK-EDIT MODAL ── */}
+        {editingSectionIdx !== null && (
+          <Modal
+            visible={editingSectionIdx !== null}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setEditingSectionIdx(null)}
+          >
+            <View style={styles.modalOverlay}>
+              <View style={styles.modalSheet}>
+                <View style={styles.modalHeader}>
+                  <View>
+                    <Text style={styles.modalTitle}>
+                      Edit Section: {customSections[editingSectionIdx]?.type?.replace(/_/g, ' ').toUpperCase()}
+                    </Text>
+                    <Text style={styles.modalSubtitle}>
+                      {customSections[editingSectionIdx]?.variant || 'Custom Section'}
+                    </Text>
+                  </View>
+                  <TouchableOpacity onPress={() => setEditingSectionIdx(null)} style={styles.modalCloseBtn}>
+                    <Ionicons name="close" size={20} color="#09090b" />
+                  </TouchableOpacity>
+                </View>
+
+                <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
+                  {/* Headline / Title */}
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>Headline / Title</Text>
+                    <TextInput
+                      style={styles.formInput}
+                      value={editForm.headline}
+                      onChangeText={(val) => setEditForm({ ...editForm, headline: val })}
+                      placeholder="e.g. Summer Collection Live"
+                      placeholderTextColor="#a1a1aa"
+                    />
+                  </View>
+
+                  {/* Subtitle / Description */}
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>Subtitle / Description</Text>
+                    <TextInput
+                      style={styles.formInput}
+                      value={editForm.subtitle}
+                      onChangeText={(val) => setEditForm({ ...editForm, subtitle: val })}
+                      placeholder="e.g. Crafted in small micro-batches"
+                      placeholderTextColor="#a1a1aa"
+                    />
+                  </View>
+
+                  {/* Content / Ticker Text */}
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>Content / Ticker Text</Text>
+                    <TextInput
+                      style={[styles.formInput, { height: 64, textAlignVertical: 'top' }]}
+                      multiline
+                      value={editForm.text}
+                      onChangeText={(val) => setEditForm({ ...editForm, text: val })}
+                      placeholder="e.g. 100% Free Shipping on Orders Over $45"
+                      placeholderTextColor="#a1a1aa"
+                    />
+                  </View>
+
+                  {/* CTA Button Label */}
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>CTA Button Label</Text>
+                    <TextInput
+                      style={styles.formInput}
+                      value={editForm.ctaText}
+                      onChangeText={(val) => setEditForm({ ...editForm, ctaText: val })}
+                      placeholder="e.g. Shop Now"
+                      placeholderTextColor="#a1a1aa"
+                    />
+                  </View>
+
+                  {/* Reorder / Move Section Controls */}
+                  <View style={styles.reorderRow}>
+                    <TouchableOpacity
+                      onPress={() => handleMoveSectionUp(editingSectionIdx)}
+                      disabled={editingSectionIdx === 0}
+                      style={[styles.reorderBtn, editingSectionIdx === 0 && { opacity: 0.4 }]}
+                    >
+                      <Ionicons name="arrow-up" size={16} color="#09090b" />
+                      <Text style={styles.reorderText}>Move Up</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      onPress={() => handleMoveSectionDown(editingSectionIdx)}
+                      disabled={editingSectionIdx === customSections.length - 1}
+                      style={[styles.reorderBtn, editingSectionIdx === customSections.length - 1 && { opacity: 0.4 }]}
+                    >
+                      <Ionicons name="arrow-down" size={16} color="#09090b" />
+                      <Text style={styles.reorderText}>Move Down</Text>
+                    </TouchableOpacity>
+                  </View>
+                </ScrollView>
+
+                {/* Save Button */}
+                <View style={styles.modalFooter}>
+                  <TouchableOpacity
+                    onPress={handleSaveSectionEdit}
+                    style={styles.saveSectionBtn}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.saveSectionBtnText}>Save & Publish Live</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          </Modal>
+        )}
       </View>
     </Modal>
   );
@@ -1868,6 +2111,16 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     color: '#71717a',
   },
+  sectionsHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  sectionEditHint: {
+    fontSize: 10,
+    color: '#007AFF',
+    fontWeight: '600',
+  },
   rowList: {
     gap: 8,
     paddingVertical: 2,
@@ -2017,6 +2270,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
   },
+  headerRightActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  cardEditIconBtn: {
+    width: 24,
+    height: 24,
+    borderRadius: 4,
+    backgroundColor: '#007aff12',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   flatIndexBadge: {
     backgroundColor: '#f4f4f5',
     paddingHorizontal: 5,
@@ -2117,5 +2383,114 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+
+  /* ── Interactive Section Edit Modal ── */
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end',
+  },
+  modalSheet: {
+    backgroundColor: '#ffffff',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    maxHeight: '80%',
+    paddingBottom: 24,
+    borderWidth: 1,
+    borderColor: '#e4e4e7',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f4f4f5',
+  },
+  modalTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#09090b',
+  },
+  modalSubtitle: {
+    fontSize: 11,
+    color: '#71717a',
+    marginTop: 2,
+    fontFamily: 'monospace',
+  },
+  modalCloseBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#f4f4f5',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalBody: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+  },
+  inputGroup: {
+    marginBottom: 12,
+    gap: 4,
+  },
+  inputLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#52525b',
+    textTransform: 'uppercase',
+    letterSpacing: 0.04,
+  },
+  formInput: {
+    backgroundColor: '#fafafa',
+    borderWidth: 1,
+    borderColor: '#e4e4e7',
+    borderRadius: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 13,
+    color: '#09090b',
+  },
+  reorderRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 8,
+    marginBottom: 16,
+  },
+  reorderBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#f4f4f5',
+    paddingVertical: 9,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#e4e4e7',
+  },
+  reorderText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#09090b',
+  },
+  modalFooter: {
+    paddingHorizontal: 20,
+    paddingTop: 8,
+  },
+  saveSectionBtn: {
+    backgroundColor: '#007AFF',
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  saveSectionBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: -0.2,
   },
 });

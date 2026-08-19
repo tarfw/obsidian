@@ -22,7 +22,7 @@ import {
  * Maps any incoming node or archetype directly to the 5 Spatial Primitives.
  */
 export function renderNodeToHtml(node: UINode, tokens?: DesignTokens): string {
-  const layoutMode = node.contract?.layout_mode || node.layout || '';
+  const layoutMode = (node.contract?.layout_mode || node.contract?.layout || node.layout || '').toLowerCase();
 
   switch (node.type) {
     // 1. Poster Primitive (Display Typography, Stacked Z-Index & Cutout Asset)
@@ -37,7 +37,7 @@ export function renderNodeToHtml(node: UINode, tokens?: DesignTokens): string {
     case 'media_hero':
     case 'hero_carousel':
     case 'section_hero':
-      if (layoutMode === 'split' || layoutMode === 'hero_split') {
+      if (layoutMode.includes('split') || layoutMode === 'split-2col') {
         return renderSplit(node, tokens);
       }
       return renderPoster(node, tokens);
@@ -119,7 +119,7 @@ export function compileRouteToHtml(route: UIRoute, tokens?: DesignTokens): strin
   };
 
   const cssVars = compileCssVars(safeTokens);
-  const hasHeaderNode = route.nodes.some((n) => n.type === 'header_nav' || n.type === 'navigation_bar' || n.type === 'announcement_bar');
+  const hasHeaderNode = route.nodes.some((n) => n.type === 'header_nav' || n.type === 'navigation_bar');
   const nodesHtml = route.nodes.map((node) => renderNodeToHtml(node, safeTokens)).join('\n');
 
   return `<!DOCTYPE html>
@@ -130,7 +130,7 @@ export function compileRouteToHtml(route: UIRoute, tokens?: DesignTokens): strin
   <title>${safeTokens.name || 'Storefront'}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Antonio:wght@600;700&family=Bebas+Neue&family=Inter:wght@400;500;600;700;800&family=Marcellus&family=Montserrat:wght@400;500;600;700;800&family=Outfit:wght@600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Antonio:wght@600;700&family=Bebas+Neue&family=Inter:wght@400;500;600;700;800&family=Inter+Tight:wght@600;700;800&family=Marcellus&family=Montserrat:wght@400;500;600;700;800&family=Outfit:wght@600;700&family=Playfair+Display:ital,wght@0,600;0,700;0,800;1,600&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
   <style>
     ${cssVars}
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -168,30 +168,29 @@ export function compileRouteToHtml(route: UIRoute, tokens?: DesignTokens): strin
       header nav, header .nav-links {
         display: none !important;
       }
-      header a[style*="font-size: 1.5rem"] {
-        font-size: 1.25rem !important;
+      header a[style*="font-size: 1.5rem"], header a[style*="font-size: 20px"] {
+        font-size: 1.15rem !important;
       }
       section[style*="grid-template-columns"] {
         grid-template-columns: 1fr !important;
-        gap: 32px !important;
+        gap: 28px !important;
         padding: 40px 16px !important;
       }
-      section[style*="height: 70vh"], section[style*="height: 75vh"] {
-        height: auto !important;
-        min-height: 420px !important;
-        padding: 60px 16px 32px !important;
+      section[style*="height: 70vh"], section[style*="height: 75vh"], section[style*="min-height: 70vh"] {
+        min-height: 380px !important;
+        padding: 48px 16px 32px !important;
       }
       div[style*="grid-template-columns"] {
         grid-template-columns: 1fr !important;
-        gap: 20px !important;
+        gap: 16px !important;
       }
       footer {
-        padding: 40px 16px 24px !important;
+        padding: 36px 16px 24px !important;
       }
       footer div[style*="justify-content: space-between"] {
         flex-direction: column !important;
         align-items: flex-start !important;
-        gap: 20px !important;
+        gap: 16px !important;
       }
     }
 
@@ -209,8 +208,8 @@ export function compileRouteToHtml(route: UIRoute, tokens?: DesignTokens): strin
 <body>
   ${
     !hasHeaderNode
-      ? `<header style="padding: 16px 24px; border-bottom: 1px solid var(--color-border); background: var(--color-surface); display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100;">
-          <a href="/" style="font-size: 1.25rem; font-family: var(--font-heading); font-weight: 700; color: var(--color-text); text-decoration: none; letter-spacing: 0.1em; text-transform: uppercase;">${safeTokens.name || 'STORE'}</a>
+      ? `<header style="padding: 16px 24px; border-bottom: 1px solid var(--color-border, rgba(0,0,0,0.1)); background: var(--color-surface, #ffffff); display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100;">
+          <a href="/" style="font-size: 1.25rem; font-family: var(--font-heading, sans-serif); font-weight: 700; color: var(--color-text, #111827); text-decoration: none; letter-spacing: 0.1em; text-transform: uppercase;">${safeTokens.name || 'STORE'}</a>
           <nav style="display: flex; gap: 20px; font-size: 0.85rem; font-weight: 600; letter-spacing: 0.15em; text-transform: uppercase;">
             <a href="/">Home</a>
             <a href="#products">Catalog</a>

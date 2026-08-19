@@ -12,6 +12,7 @@ import { resolveRouteData } from './resolver';
 import { matchPath } from './router';
 import { compileRouteToHtml } from './html-builder';
 import { parseDesignMd } from './designmd-parser';
+import { getBuiltinTemplateMd } from './builtin-templates';
 import { type UIPlan } from './types';
 
 export interface EnvBindings {
@@ -48,12 +49,23 @@ app.post('/publish', async (c) => {
     let planToStore: UIPlan | null = null;
     let mdToStore = layoutMd || '';
 
-    // A. If raw Markdown was provided
-    if (layoutMd && typeof layoutMd === 'string') {
+    // 1. First priority: Direct UIPlan or layout JSON (e.g. from app edits / quick editor / AI mutations)
+    const activeLayout = plan || layout;
+    if (activeLayout && typeof activeLayout === 'object') {
+      const layoutWithName = !Array.isArray(activeLayout)
+        ? { ...activeLayout, workspaceName: activeLayout.workspaceName || title }
+        : activeLayout;
+      const gate = validateUIPlanGate(layoutWithName);
+      planToStore = gate.plan || layoutWithName;
+    }
+
+    // 2. Second priority: Raw Markdown was provided
+    if (!planToStore && layoutMd && typeof layoutMd === 'string') {
       planToStore = parseDesignMd(layoutMd, cleanSub);
     } 
-    // B. If template name was provided (e.g. 'planhat', 'kith', 'milo')
-    else if (template && typeof template === 'string') {
+
+    // 3. Third priority: Template name was provided (e.g. 'planhat', 'kith', 'milo', 'joandso')
+    if (!planToStore && template && typeof template === 'string') {
       let tplContent = '';
       if (c.env.THEMES_BUCKET) {
         const r2File = await c.env.THEMES_BUCKET.get(`${template}.md`).catch(() => null);
@@ -61,31 +73,22 @@ app.post('/publish', async (c) => {
           tplContent = await r2File.text();
         }
       }
+      if (!tplContent) {
+        tplContent = getBuiltinTemplateMd(template) || '';
+      }
       if (tplContent) {
         mdToStore = tplContent;
         planToStore = parseDesignMd(tplContent, cleanSub);
       }
     }
 
-    // C. If direct UIPlan or layout JSON was provided
-    if (!planToStore) {
-      const activeLayout = plan || layout;
-      if (activeLayout) {
-        const layoutWithName = typeof activeLayout === 'object' && !Array.isArray(activeLayout)
-          ? { ...activeLayout, workspaceName: activeLayout.workspaceName || title }
-          : activeLayout;
-        const gate = validateUIPlanGate(layoutWithName);
-        planToStore = gate.plan || layoutWithName;
-      }
-    }
-
-    // D. If still no plan, compile a starter plan
+    // 4. Fourth priority: Compile starter plan
     if (!planToStore) {
       const { plan: starterPlan } = await compileUIPlan({
         workspaceId: cleanSub,
         workspaceName: title,
         instruction: `Storefront for ${title}`,
-        templateHint: template || 'kith',
+        templateHint: template || 'joandso',
       });
       planToStore = starterPlan;
     }
@@ -104,9 +107,12 @@ app.post('/publish', async (c) => {
       await c.env.STOREFRONT_CACHE.put(`draft:${cleanSub}`, jsonStr);
     }
 
-    // 2. Save raw design.md to Cloudflare R2 if available
-    if (c.env.SITES_BUCKET && mdToStore) {
-      await c.env.SITES_BUCKET.put(`${cleanSub}/design.md`, mdToStore).catch((e: any) => console.warn('[R2 write]', e));
+    // 2. Save raw design.md / plan.json to Cloudflare R2 if available
+    if (c.env.SITES_BUCKET) {
+      if (mdToStore) {
+        await c.env.SITES_BUCKET.put(`${cleanSub}/design.md`, mdToStore).catch((e: any) => console.warn('[R2 write]', e));
+      }
+      await c.env.SITES_BUCKET.put(`${cleanSub}/plan.json`, jsonStr).catch((e: any) => console.warn('[R2 write]', e));
     }
 
     return c.json({
@@ -420,9 +426,14 @@ app.get('*', async (c) => {
     // 2. If not in KV, check R2 SITES_BUCKET
     if (!planRaw && c.env?.SITES_BUCKET) {
       try {
-        const r2File = await c.env.SITES_BUCKET.get(`${slug}/design.md`);
-        if (r2File) {
-          planRaw = await r2File.text();
+        const r2Json = await c.env.SITES_BUCKET.get(`${slug}/plan.json`).catch(() => null);
+        if (r2Json) {
+          planRaw = await r2Json.text();
+        } else {
+          const r2File = await c.env.SITES_BUCKET.get(`${slug}/design.md`).catch(() => null);
+          if (r2File) {
+            planRaw = await r2File.text();
+          }
         }
       } catch (r2Err) {
         console.warn('[app] R2 read warning:', r2Err);

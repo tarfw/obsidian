@@ -4,7 +4,7 @@
  */
 
 import { type UIPlan, type UIRoute, type UINode, type DesignTokens } from './types';
-import { parseDesignMarkdown, PRESET_TOKENS } from './tokens';
+import { parseDesignMarkdown, PRESET_TOKENS, getPresetDesignTokens } from './tokens';
 
 function parseVal(v: string): any {
   if (!v) return '';
@@ -146,19 +146,18 @@ export function parseDesignMd(mdContent: string, workspaceId = 'default'): UIPla
   const presetHint = (data.template || data.preset_name || data.preset || '').toLowerCase();
 
   // 1. Parse tokens
-  let designTokens: DesignTokens = PRESET_TOKENS[presetHint] || parseDesignMarkdown(mdContent, presetHint);
+  let designTokens: DesignTokens = PRESET_TOKENS[presetHint]
+    ? { ...PRESET_TOKENS[presetHint] }
+    : getPresetDesignTokens(presetHint, workspaceId);
 
   if (data.tokens && typeof data.tokens === 'object') {
-    designTokens = {
-      ...designTokens,
-      colors: {
-        ...designTokens.colors,
-        ...(data.tokens.color_primary ? { primary: data.tokens.color_primary } : {}),
-        ...(data.tokens.color_bg ? { background: data.tokens.color_bg } : {}),
-        ...(data.tokens.color_surface ? { surface: data.tokens.color_surface } : {}),
-        ...(data.tokens.color_accent ? { tertiary: data.tokens.color_accent } : {}),
-        ...(data.tokens.color_text ? { text: data.tokens.color_text } : {}),
-      },
+    designTokens.colors = {
+      ...designTokens.colors,
+      ...(data.tokens.color_primary ? { primary: data.tokens.color_primary } : {}),
+      ...(data.tokens.color_bg ? { background: data.tokens.color_bg } : {}),
+      ...(data.tokens.color_surface ? { surface: data.tokens.color_surface } : {}),
+      ...(data.tokens.color_accent ? { tertiary: data.tokens.color_accent } : {}),
+      ...(data.tokens.color_text ? { text: data.tokens.color_text } : {}),
     };
   }
 

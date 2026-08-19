@@ -75,7 +75,28 @@ function normalizeToUIPlan(data: any): UIPlan | null {
 
   // 1. If it's already a valid UIPlan with routes
   if (Array.isArray(raw.routes) && raw.routes.length > 0) {
-    return raw as UIPlan;
+    const wsName = raw.workspaceName || raw.workspaceId || 'Store';
+    const presetStr = raw.template || raw.theme?.preset || 'joandso';
+    return {
+      workspaceId: raw.workspaceId || 'site',
+      revision: raw.revision || 'rev_1',
+      target: raw.target || 'web',
+      designTokens: raw.designTokens || getPresetDesignTokens(presetStr, wsName),
+      routes: raw.routes.map((r: any, rIdx: number) => ({
+        id: r.id || `route_${rIdx + 1}`,
+        path: r.path || '/',
+        title: r.title || 'Home',
+        nodes: Array.isArray(r.nodes) ? r.nodes.map((n: any, nIdx: number) => ({
+          id: n.id || `sec_${nIdx + 1}`,
+          type: n.type || 'hero_banner',
+          variant: n.variant,
+          layout: n.layout,
+          contract: n.contract || {},
+          props: n.props || {},
+        })) : [],
+      })),
+      createdAt: raw.createdAt || new Date().toISOString(),
+    };
   }
 
   // 2. If it's a legacy layout with sections array

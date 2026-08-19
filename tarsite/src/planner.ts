@@ -6,6 +6,8 @@
 
 import { type UIPlan, type UIRoute, type UINode, type DesignTokens } from './types';
 import { getPresetDesignTokens } from './tokens';
+import { getBuiltinTemplateMd } from './builtin-templates';
+import { parseDesignMd } from './designmd-parser';
 
 export interface PlannerOptions {
   workspaceId: string;
@@ -308,7 +310,17 @@ USER EDIT INSTRUCTION:
  * Fallback / Cold-Start Starter Generator
  */
 function generateStarterPlan(options: PlannerOptions): UIPlan {
-  const { workspaceId, workspaceName, templateHint = 'ehtiger', products = [] } = options;
+  const { workspaceId, workspaceName, templateHint = 'milo', products = [] } = options;
+  
+  const builtinMd = getBuiltinTemplateMd(templateHint);
+  if (builtinMd) {
+    const plan = parseDesignMd(builtinMd, workspaceId);
+    if (workspaceName && plan.designTokens) {
+      plan.designTokens.name = workspaceName;
+    }
+    return plan;
+  }
+
   const tokens = getPresetDesignTokens(templateHint, workspaceName);
   tokens.name = workspaceName;
 

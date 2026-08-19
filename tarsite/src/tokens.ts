@@ -75,6 +75,94 @@ export function parseDesignMarkdown(mdContent: string, presetSlug?: string): Des
 }
 
 export const PRESET_TOKENS: Record<string, DesignTokens> = {
+  milo: {
+    name: 'Milo Pet Care & Insurance',
+    preset: 'milo',
+    colors: {
+      primary: '#1FCB60',
+      secondary: '#032E1C',
+      tertiary: '#B5EB79',
+      background: '#FAF7F2',
+      surface: '#FFFFFF',
+      text: '#032E1C',
+      muted: '#64748B',
+      border: 'rgba(3,46,28,0.08)',
+    },
+    typography: {
+      fontHeading: 'Marcellus',
+      fontBody: 'Montserrat',
+      headingWeight: '700',
+      bodyWeight: '400',
+    },
+    radii: { sm: '8px', md: '20px', lg: '24px', full: '9999px' },
+    spacing: { xs: '4px', sm: '8px', md: '16px', lg: '24px', xl: '48px' },
+  },
+  kith: {
+    name: 'KITH Streetwear & Lifestyle',
+    preset: 'kith',
+    colors: {
+      primary: '#000000',
+      secondary: '#E5E5E5',
+      tertiary: '#111111',
+      background: '#FFFFFF',
+      surface: '#F5F5F5',
+      text: '#000000',
+      muted: '#999999',
+      border: 'rgba(0,0,0,0.1)',
+    },
+    typography: {
+      fontHeading: 'Inter',
+      fontBody: 'Inter',
+      headingWeight: '700',
+      bodyWeight: '400',
+    },
+    radii: { sm: '0px', md: '0px', lg: '0px', full: '0px' },
+    spacing: { xs: '4px', sm: '8px', md: '16px', lg: '24px', xl: '48px' },
+  },
+  eql: {
+    name: 'EQL Launch Platform',
+    preset: 'eql',
+    colors: {
+      primary: '#0A0A0C',
+      secondary: '#FFE600',
+      tertiary: '#FFF6C7',
+      background: '#F9F9FB',
+      surface: '#FFFFFF',
+      text: '#0A0A0C',
+      muted: 'rgba(10, 10, 12, 0.65)',
+      border: 'rgba(10, 10, 12, 0.12)',
+    },
+    typography: {
+      fontHeading: 'Plus Jakarta Sans',
+      fontBody: 'Inter',
+      headingWeight: '800',
+      bodyWeight: '500',
+    },
+    radii: { sm: '6px', md: '12px', lg: '16px', full: '9999px' },
+    spacing: { xs: '4px', sm: '8px', md: '16px', lg: '24px', xl: '48px' },
+  },
+  ehtiger: {
+    name: 'Hungry Tiger Fire-Roasted Condiments',
+    preset: 'ehtiger',
+    colors: {
+      primary: '#FAAE33',
+      secondary: '#823513',
+      tertiary: '#9F531B',
+      background: '#823513',
+      surface: '#402011',
+      text: '#FAAE33',
+      muted: '#DDA277',
+      border: '#6B2E12',
+    },
+    typography: {
+      fontHeading: 'Antonio',
+      fontBody: 'Inter',
+      headingWeight: '700',
+      bodyWeight: '500',
+    },
+    radii: { sm: '6px', md: '6px', lg: '6px', full: '9999px' },
+    spacing: { xs: '4px', sm: '8px', md: '16px', lg: '24px', xl: '48px' },
+  },
   planhat: {
     name: 'Planhat Tech',
     preset: 'planhat',
@@ -97,21 +185,43 @@ export const PRESET_TOKENS: Record<string, DesignTokens> = {
     radii: { sm: '4px', md: '4px', lg: '8px', full: '4px' },
     spacing: { xs: '4px', sm: '8px', md: '16px', lg: '24px', xl: '48px' },
   },
-  kith: {
-    name: 'KITH Streetwear & Lifestyle',
-    preset: 'kith',
+  joandso: {
+    name: 'JO & SO Boutique Hotel Guide',
+    preset: 'joandso',
     colors: {
-      primary: '#000000',
-      secondary: '#E5E5E5',
-      tertiary: '#000000',
-      background: '#FFFFFF',
-      surface: '#F5F5F5',
-      text: '#000000',
-      muted: '#999999',
-      border: 'rgba(0,0,0,0.1)',
+      primary: '#2C2523',
+      secondary: '#B57D14',
+      tertiary: '#173577',
+      background: '#FAF7F2',
+      surface: '#FFFFFF',
+      text: '#2C2523',
+      muted: 'rgba(44, 37, 35, 0.65)',
+      border: 'rgba(44, 37, 35, 0.12)',
     },
     typography: {
-      fontHeading: 'Inter',
+      fontHeading: 'Playfair Display',
+      fontBody: 'Inter',
+      headingWeight: '700',
+      bodyWeight: '400',
+    },
+    radii: { sm: '6px', md: '12px', lg: '16px', full: '9999px' },
+    spacing: { xs: '4px', sm: '8px', md: '16px', lg: '24px', xl: '48px' },
+  },
+  empire: {
+    name: 'EMPIRE Global Music Label',
+    preset: 'empire',
+    colors: {
+      primary: '#FFFFFF',
+      secondary: '#1A1A1A',
+      tertiary: '#E50914',
+      background: '#000000',
+      surface: '#0A0A0A',
+      text: '#FFFFFF',
+      muted: 'rgba(255, 255, 255, 0.65)',
+      border: 'rgba(255, 255, 255, 0.12)',
+    },
+    typography: {
+      fontHeading: 'Inter Tight',
       fontBody: 'Inter',
       headingWeight: '700',
       bodyWeight: '400',
@@ -119,78 +229,12 @@ export const PRESET_TOKENS: Record<string, DesignTokens> = {
     radii: { sm: '0px', md: '0px', lg: '0px', full: '0px' },
     spacing: { xs: '4px', sm: '8px', md: '16px', lg: '24px', xl: '48px' },
   },
-  milo: {
-    name: 'Milo Pet Care & Insurance',
-    preset: 'milo',
-    colors: {
-      primary: '#1FCB60',
-      secondary: '#032E1C',
-      tertiary: '#B5EB79',
-      background: '#FAF7F2',
-      surface: '#FFFFFF',
-      text: '#032E1C',
-      muted: '#64748B',
-      border: 'rgba(3,46,28,0.08)',
-    },
-    typography: {
-      fontHeading: 'Outfit',
-      fontBody: 'Inter',
-      headingWeight: '700',
-      bodyWeight: '400',
-    },
-    radii: { sm: '8px', md: '16px', lg: '24px', full: '9999px' },
-    spacing: { xs: '4px', sm: '8px', md: '16px', lg: '24px', xl: '48px' },
-  },
-  eql: {
-    name: 'EQL Launch & Hype Drop',
-    preset: 'eql',
-    colors: {
-      primary: '#0A0A0C',
-      secondary: '#FFE600',
-      tertiary: '#FFF6C7',
-      background: '#FFFFFF',
-      surface: '#F4F4F6',
-      text: '#0A0A0C',
-      muted: '#6B7280',
-      border: 'rgba(10,10,12,0.1)',
-    },
-    typography: {
-      fontHeading: 'Plus Jakarta Sans',
-      fontBody: 'Inter',
-      headingWeight: '800',
-      bodyWeight: '500',
-    },
-    radii: { sm: '6px', md: '12px', lg: '16px', full: '9999px' },
-    spacing: { xs: '4px', sm: '8px', md: '16px', lg: '24px', xl: '48px' },
-  },
-  ehtiger: {
-    name: 'Hungry Tiger Fire-Roasted Condiments',
-    preset: 'ehtiger',
-    colors: {
-      primary: '#faae33',
-      secondary: '#823513',
-      tertiary: '#9f531b',
-      background: '#823513',
-      surface: '#402011',
-      text: '#faae33',
-      muted: '#9f531b',
-      border: '#6b2e12',
-    },
-    typography: {
-      fontHeading: 'Antonio',
-      fontBody: 'Inter',
-      headingWeight: '700',
-      bodyWeight: '500',
-    },
-    radii: { sm: '6px', md: '6px', lg: '6px', full: '9999px' },
-    spacing: { xs: '4px', sm: '8px', md: '16px', lg: '24px', xl: '48px' },
-  },
 };
 
 export function getPresetDesignTokens(hint?: string, name?: string): DesignTokens {
-  const matched = hint ? PRESET_TOKENS[hint] : PRESET_TOKENS['milo'];
-  const base = matched || PRESET_TOKENS['milo'];
-  return { ...base, name: name || base.name };
+  const norm = (hint || '').toLowerCase().trim();
+  const matched = PRESET_TOKENS[norm] || PRESET_TOKENS['milo'];
+  return { ...matched, name: name || matched.name };
 }
 
 export function compileCssVars(tokens: DesignTokens): string {
@@ -205,10 +249,12 @@ export function compileCssVars(tokens: DesignTokens): string {
       --color-secondary: ${c.secondary};
       --color-tertiary: ${c.tertiary};
       --color-background: ${c.background};
+      --color-bg: ${c.background};
       --color-surface: ${c.surface};
       --color-text: ${c.text};
       --color-muted: ${c.muted};
       --color-border: ${c.border};
+      --color-charred: ${c.background === '#823513' ? '#281006' : c.secondary};
 
       --font-heading: "${t.fontHeading}", sans-serif;
       --font-body: "${t.fontBody}", sans-serif;

@@ -11,10 +11,14 @@
             "id": "c5e18b854fc94cae",
             "type": "leaf",
             "state": {
-              "type": "empty",
-              "state": {},
+              "type": "markdown",
+              "state": {
+                "file": "revenue.md",
+                "mode": "source",
+                "source": false
+              },
               "icon": "lucide-file",
-              "title": "New tab"
+              "title": "revenue"
             }
           }
         ]
@@ -188,6 +192,9 @@
   },
   "active": "c5e18b854fc94cae",
   "lastOpenFiles": [
+    "tarapp/src/components/EphemeralPlanCanvas.tsx",
+    "tarapp/src/components/AgentCollectibleCard.tsx",
+    "tarapp/src/components/AnimatedTarLogoAgent.tsx",
     "genuiteam.md",
     "tarapp/src/lib/team.ts",
     "taragent/src/lib/team.ts",
@@ -198,8 +205,6 @@
     "brandingsite/node_modules/astro/dist/runtime/client/dev-toolbar/apps/audit/ui/audit-ui.js",
     "brandingsite/node_modules/astro/dist/runtime/client/dev-toolbar/apps/audit/ui/audit-list-item.js",
     "brandingsite/node_modules/astro/dist/runtime/client/dev-toolbar/apps/audit/ui/audit-list-item.d.ts",
-    "brandingsite/node_modules/astro/dist/runtime/client/dev-toolbar/apps/audit/rules/perf.d.ts",
-    "brandingsite/node_modules/astro/dist/runtime/client/dev-toolbar/apps/audit/rules/index.d.ts",
     "brandingsite/node_modules/csso/node_modules/mdn-data/css/readme.md",
     "brandingsite/node_modules/is-inside-container/node_modules/is-docker/readme.md",
     "brandingsite/node_modules/get-tsconfig/skills/get-tsconfig/SKILL.md",

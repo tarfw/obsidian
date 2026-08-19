@@ -255,7 +255,10 @@ export default function CanvasOverlay({
         ) : (
           <ScrollView
             style={styles.scroll}
-            contentContainerStyle={styles.scrollContent}
+            contentContainerStyle={[
+              styles.scrollContent,
+              { paddingBottom: Math.max(insets.bottom, 16) + 32 },
+            ]}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[theme.primary || '#2563eb']} />}
           >
             {blocks.map((block, index) => {

@@ -133,7 +133,7 @@ export default function ExploreOverlay({ visible, onClose, theme }: ExploreOverl
             <FlatList
               data={filtered}
               keyExtractor={(item) => item.subdomain}
-              contentContainerStyle={{ paddingBottom: 16 }}
+              contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 16) + 24 }}
               renderItem={({ item }) => (
                 <View style={[styles.itemRow, { borderBottomColor: theme.border }]}>
                   <View style={[styles.iconBox, { backgroundColor: theme.primary + '15' }]}>

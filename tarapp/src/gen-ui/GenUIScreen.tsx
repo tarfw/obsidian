@@ -89,6 +89,7 @@ function getAutoRoutineMode(modes: CanvasLifeMode[]): string {
 
 function getChipIcon(label: string): any {
   const l = (label || '').toLowerCase();
+  if (l.includes('agent') || l.includes('plan')) return 'sparkles-outline';
   if (l.includes('customize') || l.includes('canvas')) return 'color-palette-outline';
   if (l.includes('call') || l.includes('phone')) return 'call-outline';
   if (l.includes('note') || l.includes('memo')) return 'document-text-outline';
@@ -98,7 +99,7 @@ function getChipIcon(label: string): any {
   if (l.includes('contact') || l.includes('customer') || l.includes('supplier')) return 'person-outline';
   if (l.includes('order') || l.includes('product')) return 'cart-outline';
   if (l.includes('deal') || l.includes('pipeline')) return 'git-network-outline';
-  return 'flash-outline';
+  return 'sparkles-outline';
 }
 
 export default function GenUIScreen({
@@ -178,12 +179,9 @@ export default function GenUIScreen({
       { label: 'View Pipeline Deals', target: 'pipeline-card' },
       { label: 'Call Supplier', target: 'contact-card' },
       { label: 'View Today Transactions', target: 'data-grid' },
-      { label: 'Confirm Restock Order', target: 'action-confirm' },
     ];
 
-    return dictionary.filter((item) =>
-      item.label.toLowerCase().includes(q)
-    );
+    return dictionary.filter((d) => d.label.toLowerCase().includes(q));
   }, [inputText]);
 
   // Contextual Chips for active mode in idle state
@@ -202,19 +200,8 @@ export default function GenUIScreen({
       ];
     }
 
-    // Admin/Owner Exclusive Suggestion Chip [ 🎨 Customize Canvas ] (genuiteam.md §5)
-    if (isOwnerOrManager) {
-      const alreadyHas = baseChips.some(c => c.action === 'customize_canvas' || String(c.label || '').toLowerCase().includes('customize'));
-      if (!alreadyHas) {
-        baseChips.push({
-          label: 'Customize Canvas',
-          action: 'customize_canvas',
-        });
-      }
-    }
-
     return baseChips;
-  }, [canvasDoc, currentMode, currentWorkspace?.role]);
+  }, [canvasDoc, currentMode, currentWorkspace?.role, currentWorkspace?.subdomain]);
 
   const handleChipPress = (chip: any) => {
     if (chip.action === 'customize_canvas' || chip.label?.toLowerCase().includes('customize canvas')) {
@@ -432,17 +419,25 @@ export default function GenUIScreen({
                       <Text style={styles.chipText}>{match.label}</Text>
                     </TouchableOpacity>
                   ))
-                : idleChips.map((chip: any, idx: number) => (
-                    <TouchableOpacity
-                      key={`chip_${idx}`}
-                      activeOpacity={0.7}
-                      onPress={() => handleChipPress(chip)}
-                      style={styles.chip}
-                    >
-                      <Ionicons name={getChipIcon(chip.label)} size={14} color="#18181b" />
-                      <Text style={styles.chipText}>{chip.label}</Text>
-                    </TouchableOpacity>
-                  ))}
+                : idleChips.map((chip: any, idx: number) => {
+                    return (
+                      <TouchableOpacity
+                        key={`chip_${idx}`}
+                        activeOpacity={0.7}
+                        onPress={() => handleChipPress(chip)}
+                        style={styles.chip}
+                      >
+                        <Ionicons
+                          name={getChipIcon(chip.label)}
+                          size={14}
+                          color="#18181b"
+                        />
+                        <Text style={styles.chipText}>
+                          {chip.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
             </ScrollView>
           </View>
         )}
@@ -650,11 +645,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
   },
+  chipAgent: {
+    backgroundColor: '#ecfdf5',
+    borderColor: '#10b981',
+  },
   chipText: {
     fontSize: 13,
     fontWeight: '500',
     color: '#18181b',
     letterSpacing: -0.1,
+  },
+  chipTextAgent: {
+    color: '#065f46',
+    fontWeight: '700',
   },
   dockBar: {
     flexDirection: 'row',

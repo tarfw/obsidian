@@ -41,6 +41,7 @@ import CanvasOverlay from '@/components/CanvasOverlay';
 import CanvasCustomizerModal from '@/components/CanvasCustomizerModal';
 import CreateWorkspace from '@/components/CreateWorkspace';
 import ChannelConnectModal from '@/components/ChannelConnectModal';
+import EphemeralPlanCanvas from '@/components/EphemeralPlanCanvas';
 import { TarLogo } from '@/components/TarLogo';
 import { TarLogoLoader } from '@/components/TarLogoLoader';
 import { updateStock } from '@/lib/inventory';
@@ -219,6 +220,8 @@ export default function WorkspacesScreen() {
   const [contactResultMessage, setContactResultMessage] = useState<string | null>(null);
   const [editContactEntity, setEditContactEntity] = useState<any | null>(null);
   const [showConnectChatModal, setShowConnectChatModal] = useState(false);
+  const [showPlanCanvas, setShowPlanCanvas] = useState(false);
+  const [planTargetWorkspace, setPlanTargetWorkspace] = useState<any>(null);
 
   // Mention (@ / #) state
   const [showMentionPopover, setShowMentionPopover] = useState(false);
@@ -1866,7 +1869,7 @@ ${membersYaml}
         presentationStyle="fullScreen"
         onRequestClose={() => setShowDropdown(false)}
       >
-        <View style={[styles.switcherContainer, { paddingTop: Math.max(insets.top, Platform.OS === 'android' ? 16 : 12) + 8, paddingBottom: Math.max(insets.bottom, 16) }]}>
+        <View style={[styles.switcherContainer, { paddingTop: Math.max(insets.top, Platform.OS === 'android' ? 16 : 12) + 8, paddingBottom: Math.max(insets.bottom, 16) + 8 }]}>
           {/* Header with Title, 5-Limit Badge & Close / Collapse Button */}
           <View style={styles.switcherHeader}>
             <View style={styles.switcherTitleCol}>
@@ -1898,6 +1901,7 @@ ${membersYaml}
               const isActive = w.subdomain === currentWorkspace?.subdomain;
               const name = w.name || w.subdomain;
               const isPersonal = w.scope === 'p' || w.subdomain === 'personal' || (w.name || '').toLowerCase().includes('personal');
+              const isOwner = isPersonal || w.role === 'owner' || w.role === 'admin' || !w.role;
               const roleLabel = isPersonal ? 'Personal' : w.role === 'owner' ? 'Owner' : 'Collaborator';
               const isLast = idx === workspaces.length - 1;
 
@@ -1929,9 +1933,20 @@ ${membersYaml}
                       </Text>
                     </View>
 
-                    <Text style={styles.switcherItemDomain} numberOfLines={1}>
-                      {isPersonal ? 'personal' : `${w.subdomain}.tarai.space`}
-                    </Text>
+                    {isOwner && (
+                      <TouchableOpacity
+                        activeOpacity={0.6}
+                        hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          setPlanTargetWorkspace(w);
+                          setShowPlanCanvas(true);
+                        }}
+                        style={styles.switcherPlanBtn}
+                      >
+                        <TarLogo size={20} color="#0f172a" />
+                      </TouchableOpacity>
+                    )}
                   </TouchableOpacity>
                   {!isLast && <View style={styles.switcherDivider} />}
                 </View>
@@ -1975,6 +1990,21 @@ ${membersYaml}
           </View>
         </View>
       </Modal>
+
+      {/* Ephemeral Plan Canvas opened directly from Workspace Switcher icon */}
+      <EphemeralPlanCanvas
+        visible={showPlanCanvas}
+        onClose={() => setShowPlanCanvas(false)}
+        workspaceName={planTargetWorkspace?.name || planTargetWorkspace?.subdomain || currentWorkspace?.name || 'Workspace'}
+        subdomain={planTargetWorkspace?.subdomain || currentWorkspace?.subdomain || 'site'}
+        scope={planTargetWorkspace?.scope || currentWorkspace?.scope || 'default'}
+        workspaces={workspaces}
+        onOpenCanvasCustomizer={() => {
+          setShowDropdown(false);
+          setShowCanvasCustomizer(true);
+        }}
+        theme={theme}
+      />
 
       {/* Agentic Full Screen AI Workspace Creation Experience */}
       <CreateWorkspace
@@ -3166,10 +3196,10 @@ const styles = StyleSheet.create({
     marginTop: 2,
     textTransform: 'capitalize',
   },
-  switcherItemDomain: {
-    fontSize: 12,
-    color: '#94a3b8',
-    textAlign: 'right',
+  switcherPlanBtn: {
+    padding: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   switcherDivider: {
     height: 1,

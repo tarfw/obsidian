@@ -163,6 +163,28 @@ export const PRESET_TOKENS: Record<string, DesignTokens> = {
     radii: { sm: '6px', md: '12px', lg: '16px', full: '9999px' },
     spacing: { xs: '4px', sm: '8px', md: '16px', lg: '24px', xl: '48px' },
   },
+  ehtiger: {
+    name: 'Hungry Tiger Fire-Roasted Condiments',
+    preset: 'ehtiger',
+    colors: {
+      primary: '#faae33',
+      secondary: '#823513',
+      tertiary: '#9f531b',
+      background: '#823513',
+      surface: '#402011',
+      text: '#faae33',
+      muted: '#9f531b',
+      border: '#6b2e12',
+    },
+    typography: {
+      fontHeading: 'Antonio',
+      fontBody: 'Inter',
+      headingWeight: '700',
+      bodyWeight: '500',
+    },
+    radii: { sm: '6px', md: '6px', lg: '6px', full: '9999px' },
+    spacing: { xs: '4px', sm: '8px', md: '16px', lg: '24px', xl: '48px' },
+  },
 };
 
 export function getPresetDesignTokens(hint?: string, name?: string): DesignTokens {

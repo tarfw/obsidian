@@ -7,66 +7,101 @@
 import { type UIRoute, type UINode, type DesignTokens } from './types';
 import { compileCssVars } from './tokens';
 import {
-  renderAnnouncementBar,
+  renderPoster,
+  renderSplit,
+  renderGrid,
+  renderRail,
+  renderAccordion,
   renderHeaderNav,
-  renderHeroBanner,
-  renderProductGrid,
-  renderStoryBanner,
   renderFooterStrip,
-} from './layout-blocks';
+  renderDividerStrip,
+} from './layout-primitives';
 
 /**
  * Universal Node HTML Builder
- * Maps incoming nodes directly to the 6 Core Layout Blocks.
+ * Maps any incoming node or archetype directly to the 5 Spatial Primitives.
  */
 export function renderNodeToHtml(node: UINode, tokens?: DesignTokens): string {
-  switch (node.type) {
-    // 1. Announcement Bar Block
-    case 'announcement_bar':
-    case 'marquee_strip':
-    case 'promo_strip':
-      return renderAnnouncementBar(node, tokens);
+  const layoutMode = node.contract?.layout_mode || node.layout || '';
 
-    // 2. Header Navigation Block
+  switch (node.type) {
+    // 1. Poster Primitive (Display Typography, Stacked Z-Index & Cutout Asset)
+    case 'poster':
+    case 'poster_hero':
+    case 'hero_poster':
+    case 'spotlight':
+      return renderPoster(node, tokens);
+
+    // Hero Banner (dynamically delegates to poster or split based on layout_mode)
+    case 'hero_banner':
+    case 'media_hero':
+    case 'hero_carousel':
+    case 'section_hero':
+      if (layoutMode === 'split' || layoutMode === 'hero_split') {
+        return renderSplit(node, tokens);
+      }
+      return renderPoster(node, tokens);
+
+    // 2. Split Primitive (2-Column Asymmetrical / Directional Editorial Layout)
+    case 'split':
+    case 'story_banner':
+    case 'editorial_split':
+    case 'feature_split':
+    case 'science_hero':
+      return renderSplit(node, tokens);
+
+    // 3. Grid Primitive (Dynamic Multi-Item Responsive Matrix)
+    case 'grid':
+    case 'product_grid':
+    case 'content_grid':
+    case 'lookbook_grid':
+    case 'recipe_grid':
+    case 'features_grid':
+    case 'category_tiles':
+    case 'review_grid':
+    case 'perks_bar':
+    case 'menu_grid':
+      return renderGrid(node, tokens);
+
+    // 4. Rail & Marquee Primitive (Horizontal Scroll / Infinite Continuous Ticker)
+    case 'rail':
+    case 'marquee':
+    case 'marquee_strip':
+    case 'announcement_bar':
+    case 'promo_strip':
+    case 'press_marquee':
+    case 'lookbook_rail':
+    case 'ugc_reel':
+      return renderRail(node, tokens);
+
+    // 5. Accordion Primitive (Collapsible Sequential Disclosure Rows)
+    case 'accordion':
+    case 'faq':
+    case 'faq_accordion':
+    case 'specs_accordion':
+    case 'nutrition_accordion':
+      return renderAccordion(node, tokens);
+
+    // Universal Nav & Footer Components
     case 'header_nav':
     case 'nav_header':
     case 'navigation_bar':
       return renderHeaderNav(node, tokens);
 
-    // 3. Hero Banner Block
-    case 'hero_banner':
-    case 'media_hero':
-    case 'hero_carousel':
-    case 'section_hero':
-      return renderHeroBanner(node, tokens);
-
-    // 4. Product & Content Grid Block
-    case 'product_grid':
-    case 'content_grid':
-    case 'lookbook_grid':
-    case 'category_tiles':
-    case 'perks_bar':
-    case 'activity_discovery':
-    case 'menu_grid':
-    case 'service_list':
-    case 'features_grid':
-      return renderProductGrid(node, tokens);
-
-    // 5. Story Split Banner Block
-    case 'story_banner':
-    case 'editorial_split':
-      return renderStoryBanner(node, tokens);
-
-    // 6. Action & Footer Strip Block
     case 'footer_strip':
     case 'action_strip':
     case 'contact_form':
     case 'footer':
       return renderFooterStrip(node, tokens);
 
-    // Fallback to Product Grid for unmapped section types
+    case 'divider_strip':
+    case 'divider':
+    case 'dotted_divider':
+      return renderDividerStrip(node, tokens);
+
+    // Fallback: Default to Grid Primitive
     default:
-      return renderProductGrid(node, tokens);
+      return renderGrid(node, tokens);
   }
 }
 
@@ -95,7 +130,7 @@ export function compileRouteToHtml(route: UIRoute, tokens?: DesignTokens): strin
   <title>${safeTokens.name || 'Storefront'}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Marcellus&family=Montserrat:wght@400;500;600;700;800&family=Outfit:wght@600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Antonio:wght@600;700&family=Bebas+Neue&family=Inter:wght@400;500;600;700;800&family=Marcellus&family=Montserrat:wght@400;500;600;700;800&family=Outfit:wght@600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
   <style>
     ${cssVars}
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { StyleSheet, View, Text, Pressable, ScrollView, TextInput, Modal, Platform, TouchableOpacity, Keyboard } from 'react-native';
+import { StyleSheet, View, Text, Pressable, ScrollView, TextInput, Modal, Platform, TouchableOpacity, Keyboard, Switch } from 'react-native';
 import { KeyboardAwareScrollView, KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -222,6 +222,7 @@ export default function WorkspacesScreen() {
   const [showConnectChatModal, setShowConnectChatModal] = useState(false);
   const [showPlanCanvas, setShowPlanCanvas] = useState(false);
   const [planTargetWorkspace, setPlanTargetWorkspace] = useState<any>(null);
+  const [showWorkspaceActions, setShowWorkspaceActions] = useState(false);
 
   // Mention (@ / #) state
   const [showMentionPopover, setShowMentionPopover] = useState(false);
@@ -1870,25 +1871,27 @@ ${membersYaml}
         onRequestClose={() => setShowDropdown(false)}
       >
         <View style={[styles.switcherContainer, { paddingTop: Math.max(insets.top, Platform.OS === 'android' ? 16 : 12) + 8, paddingBottom: Math.max(insets.bottom, 16) + 8 }]}>
-          {/* Header with Title, 5-Limit Badge & Close / Collapse Button */}
+          {/* Header with Title, Manage Toggle & Close / Collapse Button */}
           <View style={styles.switcherHeader}>
-            <View style={styles.switcherTitleCol}>
-              <View style={styles.switcherTitleRow}>
-                <Text style={styles.switcherTitle}>Workspaces</Text>
-                <View style={styles.switcherLimitBadge}>
-                  <Text style={styles.switcherLimitText}>{workspaces.length} / 5</Text>
-                </View>
-              </View>
-              <Text style={styles.switcherSubtitle}>Tap to switch your active operational context</Text>
-            </View>
+            <Text style={styles.switcherTitle}>Workspaces</Text>
 
-            <TouchableOpacity
-              onPress={() => setShowDropdown(false)}
-              style={styles.switcherCloseBtn}
-              hitSlop={8}
-            >
-              <Ionicons name="chevron-up" size={20} color="#0f172a" />
-            </TouchableOpacity>
+            <View style={styles.switcherHeaderRight}>
+              <Switch
+                value={showWorkspaceActions}
+                onValueChange={setShowWorkspaceActions}
+                trackColor={{ false: '#e2e8f0', true: '#0f172a' }}
+                thumbColor={Platform.OS === 'android' ? (showWorkspaceActions ? '#ffffff' : '#f8fafc') : undefined}
+                ios_backgroundColor="#e2e8f0"
+                style={Platform.OS === 'ios' ? { transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] } : undefined}
+              />
+              <TouchableOpacity
+                onPress={() => setShowDropdown(false)}
+                style={styles.switcherCloseBtn}
+                hitSlop={8}
+              >
+                <Ionicons name="chevron-up" size={20} color="#0f172a" />
+              </TouchableOpacity>
+            </View>
           </View>
 
           {/* List of Workspaces (Clean, Uncluttered, Divided by Light Lines) */}
@@ -1933,7 +1936,7 @@ ${membersYaml}
                       </Text>
                     </View>
 
-                    {isOwner && (
+                    {showWorkspaceActions && isOwner && (
                       <TouchableOpacity
                         activeOpacity={0.6}
                         hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
@@ -1955,39 +1958,41 @@ ${membersYaml}
           </ScrollView>
 
           {/* Bottom Actions: + Create Workspace (Limit Check), Connect Chat, Join Code */}
-          <View style={styles.switcherBottomSection}>
-            {workspaces.length < 5 ? (
-              <TouchableOpacity
-                activeOpacity={0.8}
-                onPress={() => {
-                  setShowDropdown(false);
-                  setIsCreatingWorkspace(true);
-                }}
-                style={styles.createWsBtn}
-              >
-                <Ionicons name="add" size={18} color="#ffffff" style={{ marginRight: 6 }} />
-                <Text style={styles.createWsBtnText}>Create Workspace</Text>
-              </TouchableOpacity>
-            ) : (
-              <View style={styles.limitReachedNotice}>
-                <Ionicons name="information-circle-outline" size={16} color="#64748b" style={{ marginRight: 6 }} />
-                <Text style={styles.limitReachedText}>Workspace limit reached (5 of 5)</Text>
-              </View>
-            )}
+          {showWorkspaceActions && (
+            <View style={styles.switcherBottomSection}>
+              {workspaces.length < 5 ? (
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  onPress={() => {
+                    setShowDropdown(false);
+                    setIsCreatingWorkspace(true);
+                  }}
+                  style={styles.createWsBtn}
+                >
+                  <Ionicons name="add" size={18} color="#ffffff" style={{ marginRight: 6 }} />
+                  <Text style={styles.createWsBtnText}>Create Workspace</Text>
+                </TouchableOpacity>
+              ) : (
+                <View style={styles.limitReachedNotice}>
+                  <Ionicons name="information-circle-outline" size={16} color="#64748b" style={{ marginRight: 6 }} />
+                  <Text style={styles.limitReachedText}>Workspace limit reached (5 of 5)</Text>
+                </View>
+              )}
 
-            <View style={styles.secondaryActionsRow}>
-              <TouchableOpacity
-                onPress={() => {
-                  setShowDropdown(false);
-                  setShowConnectChatModal(true);
-                }}
-                style={styles.secondaryActionBtn}
-              >
-                <Ionicons name="chatbubbles-outline" size={15} color="#0f172a" />
-                <Text style={styles.secondaryActionText}>Link Group Channel</Text>
-              </TouchableOpacity>
+              <View style={styles.secondaryActionsRow}>
+                <TouchableOpacity
+                  onPress={() => {
+                    setShowDropdown(false);
+                    setShowConnectChatModal(true);
+                  }}
+                  style={styles.secondaryActionBtn}
+                >
+                  <Ionicons name="chatbubbles-outline" size={15} color="#0f172a" />
+                  <Text style={styles.secondaryActionText}>Link Group Channel</Text>
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
+          )}
         </View>
       </Modal>
 
@@ -3116,35 +3121,17 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#f1f5f9',
   },
-  switcherTitleCol: {
-    flex: 1,
-  },
-  switcherTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
   switcherTitle: {
     fontSize: 20,
     fontWeight: '800',
     color: '#0f172a',
     letterSpacing: -0.3,
   },
-  switcherLimitBadge: {
-    backgroundColor: '#f1f5f9',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  switcherLimitText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#475569',
-  },
-  switcherSubtitle: {
-    fontSize: 12,
-    color: '#64748b',
-    marginTop: 2,
+  switcherHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginLeft: 12,
   },
   switcherCloseBtn: {
     width: 36,
@@ -3155,7 +3142,6 @@ const styles = StyleSheet.create({
     borderColor: '#e2e8f0',
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: 12,
   },
   switcherScroll: {
     flex: 1,

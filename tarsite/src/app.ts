@@ -147,22 +147,49 @@ app.post('/planner', async (c) => {
   try {
     const body = await c.req.json();
     const { workspaceId, workspaceName, instruction, templateHint, model, products } = body || {};
+    const cleanSub = (workspaceId || 'default').replace(/^w:/, '').trim().toLowerCase();
 
-    const { plan, error } = await compileUIPlan({
-      workspaceId: workspaceId || 'default',
-      workspaceName: workspaceName || 'Workspace',
-      instruction: instruction || 'Starter storefront',
-      templateHint,
-      model: model || 'qwen/qwen3.6-27b',
-      groqApiKey: c.env.GROQ_API_KEY,
-      products,
-    });
+    // 1. Fetch current active UIPlan from Edge KV
+    let existingPlan: UIPlan | null = null;
+    if (c.env.STOREFRONT_CACHE && cleanSub) {
+      const cached =
+        (await c.env.STOREFRONT_CACHE.get(`published:${cleanSub}`)) ||
+        (await c.env.STOREFRONT_CACHE.get(`draft:${cleanSub}`));
+      if (cached) {
+        try {
+          existingPlan = JSON.parse(cached);
+        } catch {}
+      }
+    }
+
+    // 2. Perform surgical mutation on the existing plan
+    const { plan, error } = await compileUIPlan(
+      {
+        workspaceId: cleanSub,
+        workspaceName: workspaceName || cleanSub,
+        instruction: instruction || '',
+        templateHint,
+        model: model || 'llama-3.3-70b-versatile',
+        groqApiKey: c.env.GROQ_API_KEY,
+        products,
+      },
+      existingPlan
+    );
 
     if (!plan) {
       return c.json({ error: error || 'Failed to generate UIPlan' }, 500);
     }
 
-    return c.json({ plan });
+    // 3. Immediately persist mutated plan to Edge KV for instant sub-50ms live update
+    if (c.env.STOREFRONT_CACHE && cleanSub) {
+      const jsonStr = JSON.stringify(plan);
+      await c.env.STOREFRONT_CACHE.put(`published:${cleanSub}`, jsonStr);
+      await c.env.STOREFRONT_CACHE.put(`published:${cleanSub.replace(/-/g, '_')}`, jsonStr);
+      await c.env.STOREFRONT_CACHE.put(`published:${cleanSub.replace(/_/g, '-')}`, jsonStr);
+      await c.env.STOREFRONT_CACHE.put(`draft:${cleanSub}`, jsonStr);
+    }
+
+    return c.json({ success: true, plan });
   } catch (err: any) {
     return c.json({ error: err?.message || 'Planner error' }, 500);
   }

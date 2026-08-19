@@ -17,8 +17,8 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "tard1",
-      "database_id": "78c14306-d78a-4152-8c3e-bbc87cb1ef5b"
+      "database_name": "tar",
+      "database_id": "977e76b3-b14d-4969-a854-8958e2f88cfa"
     }
   ],
   "kv_namespaces": [

@@ -12,7 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { TarLogo } from './TarLogo';
 import { AnimatedTarLogoAgent, AgentStateMode, AgentRoleType } from './AnimatedTarLogoAgent';
-import WorkspaceSiteScreen from './WorkspaceSiteScreen';
+import SiteScreen from './site';
 
 interface FeatureRow {
   title: string;
@@ -497,12 +497,12 @@ export function EphemeralPlanCanvas({
         )}
 
         {/* Live Site Manager & Theme Editor Modal */}
-        <WorkspaceSiteScreen
+        <SiteScreen
           visible={showSiteScreen}
           onClose={() => setShowSiteScreen(false)}
           workspaceName={workspaceName}
           subdomain={subdomain}
-          scope={workspaceName}
+          scope={cleanSub}
         />
       </View>
     </Modal>

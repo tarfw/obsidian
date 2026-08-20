@@ -33,8 +33,8 @@ export interface LinearInboxItem {
 import EventComposeModal from '@/components/EventComposeModal';
 import ContactDetailsModal from '@/components/ContactDetailsModal';
 import ItemComposeModal from '@/components/ItemComposeModal';
+import SiteScreen from '@/components/site';
 import ContactCreateModal from '@/components/ContactCreateModal';
-import WorkspaceSiteScreen from '@/components/WorkspaceSiteScreen';
 import { ContactMentionPicker, ContactMentionModal, ContactItem } from '@/components/ContactMentionPicker';
 import ExploreOverlay from '@/components/ExploreOverlay';
 import CanvasOverlay from '@/components/CanvasOverlay';
@@ -1936,20 +1936,45 @@ ${membersYaml}
                       </Text>
                     </View>
 
-                    {showWorkspaceActions && isOwner && (
-                      <TouchableOpacity
-                        activeOpacity={0.6}
-                        hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-                        onPress={(e) => {
-                          e.stopPropagation();
-                          setPlanTargetWorkspace(w);
-                          setShowPlanCanvas(true);
-                        }}
-                        style={styles.switcherPlanBtn}
-                      >
-                        <TarLogo size={20} color="#0f172a" />
-                      </TouchableOpacity>
-                    )}
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      {isOwner && (
+                        <TouchableOpacity
+                          activeOpacity={0.6}
+                          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                          onPress={(e) => {
+                            e.stopPropagation();
+                            handleSelectWorkspace(w);
+                            setShowDropdown(false);
+                            setShowSiteScreen(true);
+                          }}
+                          style={{
+                            padding: 6,
+                            borderRadius: 8,
+                            backgroundColor: '#f1f5f9',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                          accessibilityLabel="Open Storefront Studio"
+                        >
+                          <Ionicons name="globe-outline" size={18} color="#0f172a" />
+                        </TouchableOpacity>
+                      )}
+
+                      {showWorkspaceActions && isOwner && (
+                        <TouchableOpacity
+                          activeOpacity={0.6}
+                          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                          onPress={(e) => {
+                            e.stopPropagation();
+                            setPlanTargetWorkspace(w);
+                            setShowPlanCanvas(true);
+                          }}
+                          style={styles.switcherPlanBtn}
+                        >
+                          <TarLogo size={20} color="#0f172a" />
+                        </TouchableOpacity>
+                      )}
+                    </View>
                   </TouchableOpacity>
                   {!isLast && <View style={styles.switcherDivider} />}
                 </View>
@@ -2349,7 +2374,7 @@ ${membersYaml}
           setShowContactModal(true);
         }}
       />
-      <WorkspaceSiteScreen
+      <SiteScreen
         visible={showSiteScreen}
         onClose={() => setShowSiteScreen(false)}
         workspaceName={currentWorkspace?.name || currentWorkspace?.subdomain || ''}

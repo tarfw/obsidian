@@ -154,7 +154,7 @@ export function useSite(storeIdInput?: string) {
     }
     setPublished(activeLayout);
 
-    // Always prefer explicit subdomain override (from WorkspaceSiteScreen or workspace card).
+    // Always prefer explicit subdomain override (from site.tsx or workspace card).
     // cleanId may be an internal scope ID (e.g. "abc123") not the URL slug (e.g. "velvet-brew").
     const sub = subdomainOverride || cleanId;
     if (sub) {

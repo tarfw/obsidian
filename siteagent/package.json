@@ -1,0 +1,25 @@
+{
+  "name": "siteagent",
+  "version": "1.0.0",
+  "description": "Universal Refero Design.md & Edge AI Agent Runtime",
+  "main": "src/index.ts",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx src/test-render.ts"
+  },
+  "dependencies": {
+    "@libsql/client": "^0.14.0",
+    "hono": "^4.7.2",
+    "yaml": "^2.7.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250224.0",
+    "tsx": "^4.19.3",
+    "typescript": "^5.7.3",
+    "wrangler": "^3.109.2"
+  }
+}

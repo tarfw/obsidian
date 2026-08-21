@@ -84,7 +84,7 @@ export function SiteScreen({
   const [showCatalogModal, setShowCatalogModal] = useState(false);
   const [catalogSearch, setCatalogSearch] = useState('');
   const [catalogCategory, setCatalogCategory] = useState('All');
-  const [publishState, setPublishState] = useState<'idle' | 'publishing' | 'published'>('idle');
+  const [publishState, setPublishState] = useState<'idle' | 'publishing' | 'published' | 'error'>('idle');
   const [lastPublishedAt, setLastPublishedAt] = useState<number>(Date.now());
   const [aiPrompt, setAiPrompt] = useState('');
 
@@ -129,6 +129,7 @@ export function SiteScreen({
 
   // Dynamic products list from workspace or defaults
   const productItems = useMemo(() => {
+
     if (products && products.length > 0) {
       return products.slice(0, 8).map((p: any) => ({
         title: p.title || p.name || 'Signature Item',
@@ -152,39 +153,399 @@ export function SiteScreen({
         badge: "EXTRA HOT",
         desc: "Charred habanero and whole smoked black cardamom.",
         image: "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=400&q=80"
-      },
-      {
-        title: "Alpine Botanical Elixir",
-        price: "$24.00",
-        badge: "LIMITED DROP",
-        desc: "Wild harvested mountain herbs and cold extracted oils.",
-        image: "https://images.unsplash.com/photo-1514733670139-4d87a1941d55?auto=format&fit=crop&w=400&q=80"
       }
     ];
   }, [products]);
 
-  // 1-Tap Publish to Cloudflare Edge
-  const handlePublishLive = async (styleToUse = activeStyle, promptText?: string) => {
-    setPublishState('publishing');
+  // Smart domain-aware site generator for when products are empty or offline
+  const generateDomainSiteMd = (
+    brand: string,
+    styleItem: ReferoStyleItem,
+    subdomainStr: string,
+    customPrompt?: string
+  ): string => {
+    const promptLower = (customPrompt || '').toLowerCase();
+    const isMatcha = promptLower.includes('matcha') || promptLower.includes('tea') || promptLower.includes('hojicha') || promptLower.includes('yuzu') || promptLower.includes('japanese');
+    const isCafe = brand.toLowerCase().includes('cafe') || brand.toLowerCase().includes('coffee') || styleItem.id === 'redbrick' || promptLower.includes('coffee') || promptLower.includes('espresso');
+    const isFashion = styleItem.category === 'Apparel' || styleItem.id === 'adanola' || styleItem.id === 'cos' || styleItem.id === 'arte' || promptLower.includes('apparel') || promptLower.includes('clothing');
 
-    const heroHeadline = promptText ? promptText.toUpperCase() : (workspaceName ? workspaceName.toUpperCase() : 'ORGANIC BOTANICALS & GOODS');
+    const brandDisplay = brand || (isMatcha ? 'Matcha Studio' : isCafe ? 'The Roast Room Cafe' : isFashion ? 'Atelier Studio' : 'Craft & Goods');
 
-    try {
-      const itemsYaml = productItems.map(it => `  - title: "${it.title}"\n    price: "${it.price}"\n    badge: "${it.badge}"\n    desc: "${it.desc}"\n    image: "${it.image}"`).join('\n');
+    if (isMatcha) {
+      return `---
+brand: "${brandDisplay}"
+tagline: "Ceremonial Uji Matcha, Roasted Hojicha & Japanese Daily Bakes"
+style: "${styleItem.file}"
+subdomain: "${subdomainStr}"
+currency: "USD"
+cart_mode: "drawer"
 
-      const siteMd = `---
-brand: "${workspaceName || 'Storefront'}"
-tagline: "Crafted with precision on Cloudflare Edge."
-style: "${styleToUse.file}"
-subdomain: "${cleanSubdomain}"
+nav:
+  - label: "Tea Bar Menu"
+    link: "#menu"
+  - label: "Ceremonial Tins"
+    link: "#products"
+  - label: "Our Story"
+    link: "#story"
+  - label: "Tea House & Hours"
+    link: "#location"
+
+header_cta:
+  label: "Order Ahead"
+  link: "#menu"
+  type: "pill"
+---
+
+# 1. Announcement (marquee)
+items:
+  - text: "🍵 Fresh Spring Harvest: First-Flush Ceremonial Uji Matcha now whisked daily"
+  - text: "🍋 Yuzu Glazed Choux & Sourdough Pastries warm out of the oven at 8:00 AM"
+
+# 2. Hero (poster)
+headline: "${customPrompt ? customPrompt.toUpperCase() : 'CEREMONIAL MATCHA & ARTISAN BAKES'}"
+lead: "Single-cultivar ceremonial matcha stone-milled in Kyoto, rich roasted hojicha lattes, and hand-laminated yuzu pastries crafted fresh every morning."
+cta_primary:
+  label: "Explore Ceremonial Tins — $28"
+  link: "#products"
+cta_secondary:
+  label: "View Tea Bar Menu"
+  link: "#menu"
+image: "https://images.unsplash.com/photo-1576092768241-dec231879fc3?auto=format&fit=crop&w=900&q=80"
+
+# 3. Japanese Tea Bar & Patisserie (menu)
+category: "Ceremonial Tea Bar & Daily Bakes"
+items:
+  - item: "Ceremonial Uji Matcha Latte"
+    price: "$6.50"
+    tag: "FIRST FLUSH"
+    desc: "Single-origin Okumidori cultivar whisked with organic oat milk and raw cane syrup."
+  - item: "Kyoto Roasted Hojicha Latte"
+    price: "$6.00"
+    tag: "SIGNATURE"
+    desc: "Deeply roasted green tea with warm caramel and nutty tasting notes."
+  - item: "Sparkling Yuzu Matcha Tonic"
+    price: "$7.00"
+    tag: "SEASONAL"
+    desc: "Cold-whisked ceremonial matcha over sparkling water and fresh Kochi yuzu juice."
+  - item: "Yuzu Sesame Sourdough Pastry"
+    price: "$5.50"
+    tag: "FRESH BAKED"
+    desc: "Flaky layered laminate filled with tart yuzu curd and roasted black sesame."
+  - item: "Hojicha Basque Cheesecake"
+    price: "$6.75"
+    tag: "HOUSE FAV"
+    desc: "Caramelized crust with a silky, tea-infused molten center."
+
+# 4. Whisk at Home Tins (grid)
+items:
+  - title: "First-Flush Ceremonial Matcha (30g)"
+    price: "$28.00"
+    badge: "UJI DIRECT"
+    desc: "Stone-milled Okumidori cultivar. Vibrant jade green with deep umami and zero astringency."
+    image: "https://images.unsplash.com/photo-1536256263959-770b48d82b0a?auto=format&fit=crop&w=400&q=80"
+  - title: "Single-Origin Hojicha Powder (50g)"
+    price: "$22.00"
+    badge: "SLOW ROAST"
+    desc: "Charcoal-roasted bancha tea leaves milled for lattes, baking, and desserts."
+    image: "https://images.unsplash.com/photo-1582793988951-9aed5509eb97?auto=format&fit=crop&w=400&q=80"
+  - title: "Bamboo Chasen Whisk & Spoon Set"
+    price: "$24.00"
+    badge: "HANDCRAFTED"
+    desc: "100-prong golden bamboo whisk and carved measuring chashaku."
+    image: "https://images.unsplash.com/photo-1515694346937-94d85e41e6f0?auto=format&fit=crop&w=400&q=80"
+
+# 5. Sourcing & Philosophy (bento)
+title: "The Art of the Whisk"
+subtitle: "Direct-trade tea leaves harvested from multi-generational family farms in Kyoto"
+cards:
+  - title: "100% Stone-Milled in Uji"
+    desc: "Ground slowly on traditional granite mills to preserve volatile aroma and chlorophyll."
+    stat: "100% Uji"
+  - title: "Spring First Flush Only"
+    desc: "Shade-grown for 28 days before harvest to maximize L-theanine and natural sweetness."
+    stat: "1st Flush"
+  - title: "Daily Scratch Baking"
+    desc: "French laminating technique paired with Japanese citrus, sesame, and tea."
+    stat: "Baked 6 AM"
+
+# 6. Brand Heritage (story)
+headline: "HONORING THE TEA TRADITION WITH MODERN RESTRAINT"
+desc: "We founded our tea house to celebrate the mindful ritual of ceremonial tea. Every bowl is whisked by hand with pristine mountain water, bringing ancient Japanese tea craft into modern daily life."
+author: "Master Tea Blender & Founder"
+image: "https://images.unsplash.com/photo-1544787219-7f47ccb76574?auto=format&fit=crop&w=800&q=80"
+
+# 7. Reviews (testimonials)
+title: "Press & Tea Enthusiast Reviews"
+quotes:
+  - quote: "The smoothest, richest ceremonial matcha in California. The yuzu pastry is world class."
+    author: "Culinary Review San Francisco"
+    rating: 5
+  - quote: "The hojicha latte paired with the basque cheesecake is our weekly meditation ritual."
+    author: "Kenji Sato"
+    rating: 5
+
+# 8. Tea House Studio (location)
+title: "Visit The Tea House"
+address: "510 Laguna Street, San Francisco, CA 94102"
+hours: "Tuesday – Sunday: 8:00 AM – 6:00 PM"
+phone: "+1 (415) 555-0382"
+
+# 9. FAQ (faq)
+questions:
+  - q: "What makes ceremonial grade different from culinary matcha?"
+    a: "Our ceremonial matcha is harvested exclusively during the first spring harvest from shade-grown tender leaves, yielding vivid green color, sweet umami, and zero bitterness."
+  - q: "Do you have gluten-free or dairy-free options?"
+    a: "Yes, all our tea lattes are crafted with organic oat or house-made almond milk, and we offer daily gluten-free pastries."
+`;
+    }
+
+    if (isCafe) {
+      return `---
+brand: "${brandDisplay}"
+tagline: "Single-Origin Espresso & Fresh Daily Bakes"
+style: "${styleItem.file}"
+subdomain: "${subdomainStr}"
+currency: "USD"
+cart_mode: "drawer"
+
+nav:
+  - label: "Menu"
+    link: "#menu"
+  - label: "Beans & Drops"
+    link: "#products"
+  - label: "Our Story"
+    link: "#story"
+  - label: "Hours & Location"
+    link: "#location"
+
+header_cta:
+  label: "Order Ahead"
+  link: "#menu"
+  type: "pill"
+---
+
+# 1. Announcement (marquee)
+items:
+  - text: "☕ Fresh Roasts Live: Ethiopian Yirgacheffe roasted this morning"
+  - text: "🥐 Sourdough Pastries warm out of the oven at 7:30 AM"
+
+# 2. Hero (poster)
+headline: "${customPrompt ? customPrompt.toUpperCase() : 'SLOW ROASTS & MORNING RITUALS'}"
+lead: "Direct-trade single origin beans roasted in-house daily. Handcrafted espresso, organic oat lattes, and artisan baked goods."
+cta_primary:
+  label: "Explore Whole Beans — $19"
+  link: "#products"
+cta_secondary:
+  label: "View Cafe Menu"
+  link: "#menu"
+image: "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?auto=format&fit=crop&w=900&q=80"
+
+# 3. Espresso & Brew Bar (menu)
+category: "Espresso & Hand Pour Bar"
+items:
+  - item: "Cortado / Flat White"
+    price: "$4.75"
+    tag: "SIGNATURE"
+    desc: "Double shot single-origin espresso with velvety steamed whole milk."
+  - item: "Single-Origin Pour Over"
+    price: "$5.50"
+    tag: "ROTATING"
+    desc: "Rotating microlot with delicate floral and stonefruit tasting notes."
+  - item: "Cardamom Cold Brew"
+    price: "$5.25"
+    tag: "HOUSE FAV"
+    desc: "16-hour slow steep with crushed organic green cardamom."
+  - item: "Brown Butter Almond Croissant"
+    price: "$4.50"
+    tag: "FRESH BAKED"
+    desc: "Twice-baked butter croissant with rich almond frangipane."
+
+# 4. Whole Bean Drops (grid)
+items:
+  - title: "Guji Highland Natural"
+    price: "$19.00"
+    badge: "LIGHT ROAST"
+    desc: "Notes of blueberry jam, Meyer lemon, and wild honey."
+    image: "https://images.unsplash.com/photo-1559056199-641a0ac8b55e?auto=format&fit=crop&w=400&q=80"
+  - title: "Antioquia Reserva"
+    price: "$18.00"
+    badge: "MEDIUM ROAST"
+    desc: "Milk chocolate, toasted hazelnut, and brown sugar finish."
+    image: "https://images.unsplash.com/photo-1587734195503-904fca47e0e9?auto=format&fit=crop&w=400&q=80"
+  - title: "Sumatra Mandheling Dark"
+    price: "$20.00"
+    badge: "DARK ROAST"
+    desc: "Cedar, dark cocoa, and lingering sweet spice aroma."
+    image: "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=400&q=80"
+
+# 5. Roasting & Craft (bento)
+title: "From Farm to Cup"
+subtitle: "Transparent sourcing and small-batch roasting"
+cards:
+  - title: "100% Direct Trade"
+    desc: "Direct partnership with generational smallholder coffee farms."
+    stat: "100%"
+  - title: "Roasted Weekly"
+    desc: "Never shipped or served more than 7 days past roast date."
+    stat: "7 Days"
+  - title: "Zero Defect Sorting"
+    desc: "Hand-sorted and sample-cupped for peak sweetness."
+    stat: "88+ Q-Score"
+
+# 6. Brand Heritage (story)
+headline: "CRAFTED FOR THE MORNING PURIST"
+desc: "We started with a single cast-iron roaster and a simple mission: celebrate the nuance of exceptional coffee without pretension. Every cup is poured with intention."
+author: "Head Roaster & Founder"
+image: "https://images.unsplash.com/photo-1442512595331-e89e73853f31?auto=format&fit=crop&w=800&q=80"
+
+# 7. Reviews (testimonials)
+title: "Community & Press Reviews"
+quotes:
+  - quote: "The cleanest, brightest pour over in the city. The Guji Natural is unforgettable."
+    author: "James Peterson"
+    rating: 5
+  - quote: "Their cardamom cold brew is a daily ritual. Flawless hospitality and vibe."
+    author: "Maya Lin"
+    rating: 5
+
+# 8. Flagship Cafe & Studio (location)
+title: "Visit The Cafe & Roastery"
+address: "742 Valencia Street, San Francisco, CA 94110"
+hours: "Monday – Sunday: 7:00 AM – 6:00 PM"
+phone: "+1 (415) 555-0192"
+
+# 9. FAQ (faq)
+questions:
+  - q: "What grind size should I choose?"
+    a: "We recommend whole beans for maximum aroma, or select Drip/Espresso grind at checkout."
+  - q: "Do you offer plant-based milk options?"
+    a: "Yes, house-made oat and almond milks are crafted daily with no upcharge."
+`;
+    }
+
+    if (isFashion) {
+      return `---
+brand: "${brandDisplay}"
+tagline: "Architectural Tailoring & Everyday Essentials"
+style: "${styleItem.file}"
+subdomain: "${subdomainStr}"
+currency: "USD"
+cart_mode: "drawer"
+
+nav:
+  - label: "Collection"
+    link: "#products"
+  - label: "Lookbook"
+    link: "#story"
+  - label: "Atelier"
+    link: "#location"
+
+header_cta:
+  label: "Shop Drop"
+  link: "#products"
+  type: "pill"
+---
+
+# 1. Announcement (marquee)
+items:
+  - text: "✦ Autumn / Winter Capsule 04 is now live worldwide"
+  - text: "✦ Complimentary courier shipping on orders over $150"
+
+# 2. Hero (poster)
+headline: "${customPrompt ? customPrompt.toUpperCase() : 'FORM, FUNCTION & RESTRAINT'}"
+lead: "Engineered silhouettes crafted from heavyweight Japanese cotton and organic virgin wool."
+cta_primary:
+  label: "Shop Capsule — $120"
+  link: "#products"
+cta_secondary:
+  label: "View Lookbook"
+  link: "#story"
+image: "https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&w=900&q=80"
+
+# 3. Category Filter (category)
+tabs:
+  - "All"
+  - "Outerwear"
+  - "Tailored Trousers"
+  - "Heavyweight Knits"
+
+# 4. Products (grid)
+items:
+  - title: "Heavyweight Boxy Overshirt"
+    price: "$145.00"
+    badge: "CORE ESSENTIAL"
+    desc: "420gsm organic structured cotton with concealed horn buttons."
+    image: "https://images.unsplash.com/photo-1591047139829-d91aecb6caea?auto=format&fit=crop&w=400&q=80"
+  - title: "Pleated Relaxed Trouser"
+    price: "$160.00"
+    badge: "LIMITED"
+    desc: "Double-pleated Italian wool blend with tailored drape."
+    image: "https://images.unsplash.com/photo-1509631179647-0177331693ae?auto=format&fit=crop&w=400&q=80"
+  - title: "Merino Mockneck Knit"
+    price: "$130.00"
+    badge: "RESTOCK"
+    desc: "100% extrafine Australian merino wool with seamless knit construction."
+    image: "https://images.unsplash.com/photo-1576995853123-5a10305d93c0?auto=format&fit=crop&w=400&q=80"
+
+# 5. Sourcing & Craft (bento)
+title: "Material Integrity"
+subtitle: "Built to endure seasons, not trends"
+cards:
+  - title: "Zero Synthetic Blends"
+    desc: "Pure natural fibers sourced from certified heritage mills."
+    stat: "100% Natural"
+  - title: "Ethical Manufacturing"
+    desc: "Crafted in family-owned ateliers in Portugal and Japan."
+    stat: "GOTS Certified"
+  - title: "Lifetime Repair Guarantee"
+    desc: "Complimentary repair service on all seam and stitch wear."
+    stat: "Guaranteed"
+
+# 6. Brand Heritage (story)
+headline: "DESIGNED IN RESTRAINT"
+desc: "We reject the cycle of seasonal excess. Every piece in our collection is refined over months of prototyping until only the essential remains."
+author: "Design Studio"
+image: "https://images.unsplash.com/photo-1490481651871-ab68de25d43d?auto=format&fit=crop&w=800&q=80"
+
+# 7. Reviews (testimonials)
+title: "Press & Client Notes"
+quotes:
+  - quote: "The fabric weight and drape are comparable to luxury fashion houses at triple the price."
+    author: "Monocle Dossier"
+    rating: 5
+  - quote: "Flawless minimal tailoring. The trousers are a masterpiece."
+    author: "Marcus Chen"
+    rating: 5
+
+# 8. Storefront Studio (location)
+title: "Visit The Flagship Atelier"
+address: "18 Mercer Street, New York, NY 10013"
+hours: "Tuesday – Saturday: 11:00 AM – 7:00 PM"
+phone: "+1 (212) 555-0144"
+
+# 9. FAQ (faq)
+questions:
+  - q: "How do your sizing and fits run?"
+    a: "Our silhouettes feature a relaxed, contemporary drape. We recommend your true size."
+  - q: "What is your worldwide shipping policy?"
+    a: "Orders ship carbon-neutral via DHL Express with all duties pre-paid."
+`;
+    }
+
+    // Default High-End Goods Template
+    const productListYaml = productItems.map(it => `  - title: "${it.title}"\n    price: "${it.price}"\n    badge: "${it.badge}"\n    desc: "${it.desc}"\n    image: "${it.image}"`).join('\n');
+
+    return `---
+brand: "${brandDisplay}"
+tagline: "Formulated with Intention and Uncompromising Quality"
+style: "${styleItem.file}"
+subdomain: "${subdomainStr}"
 currency: "USD"
 cart_mode: "drawer"
 
 nav:
   - label: "Shop Drops"
     link: "#products"
-  - label: "Menu & Tasting"
-    link: "#menu"
   - label: "Our Story"
     link: "#story"
   - label: "Locations"
@@ -198,11 +559,11 @@ header_cta:
 
 # 1. Announcement (marquee)
 items:
-  - text: "🔥 Batch #04 Live: Free worldwide shipping over $45"
-  - text: "🚚 Next-day dispatch across California"
+  - text: "🔥 Batch Live: Complimentary worldwide shipping over $50"
+  - text: "📦 Same-day dispatch on all orders"
 
 # 2. Hero (poster)
-headline: "${heroHeadline}"
+headline: "${customPrompt ? customPrompt.toUpperCase() : brandDisplay.toUpperCase()}"
 lead: "Small-batch formulations crafted with heirloom ingredients and uncompromising precision."
 cta_primary:
   label: "Shop The Drops — $18"
@@ -211,7 +572,7 @@ cta_secondary:
   label: "Explore Story"
   link: "#story"
 
-# 3. Category Filter
+# 3. Category Filter (category)
 tabs:
   - "All"
   - "Signature Drops"
@@ -220,45 +581,131 @@ tabs:
 
 # 4. Products (grid)
 items:
-${itemsYaml}
+${productListYaml}
 
-# 5. Bento (bento)
+# 5. Brand Heritage (story)
+headline: "CRAFTED IN SMALL ARTISANAL BATCHES"
+desc: "Founded on the belief that real quality comes from patient craft and uncompromising heirloom ingredients. Handcrafted with precision."
+author: "Founder & Master Blender"
+image: "https://images.unsplash.com/photo-1556910103-1c02745aae4d?auto=format&fit=crop&w=800&q=80"
+
+# 6. Sourcing & Craft (bento)
 title: "Sourcing & Craft"
-subtitle: "Every product is formulated in small cast-iron batches"
+subtitle: "Every item is formulated in small intentional batches"
 cards:
-  - title: "100% Heirloom Chillies"
-    desc: "Directly sourced from organic family farms in Tamil Nadu."
+  - title: "100% Pure Sourcing"
+    desc: "Directly sourced from organic certified family farms."
     stat: "100%"
-  - title: "Slow Fire-Roasted"
-    desc: "Cooked in small cast-iron batches for 6 hours."
-    stat: "6 Hours"
-  - title: "Zero Preservatives"
-    desc: "Pure cold-pressed oils, natural salt, and organic vinegars."
+  - title: "Slow Process"
+    desc: "Crafted patiently for unmatched quality."
+    stat: "Small Batch"
+  - title: "Zero Fillers"
+    desc: "Pure natural components and cold extracted botanicals."
     stat: "0 Chemical"
 
-# 6. Reviews (testimonials)
-title: "Community & Press Reviews"
+# 7. Reviews (testimonials)
+title: "Community Reviews"
 quotes:
-  - quote: "The deepest, richest condiment I've ever tasted. Bought 4 jars."
-    author: "Chef Marcus Lin"
-    rating: 5
-  - quote: "A pantry staple. Unmatched depth of flavour and aroma."
+  - quote: "The highest quality product in this category. Absolutely phenomenal."
     author: "Elena Rostova"
     rating: 5
+  - quote: "A staple in our daily routine. Unmatched depth and aroma."
+    author: "Marcus Lin"
+    rating: 5
 
-# 7. FAQ (faq)
-title: "Frequently Asked Questions"
+# 8. Storefront & Studio (location)
+title: "Storefront & Studio"
+address: "482 Market Street, San Francisco, CA 94105"
+hours: "Tuesday – Sunday: 11:00 AM – 8:00 PM"
+phone: "+1 (415) 890-4421"
+
+# 9. FAQ (faq)
 questions:
-  - q: "How long does a jar last?"
-    a: "Unopened jars last 12 months. Once opened, refrigerate and consume within 90 days."
-  - q: "Is this suitable for vegans?"
-    a: "Yes, 100% of our products are vegan and gluten-free."
+  - q: "How long does each batch take to craft?"
+    a: "Every batch undergoes slow extraction and rigorous testing before bottling."
+  - q: "Are all formulations vegan & cruelty-free?"
+    a: "Yes, 100% of our products are certified vegan and cruelty-free."
 `;
+  };
 
+  // Re-point an existing site.md at a new style WITHOUT regenerating content.
+  const applyStyleToSiteMd = (baseMd: string, styleItem: ReferoStyleItem): string => {
+    if (/^style:\s*["']?/m.test(baseMd)) {
+      return baseMd.replace(/^style:\s*["']?[^\n"'`]+["']?/m, `style: "${styleItem.file}"`);
+    }
+    return baseMd.replace(/^---\s*$/m, `---\nstyle: "${styleItem.file}"`);
+  };
+
+  // 1-Tap Publish to Cloudflare Edge with Groq Qwen planner support.
+  // Invariant: existing OKF site.md content is NEVER discarded — style switches
+  // only mutate the frontmatter `style:` line; AI edits are applied on top of
+  // the current document (the server rejects section-losing mutations).
+  const handlePublishLive = async (styleToUse = activeStyle, promptText?: string) => {
+    setPublishState('publishing');
+
+    try {
+      // 1. Load the current document from OKF as the base for this update.
+      let baseSiteMd: string | null = null;
       if (scope) {
-        tar.okf.upload(scope, 'site.md', siteMd).catch((e: any) => console.warn('OKF site.md upload error:', e));
+        try {
+          const res: any = await tar.okf.read(scope, 'site.md');
+          if (res?.content && res.content.length > 200) baseSiteMd = res.content;
+        } catch { /* no existing site.md yet */ }
       }
 
+      let siteMd: string;
+      if (baseSiteMd && !promptText?.trim()) {
+        // Style switch (or re-publish): keep ALL content, swap the design system only.
+        siteMd = applyStyleToSiteMd(baseSiteMd, styleToUse);
+      } else if (baseSiteMd) {
+        // AI edit: start from the live document so nothing is lost.
+        siteMd = baseSiteMd;
+      } else {
+        // First publish: generate a vertical-appropriate starter document.
+        siteMd = generateDomainSiteMd(workspaceName, styleToUse, cleanSubdomain, promptText);
+      }
+
+      // 2. If the user provided a prompt, let the planner surgically mutate the doc.
+      if (promptText && promptText.trim()) {
+        try {
+          const plannerRes = await fetch(`${SITEAGENT_URL}/planner`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              currentSiteMarkdown: siteMd,
+              instruction: promptText.trim(),
+              brandName: workspaceName || 'Storefront',
+              styleName: styleToUse.file,
+              vertical: styleToUse.category
+            })
+          });
+
+          if (plannerRes.ok) {
+            const plannerData: any = await plannerRes.json();
+            if (plannerData?.updatedSiteMarkdown && plannerData.updatedSiteMarkdown.length > 100) {
+              siteMd = plannerData.updatedSiteMarkdown;
+            }
+          } else {
+            throw new Error(`Planner HTTP ${plannerRes.status}`);
+          }
+        } catch (planErr) {
+          console.warn('Planner request warning, using current document:', planErr);
+          setPublishState('error');
+          setTimeout(() => setPublishState('idle'), 2500);
+          return;
+        }
+      }
+
+      // 3. Persist to OKF (awaited — the next publish must see this version).
+      if (scope) {
+        try {
+          await tar.okf.upload(scope, 'site.md', siteMd);
+        } catch (e: any) {
+          console.warn('OKF site.md upload error:', e);
+        }
+      }
+
+      // 4. Compile & push to the edge.
       const res = await fetch(`${SITEAGENT_URL}/publish`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -269,20 +716,30 @@ questions:
         })
       });
 
-      if (res.ok) {
-        setLastPublishedAt(Date.now());
-        setPublishState('published');
-        setTimeout(() => setPublishState('idle'), 2000);
-      } else {
-        setLastPublishedAt(Date.now());
-        setPublishState('published');
-        setTimeout(() => setPublishState('idle'), 2000);
+      if (!res.ok) {
+        const detail = await res.text().catch(() => '');
+        console.warn('Publish failed:', res.status, detail);
+        setPublishState('error');
+        setTimeout(() => setPublishState('idle'), 2500);
+        return;
       }
-    } catch (e) {
-      console.warn('Publish error:', e);
+
+      // Persist the chosen design system into OKF as the workspace's design.md
+      // (per-workspace artifact, editable by agents, source of truth for tokens).
+      if (scope) {
+        fetch(`${SITEAGENT_URL}/design/${styleToUse.file}`)
+          .then(r => (r.ok ? r.text() : Promise.reject(new Error(`HTTP ${r.status}`))))
+          .then(designMd => tar.okf.upload(scope, 'design.md', designMd))
+          .catch((e: any) => console.warn('OKF design.md upload error:', e));
+      }
+
       setLastPublishedAt(Date.now());
       setPublishState('published');
       setTimeout(() => setPublishState('idle'), 2000);
+    } catch (e) {
+      console.warn('Publish error:', e);
+      setPublishState('error');
+      setTimeout(() => setPublishState('idle'), 2500);
     }
   };
 
@@ -293,6 +750,7 @@ questions:
   };
 
   if (!visible) return null;
+
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
@@ -314,9 +772,10 @@ questions:
             >
               <Text style={[
                 styles.publishTextBtnLabel,
-                publishState === 'published' && { color: '#16a34a' }
+                publishState === 'published' && { color: '#16a34a' },
+                publishState === 'error' && { color: '#dc2626' }
               ]}>
-                {publishState === 'publishing' ? 'Publishing...' : publishState === 'published' ? 'Published' : 'Publish'}
+                {publishState === 'publishing' ? 'Publishing...' : publishState === 'published' ? 'Published' : publishState === 'error' ? 'Failed — Retry' : 'Publish'}
               </Text>
             </TouchableOpacity>
 
@@ -369,20 +828,22 @@ questions:
           <View style={styles.sectionBlock}>
             <View style={styles.sectionLabelRow}>
               <Text style={styles.sectionLabel}>Storefront Structure</Text>
-              <Text style={styles.sectionCountText}>7 Sections</Text>
+              <Text style={styles.sectionCountText}>9 Sections</Text>
             </View>
 
             <View style={styles.sectionsContainer}>
               {[
                 { title: 'Announcement Marquee', sub: 'Worldwide shipping bar' },
                 { title: 'Hero Poster Banner', sub: 'Headline & shop button' },
-                { title: 'Category Filter Tabs', sub: 'Drop categories' },
-                { title: 'Product Catalog Grid', sub: '3 featured items' },
-                { title: 'Sourcing & Craft (Bento)', sub: '3 feature highlights' },
-                { title: 'Customer Reviews', sub: '2 verified testimonials' },
-                { title: 'FAQ & Accordion', sub: '2 question drawers' },
+                { title: 'Category Filter Tabs', sub: 'Interactive category filters' },
+                { title: 'Product Catalog Grid', sub: 'Items with 1-tap cart buttons' },
+                { title: 'Brand Heritage & Story', sub: 'Craft & founder origin' },
+                { title: 'Sourcing & Craft (Bento)', sub: '3 feature highlights & stats' },
+                { title: 'Customer Reviews', sub: 'Verified 5-star testimonials' },
+                { title: 'Flagship Studio & Hours', sub: 'Address, hours & reservation' },
+                { title: 'FAQ & Accordion', sub: 'Shelf-life & vegan info drawers' },
               ].map((sec, idx) => (
-                <View key={idx} style={[styles.sectionRow, idx === 6 && { borderBottomWidth: 0 }]}>
+                <View key={idx} style={[styles.sectionRow, idx === 8 && { borderBottomWidth: 0 }]}>
                   <Text style={styles.sectionIndex}>{idx + 1}</Text>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.sectionRowTitle}>{sec.title}</Text>

@@ -1080,7 +1080,7 @@ Please modify the markdown and output the complete updated markdown file.`;
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'llama-3.1-70b-versatile',
+        model: 'qwen/qwen3.6-27b',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }
@@ -1524,7 +1524,7 @@ app.post('/agents/master/:sessionId', async (c) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'llama-3.1-8b-instant',
+        model: 'qwen/qwen3.6-27b',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: message },

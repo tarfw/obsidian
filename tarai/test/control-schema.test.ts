@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const schema = readFileSync(`${root}d1/migrations/0001_control.sql`, 'utf8');
 const catalog = readFileSync(`${root}d1/migrations/0002_catalog.sql`, 'utf8');
+const pricing = readFileSync(`${root}d1/migrations/0003_credit_pricing.sql`, 'utf8');
 let db: Client;
 
 async function seedUser(id: string, credits = 100) {
@@ -20,6 +21,7 @@ beforeEach(async () => {
   db = createClient({ url: 'file::memory:' });
   await db.executeMultiple(schema);
   await db.executeMultiple(catalog);
+  await db.executeMultiple(pricing);
 });
 
 describe('D1 control invariants', () => {
@@ -87,6 +89,29 @@ describe('D1 control invariants', () => {
       INSERT INTO members (id,space,user,role,state,budget,spent,reset,created,updated) VALUES ('private-owner','private','owner','owner','active',0,0,10,1,1);
     `);
     await expect(db.execute("INSERT INTO runs (id,user,space,agent,credits,state,idem,created) VALUES ('denied','outsider','private','workspace-summary',2,'reserved','denied',2)")).rejects.toThrow(/access/);
+  });
+
+  it('matches the published credit packs and agent rates', async () => {
+    const packs = await db.execute("SELECT id, credits, price, currency FROM packs WHERE state = 'active' ORDER BY price");
+    expect(packs.rows.map((row) => [String(row[0]), Number(row[1]), Number(row[2]), String(row[3])])).toEqual([
+      ['topup-starter-1000', 1000, 10000, 'INR'],
+      ['activation-1000', 1000, 50000, 'INR'],
+      ['topup-growth-5000', 5000, 50000, 'INR'],
+      ['topup-scale-10000', 10000, 100000, 'INR'],
+    ]);
+    const rates = await db.execute('SELECT action, credits FROM agents');
+    const byAction = Object.fromEntries(rates.rows.map((row) => [String(row[0]), Number(row[1])]));
+    expect(byAction).toMatchObject({
+      'workspace.summary': 2,
+      'sales.reply': 2,
+      'sales.quote': 10,
+      'ops.workflow': 10,
+      'analyst.report': 20,
+      'site.generate': 100,
+      'site.edit': 10,
+      'site.publish': 5,
+      'research.task': 100,
+    });
   });
 
   it('does not update wallet balances in application code', () => {

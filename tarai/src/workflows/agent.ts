@@ -30,6 +30,11 @@ export class AgentWorkflow extends WorkflowEntrypoint<AgentEnv, AgentParams> {
     const control = new ControlRepository(this.env.CONTROL);
     try {
       const route = await step.do('resolve workspace', async () => {
+        if (input.space.startsWith('personal:')) {
+          const user = await control.getUser(input.user);
+          if (!user?.host || user.state !== 'active') throw new Error('Personal workspace is unavailable');
+          return { id: input.space, host: user.host };
+        }
         const space = await control.getSpace(input.space);
         if (!space?.host || !['active', 'grace'].includes(space.state)) throw new Error('Workspace is unavailable');
         return space;
@@ -66,7 +71,7 @@ export class AgentWorkflow extends WorkflowEntrypoint<AgentEnv, AgentParams> {
         }
       });
       await step.do('settle run', () => control.finishRun(input.run, {}));
-      if (this.env.PROJECTION_WORKFLOW) {
+      if (this.env.PROJECTION_WORKFLOW && !input.space.startsWith('personal:')) {
         await step.do('project result', () => this.env.PROJECTION_WORKFLOW!.create({
           id: `projection-${input.run}`,
           params: { id: input.run, space: input.space, type: `agent.${input.action}`, ref: input.run, data: { action: result.action, summary: result.summary, result: result.data } },

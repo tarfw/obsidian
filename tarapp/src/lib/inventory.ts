@@ -1,5 +1,4 @@
 import { tar } from './tar';
-import { routeDbForEntity } from './db';
 
 /**
  * Helper to find a product row by id or title in local DB or via tar.tool.
@@ -8,26 +7,10 @@ import { routeDbForEntity } from './db';
 export async function findProduct(scope: string, identifier: string) {
   if (!identifier) return null;
 
-  // 1. Try local SQLite DB first (instant local-first search by id, title, or lower(title))
-  try {
-    const db = routeDbForEntity('product', scope);
-    const rows = await db.all(
-      `SELECT * FROM matter WHERE id = ? OR title = ? OR lower(title) = lower(?) LIMIT 1`,
-      [identifier, identifier, identifier]
-    );
-    if (rows && rows.length > 0) {
-      console.log(`[findProduct] ⚡ Instant local SQLite match for "${identifier}": id=${rows[0].id}, title="${rows[0].title}"`);
-      return rows[0];
-    }
-  } catch (err) {
-    console.warn('[findProduct] Local DB query warning:', err);
-  }
-
-  // 2. Network fallback only if not found locally
-  console.log(`[findProduct] 🌐 Local match not found, running network search for "${identifier}"...`);
+  console.log(`[findProduct] Fetching scoped product "${identifier}"...`);
   try {
     const readRes = await tar.tool('read', { table: 'matter', id: identifier, scope }).catch(() => null);
-    if (readRes?.row) return readRes.row;
+    if (readRes?.rows?.length > 0) return readRes.rows[0];
     
     const searchRes = await tar.tool('search', { table: 'matter', query: identifier, scope }).catch(() => null);
     if (searchRes?.rows?.length > 0) return searchRes.rows[0];
@@ -97,33 +80,17 @@ export async function updateStock(
   }
 
   primitiveData.locations = locations;
-  const updatedDataStr = JSON.stringify(primitiveData);
-
   console.log(`[updateStock] 📦 Product matched: "${title}" (id: ${actualId}). Current ON HAND: ${currentQty} ${unit} -> New ON HAND: ${newQty} ${unit}.`);
 
-  // 1. Update matter value & data locally in SQLite DB (Instant 1ms)
-  try {
-    const db = routeDbForEntity('product', scope);
-    await db.run(
-      `UPDATE matter SET value = ?, data = ?, updated = unixepoch() WHERE id = ?`,
-      [newQty, updatedDataStr, actualId]
-    );
-    console.log(`[updateStock] ⚡ Local SQLite value updated to ${newQty} for id: ${actualId}`);
-  } catch (dbErr) {
-    console.warn('[updateStock] Local DB update warning:', dbErr);
-  }
-
-  // Non-blocking background network sync
-  tar.tool('update', {
+  await tar.tool('update', {
     table: 'matter',
     id: actualId,
     scope,
     type: product.type || 'product',
     patch: { value: newQty, data: primitiveData },
-  }).catch((tarErr) => console.warn('[updateStock] Non-blocking tar.tool update note:', tarErr));
+  });
 
   // 2. Log motion entry in SQLite (Instant 1ms)
-  const motionId = `mot_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
   const motionData = {
     delta: netValueDelta,
     transferQty: isInternalTransfer ? transferQty : undefined,
@@ -136,25 +103,13 @@ export async function updateStock(
     timestamp: new Date().toISOString(),
   };
 
-  try {
-    const db = routeDbForEntity('product', scope);
-    await db.run(
-      `INSERT INTO motion (id, type, ref, data, scope, at) VALUES (?, ?, ?, ?, ?, unixepoch())`,
-      [motionId, motionType, actualId, JSON.stringify(motionData), scope]
-    );
-    console.log(`[updateStock] ⚡ Local motion logged: id=${motionId}, type=${motionType}, ref=${actualId}`);
-  } catch (dbErr) {
-    console.warn('[updateStock] Local motion log warning:', dbErr);
-  }
-
-  // Non-blocking background motion network sync
-  tar.tool('create', {
+  await tar.tool('create', {
     table: 'motion',
     type: motionType,
     ref: actualId,
     data: motionData,
     scope,
-  }).catch((tarErr) => console.warn('[updateStock] Non-blocking tar.tool motion creation note:', tarErr));
+  });
 
   // 3. Check low stock threshold
   if (netValueDelta < 0 && newQty <= minQty && minQty > 0) {
@@ -186,26 +141,11 @@ export async function getStockHistory(scope: string, productId: string): Promise
 
   let historyRows: any[] = [];
   try {
-    const db = routeDbForEntity('product', scope);
-    const rows = await db.all(
-      `SELECT * FROM motion WHERE ref = ? OR ref = ? ORDER BY at DESC`,
-      [actualId, productId]
-    );
-    if (rows && rows.length > 0) {
-      historyRows = rows;
-    }
+    const res = await tar.tool('read', { table: 'motion', ref: actualId, scope });
+    const rawList = Array.isArray(res?.rows) ? res.rows : res?.row ? [res.row] : [];
+    historyRows = rawList.filter((r: any) => Boolean(r));
   } catch (err) {
-    console.warn('[getStockHistory] Local DB fetch warning:', err);
-  }
-
-  if (historyRows.length === 0) {
-    try {
-      const res = await tar.tool('read', { table: 'motion', ref: actualId, scope });
-      const rawList = Array.isArray(res?.rows) ? res.rows : res?.row ? [res.row] : [];
-      historyRows = rawList.filter((r: any) => Boolean(r));
-    } catch (err) {
-      console.warn('[getStockHistory] tar.tool fetch warning:', err);
-    }
+    console.warn('[getStockHistory] tar.tool fetch warning:', err);
   }
 
   console.log(`[getStockHistory] ✅ Found ${historyRows.length} history records for "${productId}"`);

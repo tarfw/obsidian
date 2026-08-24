@@ -25,7 +25,7 @@ export function getCloudMcpClient(): CloudMcpClient | null {
  * Returns null for local scopes or when no cloud client is set.
  */
 function isCloudScope(scope: string): boolean {
-  return scope === 'w' || scope.startsWith('w:') || scope === 'o' || scope.startsWith('o:');
+  return scope === 'p' || scope === 'personal' || scope === 'w' || scope.startsWith('w:') || scope === 'o' || scope.startsWith('o:') || Boolean(scope);
 }
 
 export async function forwardToCloud<T>(
@@ -35,11 +35,19 @@ export async function forwardToCloud<T>(
 ): Promise<T | null> {
   if (!isCloudScope(scope)) return null;
   const client = getCloudMcpClient();
-  if (!client) {
-    // No cloud client configured; caller should fall back to local/shared DB routing.
-    return null;
+  if (client) return client.call(toolName, params) as T;
+  const { tar } = await import('./tar');
+  if (toolName === 'link') {
+    return tar.tool('create', {
+      table: 'graph',
+      source: params.src,
+      target: params.tgt,
+      kind: params.rel,
+      data: params.data || {},
+      scope,
+    }) as Promise<T>;
   }
-  return client.call(toolName, params) as T;
+  return tar.tool(toolName, { ...params, scope }) as Promise<T>;
 }
 
 export class CloudNotConfiguredError extends Error {

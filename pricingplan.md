@@ -40,10 +40,13 @@ Manual actions and normal database operations use 0 credits. Site-agent actions 
 
 ## 3. Credits and Cost
 
-| Credit pack | Indicative price* |
-|---|---:|
-| 500 credits | ₹99 |
-| 2,500 credits | ₹449 |
-| 6,000 credits | ₹999 |
+Initial activation costs ₹500 and includes 1,000 credits. After activation, every top-up passes through at-cost credits with no expiry while the account is active.
 
-\* Prices are localized worldwide using purchasing power, taxes, and store costs. Purchased credits do not expire while the account is active. Third-party charges such as WhatsApp, SMS, domains, and payment processing are separate.
+| Pack | Price | Credits included | Structure | Best for |
+|---|---:|---:|---|---|
+| Base Credit Pack | ₹500 | 1,000 | ₹400 platform fee + ₹100 usage credit | Initial account activation |
+| Top-Up: Starter | ₹100 | 1,000 | 100% at-cost usage top-up | Flexible on-demand use |
+| Top-Up: Growth | ₹500 | 5,000 | 100% at-cost usage top-up | Daily CRM, OCR and proposals |
+| Top-Up: Scale | ₹1,000 | 10,000 | 100% at-cost usage top-up | High-volume work and research |
+
+Third-party charges such as WhatsApp, SMS, domains, and payment processing are separate.

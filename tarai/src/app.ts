@@ -8,7 +8,6 @@ import { createDatabaseClientForHost } from './data/turso.ts';
 import { TenantRepository, type TenantTable } from './data/repositories/tenant.ts';
 import { R2StorageService, type R2BucketBinding } from './data/r2.ts';
 import { KVCacheService, type KVNamespaceBinding } from './data/kv.ts';
-import { createReadToken } from './data/platform.ts';
 import { createRazorpayOrder, verifyRazorpayWebhook } from './payments/razorpay.ts';
 import { verifyHmacSha256 } from './channels/signature.ts';
 import type { AgentParams } from './workflows/agent.ts';
@@ -68,8 +67,16 @@ function errorStatus(error: ControlError): 400 | 402 | 403 | 404 | 409 | 503 {
 
 async function startAgent(env: Env, auth: AuthContext, action: string, idem: string, input: Record<string, unknown>): Promise<AgentRun> {
   if (!env.AGENT_WORKFLOW) throw new ControlError('unavailable', 'Agent execution is unavailable');
+  if (auth.workspaceId.startsWith('personal:') && /^(site\.|sales\.|support\.|retention\.)/.test(action)) {
+    throw new ControlError('access', 'This agent action requires a workspace');
+  }
   const control = new ControlRepository(env.CONTROL);
-  const run = await control.reserveRun({ user: auth.userId, space: auth.workspaceId, action, idem });
+  const run = await control.reserveRun({
+    user: auth.userId,
+    space: auth.workspaceId.startsWith('personal:') ? undefined : auth.workspaceId,
+    action,
+    idem,
+  });
   if (run.state !== 'reserved') return run;
   try {
     await env.AGENT_WORKFLOW.createBatch([{
@@ -89,7 +96,68 @@ async function enqueueProjection(env: Env, input: ProjectionParams): Promise<voi
 }
 
 function present(row: { id: string; type: string; data: Record<string, unknown>; state?: string; ref?: string | null; created: number; updated?: number }) {
-  return { id: row.id, type: row.type, ...row.data, state: row.state, ref: row.ref, created_at: row.created, updated_at: row.updated };
+  return {
+    ...row.data,
+    id: row.id,
+    type: row.type,
+    data: row.data,
+    state: row.state,
+    status: row.data.status || row.state,
+    ref: row.ref,
+    created_at: row.created,
+    updated_at: row.updated,
+  };
+}
+
+function entityData(body: Record<string, unknown>): Record<string, unknown> {
+  const nested = typeof body.data === 'object' && body.data ? body.data as Record<string, unknown> : {};
+  const data = { ...nested };
+  const reserved = new Set(['table', 'scope', 'data', 'patch', 'source', 'target', 'kind', 'requestId', 'idem']);
+  for (const [key, value] of Object.entries(body)) {
+    if (!reserved.has(key) && key !== 'id' && key !== 'type') data[key] = value;
+  }
+  return data;
+}
+
+function safeKnowledgePath(value: string): string | null {
+  let decoded: string;
+  try { decoded = decodeURIComponent(value); } catch { return null; }
+  const normalized = decoded.replace(/\\/g, '/').replace(/^\/+/, '');
+  if (!normalized || normalized.length > 240 || normalized.includes('..') || !/^[a-zA-Z0-9_./-]+$/.test(normalized)) return null;
+  return normalized;
+}
+
+function safeJson(value: unknown): string {
+  return JSON.stringify(value).replace(/</g, '\\u003c');
+}
+
+function checkoutPage(input: { paymentId: string; orderId: string; key: string; amount: number; currency: string; credits: number }): string {
+  const options = safeJson({
+    key: input.key,
+    amount: input.amount,
+    currency: input.currency,
+    name: 'Tarai',
+    description: `${input.credits} credits`,
+    order_id: input.orderId,
+    theme: { color: '#0f172a' },
+  });
+  const paymentId = safeJson(input.paymentId);
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"><title>Buy Tarai credits</title><style>body{margin:0;background:#f8fafc;color:#0f172a;font:16px system-ui,sans-serif;display:grid;min-height:100vh;place-items:center}.card{box-sizing:border-box;width:min(92vw,420px);padding:32px;border:1px solid #e2e8f0;border-radius:24px;background:#fff;text-align:center;box-shadow:0 18px 50px #0f172a12}h1{margin:0 0 8px;font-size:26px}.balance{font-size:42px;font-weight:800;margin:22px 0 4px}.muted{color:#64748b}button{width:100%;margin-top:24px;padding:14px;border:0;border-radius:14px;background:#0f172a;color:#fff;font-weight:700;font-size:16px}button:disabled{opacity:.5}</style></head><body><main class="card"><h1>Tarai credits</h1><p class="muted">Secure checkout powered by Razorpay</p><div class="balance">${input.credits}</div><div class="muted">credits</div><button id="pay">Continue to payment</button><p id="status" class="muted"></p></main><script src="https://checkout.razorpay.com/v1/checkout.js"></script><script>const button=document.getElementById('pay'),status=document.getElementById('status'),paymentId=${paymentId};const options=${options};options.handler=async(response)=>{button.disabled=true;status.textContent='Confirming payment…';try{const result=await fetch('/checkout/'+encodeURIComponent(paymentId)+'/verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(response)});if(!result.ok)throw new Error('confirmation failed');document.querySelector('main').innerHTML='<h1>Payment received</h1><p class="muted">Your credits are ready. You can close this page and return to Tar.</p>';}catch(error){button.disabled=false;status.textContent='Payment received, but confirmation is still processing. Return to Tar and refresh shortly.';}};button.onclick=()=>{status.textContent='';new Razorpay(options).open();};</script></body></html>`;
+}
+
+function presentSpace(space: ControlSpace) {
+  return {
+    id: space.id,
+    name: space.name,
+    slug: space.slug,
+    scope: space.slug,
+    subdomain: space.slug,
+    region: space.region,
+    role: space.role,
+    state: space.state,
+    created: space.created,
+    updated: space.updated,
+  };
 }
 
 app.get('/api/ping', (c) => c.json({ ok: true }));
@@ -107,6 +175,41 @@ app.post('/webhooks/razorpay', async (c) => {
   if (!payment.id || !payment.order_id || typeof payment.amount !== 'number' || !Number.isInteger(payment.amount) || !payment.currency) return c.json({ error: 'Invalid payment payload' }, 400);
   await new ControlRepository(c.env.CONTROL).settlePayment({ checkout: payment.order_id, receipt: payment.id, amount: payment.amount, currency: payment.currency });
   return c.json({ accepted: true });
+});
+
+app.get('/checkout/:id', async (c) => {
+  if (!c.env.RAZORPAY_KEY_ID) return c.text('Checkout is not configured', 503);
+  const payment = await new ControlRepository(c.env.CONTROL).getPayment(c.req.param('id'));
+  if (!payment || payment.state === 'paid') return c.text(payment ? 'Payment already completed' : 'Checkout not found', payment ? 200 : 404);
+  return c.html(checkoutPage({
+    paymentId: String(payment.id),
+    orderId: String(payment.checkout),
+    key: c.env.RAZORPAY_KEY_ID,
+    amount: Number(payment.amount),
+    currency: String(payment.currency),
+    credits: Number(payment.credits),
+  }), 200, {
+    'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline' https://checkout.razorpay.com; frame-src https://api.razorpay.com https://*.razorpay.com; connect-src 'self' https://api.razorpay.com https://*.razorpay.com; img-src 'self' data: https:; style-src 'unsafe-inline'",
+    'Referrer-Policy': 'no-referrer',
+    'X-Content-Type-Options': 'nosniff',
+  });
+});
+
+app.post('/checkout/:id/verify', async (c) => {
+  if (!c.env.RAZORPAY_KEY_SECRET) return c.json({ error: 'Checkout is not configured' }, 503);
+  const payment = await new ControlRepository(c.env.CONTROL).getPayment(c.req.param('id'));
+  if (!payment) return c.json({ error: 'Checkout not found' }, 404);
+  const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+  const receipt = typeof body.razorpay_payment_id === 'string' ? body.razorpay_payment_id : '';
+  const returnedOrder = typeof body.razorpay_order_id === 'string' ? body.razorpay_order_id : '';
+  const signature = typeof body.razorpay_signature === 'string' ? body.razorpay_signature : '';
+  if (returnedOrder !== payment.checkout || !receipt || !await verifyHmacSha256(`${payment.checkout}|${receipt}`, c.env.RAZORPAY_KEY_SECRET, signature)) {
+    return c.json({ error: 'Invalid payment signature' }, 401);
+  }
+  await new ControlRepository(c.env.CONTROL).settlePayment({
+    checkout: String(payment.checkout), receipt, amount: Number(payment.amount), currency: String(payment.currency),
+  });
+  return c.json({ paid: true });
 });
 
 app.get('/sites/:space', async (c) => {
@@ -175,14 +278,46 @@ app.use('/api/*', async (c, next) => {
   const token = c.env.TURSO_AUTH_TOKEN;
   const personal = user.host && token ? createDatabaseClientForHost(user.host, token) : undefined;
   c.set('personal', personal);
-  const identityOnly = new Set(['/api/workspaces', '/api/wallet', '/api/ledger', '/api/agents', '/api/payments/order', '/api/sync/personal']);
+  const identityOnly = new Set(['/api/workspaces', '/api/wallet', '/api/ledger', '/api/agents', '/api/packs', '/api/payments/order', '/api/dev/credits']);
   const restorePath = /^\/api\/workspaces\/[^/]+\/restore$/.test(c.req.path);
   if (identityOnly.has(c.req.path) || restorePath) {
     try { await next(); } finally { personal?.close(); }
     return;
   }
   const slug = c.req.header('X-Workspace-Slug');
-  if (!slug) return c.json({ error: 'Missing X-Workspace-Slug' }, 400);
+  if (!slug) {
+    const personalRoute = /^\/api\/entities\/(read|search|create|insert|update|delete)$/.test(c.req.path)
+      || c.req.path === '/api/intent'
+      || /^\/api\/runs\/[^/]+$/.test(c.req.path)
+      || /^\/api\/agents\/[^/]+\/run$/.test(c.req.path);
+    if (!personalRoute) {
+      return c.json({ error: 'Missing X-Workspace-Slug' }, 400);
+    }
+    if (!personal || user.state !== 'active') return c.json({ error: 'Personal database is being prepared' }, 409);
+    const personalId = `personal:${verified.identity.userId}`;
+    c.set('data', personal);
+    c.set('auth', {
+      userId: verified.identity.userId,
+      email: verified.identity.email,
+      workspaceId: personalId,
+      role: 'owner',
+      status: 'active',
+      audience: 'owner',
+    });
+    c.set('space', {
+      id: personalId,
+      owner: verified.identity.userId,
+      slug: 'personal',
+      name: 'Personal',
+      region: user.region,
+      db: user.db,
+      host: user.host,
+      schema: user.schema,
+      state: 'active',
+    } as ControlSpace);
+    try { await next(); } finally { personal.close(); }
+    return;
+  }
   const space = await control.getSpaceBySlug(slug);
   if (!space) return c.json({ error: 'Workspace not found' }, 404);
   const member = await control.getMember(verified.identity.userId, space.id);
@@ -199,12 +334,17 @@ app.use('/api/*', async (c, next) => {
     userId: verified.identity.userId, email: verified.identity.email, workspaceId: space.id, role: member.role, status: member.state,
     audience: member.role === 'owner' ? 'owner' : member.role === 'guest' ? 'customer' : 'member',
   });
+  if (member.role === 'guest' && c.req.path !== '/api/sales/query' && c.req.path !== '/api/support/query') {
+    data.close();
+    personal?.close();
+    return c.json({ error: 'Customer identities cannot access internal workspace APIs' }, 403);
+  }
   try { await next(); } finally { data.close(); personal?.close(); }
 });
 
 app.get('/api/workspaces', async (c) => {
   const spaces = await new ControlRepository(c.env.CONTROL).listSpaces(c.get('identity').userId);
-  return c.json({ workspaces: spaces.map((space) => ({ ...space, scope: space.slug, subdomain: space.slug })) });
+  return c.json({ workspaces: spaces.map(presentSpace) });
 });
 
 app.post('/api/workspaces', async (c) => {
@@ -219,17 +359,17 @@ app.post('/api/workspaces', async (c) => {
   if (!c.env.PROVISION_WORKFLOW) return c.json({ error: 'Provisioning is unavailable' }, 503);
   try {
     const existing = await control.getSpaceByCreateIdem(idem);
-    if (existing) return c.json({ workspace: { ...existing, scope: existing.slug, subdomain: existing.slug } }, 200);
+    if (existing) return c.json({ workspace: presentSpace(existing) }, 200);
     const id = `ws_${crypto.randomUUID()}`;
     const space = await control.createSpace({ id, owner: identity.userId, slug, name, region, idem });
     const db = `space-${id.replace(/[^a-z0-9-]/gi, '-').toLowerCase().slice(0, 48)}`;
     try {
-      await c.env.PROVISION_WORKFLOW.createBatch([{ id: `provision-${db}`, params: { kind: 'space', id, name: db, region } }]);
+    await c.env.PROVISION_WORKFLOW.createBatch([{ id: `provision-${db}`, params: { kind: 'space', id, name: db, region, displayName: name } }]);
     } catch (error) {
       await control.failSpace(id, 'workflow_unavailable');
       throw error;
     }
-    return c.json({ workspace: { ...space, scope: slug, subdomain: slug } }, 202);
+    return c.json({ workspace: presentSpace(space) }, 202);
   } catch (error) {
     if (error instanceof ControlError) return c.json({ error: error.message }, errorStatus(error));
     throw error;
@@ -258,11 +398,24 @@ app.post('/api/workspaces/:id/restore', async (c) => {
 app.get('/api/wallet', async (c) => c.json({ wallet: await new ControlRepository(c.env.CONTROL).getWallet(c.get('identity').userId) }));
 app.get('/api/ledger', async (c) => c.json({ ledger: await new ControlRepository(c.env.CONTROL).listLedger(c.get('identity').userId) }));
 app.get('/api/agents', async (c) => c.json({ agents: await new ControlRepository(c.env.CONTROL).listAgents() }));
+app.get('/api/packs', async (c) => c.json({ packs: await new ControlRepository(c.env.CONTROL).listPacks() }));
+
+app.post('/api/dev/credits', async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const credits = typeof body.credits === 'number' ? body.credits : Number(body.credits);
+  const idem = c.req.header('Idempotency-Key') || '';
+  if (!Number.isInteger(credits) || !idem) return c.json({ error: 'Integer credits and Idempotency-Key are required' }, 400);
+  const wallet = await new ControlRepository(c.env.CONTROL).grantDevelopmentCredits({
+    user: c.get('identity').userId, credits, idem,
+  });
+  return c.json({ wallet });
+});
 
 app.get('/api/runs/:id', async (c) => {
   const run = await new ControlRepository(c.env.CONTROL).getRun(c.req.param('id'));
   if (!run || run.user !== c.get('identity').userId) return c.json({ error: 'Run not found' }, 404);
-  return c.json({ run });
+  const [motion] = await new TenantRepository(c.get('data')).list('motion', { ref: run.id });
+  return c.json({ run, result: motion?.data || null });
 });
 
 app.post('/api/agents/:action/run', async (c) => {
@@ -272,6 +425,9 @@ app.post('/api/agents/:action/run', async (c) => {
   if (!idem || idem.length > 128) return c.json({ error: 'Idempotency-Key is required' }, 400);
   const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
   try {
+    if (['site.active', 'site.publish', 'retention.campaign'].includes(action) && auth.role !== 'owner' && auth.role !== 'admin') {
+      return c.json({ error: 'This action requires an owner or admin' }, 403);
+    }
     if (action === 'site.active') {
       const service = await new ControlRepository(c.env.CONTROL).activateSite(auth.workspaceId, auth.userId, idem);
       return c.json({ service }, 201);
@@ -308,7 +464,12 @@ app.post('/api/entities/:operation', async (c) => {
   if (!database) return c.json({ error: 'Personal database is being prepared' }, 409);
   const repo = new TenantRepository(database);
   if (operation === 'read' || operation === 'search') {
-    let rows = await repo.list(table, { id: typeof body.id === 'string' ? body.id : undefined, type: typeof body.type === 'string' ? body.type : undefined, space: auth.workspaceId });
+    let rows = await repo.list(table, {
+      id: typeof body.id === 'string' ? body.id : undefined,
+      type: typeof body.type === 'string' ? body.type : undefined,
+      ref: typeof body.ref === 'string' ? body.ref : undefined,
+      space: auth.workspaceId,
+    });
     if (operation === 'search' && typeof body.query === 'string') {
       const query = body.query.toLowerCase();
       rows = rows.filter((row) => JSON.stringify(row.data).toLowerCase().includes(query));
@@ -316,7 +477,7 @@ app.post('/api/entities/:operation', async (c) => {
     return c.json({ rows: rows.map(present) });
   }
   if (operation === 'create' || operation === 'insert') {
-    const data = typeof body.data === 'object' && body.data ? body.data as Record<string, unknown> : {};
+    const data = entityData(body);
     if (table === 'graph') {
       if (typeof body.source !== 'string' || typeof body.target !== 'string' || typeof body.kind !== 'string') return c.json({ error: 'Graph source, target and kind are required' }, 400);
       return c.json({ row: await repo.link({ id: `grf_${crypto.randomUUID()}`, source: body.source, target: body.target, kind: body.kind, data }) }, 201);
@@ -362,6 +523,15 @@ app.post('/api/tools/:name', async (c) => {
   }
   if (name === 'task.update' || name === 'task.archive' || name === 'inventory.correct') {
     if (typeof body.id !== 'string') return c.json({ error: 'Record id is required' }, 400);
+    if (name === 'task.archive' && c.get('auth').role !== 'owner' && c.get('auth').role !== 'admin') {
+      const approval = await repo.create('matter', {
+        id: `apr_${crypto.randomUUID()}`,
+        type: 'approval',
+        data: { status: 'pending', action: name, target: body.id, payload: body, requestedBy: c.get('auth').userId },
+        actor: c.get('auth').userId,
+      });
+      return c.json({ success: true, status: 'staged_for_approval', approval: present(approval) }, 202);
+    }
     const patch = name === 'task.archive' ? { state: 'archived' } : (typeof body.patch === 'object' && body.patch ? body.patch as Record<string, unknown> : body);
     const row = await repo.update('matter', body.id, patch);
     if (!row) return c.json({ error: 'Record not found' }, 404);
@@ -381,10 +551,18 @@ app.post('/api/approvals/:id/decide', async (c) => {
   const body = await c.req.json().catch(() => ({}));
   if (body.decision !== 'approved' && body.decision !== 'rejected') return c.json({ error: 'Decision must be approved or rejected' }, 400);
   const repo = new TenantRepository(c.get('data'));
-  const row = await repo.update('matter', c.req.param('id'), { status: body.decision, state: body.decision, reason: body.reason || '' });
-  if (!row) return c.json({ error: 'Approval not found' }, 404);
-  await repo.create('motion', { id: `mot_${crypto.randomUUID()}`, type: 'approval.decided', data: { decision: body.decision, reason: body.reason || '' }, actor: auth.userId, ref: row.id });
-  return c.json({ updated: true, approval: present(row) });
+  const [pending] = await repo.list('matter', { id: c.req.param('id'), type: 'approval' });
+  if (!pending) return c.json({ error: 'Approval not found' }, 404);
+  if (pending.data.status !== 'pending') return c.json({ error: 'Approval has already been decided' }, 409);
+  let effect: Record<string, unknown> | null = null;
+  if (body.decision === 'approved' && pending.data.action === 'task.archive' && typeof pending.data.target === 'string') {
+    const target = await repo.update('matter', pending.data.target, { state: 'archived' });
+    if (!target) return c.json({ error: 'Approval target no longer exists' }, 409);
+    effect = present(target);
+  }
+  const row = await repo.update('matter', pending.id, { status: body.decision, state: body.decision, reason: body.reason || '', decidedBy: auth.userId });
+  await repo.create('motion', { id: `mot_${crypto.randomUUID()}`, type: 'approval.decided', data: { decision: body.decision, reason: body.reason || '', effect }, actor: auth.userId, ref: pending.id });
+  return c.json({ updated: true, approval: present(row!), effect });
 });
 
 app.post('/api/sales/query', async (c) => {
@@ -432,25 +610,35 @@ app.get('/api/canvas', async (c) => {
   const value = await new R2StorageService(c.env.OKF_STORAGE).readText(`workspaces/${c.get('auth').workspaceId}/canvas.json`);
   return c.json(value ? JSON.parse(value) : { blocks: [] });
 });
+
+app.get('/api/knowledge/*', async (c) => {
+  const path = safeKnowledgePath(c.req.path.slice('/api/knowledge/'.length));
+  if (!path) return c.json({ error: 'Invalid knowledge path' }, 400);
+  const content = await new R2StorageService(c.env.OKF_STORAGE).readText(`workspaces/${c.get('auth').workspaceId}/knowledge/${path}`);
+  if (content === null) return c.json({ error: 'Knowledge file not found' }, 404);
+  return c.json({ path, content });
+});
+
+app.put('/api/knowledge/*', async (c) => {
+  const auth = c.get('auth');
+  if (auth.role !== 'owner' && auth.role !== 'admin') return c.json({ error: 'Only owners and admins can edit workspace knowledge' }, 403);
+  const path = safeKnowledgePath(c.req.path.slice('/api/knowledge/'.length));
+  if (!path) return c.json({ error: 'Invalid knowledge path' }, 400);
+  const body = await c.req.json().catch(() => ({}));
+  if (typeof body.content !== 'string' || body.content.length > 1_000_000) return c.json({ error: 'Knowledge content is required and must be under 1 MB' }, 400);
+  await new R2StorageService(c.env.OKF_STORAGE).writeText(
+    `workspaces/${auth.workspaceId}/knowledge/${path}`,
+    body.content,
+    { actor: auth.userId, updated: new Date().toISOString() },
+  );
+  return c.json({ updated: true, path });
+});
 app.post('/api/canvas', async (c) => {
   const auth = c.get('auth');
   if (auth.role !== 'owner' && auth.role !== 'admin') return c.json({ error: 'Only owners and admins can edit the canvas' }, 403);
   const body = await c.req.json();
   await new R2StorageService(c.env.OKF_STORAGE).writeText(`workspaces/${auth.workspaceId}/canvas.json`, JSON.stringify(body));
   return c.json({ updated: true });
-});
-
-app.get('/api/sync/personal', async (c) => {
-  const user = await new ControlRepository(c.env.CONTROL).getUser(c.get('identity').userId);
-  if (!user?.db || !user.host || user.state !== 'active') return c.json({ error: 'Personal database is being prepared' }, 409);
-  return c.json({ url: `libsql://${user.host}`, token: await createReadToken(c.env, user.db), expires: Math.floor(Date.now() / 1000) + 3600 });
-});
-app.get('/api/sync/workspace', async (c) => {
-  const auth = c.get('auth');
-  if (auth.role !== 'owner' && auth.role !== 'admin') return c.json({ error: 'Use the role-filtered API cache' }, 403);
-  const space = c.get('space');
-  if (!space.db || !space.host) return c.json({ error: 'Workspace database is being prepared' }, 409);
-  return c.json({ url: `libsql://${space.host}`, token: await createReadToken(c.env, space.db), expires: Math.floor(Date.now() / 1000) + 3600 });
 });
 
 app.post('/api/payments/order', async (c) => {
@@ -461,13 +649,13 @@ app.post('/api/payments/order', async (c) => {
   if (!pack || !idem) return c.json({ error: 'Pack and Idempotency-Key are required' }, 400);
   const control = new ControlRepository(c.env.CONTROL);
   const existing = await control.getPaymentByIdem(idem);
-  if (existing) return c.json({ payment: existing });
+  if (existing) return c.json({ payment: existing, checkoutUrl: `${new URL(c.req.url).origin}/checkout/${existing.id}` });
   const price = await control.getPack(pack);
   if (!price) return c.json({ error: 'Pack not found' }, 404);
   const id = `pay_${crypto.randomUUID()}`;
   const order = await createRazorpayOrder(c.env, { amount: price.price, currency: price.currency, receipt: id });
   const payment = await control.createPayment({ id, user: c.get('identity').userId, pack, checkout: order.id, idem });
-  return c.json({ payment, key: c.env.RAZORPAY_KEY_ID }, 201);
+  return c.json({ payment, checkoutUrl: `${new URL(c.req.url).origin}/checkout/${payment.id}` }, 201);
 });
 
 app.onError((error, c) => {

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -6,13 +6,14 @@ import {
   Modal,
   TouchableOpacity,
   ScrollView,
-  Linking,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { TarLogo } from './TarLogo';
 import { AnimatedTarLogoAgent, AgentStateMode, AgentRoleType } from './AnimatedTarLogoAgent';
 import SiteScreen from './site';
+import { tar, type AgentRate } from '@/lib/tar';
 
 interface FeatureRow {
   title: string;
@@ -26,14 +27,15 @@ interface PlanAgentItem {
   role: AgentRoleType;
   title: string;
   description: string;
-  features?: (billing: 'monthly' | 'yearly', usedWorkspaces?: number) => FeatureRow[];
+  features?: (ownedWorkspaces?: number, joinedWorkspaces?: number) => FeatureRow[];
 }
 
 interface MicroAgentEntry {
   id: string;
+  action: string;
   name: string;
   desc: string;
-  cost: string;
+  credits: number;
   color: string;
   bg: string;
 }
@@ -41,73 +43,82 @@ interface MicroAgentEntry {
 const MICRO_AGENTS_DIRECTORY: MicroAgentEntry[] = [
   {
     id: 'ocr_intake',
+    action: 'ocr.scan',
     name: 'Tar Intake OCR',
     desc: 'Scans paper bills, vendor receipts, and delivery notes into stock',
-    cost: '₹5.00 / 1,000 scans',
+    credits: 3,
     color: '#8B5CF6',
     bg: '#F5F3FF',
   },
   {
     id: 'lead_hunter',
+    action: 'lead.batch',
     name: 'Supplier & Lead Hunter',
     desc: 'Finds verified wholesale suppliers, B2B buyers & direct contacts',
-    cost: '₹5.00 / batch',
+    credits: 50,
     color: '#10B981',
     bg: '#ECFDF5',
   },
   {
     id: 'price_monitor',
+    action: 'price.check',
     name: 'Competitor Price Monitor',
     desc: 'Tracks live product prices across quick-commerce apps and local stores',
-    cost: '₹0.10 / check',
+    credits: 2,
     color: '#F97316',
     bg: '#FFF7ED',
   },
   {
     id: 'gst_recon',
+    action: 'tax.report',
     name: 'GST & Tax Estimator',
     desc: 'Calculates advance tax liabilities and input tax credits automatically',
-    cost: '₹0.10 / report',
+    credits: 20,
     color: '#D97706',
     bg: '#FFFBEB',
   },
   {
     id: 'bill_auditor',
+    action: 'bill.audit',
     name: 'Bank & Bill Margin Auditor',
     desc: 'Matches purchase orders with bills and flags supplier price hikes',
-    cost: '₹0.04 / audit',
+    credits: 5,
     color: '#2563EB',
     bg: '#EFF6FF',
   },
   {
     id: 'lapsed_recovery',
+    action: 'retention.campaign',
     name: 'Lapsed Customer Retention',
     desc: 'Finds inactive customers and drafts tailored WhatsApp win-back offers',
-    cost: '₹0.02 / run',
+    credits: 20,
     color: '#E11D48',
     bg: '#FFF1F2',
   },
   {
     id: 'image_clean',
+    action: 'photo.clean',
     name: 'Product Photo AI Clean',
     desc: 'Removes messy backgrounds and formats studio-grade product photos',
-    cost: '₹0.10 / 10 items',
+    credits: 10,
     color: '#6366F1',
     bg: '#EEF2FF',
   },
   {
     id: 'voice_order',
+    action: 'voice.order',
     name: 'Voice Note Order Parser',
     desc: 'Transcribes customer audio notes directly into checkout items',
-    cost: '₹0.01 / order',
+    credits: 5,
     color: '#0D9488',
     bg: '#F0FDFA',
   },
   {
     id: 'research_swarm',
+    action: 'research.task',
     name: 'Multi-Agent Research Swarm',
     desc: 'Deep multi-agent research across business registries, licenses & tenders',
-    cost: '₹0.50 / task',
+    credits: 100,
     color: '#0891B2',
     bg: '#ECFEFF',
   },
@@ -120,42 +131,27 @@ const PLAN_AGENTS: PlanAgentItem[] = [
     role: 'workspace_agent',
     title: 'Workspace',
     description: 'Local business OS funded by public & sponsors.',
-    features: (_billing, usedWorkspaces = 1) => [
-      { title: 'Workspaces', value: `${usedWorkspaces}/5`, isExpandable: true },
-      { title: 'Instant Edge Storefront', value: '*.tarai.space' },
-      { title: 'POS Register & Stock Tracker', value: 'Offline-first' },
-      { title: 'Customer CRM & Deal Pipeline', value: 'Included' },
-      { title: 'Click-to-WhatsApp P2P Orders', value: 'Free' },
-      { title: 'Platform & Hosting Cost', value: 'Public & Sponsors' },
+    features: (ownedWorkspaces = 0, joinedWorkspaces = 0) => [
+      { title: 'Owned workspaces', value: `${ownedWorkspaces} · 100 credits/month each`, isExpandable: true },
+      { title: 'Joined workspaces', value: `${joinedWorkspaces} · free` },
+      { title: 'Personal workspace', value: 'Free' },
+      { title: 'Manual database actions', value: 'Free' },
+      { title: 'Public browsing & ordering', value: 'Free' },
+      { title: 'Workspace limit', value: 'None' },
     ],
   },
   {
     id: 'tier_2',
-    tabLabel: 'Sales Agent',
+    tabLabel: 'Credits',
     role: 'sales_agent',
-    title: 'Sales Agent',
-    description: '24/7 AI employee closing deals on site, socials & WhatsApp.',
-    features: (billing) => [
-      {
-        title: 'Storefront AI Salesperson',
-        value: billing === 'yearly' ? '24M tokens/yr' : '2M tokens/mo',
-      },
-      {
-        title: 'Social Channels AI Chatbot',
-        value: 'Included',
-      },
-      {
-        title: 'WhatsApp AI Customer Chats',
-        value: billing === 'yearly' ? '6,000 / yr' : '500 / mo',
-      },
-      {
-        title: 'Paper Bill & Receipt OCR Scans',
-        value: billing === 'yearly' ? '6,000 / yr' : '500 / mo',
-      },
-      {
-        title: 'Custom Domain & SSL',
-        value: billing === 'yearly' ? 'Free .com' : 'Supported',
-      },
+    title: 'One Credit Wallet',
+    description: 'Credits pay for owned workspaces and AI actions. No fixed plans.',
+    features: () => [
+      { title: '500 credits', value: '₹99' },
+      { title: '2,500 credits', value: '₹449' },
+      { title: '6,000 credits', value: '₹999' },
+      { title: 'Expiry', value: 'None while account is active' },
+      { title: 'Third-party fees', value: 'Separate' },
     ],
   },
   {
@@ -186,12 +182,22 @@ export function EphemeralPlanCanvas({
   workspaces,
   onOpenCanvasCustomizer,
 }: EphemeralPlanCanvasProps) {
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState<string>('tier_1');
-  const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
   const [siteGenMode] = useState<AgentStateMode>('active');
   const [workspacesExpanded, setWorkspacesExpanded] = useState<boolean>(false);
   const [showSiteScreen, setShowSiteScreen] = useState<boolean>(false);
+  const [walletBalance, setWalletBalance] = useState<number | null>(null);
+  const [catalog, setCatalog] = useState<AgentRate[]>([]);
+
+  useEffect(() => {
+    if (!visible) return;
+    Promise.all([tar.wallet(), tar.agents()]).then(([wallet, agents]) => {
+      setWalletBalance(wallet.wallet?.balance ?? 0);
+      setCatalog(agents.agents || []);
+    }).catch(() => {});
+  }, [visible]);
 
   const cleanSub = (subdomain || 'site').replace(/^w:/, '');
 
@@ -205,20 +211,29 @@ export function EphemeralPlanCanvas({
     (w) => w.role === 'member'
   ).length;
 
-  const usedWorkspacesCount = Math.max((workspaces?.length || 1), 1);
   const currentAgent = PLAN_AGENTS.find((a) => a.id === activeTab) || PLAN_AGENTS[0];
 
-  const handleOpenRazorpaySubscription = () => {
-    const planType = billingCycle === 'yearly' ? 'annual' : 'monthly';
-    const razorpayUrl = `https://rzp.io/l/tar-sales-${planType}?subdomain=${encodeURIComponent(cleanSub)}&workspace=${encodeURIComponent(workspaceName)}`;
-    Linking.openURL(razorpayUrl).catch(() => {
-      Linking.openURL('https://tarai.space/pricing').catch(() => null);
-    });
+  const handleOpenCreditPacks = () => {
+    onClose();
+    router.push('/credits');
   };
 
-  const activeFeatures = currentAgent.features
-    ? currentAgent.features(billingCycle, usedWorkspacesCount)
-    : [];
+  const activeFeatures = currentAgent.features ? currentAgent.features(ownerCount, memberCount) : [];
+  const agentDirectory = catalog.length > 0
+    ? catalog.map((agent, index) => {
+        const fallback = MICRO_AGENTS_DIRECTORY.find((item) => item.action === agent.action);
+        const colors = ['#8B5CF6', '#10B981', '#F97316', '#2563EB', '#E11D48', '#0891B2'];
+        return {
+          id: agent.id,
+          action: agent.action,
+          name: agent.name,
+          desc: fallback?.desc || agent.action.replace(/\./g, ' '),
+          credits: agent.credits,
+          color: fallback?.color || colors[index % colors.length],
+          bg: fallback?.bg || '#F8FAFC',
+        };
+      })
+    : MICRO_AGENTS_DIRECTORY;
 
   return (
     <Modal
@@ -242,7 +257,7 @@ export function EphemeralPlanCanvas({
             <TouchableOpacity onPress={onClose} hitSlop={12} style={styles.backBtn}>
               <Ionicons name="close" size={22} color="#09090b" />
             </TouchableOpacity>
-            <Text style={styles.pageTitle}>Plans & Agents</Text>
+            <Text style={styles.pageTitle}>Credits & Agents</Text>
           </View>
           <View style={styles.workspacePill}>
             <Text style={styles.workspacePillText}>{cleanSub}</Text>
@@ -282,12 +297,12 @@ export function EphemeralPlanCanvas({
             showsVerticalScrollIndicator={false}
           >
             <View style={styles.directoryContainer}>
-              {MICRO_AGENTS_DIRECTORY.map((item, idx) => (
+              {agentDirectory.map((item, idx) => (
                 <View
                   key={item.id}
                   style={[
                     styles.directoryRow,
-                    idx < MICRO_AGENTS_DIRECTORY.length - 1 && styles.directoryRowBorder,
+                    idx < agentDirectory.length - 1 && styles.directoryRowBorder,
                   ]}
                 >
                   {/* Non-animated TarLogo Icon differing by work color */}
@@ -300,7 +315,7 @@ export function EphemeralPlanCanvas({
                     <Text style={styles.directoryName}>{item.name}</Text>
                     <Text style={styles.directoryDesc}>{item.desc}</Text>
                     <View style={styles.directoryCostRow}>
-                      <Text style={styles.directoryCostText}>{item.cost}</Text>
+                      <Text style={styles.directoryCostText}>{item.credits} credits</Text>
                     </View>
                   </View>
                 </View>
@@ -331,51 +346,10 @@ export function EphemeralPlanCanvas({
               <Text style={styles.agentDesc} numberOfLines={1}>
                 {currentAgent.description}
               </Text>
+              {currentAgent.id === 'tier_2' && walletBalance !== null ? (
+                <Text style={styles.walletBalance}>{walletBalance.toLocaleString()} credits available</Text>
+              ) : null}
             </View>
-
-            {/* ── MINIMAL MONTHLY / YEARLY BILLING TOGGLE (Sales Agent Only) ── */}
-            {currentAgent.id === 'tier_2' && (
-              <View style={styles.billingToggleWrap}>
-                <TouchableOpacity
-                  activeOpacity={0.7}
-                  onPress={() => setBillingCycle('monthly')}
-                  style={[
-                    styles.billingBtn,
-                    billingCycle === 'monthly' && styles.billingBtnActive,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.billingText,
-                      billingCycle === 'monthly' && styles.billingTextActive,
-                    ]}
-                  >
-                    Monthly · ₹499
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  activeOpacity={0.7}
-                  onPress={() => setBillingCycle('yearly')}
-                  style={[
-                    styles.billingBtn,
-                    billingCycle === 'yearly' && styles.billingBtnActive,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.billingText,
-                      billingCycle === 'yearly' && styles.billingTextActive,
-                    ]}
-                  >
-                    Yearly · ₹3,999
-                  </Text>
-                  <View style={styles.saveBadge}>
-                    <Text style={styles.saveBadgeText}>FREE .COM</Text>
-                  </View>
-                </TouchableOpacity>
-              </View>
-            )}
 
             {/* ── 2-COLUMN KEY-VALUE FEATURE SPECS ── */}
             {activeFeatures.length > 0 && (
@@ -404,20 +378,20 @@ export function EphemeralPlanCanvas({
                         </View>
                       </TouchableOpacity>
 
-                      {/* Expandable Breakdown for 5 Workspaces (No icons, current status by number and text) */}
+                      {/* Owned workspaces reserve credits; joined workspaces are free for members. */}
                       {isExpandableRow && workspacesExpanded && (
                         <View style={styles.workspaceBreakdownBox}>
                           <View style={styles.breakdownRow}>
                             <Text style={styles.breakdownTitle}>Personal</Text>
-                            <Text style={styles.breakdownQuota}>1 / 1 active</Text>
+                            <Text style={styles.breakdownQuota}>Always free</Text>
                           </View>
                           <View style={styles.breakdownRow}>
                             <Text style={styles.breakdownTitle}>Owner</Text>
-                            <Text style={styles.breakdownQuota}>{ownerCount} / 2 created</Text>
+                            <Text style={styles.breakdownQuota}>{ownerCount} active</Text>
                           </View>
                           <View style={[styles.breakdownRow, { borderBottomWidth: 0 }]}>
                             <Text style={styles.breakdownTitle}>Member</Text>
-                            <Text style={styles.breakdownQuota}>{memberCount} / 2 joined</Text>
+                            <Text style={styles.breakdownQuota}>{memberCount} joined · free</Text>
                           </View>
                         </View>
                       )}
@@ -480,11 +454,11 @@ export function EphemeralPlanCanvas({
             <TouchableOpacity
               activeOpacity={0.7}
               style={styles.actionTextRowBtn}
-              onPress={handleOpenRazorpaySubscription}
+              onPress={handleOpenCreditPacks}
             >
               <View style={styles.actionLeftWithLogo}>
                 <TarLogo size={18} color="#09090b" />
-                <Text style={styles.actionTextRowLabel}>Activate Sales Agent</Text>
+                <Text style={styles.actionTextRowLabel}>Buy Credit Pack</Text>
               </View>
               <Ionicons
                 name="arrow-forward"
@@ -611,6 +585,13 @@ const styles = StyleSheet.create({
     fontSize: 12.5,
     lineHeight: 17,
     color: '#52525b',
+  },
+  walletBalance: {
+    marginTop: 8,
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#09090b',
+    letterSpacing: -0.4,
   },
   billingToggleWrap: {
     flexDirection: 'row',

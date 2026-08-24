@@ -58,15 +58,15 @@ export default function SettingsScreen() {
     lfmLlm.downloadProgress < 1;
 
   useEffect(() => {
-    if (hammerLlm.isReady) {
-      setIsHammerCachedState(true);
-    }
+    if (!hammerLlm.isReady) return;
+    const timer = setTimeout(() => setIsHammerCachedState(true), 0);
+    return () => clearTimeout(timer);
   }, [hammerLlm.isReady]);
 
   useEffect(() => {
-    if (lfmLlm.isReady) {
-      setIsLfmCachedState(true);
-    }
+    if (!lfmLlm.isReady) return;
+    const timer = setTimeout(() => setIsLfmCachedState(true), 0);
+    return () => clearTimeout(timer);
   }, [lfmLlm.isReady]);
 
   const handleLoadHammer = () => {

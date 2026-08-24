@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { StyleSheet, View, Text, Pressable, ScrollView, TextInput, Modal, Platform, TouchableOpacity, Keyboard, Switch } from 'react-native';
+import { StyleSheet, View, Text, Pressable, ScrollView, TextInput, Modal, Platform, TouchableOpacity, Keyboard } from 'react-native';
 import { KeyboardAwareScrollView, KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -40,18 +40,17 @@ import ExploreOverlay from '@/components/ExploreOverlay';
 import CanvasOverlay from '@/components/CanvasOverlay';
 import CanvasCustomizerModal from '@/components/CanvasCustomizerModal';
 import CreateWorkspace from '@/components/CreateWorkspace';
-import ChannelConnectModal from '@/components/ChannelConnectModal';
-import EphemeralPlanCanvas from '@/components/EphemeralPlanCanvas';
-import { TarLogo } from '@/components/TarLogo';
 import { TarLogoLoader } from '@/components/TarLogoLoader';
 import { updateStock } from '@/lib/inventory';
 
 interface Workspace {
+  id?: string;
   scope: string;
   subdomain: string;
   role: string;
   name?: string;
   type?: string;
+  state?: 'provisioning' | 'active' | 'grace' | 'readonly' | 'archived' | 'cold' | 'restoring' | 'error';
 }
 
 const PERSONAL_WORKSPACE: Workspace = {
@@ -153,12 +152,12 @@ export default function WorkspacesScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const paramSubdomain = typeof params.subdomain === 'string' ? params.subdomain : undefined;
-  const paramCode = typeof params.code === 'string' ? params.code : undefined;
   const paramAction = typeof params.action === 'string' ? params.action : undefined;
 
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [currentWorkspace, setCurrentWorkspace] = useState<Workspace | null>(null);
   const [loadingWorkspaces, setLoadingWorkspaces] = useState(true);
+  const [creditBalance, setCreditBalance] = useState<number | null>(null);
 
   const [sessionId] = useState(() => 'sess_' + Date.now());
   const [products, setProducts] = useState<any[]>([]);
@@ -219,10 +218,6 @@ export default function WorkspacesScreen() {
   const [submittingContact, setSubmittingContact] = useState(false);
   const [contactResultMessage, setContactResultMessage] = useState<string | null>(null);
   const [editContactEntity, setEditContactEntity] = useState<any | null>(null);
-  const [showConnectChatModal, setShowConnectChatModal] = useState(false);
-  const [showPlanCanvas, setShowPlanCanvas] = useState(false);
-  const [planTargetWorkspace, setPlanTargetWorkspace] = useState<any>(null);
-  const [showWorkspaceActions, setShowWorkspaceActions] = useState(false);
 
   // Mention (@ / #) state
   const [showMentionPopover, setShowMentionPopover] = useState(false);
@@ -412,8 +407,8 @@ export default function WorkspacesScreen() {
   }, [currentWorkspace?.scope]);
 
   // Fetch workspaces list on mount with Google email matching (genuiteam.md §3)
-  const fetchWorkspacesList = useCallback(async () => {
-    setLoadingWorkspaces(true);
+  const fetchWorkspacesList = useCallback(async (silent = false): Promise<Workspace[]> => {
+    if (!silent) setLoadingWorkspaces(true);
     try {
       const user = await getCurrentUser().catch(() => null);
       if (user?.email) {
@@ -435,12 +430,14 @@ export default function WorkspacesScreen() {
       } else {
         setCurrentWorkspace(PERSONAL_WORKSPACE);
       }
+      return list;
     } catch (e) {
       console.warn('[Workspaces] Failed to fetch workspaces:', e);
       setWorkspaces([PERSONAL_WORKSPACE]);
       setCurrentWorkspace(PERSONAL_WORKSPACE);
+      return [PERSONAL_WORKSPACE];
     } finally {
-      setLoadingWorkspaces(false);
+      if (!silent) setLoadingWorkspaces(false);
     }
   }, [paramSubdomain]);
 
@@ -448,62 +445,16 @@ export default function WorkspacesScreen() {
     fetchWorkspacesList();
   }, [fetchWorkspacesList]);
 
-  // Handle native deep link account verification
   useEffect(() => {
-    if (paramCode && currentWorkspace?.scope) {
-      const scope = currentWorkspace.scope;
-      getCurrentUser().then(async (user) => {
-        if (user && user.email) {
-          try {
-            const membersRes = await tar.okf.read(scope, 'team/members.md');
-            if (membersRes && membersRes.content) {
-              const { frontmatter, markdownBody } = parseYamlFrontmatter(membersRes.content);
-              const membersList = frontmatter.members || [];
-              
-              const memberIdx = membersList.findIndex((m: any) => String(m.code) === String(paramCode) && m.status === 'pending');
-              if (memberIdx !== -1) {
-                membersList[memberIdx].email = user.email;
-                membersList[memberIdx].status = 'verified';
-                delete membersList[memberIdx].code;
-                
-                const rolesYaml = Object.entries(frontmatter.roles || {})
-                  .map(([r, skills]) => `  ${r}: [${(skills as any).join(', ')}]`)
-                  .join('\n');
-                
-                const membersYaml = membersList
-                  .map((m: any) => {
-                    let lines = `  - email: "${m.email}"\n    role: "${m.role}"\n    status: "${m.status}"`;
-                    if (m.platform) lines += `\n    platform: "${m.platform}"`;
-                    if (m.channelId) lines += `\n    channelId: "${m.channelId}"`;
-                    return lines;
-                  })
-                  .join('\n');
+    if (!showDropdown) return;
+    tar.wallet().then(({ wallet }) => setCreditBalance(wallet?.balance ?? 0)).catch(() => setCreditBalance(null));
+  }, [showDropdown]);
 
-                const updatedYaml = `---
-type: TeamConfiguration
-title: Team Access & Channel Mappings
-timestamp: ${new Date().toISOString()}
-roles:
-${rolesYaml}
-members:
-${membersYaml}
----
-`;
-                
-                await tar.okf.edit(scope, 'team/members.md', updatedYaml + markdownBody);
-                setAgentFeedback({ text: 'Successfully linked your chat channel account!', type: 'success' });
-              } else {
-                setAgentFeedback({ text: 'Invalid or expired linking code.', type: 'error' });
-              }
-            }
-          } catch (err: any) {
-            console.warn('[LinkVerification] Code verification failed:', err);
-            setAgentFeedback({ text: err.message || 'Failed to link account.', type: 'error' });
-          }
-        }
-      });
-    }
-  }, [paramCode, currentWorkspace?.scope]);
+  useEffect(() => {
+    if (!workspaces.some((workspace) => workspace.state === 'provisioning' || workspace.state === 'restoring')) return;
+    const timer = setInterval(() => { fetchWorkspacesList(true).catch(() => {}); }, 2000);
+    return () => clearInterval(timer);
+  }, [fetchWorkspacesList, workspaces]);
 
   const [newWsDesc, setNewWsDesc] = useState('');
 
@@ -553,17 +504,6 @@ ${membersYaml}
       }
     }
   }, [paramSubdomain, workspaces]);
-
-  // Sync current workspace database when selected workspace changes (skip personal workspace)
-  useEffect(() => {
-    if (currentWorkspace?.subdomain && currentWorkspace.subdomain !== 'personal' && currentWorkspace.subdomain !== 'p') {
-      import('@/lib/db').then(({ initWorkspaceSync }) => {
-        initWorkspaceSync(currentWorkspace.subdomain).catch(err => {
-          console.warn('[Workspace] Failed to initialize sync for', currentWorkspace.subdomain, err);
-        });
-      });
-    }
-  }, [currentWorkspace]);
 
   const filterActiveRows = (rows: any[]) => {
     return (rows || []).filter((r: any) => {
@@ -897,6 +837,10 @@ ${membersYaml}
   }, [canvasBlocks, currentWorkspace?.scope, currentWorkspace?.role]);
 
   const handleSelectWorkspace = async (item: Workspace) => {
+    if (item.state === 'provisioning' || item.state === 'restoring') {
+      setAgentFeedback({ text: `${item.name || item.subdomain} is still creating its private database.`, type: 'info' });
+      return;
+    }
     setShowDropdown(false);
     if (item.subdomain === currentWorkspace?.subdomain) return;
     
@@ -1871,19 +1815,11 @@ ${membersYaml}
         onRequestClose={() => setShowDropdown(false)}
       >
         <View style={[styles.switcherContainer, { paddingTop: Math.max(insets.top, Platform.OS === 'android' ? 16 : 12) + 8, paddingBottom: Math.max(insets.bottom, 16) + 8 }]}>
-          {/* Header with Title, Manage Toggle & Close / Collapse Button */}
+          {/* Header */}
           <View style={styles.switcherHeader}>
             <Text style={styles.switcherTitle}>Workspaces</Text>
 
             <View style={styles.switcherHeaderRight}>
-              <Switch
-                value={showWorkspaceActions}
-                onValueChange={setShowWorkspaceActions}
-                trackColor={{ false: '#e2e8f0', true: '#0f172a' }}
-                thumbColor={Platform.OS === 'android' ? (showWorkspaceActions ? '#ffffff' : '#f8fafc') : undefined}
-                ios_backgroundColor="#e2e8f0"
-                style={Platform.OS === 'ios' ? { transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] } : undefined}
-              />
               <TouchableOpacity
                 onPress={() => setShowDropdown(false)}
                 style={styles.switcherCloseBtn}
@@ -1904,8 +1840,15 @@ ${membersYaml}
               const isActive = w.subdomain === currentWorkspace?.subdomain;
               const name = w.name || w.subdomain;
               const isPersonal = w.scope === 'p' || w.subdomain === 'personal' || (w.name || '').toLowerCase().includes('personal');
-              const isOwner = isPersonal || w.role === 'owner' || w.role === 'admin' || !w.role;
-              const roleLabel = isPersonal ? 'Personal' : w.role === 'owner' ? 'Owner' : 'Collaborator';
+              const roleLabel = isPersonal
+                ? 'Personal'
+                : w.state === 'provisioning'
+                  ? 'Creating private database…'
+                  : w.state === 'restoring'
+                    ? 'Restoring private database…'
+                    : w.state === 'error'
+                      ? 'Database setup failed'
+                      : w.role === 'owner' ? 'Owner' : 'Collaborator';
               const isLast = idx === workspaces.length - 1;
 
               return (
@@ -1935,46 +1878,6 @@ ${membersYaml}
                         {roleLabel}
                       </Text>
                     </View>
-
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                      {isOwner && (
-                        <TouchableOpacity
-                          activeOpacity={0.6}
-                          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-                          onPress={(e) => {
-                            e.stopPropagation();
-                            handleSelectWorkspace(w);
-                            setShowDropdown(false);
-                            setShowSiteScreen(true);
-                          }}
-                          style={{
-                            padding: 6,
-                            borderRadius: 8,
-                            backgroundColor: '#f1f5f9',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                          }}
-                          accessibilityLabel="Open Storefront Studio"
-                        >
-                          <Ionicons name="globe-outline" size={18} color="#0f172a" />
-                        </TouchableOpacity>
-                      )}
-
-                      {showWorkspaceActions && isOwner && (
-                        <TouchableOpacity
-                          activeOpacity={0.6}
-                          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-                          onPress={(e) => {
-                            e.stopPropagation();
-                            setPlanTargetWorkspace(w);
-                            setShowPlanCanvas(true);
-                          }}
-                          style={styles.switcherPlanBtn}
-                        >
-                          <TarLogo size={20} color="#0f172a" />
-                        </TouchableOpacity>
-                      )}
-                    </View>
                   </TouchableOpacity>
                   {!isLast && <View style={styles.switcherDivider} />}
                 </View>
@@ -1982,59 +1885,34 @@ ${membersYaml}
             })}
           </ScrollView>
 
-          {/* Bottom Actions: + Create Workspace (Limit Check), Connect Chat, Join Code */}
-          {showWorkspaceActions && (
-            <View style={styles.switcherBottomSection}>
-              {workspaces.length < 5 ? (
-                <TouchableOpacity
-                  activeOpacity={0.8}
-                  onPress={() => {
-                    setShowDropdown(false);
-                    setIsCreatingWorkspace(true);
-                  }}
-                  style={styles.createWsBtn}
-                >
-                  <Ionicons name="add" size={18} color="#ffffff" style={{ marginRight: 6 }} />
-                  <Text style={styles.createWsBtnText}>Create Workspace</Text>
-                </TouchableOpacity>
-              ) : (
-                <View style={styles.limitReachedNotice}>
-                  <Ionicons name="information-circle-outline" size={16} color="#64748b" style={{ marginRight: 6 }} />
-                  <Text style={styles.limitReachedText}>Workspace limit reached (5 of 5)</Text>
-                </View>
-              )}
-
-              <View style={styles.secondaryActionsRow}>
-                <TouchableOpacity
-                  onPress={() => {
-                    setShowDropdown(false);
-                    setShowConnectChatModal(true);
-                  }}
-                  style={styles.secondaryActionBtn}
-                >
-                  <Ionicons name="chatbubbles-outline" size={15} color="#0f172a" />
-                  <Text style={styles.secondaryActionText}>Link Group Channel</Text>
-                </TouchableOpacity>
+          <View style={styles.switcherAccountSection}>
+            <Text style={styles.switcherAccountTitle}>Credits & Agents</Text>
+            <TouchableOpacity
+              onPress={() => { setShowDropdown(false); router.push('/credits'); }}
+              style={styles.creditBalanceRow}
+              accessibilityLabel="Open credits and billing"
+            >
+              <View>
+                <Text style={styles.creditBalanceLabel}>Available credits</Text>
+                <Text style={styles.creditBalanceValue}>{creditBalance === null ? '—' : creditBalance.toLocaleString('en-IN')}</Text>
               </View>
+              <Ionicons name="chevron-forward" size={19} color="#64748b" />
+            </TouchableOpacity>
+            <View style={styles.switcherQuickActions}>
+              <TouchableOpacity onPress={() => { setShowDropdown(false); setIsCreatingWorkspace(true); }} style={styles.switcherQuickAction}>
+                <Text style={styles.switcherQuickActionText}>Create workspace</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => { setShowDropdown(false); setShowCanvasCustomizer(true); }} style={styles.switcherQuickAction}>
+                <Text style={styles.switcherQuickActionText}>Edit canvas</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => { setShowDropdown(false); setShowSiteScreen(true); }} style={styles.switcherQuickAction}>
+                <Text style={styles.switcherQuickActionText}>Edit storefront</Text>
+              </TouchableOpacity>
             </View>
-          )}
+          </View>
+
         </View>
       </Modal>
-
-      {/* Ephemeral Plan Canvas opened directly from Workspace Switcher icon */}
-      <EphemeralPlanCanvas
-        visible={showPlanCanvas}
-        onClose={() => setShowPlanCanvas(false)}
-        workspaceName={planTargetWorkspace?.name || planTargetWorkspace?.subdomain || currentWorkspace?.name || 'Workspace'}
-        subdomain={planTargetWorkspace?.subdomain || currentWorkspace?.subdomain || 'site'}
-        scope={planTargetWorkspace?.scope || currentWorkspace?.scope || 'default'}
-        workspaces={workspaces}
-        onOpenCanvasCustomizer={() => {
-          setShowDropdown(false);
-          setShowCanvasCustomizer(true);
-        }}
-        theme={theme}
-      />
 
       {/* Agentic Full Screen AI Workspace Creation Experience */}
       <CreateWorkspace
@@ -2042,25 +1920,19 @@ ${membersYaml}
         canClose={workspaces.length > 0}
         existingSubdomains={workspaces.map((w) => w.subdomain)}
         onClose={closeCreateModal}
+        onOpenCredits={() => {
+          closeCreateModal();
+          router.push('/credits');
+        }}
         onSuccess={async (slug) => {
           closeCreateModal();
-          await fetchWorkspacesList();
-          const found = workspaces.find((w) => w.subdomain === slug);
+           const refreshed = await fetchWorkspacesList();
+           const found = refreshed.find((w) => w.subdomain === slug);
           if (found) {
             setCurrentWorkspace(found);
           }
         }}
       />
-
-      {/* Channel Link Modal for Telegram / Discord / Slack (Flow 2) */}
-      <ChannelConnectModal
-        visible={showConnectChatModal}
-        onClose={() => setShowConnectChatModal(false)}
-        subdomain={currentWorkspace?.subdomain || ''}
-        workspaceName={workspaceName || currentWorkspace?.subdomain || 'Workspace'}
-        userId={currentWorkspace?.scope || 'guest'}
-      />
-
 
       {/* Full-Screen Gmail Mobile App Style Event Compose Modal */}
       <EventComposeModal
@@ -3207,72 +3079,55 @@ const styles = StyleSheet.create({
     marginTop: 2,
     textTransform: 'capitalize',
   },
-  switcherPlanBtn: {
-    padding: 6,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   switcherDivider: {
     height: 1,
     backgroundColor: '#f1f5f9',
     marginHorizontal: 14,
   },
-  switcherBottomSection: {
-    paddingHorizontal: 20,
-    paddingTop: 12,
+  switcherAccountSection: {
+    marginHorizontal: 16,
+    marginBottom: 14,
+    paddingTop: 14,
     borderTopWidth: 1,
     borderTopColor: '#f1f5f9',
-    gap: 10,
-    backgroundColor: '#ffffff',
   },
-  createWsBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#0f172a',
-    paddingVertical: 13,
-    borderRadius: 12,
-  },
-  createWsBtnText: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  limitReachedNotice: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#f8fafc',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    paddingVertical: 11,
-    borderRadius: 12,
-  },
-  limitReachedText: {
-    fontSize: 12.5,
-    fontWeight: '600',
-    color: '#64748b',
-  },
-  secondaryActionsRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  secondaryActionBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#f8fafc',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    paddingVertical: 10,
-    borderRadius: 10,
-    gap: 6,
-  },
-  secondaryActionText: {
-    fontSize: 12.5,
-    fontWeight: '600',
+  switcherAccountTitle: {
     color: '#0f172a',
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 8,
+  },
+  creditBalanceRow: {
+    minHeight: 58,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    backgroundColor: '#f8fafc',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  creditBalanceLabel: {
+    color: '#64748b',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  creditBalanceValue: {
+    color: '#0f172a',
+    fontSize: 20,
+    fontWeight: '800',
+    marginTop: 1,
+  },
+  switcherQuickActions: {
+    flexDirection: 'row',
+    gap: 14,
+    paddingHorizontal: 4,
+    paddingTop: 12,
+  },
+  switcherQuickAction: { paddingVertical: 4 },
+  switcherQuickActionText: {
+    color: '#334155',
+    fontSize: 13,
+    fontWeight: '600',
   },
 });
 

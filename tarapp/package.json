@@ -57,7 +57,8 @@
     "reset-project": "node ./scripts/reset-project.js",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "release:check": "node ./scripts/verify-release.mjs"
   },
   "overrides": {
     "react-dom": "19.2.3"

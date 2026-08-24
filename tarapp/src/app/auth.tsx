@@ -3,10 +3,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useState, useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import * as SecureStore from 'expo-secure-store';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
-import { useTheme } from '@/hooks/use-theme';
 import { signInWithGoogle, getCurrentUser, trySilentSignIn } from '@/lib/auth';
 import { setUserId, tar } from '@/lib/tar';
 import { TarLogo } from '@/components/TarLogo';
@@ -20,12 +18,13 @@ const SOLUTIONS = [
   { icon: 'bulb-outline' as const, label: 'AI' },
 ];
 
+const AUTH_BACKGROUND = '#1E5631';
+
 const T0 = Date.now();
 function ms() { return `${Date.now() - T0}ms`; }
 
 export default function AuthScreen() {
   const insets = useSafeAreaInsets();
-  const theme = useTheme();
   const router = useRouter();
   const { height: windowHeight } = useWindowDimensions();
   const [loading, setLoading] = useState(false);
@@ -95,11 +94,11 @@ export default function AuthScreen() {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: '#1E5631' }]}>
+    <View style={[styles.container, { backgroundColor: AUTH_BACKGROUND }]}>
       <StatusBar style="light" />
       <View style={[styles.content, { paddingTop: insets.top + 20 }]}>
         <View style={styles.logoContainer}>
-          <TarLogo size={logoHeight} color="#EBA827" />
+          <TarLogo size={logoHeight} color="#EBA827" bgColor={AUTH_BACKGROUND} />
         </View>
         <Text style={[styles.title, { color: '#FFFFFF' }]}>tar.</Text>
         <Text style={[styles.subtitle, { color: '#E2F1E8' }]}>Everything app</Text>

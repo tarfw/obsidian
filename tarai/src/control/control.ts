@@ -3,7 +3,7 @@ import type { Role } from '../domain/types.ts';
 import type { AgentRate, AgentRun, ControlMember, ControlSpace, ControlUser, MemberRoute, Service, Wallet } from './types.ts';
 import { ControlError } from './types.ts';
 
-const TRIAL_CREDITS = 100;
+const TRIAL_CREDITS = 0;
 const WORKSPACE_CREDITS = 100;
 const SITE_CREDITS = 50;
 
@@ -37,7 +37,7 @@ export class ControlRepository {
     const now = unixNow();
     const wallet = `wal_${identity.userId}`;
     try {
-      await this.db.batch([
+      const statements = [
         this.db.prepare(
           `INSERT INTO users (id, email, name, region, state, created, updated)
            VALUES (?, ?, ?, ?, 'provisioning', ?, ?)
@@ -47,12 +47,15 @@ export class ControlRepository {
           `INSERT INTO wallets (id, user, balance, created, updated) VALUES (?, ?, 0, ?, ?)
            ON CONFLICT(user) DO NOTHING`,
         ).bind(wallet, identity.userId, now, now),
-        this.db.prepare(
+      ];
+      if (TRIAL_CREDITS > 0) {
+        statements.push(this.db.prepare(
           `INSERT INTO ledger (id, wallet, amount, kind, ref, idem, meta, created)
            VALUES (?, ?, ?, 'trial', ?, ?, '{}', ?)
            ON CONFLICT(idem) DO NOTHING`,
-        ).bind(`led_${crypto.randomUUID()}`, wallet, TRIAL_CREDITS, identity.userId, `trial:${identity.userId}`, now),
-      ]);
+        ).bind(`led_${crypto.randomUUID()}`, wallet, TRIAL_CREDITS, identity.userId, `trial:${identity.userId}`, now));
+      }
+      await this.db.batch(statements);
     } catch (error) {
       databaseError(error);
     }
@@ -261,6 +264,13 @@ export class ControlRepository {
     return result.results;
   }
 
+  async listPacks(): Promise<Array<{ id: string; credits: number; price: number; currency: string }>> {
+    const result = await this.db.prepare(
+      `SELECT id, credits, price, currency FROM packs WHERE state = 'active' ORDER BY credits`,
+    ).all<{ id: string; credits: number; price: number; currency: string }>();
+    return result.results;
+  }
+
   async reserveRun(input: { user: string; space?: string; action: string; idem: string }): Promise<AgentRun> {
     const existing = await this.db.prepare('SELECT * FROM runs WHERE idem = ?').bind(input.idem).first<AgentRun>();
     if (existing) return existing;
@@ -339,12 +349,38 @@ export class ControlRepository {
     return result.results;
   }
 
+  async grantDevelopmentCredits(input: { user: string; credits: number; idem: string }): Promise<Wallet> {
+    const wallet = await this.getWallet(input.user);
+    if (!wallet) throw new ControlError('missing', 'Wallet not found');
+    const credits = Math.trunc(input.credits);
+    if (credits < 1 || credits > 100_000) throw new ControlError('conflict', 'Development credits must be between 1 and 100,000');
+    const now = unixNow();
+    try {
+      await this.db.prepare(
+        `INSERT INTO ledger (id, wallet, amount, kind, ref, idem, meta, created)
+         VALUES (?, ?, ?, 'adjust', 'development', ?, json_object('source', 'development'), ?)
+         ON CONFLICT(idem) DO NOTHING`,
+      ).bind(`led_${crypto.randomUUID()}`, wallet.id, credits, `development:${input.idem}`, now).run();
+    } catch (error) {
+      databaseError(error);
+    }
+    const updated = await this.getWallet(input.user);
+    if (!updated) throw new ControlError('missing', 'Wallet not found');
+    return updated;
+  }
+
   async getPack(id: string): Promise<{ id: string; credits: number; price: number; currency: string } | null> {
     return this.db.prepare(`SELECT id, credits, price, currency FROM packs WHERE id = ? AND state = 'active'`).bind(id).first();
   }
 
   async getPaymentByIdem(idem: string): Promise<Record<string, unknown> | null> {
     return this.db.prepare('SELECT * FROM payments WHERE idem = ?').bind(idem).first();
+  }
+
+  async getPayment(id: string): Promise<Record<string, unknown> | null> {
+    return this.db.prepare(
+      'SELECT id, checkout, amount, currency, credits, state FROM payments WHERE id = ?',
+    ).bind(id).first();
   }
 
   async createPayment(input: { id: string; user: string; pack: string; checkout: string; idem: string }): Promise<Record<string, unknown>> {
@@ -429,7 +465,7 @@ export class ControlRepository {
       if (!(error instanceof Error) || !error.message.includes('funds')) throw error;
       const grace = now + 7 * 86400;
       await this.db.batch([
-        this.db.prepare(`UPDATE services SET state = 'grace', grace = ?, updated = ? WHERE id = ? AND renewal = ?`).bind(grace, now, service.id, period),
+        this.db.prepare(`UPDATE services SET state = 'grace', grace = COALESCE(grace, ?), updated = ? WHERE id = ? AND renewal = ?`).bind(grace, now, service.id, period),
         ...(service.space ? [this.db.prepare(`UPDATE spaces SET state = 'grace', updated = ? WHERE id = ?`).bind(now, service.space)] : []),
       ]);
       return 'grace';
@@ -451,16 +487,24 @@ export class ControlRepository {
   }
 
   async markArchiving(space: string): Promise<boolean> {
+    const now = unixNow();
     const result = await this.db.prepare(
       `UPDATE spaces SET state = 'archived', updated = ? WHERE id = ? AND state = 'readonly'`,
-    ).bind(unixNow(), space).run();
+    ).bind(now, space).run();
+    if (result.meta.changes === 1) {
+      await this.db.prepare(
+        `UPDATE services SET state = 'ended', updated = ? WHERE space = ? AND kind = 'workspace'`,
+      ).bind(now, space).run();
+    }
     return result.meta.changes === 1;
   }
 
   async releaseArchive(space: string): Promise<void> {
-    await this.db.prepare(
-      `UPDATE spaces SET state = 'readonly', updated = ? WHERE id = ? AND state = 'archived'`,
-    ).bind(unixNow(), space).run();
+    const now = unixNow();
+    await this.db.batch([
+      this.db.prepare(`UPDATE spaces SET state = 'readonly', updated = ? WHERE id = ? AND state = 'archived'`).bind(now, space),
+      this.db.prepare(`UPDATE services SET state = 'grace', updated = ? WHERE space = ? AND kind = 'workspace' AND state = 'ended'`).bind(now, space),
+    ]);
   }
 
   async markCold(space: string): Promise<void> {

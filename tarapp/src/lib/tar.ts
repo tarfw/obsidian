@@ -1,68 +1,171 @@
-/** Secure TarApp gateway for the Tarai Worker. */
+/** Typed, authenticated TarApp gateway for the Tarai Worker. */
 import { getValidIdToken } from './auth';
 
-const TARAI_URL = process.env.EXPO_PUBLIC_TARAI_URL || 'https://tarai.tar-54d.workers.dev';
+const TARAI_URL = (process.env.EXPO_PUBLIC_TARAI_URL || 'https://tarai.tar-54d.workers.dev').replace(/\/$/, '');
 
-// Retained for existing screens. Tarai derives identity from the verified token.
+export interface WorkspaceSummary {
+  id: string;
+  name: string;
+  slug: string;
+  subdomain: string;
+  scope: string;
+  role: 'owner' | 'admin' | 'member' | 'guest';
+  state: 'provisioning' | 'active' | 'grace' | 'readonly' | 'archived' | 'cold' | 'restoring' | 'error';
+}
+
+export interface CreditWallet { id: string; user: string; balance: number; }
+export interface CreditPack { id: string; credits: number; price: number; currency: string; }
+export interface AgentRate { id: string; name: string; action: string; credits: number; version: number; }
+export interface CreditLedgerEntry { id: string; amount: number; kind: string; ref?: string; meta?: string; created: number; }
+export interface PaymentOrder { payment: { id: string; amount: number; currency: string; credits: number; state: string }; checkoutUrl: string; }
+
+export class TaraiRequestError extends Error {
+  constructor(public readonly status: number, message: string, public readonly path: string) {
+    super(message);
+    this.name = 'TaraiRequestError';
+  }
+}
+
 export function setUserId(_id: string) {}
 export function setUserEmail(_email: string) {}
 
-async function headers(scope?: string, json = false): Promise<Record<string, string>> {
-  const idToken = await getValidIdToken();
-  if (!idToken) throw new Error('Your Google sign-in has expired. Please sign in again.');
-  const result: Record<string, string> = { Authorization: `Bearer ${idToken}` };
-  if (json) result['Content-Type'] = 'application/json';
-  if (scope && scope !== 'p') result['X-Workspace-Slug'] = scope.replace(/^w:/, '');
-  return result;
+function newIdempotencyKey(prefix = 'app'): string {
+  return `${prefix}:${Date.now()}:${Math.random().toString(36).slice(2)}`;
 }
 
-async function request<T>(path: string, options: { method?: 'GET' | 'POST'; body?: Record<string, unknown>; scope?: string } = {}): Promise<T> {
-  const requestHeaders = await headers(options.scope, Boolean(options.body));
-  if (options.method === 'POST') {
-    requestHeaders['Idempotency-Key'] = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+async function request<T>(path: string, options: {
+  method?: 'GET' | 'POST' | 'PUT';
+  body?: Record<string, unknown>;
+  scope?: string;
+  idempotencyKey?: string;
+} = {}): Promise<T> {
+  const idToken = await getValidIdToken();
+  if (!idToken) throw new TaraiRequestError(401, 'Your Google sign-in has expired. Please sign in again.', path);
+  const headers: Record<string, string> = { Authorization: `Bearer ${idToken}` };
+  if (options.body) headers['Content-Type'] = 'application/json';
+  if (options.scope && options.scope !== 'p' && options.scope !== 'personal') {
+    headers['X-Workspace-Slug'] = options.scope.replace(/^w:/, '');
   }
-  const res = await fetch(`${TARAI_URL}${path}`, {
+  if (options.method === 'POST' || options.method === 'PUT') {
+    headers['Idempotency-Key'] = options.idempotencyKey || newIdempotencyKey();
+  }
+  const response = await fetch(`${TARAI_URL}${path}`, {
     method: options.method || 'GET',
-    headers: requestHeaders,
+    headers,
     body: options.body ? JSON.stringify(options.body) : undefined,
   });
-  if (!res.ok) throw new Error(`${options.method || 'GET'} ${path} failed: ${await res.text()}`);
-  return res.json() as Promise<T>;
-}
-
-export function getSyncCredential(scope: string): Promise<{ url: string; token: string; expires: number }> {
-  return request(scope === 'p' ? '/api/sync/personal' : '/api/sync/workspace', { scope });
+  const raw = await response.text();
+  let payload: any = {};
+  if (raw) {
+    try { payload = JSON.parse(raw); } catch { payload = { error: raw }; }
+  }
+  if (!response.ok) throw new TaraiRequestError(response.status, payload.error || `${response.status} ${response.statusText}`, path);
+  return payload as T;
 }
 
 function entityOperation(name: string, input: Record<string, any>): Promise<any> {
-  return request<any>(`/api/entities/${name}`, { method: 'POST', body: input, scope: input.scope });
+  const body = { ...input };
+  if (body.table === 'graph') {
+    body.source = body.source ?? body.src;
+    body.target = body.target ?? body.tgt;
+    body.kind = String(body.kind ?? body.rel ?? 'related_to');
+    delete body.src;
+    delete body.tgt;
+    delete body.rel;
+  }
+  return request<any>(`/api/entities/${name}`, { method: 'POST', body, scope: input.scope });
+}
+
+function knowledgePath(path: string): string {
+  return path.split('/').filter(Boolean).map(encodeURIComponent).join('/');
+}
+
+async function createWorkspace(data: { name: string; subdomain: string; description?: string; message?: string; modules?: string[]; type?: string }) {
+  const created = await request<{ workspace: WorkspaceSummary }>('/api/workspaces', {
+    method: 'POST',
+    body: data,
+    idempotencyKey: newIdempotencyKey(`workspace:${data.subdomain}`),
+  });
+  return created.workspace;
+}
+
+async function chat(message: string, scope?: string): Promise<any> {
+  const started = await request<{ run: any }>('/api/intent', {
+    method: 'POST',
+    scope,
+    body: { intent: message, action: 'workspace.summary', scope: 'workspace' },
+  });
+  if (!started.run?.id) return started;
+  for (let attempt = 0; attempt < 12; attempt++) {
+    if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 500));
+    const status = await request<{ run: any; result: any }>(`/api/runs/${encodeURIComponent(started.run.id)}`, { scope });
+    if (status.run?.state === 'done') {
+      return {
+        run: status.run,
+        data: status.result?.data || status.result,
+        reply: status.result?.summary || 'Tar completed the workspace request.',
+        executorResult: { success: true },
+      };
+    }
+    if (status.run?.state === 'failed' || status.run?.state === 'refunded') {
+      throw new TaraiRequestError(500, 'Tar could not complete this request. Reserved credits were refunded.', `/api/runs/${started.run.id}`);
+    }
+  }
+  return { run: started.run, reply: 'Tar is still working. The result will appear in your inbox.', executorResult: { success: false } };
 }
 
 export const tar = {
-  chat: (_sessionId: string, message: string, scope?: string): Promise<any> => request<any>('/api/intent', { method: 'POST', scope, body: { intent: message, scope: 'workspace' } }),
+  chat: (_sessionId: string, message: string, scope?: string) => chat(message, scope),
   aiTasks: (_scope: string) => Promise.resolve([]),
-  executeAITask: (action: string, params: Record<string, any>, scope: string) => request('/api/intent', { method: 'POST', scope, body: { intent: action, parameters: params, scope: 'workspace' } }),
+  executeAITask: (action: string, params: Record<string, any>, scope: string) => request('/api/intent', { method: 'POST', scope, body: { intent: action, action, parameters: params, scope: 'workspace' } }),
   tool: entityOperation,
-  workflow: (name: string, input: Record<string, any>) => request(`/api/tools/${name}`, { method: 'POST', scope: input.scope, body: input }),
-  search: (query: string) => Promise.resolve({ results: [], query }),
+  workflow: (name: string, input: Record<string, any>) => request(`/api/tools/${encodeURIComponent(name)}`, { method: 'POST', scope: input.scope, body: input }),
+  search: (query: string, scope = 'p') => entityOperation('search', { table: 'matter', query, scope }),
   listTeams: () => Promise.resolve([]),
-  createWorkspace: (data: { name: string; subdomain: string; description?: string; message?: string; modules?: string[]; type?: string }) => request('/api/workspaces', { method: 'POST', body: data }),
-  listWorkspaces: (_email?: string) => request<{ workspaces: any[] }>('/api/workspaces'),
-  toolsExecute: (action: string, params: Record<string, any>, scope: string) => request('/api/intent', { method: 'POST', scope, body: { intent: action, parameters: params, scope: 'workspace' } }),
+  createWorkspace,
+  listWorkspaces: (_email?: string) => request<{ workspaces: WorkspaceSummary[] }>('/api/workspaces'),
+  wallet: () => request<{ wallet: CreditWallet | null }>('/api/wallet'),
+  ledger: () => request<{ ledger: CreditLedgerEntry[] }>('/api/ledger'),
+  agents: () => request<{ agents: AgentRate[] }>('/api/agents'),
+  packs: () => request<{ packs: CreditPack[] }>('/api/packs'),
+  runAgent: (action: string, input: Record<string, unknown>, scope: string) => request<{ run?: any; service?: any }>(`/api/agents/${encodeURIComponent(action)}/run`, { method: 'POST', scope, body: input }),
+  createPaymentOrder: (pack: string) => request<PaymentOrder>('/api/payments/order', { method: 'POST', body: { pack } }),
+  grantDevelopmentCredits: (credits: number) => request<{ wallet: CreditWallet }>('/api/dev/credits', { method: 'POST', body: { credits } }),
+  approvals: (scope: string) => request<any[]>('/api/approvals', { scope }),
+  decideApproval: (id: string, decision: 'approved' | 'rejected', scope: string, reason = '') => request(`/api/approvals/${encodeURIComponent(id)}/decide`, { method: 'POST', scope, body: { decision, reason } }),
+  members: (scope: string) => request<{ members: any[] }>('/api/members', { scope }),
+  addMember: (scope: string, member: { email: string; role: 'admin' | 'member' | 'guest'; budget?: number }) => request('/api/members', { method: 'POST', scope, body: member }),
+  setMemberBudget: (scope: string, id: string, budget: number) => request(`/api/members/${encodeURIComponent(id)}/budget`, { method: 'POST', scope, body: { budget } }),
+  toolsExecute: (action: string, params: Record<string, any>, scope: string) => request('/api/intent', { method: 'POST', scope, body: { intent: action, action, parameters: params, scope: 'workspace' } }),
   writeEvent: (scope: string, type: string, data: Record<string, any>) => entityOperation('create', { table: 'motion', type, data, scope }),
   getInbox: (scope: string) => entityOperation('read', { table: 'inbox', scope }),
   markTaskDone: (taskId: string, scope: string) => entityOperation('update', { table: 'inbox', id: taskId, patch: { status: 'done' }, scope }),
   timeline: (_opts?: { limit?: number; since?: string }) => Promise.resolve([]),
-  // Arbitrary client SQL was removed. Screens now use the scoped entity API.
   db: { query: async (_sql: string, _args: any[] = [], _scope?: string): Promise<any[]> => [] },
   okf: {
-    read: async (_scope: string, _path: string): Promise<any> => null,
-    readIndex: async (_scope: string): Promise<any> => null,
-    upload: async (_scope: string, _path: string, _content: string) => { throw new Error('Knowledge-file editing is not enabled in this Tarai release.'); },
-    edit: async (_scope: string, _path: string, _content: string) => { throw new Error('Knowledge-file editing is not enabled in this Tarai release.'); },
+    read: (scope: string, path: string) => request<{ path: string; content: string }>(`/api/knowledge/${knowledgePath(path)}`, { scope }),
+    readIndex: (scope: string) => request<{ path: string; content: string }>('/api/knowledge/index.md', { scope }),
+    upload: (scope: string, path: string, content: string) => request(`/api/knowledge/${knowledgePath(path)}`, { method: 'PUT', scope, body: { content } }),
+    edit: (scope: string, path: string, content: string) => request(`/api/knowledge/${knowledgePath(path)}`, { method: 'PUT', scope, body: { content } }),
   },
-  team: { getRoster: async (_scope: string) => ({ members: [] }), sync: async (_scope: string, _members: any) => ({ success: false }) },
-  canvas: { add: async (_scope: string, _block: any) => ({ success: false }), remove: async (_scope: string, _module: string) => ({ success: false }) },
+  team: {
+    getRoster: (scope: string) => request<{ members: any[] }>('/api/members', { scope }),
+    sync: async (_scope: string, _members: any) => ({ success: false, reason: 'Membership changes require the typed member API.' }),
+  },
+  canvas: {
+    get: (scope: string) => request<any>('/api/canvas', { scope }),
+    save: (scope: string, canvas: any) => request('/api/canvas', { method: 'POST', scope, body: canvas }),
+    add: async (scope: string, block: any) => {
+      const canvas = await request<any>('/api/canvas', { scope });
+      const next = { ...canvas, blocks: [...(canvas.blocks || []), typeof block === 'string' ? { id: block, type: block } : block].slice(0, 3) };
+      return request('/api/canvas', { method: 'POST', scope, body: next });
+    },
+    remove: async (scope: string, module: string) => {
+      const canvas = await request<any>('/api/canvas', { scope });
+      const next = { ...canvas, blocks: (canvas.blocks || []).filter((block: any) => block.id !== module && block.type !== module) };
+      return request('/api/canvas', { method: 'POST', scope, body: next });
+    },
+  },
   ai: {
     transcribe: async (_audioBase64: string, _mimeType = 'audio/m4a') => ({ text: '' }),
     planCanvas: async (_prompt: string, _workspaceName?: string, _vertical?: string, _scope?: string) => ({ success: false, chips: [], blocks: [], canvasMarkdown: '' }),

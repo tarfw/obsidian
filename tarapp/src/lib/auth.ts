@@ -2,6 +2,8 @@ import { GoogleSignin, statusCodes } from "@react-native-google-signin/google-si
 import * as SecureStore from "expo-secure-store";
 
 const SECURE_STORE_USER_KEY = "google_auth_user";
+let cachedUser: UserProfile | null | undefined;
+let userLoad: Promise<UserProfile | null> | null = null;
 
 GoogleSignin.configure({
   webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || "226183831843-5sjvl1hsv4d04aucnqsqn19u83o4f5ku.apps.googleusercontent.com",
@@ -43,6 +45,7 @@ export async function signInWithGoogle(): Promise<UserProfile> {
 
     console.log(`[Auth] ${Date.now() - t0}ms — storing profile to SecureStore`);
     await SecureStore.setItemAsync(SECURE_STORE_USER_KEY, JSON.stringify(profile));
+    cachedUser = profile;
 
     console.log(`[Auth] ${Date.now() - t0}ms — signInWithGoogle DONE: ${profile.email}`);
     return profile;
@@ -80,16 +83,22 @@ export async function signOutGoogle(): Promise<void> {
     console.error(`[Auth] ${Date.now() - t0}ms — signOutGoogle error:`, error);
   } finally {
     await SecureStore.deleteItemAsync(SECURE_STORE_USER_KEY);
+    cachedUser = null;
+    userLoad = null;
     console.log(`[Auth] ${Date.now() - t0}ms — signOutGoogle DONE (SecureStore cleared)`);
   }
 }
 
 export async function getCurrentUser(): Promise<UserProfile | null> {
+  if (cachedUser !== undefined) return cachedUser;
+  if (userLoad) return userLoad;
   const t0 = Date.now();
-  const savedUserJson = await SecureStore.getItemAsync(SECURE_STORE_USER_KEY);
-  console.log(`[Auth] ${Date.now() - t0}ms — getCurrentUser: ${savedUserJson ? 'found' : 'null'}`);
-  if (!savedUserJson) return null;
-  return JSON.parse(savedUserJson) as UserProfile;
+  userLoad = SecureStore.getItemAsync(SECURE_STORE_USER_KEY).then((savedUserJson) => {
+    console.log(`[Auth] ${Date.now() - t0}ms — getCurrentUser: ${savedUserJson ? 'found' : 'null'}`);
+    cachedUser = savedUserJson ? JSON.parse(savedUserJson) as UserProfile : null;
+    return cachedUser;
+  }).finally(() => { userLoad = null; });
+  return userLoad;
 }
 
 function tokenExpiresSoon(token: string | null): boolean {
@@ -144,6 +153,7 @@ export async function trySilentSignIn(): Promise<UserProfile | null> {
     };
 
     await SecureStore.setItemAsync(SECURE_STORE_USER_KEY, JSON.stringify(profile));
+    cachedUser = profile;
 
     console.log(`[Auth] ${Date.now() - t0}ms — trySilentSignIn DONE: ${profile.email}`);
     return profile;

@@ -39,11 +39,12 @@ function present(row: RawRow): TenantRow {
 export class TenantRepository {
   constructor(private readonly client: Client) {}
 
-  async list(table: TenantTable, filter: { id?: string; type?: string; space?: string } = {}): Promise<TenantRow[]> {
+  async list(table: TenantTable, filter: { id?: string; type?: string; space?: string; ref?: string } = {}): Promise<TenantRow[]> {
     const where: string[] = [];
     const args: InValue[] = [];
     if (filter.id) { where.push('id = ?'); args.push(filter.id); }
     if (filter.type) { where.push('type = ?'); args.push(filter.type); }
+    if (filter.ref && (table === 'motion' || table === 'inbox')) { where.push('ref = ?'); args.push(filter.ref); }
     if (filter.space && table === 'inbox') { where.push('space = ?'); args.push(filter.space); }
     const rows = await executeQuery<RawRow>(
       this.client,
@@ -90,8 +91,10 @@ export class TenantRepository {
     const [current] = await this.list(table, { id });
     if (!current) return null;
     const state = typeof patch.state === 'string' ? patch.state : typeof patch.status === 'string' ? patch.status : current.state;
-    const data = { ...current.data, ...patch };
+    const nested = typeof patch.data === 'object' && patch.data ? patch.data as Record<string, unknown> : {};
+    const data = { ...current.data, ...nested, ...patch };
     delete data.state;
+    delete data.data;
     const now = Math.floor(Date.now() / 1000);
     await this.client.execute({
       sql: `UPDATE ${table} SET data = ?, state = ?, updated = ? WHERE id = ?`,

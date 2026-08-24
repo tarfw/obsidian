@@ -22,6 +22,7 @@ interface CreateWorkspaceProps {
   onSuccess: (subdomain: string) => Promise<void>;
   canClose: boolean;
   existingSubdomains?: string[];
+  onOpenCredits?: () => void;
 }
 
 export default function CreateWorkspace({
@@ -30,6 +31,7 @@ export default function CreateWorkspace({
   onSuccess,
   canClose,
   existingSubdomains = [],
+  onOpenCredits,
 }: CreateWorkspaceProps) {
   const insets = useSafeAreaInsets();
 
@@ -39,6 +41,7 @@ export default function CreateWorkspace({
   const [isSynthesizing, setIsSynthesizing] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [needsCredits, setNeedsCredits] = useState(false);
 
   // Subdomain / Scope Calculation
   const rawName = workspaceName.trim() || 'workspace';
@@ -64,6 +67,7 @@ export default function CreateWorkspace({
     const finalDesc = description.trim();
     setIsSynthesizing(true);
     setErrorMessage(null);
+    setNeedsCredits(false);
     setCurrentStep(1);
 
     try {
@@ -104,7 +108,9 @@ export default function CreateWorkspace({
       await onSuccess(finalSlug);
     } catch (err: any) {
       console.error('[CreateWorkspace] Creation error:', err);
-      setErrorMessage(err?.message || 'Failed to create workspace. Please try again.');
+      const insufficientCredits = err?.status === 402 || /not enough credits/i.test(err?.message || '');
+      setNeedsCredits(insufficientCredits);
+      setErrorMessage(insufficientCredits ? 'You need 100 credits to start an owned workspace.' : (err?.message || 'Failed to create workspace. Please try again.'));
       setIsSynthesizing(false);
       setCurrentStep(0);
     }
@@ -185,6 +191,11 @@ export default function CreateWorkspace({
                 <View style={styles.errorBanner}>
                   <Ionicons name="alert-circle-outline" size={16} color="#dc2626" style={{ marginRight: 6 }} />
                   <Text style={styles.errorText}>{errorMessage}</Text>
+                  {needsCredits && onOpenCredits && (
+                    <Pressable onPress={onOpenCredits} style={styles.creditsButton}>
+                      <Text style={styles.creditsButtonText}>Add credits</Text>
+                    </Pressable>
+                  )}
                 </View>
               )}
 
@@ -329,6 +340,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 9,
   },
+  creditsButton: {
+    marginLeft: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 8,
+    backgroundColor: '#0f172a',
+  },
+  creditsButtonText: { color: '#ffffff', fontSize: 12, fontWeight: '700' },
   errorText: {
     flex: 1,
     color: '#dc2626',

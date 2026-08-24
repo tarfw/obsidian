@@ -1,6 +1,5 @@
 import { ReactNode, useMemo, useState, useEffect, createContext, useContext } from 'react';
-import { AppState, AppStateStatus } from 'react-native';
-import { getUserDb, subscribeDb, syncAllActiveDbs } from '@/lib/db';
+import { getUserDb, subscribeDb } from '@/lib/db';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { Database } from '@tursodatabase/sync-react-native';
 
@@ -16,17 +15,8 @@ export function DbProvider({ children }: { children: ReactNode }) {
       setDb(getUserDb());
     });
 
-    // Foreground listener: auto-pull on app focus
-    const handleAppState = (nextState: AppStateStatus) => {
-      if (nextState === 'active') {
-        syncAllActiveDbs().catch(() => {});
-      }
-    };
-    const appStateSub = AppState.addEventListener('change', handleAppState);
-
     return () => {
       unsubscribe();
-      appStateSub.remove();
     };
   }, []);
 

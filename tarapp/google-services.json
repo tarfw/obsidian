@@ -30,6 +30,22 @@
           }
         },
         {
+          "client_id": "226183831843-dhbt7orgjc1prci3d21k2q2c43ibq1pq.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.tarfw.app",
+            "certificate_hash": "c306d4eddf8b158da6097dd5c74884066e855f28"
+          }
+        },
+        {
+          "client_id": "226183831843-l1d7utbpvfb5pa1lbpo0ullrdel5jp05.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.tarfw.app",
+            "certificate_hash": "ee65071e9bc5806e076afb47b8e9fca84f697c28"
+          }
+        },
+        {
           "client_id": "226183831843-5sjvl1hsv4d04aucnqsqn19u83o4f5ku.apps.googleusercontent.com",
           "client_type": 3
         }

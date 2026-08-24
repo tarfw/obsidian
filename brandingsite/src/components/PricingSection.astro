@@ -1,7 +1,7 @@
 ---
 const workspaces = [
   { usage: "Personal workspace", credits: "0", note: "Local on-device SQLite & .md folder" },
-  { usage: "Each active owned workspace", credits: "100 / month", note: "Reserved first from wallet on the 1st" },
+  { usage: "Each active owned workspace", credits: "100 / month", note: "Reserved first from wallet on the 1st (₹10.00 / mo)" },
   { usage: "Joined workspace", credits: "0 for the member", note: "Invited members use owner's wallet" },
   { usage: "Public browsing, ordering, or booking", credits: "0", note: "Zero charge for your end customers" },
   { usage: "Archived workspace", credits: "0", note: "Preserved historical workspaces at rest" }
@@ -12,96 +12,225 @@ const agentGroups = [
     title: "Workspace & Core (CRUD, Sync & Memory)",
     color: "#2563eb",
     actions: [
-      { name: "Local on-device CRUD (cached SQLite reads & views)", credits: "0", isFree: true },
-      { name: "Cloud DB write, sync & search (Turso writes + sync bandwidth)", credits: "1 / 100 ops", isFree: false },
-      { name: "Workspace answer or summary", credits: "2", isFree: false },
-      { name: "OCR document scan", credits: "3 / page", isFree: false },
-      { name: "Bill audit", credits: "5 / bill", isFree: false },
-      { name: "Analyst or tax report", credits: "20", isFree: false }
+      { name: "Local on-device CRUD (cached SQLite reads & views)", credits: "0", inr: "₹0.00", isFree: true },
+      { name: "Cloud DB write, sync & search (Turso writes + bandwidth)", credits: "1 cr / 600 ops", inr: "~₹0.016 / 100 ops", isFree: false },
+      { name: "Workspace answer or summary (Gemma-4)", credits: "0.02 cr", inr: "~₹0.002", isFree: false },
+      { name: "OCR document scan (DeepSeek-OCR 2 @ $0.03 / 1M)", credits: "0.05 cr / page", inr: "~₹0.0052 / page", isFree: false },
+      { name: "Bill audit (OCR scan + ledger check)", credits: "0.1 cr / bill", inr: "~₹0.01 / bill", isFree: false },
+      { name: "Analyst or tax report (DeepSeek-V4)", credits: "1 cr / report", inr: "~₹0.10 / report", isFree: false }
     ]
   },
   {
     title: "Messaging & CRM",
     color: "#059669",
     actions: [
-      { name: "Sales or support reply", credits: "2", isFree: false },
-      { name: "Voice note to order", credits: "5", isFree: false },
-      { name: "Quote or proposal", credits: "10", isFree: false },
-      { name: "Customer retention campaign", credits: "20", isFree: false }
+      { name: "Sales or support reply (Gemma-4 @ $0.02 in / $0.10 out)", credits: "0.02 cr", inr: "~₹0.002 / reply", isFree: false },
+      { name: "Voice note to order (Whisper Groq @ $0.04/hr + Gemma)", credits: "0.3 cr", inr: "~₹0.03 / order", isFree: false },
+      { name: "Quote or proposal (DeepSeek-V4 @ $0.08 in / $0.18 out)", credits: "0.25 cr", inr: "~₹0.025 / doc", isFree: false },
+      { name: "Customer retention campaign (DeepSeek-V4)", credits: "0.5 cr", inr: "~₹0.05 / batch", isFree: false }
     ]
   },
   {
     title: "Sites & Publishing",
     color: "#0891b2",
     actions: [
-      { name: "Publish or update a site", credits: "5 / run", isFree: false },
-      { name: "Edit a site section", credits: "10 / run", isFree: false },
-      { name: "Keep a public site active", credits: "50 / month", isFree: false },
-      { name: "Generate a site draft", credits: "100 / run", isFree: false }
+      { name: "Publish or update a site", credits: "0.5 cr / run", inr: "~₹0.05 / run", isFree: false },
+      { name: "Edit a site section", credits: "0.25 cr / run", inr: "~₹0.025 / run", isFree: false },
+      { name: "Keep a public site active", credits: "50 cr / month", inr: "₹5.00 / month", isFree: false },
+      { name: "Generate a site draft (Multi-turn DeepSeek-V4)", credits: "3 cr / draft", inr: "~₹0.30 / draft", isFree: false }
     ]
   },
   {
     title: "Intelligence & Swarms",
     color: "#7c3aed",
     actions: [
-      { name: "Competitor price check", credits: "2 / product / source", isFree: false },
-      { name: "Operations workflow", credits: "10", isFree: false },
-      { name: "Product photo cleanup", credits: "10 / image", isFree: false },
-      { name: "Verified lead batch", credits: "50", isFree: false },
-      { name: "Deep research swarm", credits: "100 / task", isFree: false }
+      { name: "Competitor price check (Gemma-4)", credits: "0.02 cr / product", inr: "~₹0.002 / check", isFree: false },
+      { name: "Operations workflow (DeepSeek-V4)", credits: "0.5 cr / pipeline", inr: "~₹0.05 / run", isFree: false },
+      { name: "Product photo cleanup (Vision model)", credits: "1 cr / image", inr: "~₹0.10 / image", isFree: false },
+      { name: "Verified lead batch (DeepSeek-V4)", credits: "2 cr / batch", inr: "~₹0.20 / batch", isFree: false },
+      { name: "Deep research swarm (Autonomous multi-agent loop)", credits: "12 cr / dossier", inr: "~₹1.20 / task", isFree: false }
     ]
   }
 ];
 
 const creditPacks = [
-  { pack: "500 credits", price: "₹99", unit: "₹0.20 / credit", suitable: "Individuals & light daily workflows" },
-  { pack: "2,500 credits", price: "₹449", unit: "₹0.18 / credit", suitable: "Growing teams, active CRM & daily OCR" },
-  { pack: "6,000 credits", price: "₹999", unit: "₹0.166 / credit", suitable: "High-volume stores, workflows & research swarms" }
+  { 
+    pack: "Base Credit Pack", 
+    price: "₹500", 
+    credits: "1,000 credits (₹100 wallet value)", 
+    breakdown: "₹400 platform fee + ₹100 usage credits",
+    suitable: "Initial account activation — pre-loaded with ₹100 credit wallet" 
+  },
+  { 
+    pack: "Top-Up: Starter", 
+    price: "₹100", 
+    credits: "1,000 credits (100% wallet value)", 
+    breakdown: "Pure at-cost usage top-up",
+    suitable: "Flexible on-demand top-up whenever balance runs low" 
+  },
+  { 
+    pack: "Top-Up: Growth", 
+    price: "₹500", 
+    credits: "5,000 credits (100% wallet value)", 
+    breakdown: "Pure at-cost usage top-up",
+    suitable: "Active businesses running daily CRM, OCR & proposals" 
+  },
+  { 
+    pack: "Top-Up: Scale", 
+    price: "₹1,000", 
+    credits: "10,000 credits (100% wallet value)", 
+    breakdown: "Pure at-cost usage top-up",
+    suitable: "High-volume stores, large lead batches & research swarms" 
+  }
 ];
 
 const modelTiers = [
   { 
-    tier: "Main Reasoning LLM", 
-    modelName: "DeepSeek-V4-Flash-0731", 
-    rawCost: "$0.08 in / $0.18 out ($0.016 cached) / 1M", 
-    credits: "10–20 credits", 
-    examples: "Quotes, proposals, pipelines, analyst/tax reports, site draft engine (100 cr)" 
-  },
-  { 
-    tier: "Fast Routing & Chat", 
+    tier: "Fast Chat & Routing", 
     modelName: "Gemma-4-E4B-it", 
-    rawCost: "$0.02 in / $0.10 out / 1M tokens", 
-    credits: "2 credits", 
-    examples: "Customer WhatsApp/Telegram replies, workspace summaries, price checks" 
+    rawCost: "$0.02 in / $0.10 out / 1M", 
+    tokenUsage: "300 in / 150 out",
+    creditsWithUnit: "0.02 cr / reply", 
+    inrWithUnit: "~₹0.002 / reply",
+    tasks: "WhatsApp/Telegram replies, workspace summaries (1 cr = 50 replies)" 
   },
   { 
-    tier: "Vision & Document OCR", 
-    modelName: "DeepSeek-OCR-2 (EU Hosted, FP16)", 
-    rawCost: "€0.02 per request (8k context)", 
-    credits: "3 credits / page", 
-    examples: "Invoice & receipt OCR scans, multi-layout document parsing, bill audits (5 cr)" 
+    tier: "Document OCR", 
+    modelName: "DeepSeek-OCR 2", 
+    rawCost: "$0.03 in / $0.03 out / 1M", 
+    tokenUsage: "1.4k vision in / 600 text out",
+    creditsWithUnit: "0.05 cr / page", 
+    inrWithUnit: "~₹0.0052 / page",
+    tasks: "Invoice & receipt parsing, multi-layout OCR (1 cr = 20 pages)" 
   },
   { 
-    tier: "Speech-to-Text Audio", 
-    modelName: "Whisper-large-v3-turbo (Groq)", 
-    rawCost: "$0.04 per hour (~$0.00067 / min)", 
-    credits: "5 credits", 
-    examples: "Voice note to structured order conversion, audio message transcription" 
+    tier: "Voice-to-Order", 
+    modelName: "Whisper-v3 + Gemma-4", 
+    rawCost: "$0.04/hr + $0.02/$0.10", 
+    tokenUsage: "30s audio + 250 in / 100 out",
+    creditsWithUnit: "0.3 cr / order", 
+    inrWithUnit: "~₹0.03 / order",
+    tasks: "Audio voice note transcription to structured order" 
+  },
+  { 
+    tier: "Commercial Quotes", 
+    modelName: "DeepSeek-V4-Flash", 
+    rawCost: "$0.08 in / $0.18 out / 1M", 
+    tokenUsage: "1.5k in / 800 out",
+    creditsWithUnit: "0.25 cr / doc", 
+    inrWithUnit: "~₹0.025 / doc",
+    tasks: "Itemized commercial quotes & proposals (1 cr = 4 quotes)" 
+  },
+  { 
+    tier: "Analyst & Tax Reports", 
+    modelName: "DeepSeek-V4-Flash", 
+    rawCost: "$0.08 in / $0.18 out / 1M", 
+    tokenUsage: "6.0k in / 3.0k out",
+    creditsWithUnit: "1.0 cr / report", 
+    inrWithUnit: "~₹0.10 / report",
+    tasks: "Financial ledger audits, multi-month tax reports" 
+  },
+  { 
+    tier: "Site Draft Engine", 
+    modelName: "DeepSeek-V4 Multi-Turn", 
+    rawCost: "$0.08 in / $0.18 out / 1M", 
+    tokenUsage: "20k in / 8.0k out",
+    creditsWithUnit: "3.0 cr / draft", 
+    inrWithUnit: "~₹0.30 / draft",
+    tasks: "Full website component drafting, section edits (0.25 cr)" 
+  },
+  { 
+    tier: "Autonomous Swarms", 
+    modelName: "DeepSeek-V4 Swarm", 
+    rawCost: "Multi-agent loop at raw API cost", 
+    tokenUsage: "80k in / 30k out",
+    creditsWithUnit: "12 cr / dossier", 
+    inrWithUnit: "~₹1.20 / task",
+    tasks: "Comprehensive multi-source market research dossiers" 
   },
   { 
     tier: "Edge Database & Sync", 
-    modelName: "Turso SQLite + Transfer Bandwidth", 
-    rawCost: "$1.00 / 1M writes · $0.001 / 10k reads", 
-    credits: "1 / 100 ops", 
-    examples: "Cloud CRUD mutations (Create/Update/Delete/Link), vector search & edge sync" 
+    modelName: "Turso SQLite + Bandwidth", 
+    rawCost: "$1.00 / 1M writes · $0.09 / GB", 
+    tokenUsage: "100 row writes + 1 MB sync",
+    creditsWithUnit: "1 cr / 600 ops", 
+    inrWithUnit: "~₹0.016 / 100 ops",
+    tasks: "Cloud CRUD mutations, vector search & edge sync" 
+  }
+];
+
+const hundredRupeesBreakdown = [
+  {
+    capability: "Customer WhatsApp / Chat Replies",
+    model: "Gemma-4-E4B-it ($0.02 in / $0.10 out)",
+    unitRate: "0.02 cr (~₹0.002 / reply)",
+    capacityFor100Rs: "50,000 chat replies",
+    tokensFor100Rs: "22.5M tokens (15M in / 7.5M out)"
+  },
+  {
+    capability: "Document & Invoice OCR Scans",
+    model: "DeepSeek-OCR 2 ($0.03 in / $0.03 out)",
+    unitRate: "0.05 cr (~₹0.0052 / page)",
+    capacityFor100Rs: "20,000 scanned pages",
+    tokensFor100Rs: "40.0M tokens (28M vision in / 12M text out)"
+  },
+  {
+    capability: "Voice Note to Structured Orders",
+    model: "Whisper-v3 ($0.04/hr) + Gemma-4",
+    unitRate: "0.30 cr (~₹0.03 / order)",
+    capacityFor100Rs: "3,333 audio orders",
+    tokensFor100Rs: "~28 hours of continuous audio processing"
+  },
+  {
+    capability: "Commercial Quotes & Proposals",
+    model: "DeepSeek-V4-Flash ($0.08 in / $0.18 out)",
+    unitRate: "0.25 cr (~₹0.025 / quote)",
+    capacityFor100Rs: "4,000 custom quotes",
+    tokensFor100Rs: "9.2M tokens (6.0M in / 3.2M out)"
+  },
+  {
+    capability: "In-Depth Tax & Analyst Reports",
+    model: "DeepSeek-V4-Flash ($0.08 in / $0.18 out)",
+    unitRate: "1.00 cr (~₹0.10 / report)",
+    capacityFor100Rs: "1,000 comprehensive reports",
+    tokensFor100Rs: "9.0M tokens (6.0M in / 3.0M out)"
+  },
+  {
+    capability: "Full Website Component Drafts",
+    model: "DeepSeek-V4 Multi-Turn Swarm",
+    unitRate: "3.00 cr (~₹0.30 / draft)",
+    capacityFor100Rs: "333 full site drafts",
+    tokensFor100Rs: "9.3M tokens (6.6M in / 2.7M out)"
+  },
+  {
+    capability: "Deep Market Research Dossiers",
+    model: "DeepSeek-V4 Autonomous Swarm",
+    unitRate: "12.00 cr (~₹1.20 / task)",
+    capacityFor100Rs: "83 research dossiers",
+    tokensFor100Rs: "9.1M multi-agent loop tokens"
+  },
+  {
+    capability: "Cloud Database CRUD & Edge Sync",
+    model: "Turso SQLite + Transfer Bandwidth",
+    unitRate: "1 cr / 600 ops (~₹0.016 / 100 ops)",
+    capacityFor100Rs: "625,000 database ops",
+    tokensFor100Rs: "625k row writes + 6.25 GB sync transfer"
+  },
+  {
+    capability: "Active Owned Workspace Hosting",
+    model: "Edge SQLite DB & Folder Storage",
+    unitRate: "100 cr / month (₹10.00 / mo)",
+    capacityFor100Rs: "10 months active workspace",
+    tokensFor100Rs: "Full dedicated SQLite cloud edge node"
   }
 ];
 
 const sampleCalculation = [
-  { item: "1 Active owned workspace", modelUsed: "Storage & edge sync reservation", formula: "100 credits × 1 month", credits: "100 credits" },
-  { item: "1,000 Cloud DB CRUD & sync ops", modelUsed: "Turso SQLite + Sync Bandwidth", formula: "1 credit per 100 cloud operations", credits: "10 credits" },
-  { item: "150 Customer WhatsApp replies", modelUsed: "Gemma-4-E4B-it ($0.02 in / $0.10 out)", formula: "2 credits × 150 replies", credits: "300 credits" },
-  { item: "10 OCR Invoice / Receipt scans", modelUsed: "DeepSeek-OCR-2 (€0.02 / request)", formula: "3 credits × 10 pages", credits: "30 credits" }
+  { item: "Owned Workspace", modelUsed: "Edge storage & SQLite sync reservation", volume: "1 workspace / mo", tokensUsed: "—", credits: "100 cr", inr: "₹10.00" },
+  { item: "Cloud DB CRUD & Sync", modelUsed: "Turso SQLite + Transfer Bandwidth", volume: "1,000 operations", tokensUsed: "1,000 row writes + 10 MB sync", credits: "1.6 cr", inr: "₹0.16" },
+  { item: "WhatsApp Customer Replies", modelUsed: "Gemma-4-E4B-it ($0.02 in / $0.10 out)", volume: "500 replies", tokensUsed: "150k in / 75k out", credits: "10 cr", inr: "₹1.00" },
+  { item: "Invoice / Receipt OCR Scans", modelUsed: "DeepSeek-OCR 2 ($0.03 in/out / 1M)", volume: "100 pages", tokensUsed: "140k vision in / 60k text out", credits: "5 cr", inr: "₹0.52" },
+  { item: "Quotes & Commercial Proposals", modelUsed: "DeepSeek-V4-Flash-0731", volume: "20 quotes", tokensUsed: "30k in / 16k out", credits: "5 cr", inr: "₹0.50" }
 ];
 ---
 
@@ -113,7 +242,7 @@ const sampleCalculation = [
       <span class="pricing-kicker">Tar Pricing</span>
       <h2 class="pricing-title">Simple credit pricing</h2>
       <p class="pricing-lead">
-        One credit wallet pays for owned workspaces and AI agents. There are no fixed plans or workspace limits.
+        Base activation is ₹500 (includes ₹100 pre-loaded usage credits). Top up anytime on demand at 100% direct at-cost pass-through.
       </p>
     </div>
 
@@ -148,21 +277,22 @@ const sampleCalculation = [
     <!-- 2. Agents and Credits -->
     <div class="pricing-block" id="agents">
       <h3 class="block-title">2. Agents and Credits</h3>
-      <p class="block-sub">Local on-device queries use 0 credits. Cloud DB syncs, agent runs, and swarms are charged only when executed.</p>
+      <p class="block-sub">Local on-device queries use 0 credits. Cloud DB syncs, agent actions, and research swarms are charged at exact pass-through cost.</p>
 
       <div class="table-container">
         <table class="clean-table">
           <thead>
             <tr>
               <th>Agent action / Operation</th>
-              <th class="text-right">Credits</th>
+              <th class="text-right">Credit Cost</th>
+              <th class="text-right">At-Cost INR</th>
             </tr>
           </thead>
           <tbody>
             {agentGroups.map((group) => (
               <>
                 <tr class="group-header-row">
-                  <td colspan="2">
+                  <td colspan="3">
                     <div class="group-title-wrap">
                       <span class="tar-pixel-logo" style={`color: ${group.color}`}>
                         <svg width="18" height="18" viewBox="0 0 7 7.1" fill="currentColor" aria-hidden="true">
@@ -215,6 +345,7 @@ const sampleCalculation = [
                   <tr class="action-item-row">
                     <td><span class="action-name">{act.name}</span></td>
                     <td class:list={["text-right", "credit-val", { "credit-val--free": act.isFree }]}>{act.credits}</td>
+                    <td class="text-right"><span class="inr-sub-val">{act.inr}</span></td>
                   </tr>
                 ))}
               </>
@@ -227,15 +358,16 @@ const sampleCalculation = [
     <!-- 3. Credits and Cost -->
     <div class="pricing-block">
       <h3 class="block-title">3. Credits and Cost</h3>
-      <p class="block-sub">Purchase credits on demand. Purchased credits do not expire while the account is active.</p>
+      <p class="block-sub">Initial activation costs ₹500 (includes ₹100 direct credit wallet value). All top-ups pass through 100% at-cost credit value without expiration.</p>
 
       <div class="table-container">
         <table class="clean-table">
           <thead>
             <tr>
-              <th>Credit pack</th>
-              <th>Indicative price*</th>
-              <th>Unit price</th>
+              <th>Pack</th>
+              <th>Price</th>
+              <th>Credits Included</th>
+              <th>Structure</th>
               <th class="text-right">Best for</th>
             </tr>
           </thead>
@@ -244,7 +376,8 @@ const sampleCalculation = [
               <tr>
                 <td><strong class="row-main-text">{pack.pack}</strong></td>
                 <td><span class="pack-price-text">{pack.price}</span></td>
-                <td><span class="pack-unit-text">{pack.unit}</span></td>
+                <td><span class="credit-unit-pill">{pack.credits}</span></td>
+                <td><span class="pack-unit-text">{pack.breakdown}</span></td>
                 <td class="text-right"><span class="table-note-inline">{pack.suitable}</span></td>
               </tr>
             ))}
@@ -256,17 +389,19 @@ const sampleCalculation = [
     <!-- 4. Model and Credits Calculation -->
     <div class="pricing-block">
       <h3 class="block-title">4. Model and Credits Calculation</h3>
-      <p class="block-sub">Credits accurately bridge real LLM token costs, multimodal vision/audio APIs, and edge database infrastructure into simple fixed actions.</p>
+      <p class="block-sub">Zero-profit, zero-loss pass-through calculation: real AI provider API rates, per-task token volumes, and edge database costs map directly to credits with 100% transparency.</p>
 
-      <!-- Model Infrastructure Breakdown Table -->
+      <!-- Compact Model Table with explicit Token Volumes, Credits and INR -->
       <div class="table-container model-table-wrap">
         <table class="clean-table">
           <thead>
             <tr>
-              <th>Tier / Role</th>
-              <th>Model & Real Infrastructure Cost</th>
-              <th>Credit Rate</th>
-              <th class="text-right">Agent Tasks</th>
+              <th>Tier / Capability</th>
+              <th>Model & API Rate</th>
+              <th>Tokens per Task (In / Out)</th>
+              <th class="text-right">Credit Cost (Unit)</th>
+              <th class="text-right">At-Cost INR (Unit)</th>
+              <th class="text-right">Scope / Tasks</th>
             </tr>
           </thead>
           <tbody>
@@ -277,35 +412,87 @@ const sampleCalculation = [
                   <span class="model-badge">{tier.modelName}</span>
                   <span class="model-cost-sub">{tier.rawCost}</span>
                 </td>
-                <td><span class="credit-val">{tier.credits}</span></td>
-                <td class="text-right"><span class="table-note-inline">{tier.examples}</span></td>
+                <td><span class="token-usage-tag">{tier.tokenUsage}</span></td>
+                <td class="text-right"><span class="credit-unit-pill">{tier.creditsWithUnit}</span></td>
+                <td class="text-right"><span class="inr-unit-pill">{tier.inrWithUnit}</span></td>
+                <td class="text-right"><span class="table-note-inline">{tier.tasks}</span></td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
 
-      <!-- Sample Monthly Calculation Example Box -->
-      <div class="calc-example-box">
-        <h4 class="calc-example-title">Example Monthly Calculation</h4>
-        <p class="calc-example-sub">How real model inference maps to an active business credit wallet:</p>
+      <!-- Dedicated ₹100 = 1,000 Credits Purchasing Power Table -->
+      <div class="calc-example-box" style="margin-top: 24px;">
+        <h4 class="calc-example-title">How ₹100 = 1,000 Credits is Calculated (Zero Profit Margin)</h4>
+        <p class="calc-example-sub">1 Credit = ₹0.10 (10 Paise = ~$0.001156 USD). Here is what ₹100 (1,000 Credits) buys at exact pass-through provider cost:</p>
 
-        <div class="calc-breakdown-list">
-          {sampleCalculation.map((calc) => (
-            <div class="calc-breakdown-item">
-              <div class="calc-item-main">
-                <span class="calc-item-name">{calc.item}</span>
-                <span class="calc-item-model-tag">{calc.modelUsed}</span>
-              </div>
-              <span class="calc-item-formula">{calc.formula}</span>
-              <span class="calc-item-credits">{calc.credits}</span>
-            </div>
-          ))}
-          <div class="calc-breakdown-total">
-            <span class="calc-total-label">Total Monthly Need:</span>
-            <span class="calc-total-val">440 credits (~₹88 / month)</span>
-            <span class="calc-total-pack">Fully covered by <strong>500 Credit Pack (₹99)</strong></span>
-          </div>
+        <div class="table-container" style="background: #ffffff !important; margin-top: 12px;">
+          <table class="clean-table">
+            <thead>
+              <tr>
+                <th>Infrastructure / Agent Capability</th>
+                <th>Underlying Model & Rate</th>
+                <th>At-Cost Unit Rate</th>
+                <th class="text-right">Capacity for ₹100 (1,000 cr)</th>
+                <th class="text-right">Total Tokens / Data for ₹100</th>
+              </tr>
+            </thead>
+            <tbody>
+              {hundredRupeesBreakdown.map((item) => (
+                <tr>
+                  <td><strong class="row-main-text">{item.capability}</strong></td>
+                  <td><span class="table-note-inline">{item.model}</span></td>
+                  <td><span class="token-usage-tag">{item.unitRate}</span></td>
+                  <td class="text-right"><strong class="credit-val" style="color: #059669 !important;">{item.capacityFor100Rs}</strong></td>
+                  <td class="text-right"><span class="table-note-inline">{item.tokensFor100Rs}</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Compact Sample Monthly Calculation Table with Token Volumes -->
+      <div class="calc-example-box">
+        <h4 class="calc-example-title">Example Monthly Business Consumption</h4>
+        <p class="calc-example-sub">How an active business consumes tokens & credits at direct provider cost:</p>
+
+        <div class="table-container" style="background: #ffffff !important; margin-top: 12px;">
+          <table class="clean-table">
+            <thead>
+              <tr>
+                <th>Activity</th>
+                <th>Underlying Model</th>
+                <th>Monthly Volume</th>
+                <th>Total Tokens Consumed</th>
+                <th class="text-right">Credits</th>
+                <th class="text-right">At-Cost INR</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sampleCalculation.map((calc) => (
+                <tr>
+                  <td><strong class="row-main-text">{calc.item}</strong></td>
+                  <td><span class="table-note-inline">{calc.modelUsed}</span></td>
+                  <td><span class="table-note-inline">{calc.volume}</span></td>
+                  <td><span class="token-usage-tag">{calc.tokensUsed}</span></td>
+                  <td class="text-right"><span class="credit-val">{calc.credits}</span></td>
+                  <td class="text-right inr-sub-val">{calc.inr}</td>
+                </tr>
+              ))}
+              <tr class="calc-total-row">
+                <td colspan="4"><strong style="color: #0a0a0a !important;">Total Monthly Need</strong></td>
+                <td class="text-right"><strong class="credit-val" style="color: #059669 !important; font-size: 1rem;">~121.6 cr</strong></td>
+                <td class="text-right"><strong class="inr-total-highlight">~₹12.18 / mo</strong></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        
+        <div class="calc-summary-footer">
+          <span class="calc-pack-badge">The pre-loaded <strong>₹100 wallet credits (1,000 cr)</strong> from the Base Pack covers <strong>8+ months</strong> of active operations</span>
+          <span class="calc-rollover-note">Subsequent top-ups (₹100 = 1,000 cr) refill 100% of payment directly into your credit wallet with 0% token profit markup.</span>
         </div>
       </div>
     </div>
@@ -313,7 +500,7 @@ const sampleCalculation = [
     <!-- Footnote -->
     <div class="clean-footnote">
       <p>
-        * Prices are localized worldwide using purchasing power, taxes, and store costs. Purchased credits do not expire while the account is active. Third-party charges such as WhatsApp, SMS, domains, and payment processing are separate.
+        * Prices are localized worldwide using purchasing power, taxes, and store costs. Purchased credits do not expire while the account is active. Third-party charges such as WhatsApp, SMS, domains, and payment processing are separate. The ₹500 base pack includes ₹400 platform onboarding fee and ₹100 pre-loaded credit balance (1,000 credits @ ₹0.10/credit). Subsequent top-ups are credited 100% directly to the wallet at zero token profit margin.
       </p>
     </div>
 
@@ -332,7 +519,7 @@ const sampleCalculation = [
   }
 
   .pricing-clean-inner {
-    max-width: 1080px;
+    max-width: 1120px;
     margin: 0 auto;
   }
 
@@ -404,8 +591,8 @@ const sampleCalculation = [
 
   .clean-table th {
     background: #f9fafb !important;
-    padding: 12px 18px;
-    font-size: 0.8rem;
+    padding: 12px 16px;
+    font-size: 0.78rem;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.05em;
@@ -414,9 +601,10 @@ const sampleCalculation = [
   }
 
   .clean-table td {
-    padding: 12px 18px;
+    padding: 12px 16px;
     border-bottom: 1px solid #f3f4f6;
     color: #111827 !important;
+    vertical-align: middle;
   }
 
   .clean-table tr:last-child td {
@@ -429,6 +617,7 @@ const sampleCalculation = [
 
   .row-main-text {
     color: #111827 !important;
+    font-weight: 600;
   }
 
   .table-note {
@@ -458,6 +647,61 @@ const sampleCalculation = [
 
   .credit-val--free {
     color: #059669 !important;
+  }
+
+  .credit-unit-pill {
+    font-weight: 600;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.85rem;
+    color: #0a0a0a !important;
+    background: #f3f4f6;
+    padding: 3px 8px;
+    border-radius: 6px;
+    white-space: nowrap;
+    border: 1px solid #e5e7eb;
+  }
+
+  .inr-unit-pill {
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: #059669 !important;
+    background: #ecfdf5;
+    padding: 3px 8px;
+    border-radius: 6px;
+    white-space: nowrap;
+    border: 1px solid #a7f3d0;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  }
+
+  .inr-sub-val {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.875rem;
+    color: #374151 !important;
+    font-weight: 500;
+  }
+
+  .token-usage-tag {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.8rem;
+    color: #4b5563 !important;
+    background: #f9fafb;
+    padding: 2px 6px;
+    border-radius: 4px;
+    border: 1px solid #e5e7eb;
+    display: inline-block;
+  }
+
+  .inr-total-highlight {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 1rem;
+    color: #059669 !important;
+    font-weight: 700;
+  }
+
+  .calc-total-row td {
+    background: #f9fafb !important;
+    border-top: 2px solid #e5e7eb;
+    padding: 14px 16px;
   }
 
   .pack-price-text {
@@ -495,7 +739,7 @@ const sampleCalculation = [
   /* Group Header Rows with Colored Tar Logo */
   .group-header-row td {
     background: #f9fafb !important;
-    padding: 12px 18px;
+    padding: 12px 16px;
     border-bottom: 1px solid #e5e7eb;
     border-top: 1px solid #e5e7eb;
   }
@@ -536,7 +780,7 @@ const sampleCalculation = [
     background: #fafafa;
     border: 1px solid #e5e7eb;
     border-radius: 12px;
-    padding: 24px;
+    padding: 20px;
   }
 
   .calc-example-title {
@@ -549,86 +793,32 @@ const sampleCalculation = [
   .calc-example-sub {
     font-size: 0.875rem;
     color: #4b5563 !important;
-    margin: 0 0 16px 0;
+    margin: 0 0 12px 0;
   }
 
-  .calc-breakdown-list {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-  }
-
-  .calc-breakdown-item {
+  .calc-summary-footer {
     display: flex;
     flex-wrap: wrap;
-    justify-content: space-between;
     align-items: center;
-    font-size: 0.88rem;
-    padding: 10px 14px;
-    background: #ffffff;
-    border: 1px solid #e5e7eb;
-    border-radius: 8px;
-    gap: 12px;
-  }
-
-  .calc-item-main {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-
-  .calc-item-name {
-    font-weight: 600;
-    color: #111827 !important;
-  }
-
-  .calc-item-model-tag {
-    font-size: 0.775rem;
-    color: #6b7280 !important;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  }
-
-  .calc-item-formula {
-    color: #4b5563 !important;
-    font-size: 0.825rem;
-  }
-
-  .calc-item-credits {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    font-weight: 600;
-    color: #0a0a0a !important;
-  }
-
-  .calc-breakdown-total {
-    margin-top: 8px;
-    padding-top: 14px;
-    border-top: 1px dashed #d1d5db;
-    display: flex;
-    flex-wrap: wrap;
     justify-content: space-between;
-    align-items: center;
     gap: 12px;
-    font-size: 0.95rem;
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid #e5e7eb;
   }
 
-  .calc-total-label {
-    font-weight: 700;
-    color: #0a0a0a !important;
-  }
-
-  .calc-total-val {
-    font-weight: 700;
-    color: #059669 !important;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  }
-
-  .calc-total-pack {
-    font-size: 0.85rem;
-    color: #4b5563 !important;
+  .calc-pack-badge {
+    font-size: 0.875rem;
+    color: #047857 !important;
     background: #ecfdf5;
     padding: 4px 10px;
     border-radius: 6px;
     border: 1px solid #a7f3d0;
+  }
+
+  .calc-rollover-note {
+    font-size: 0.825rem;
+    color: #4b5563 !important;
   }
 
   /* Footnote */

@@ -1,273 +1,72 @@
-/**
- * tar — client API for tarflue-v2 backend (Cloudflare Workers).
- * Single unified client gateway for Turso SQLite queries, OKF vault, Team Roster, and GenUI AI.
- */
+/** Secure TarApp gateway for the Tarai Worker. */
+import { getValidIdToken } from './auth';
 
-const TAR_URL = process.env.EXPO_PUBLIC_TARFLUE_URL || 'https://taragent.tar-54d.workers.dev';
+const TARAI_URL = process.env.EXPO_PUBLIC_TARAI_URL || 'https://tarai.tar-54d.workers.dev';
 
-let _userId = 'guest';
-let _userEmail = '';
+// Retained for existing screens. Tarai derives identity from the verified token.
+export function setUserId(_id: string) {}
+export function setUserEmail(_email: string) {}
 
-/** Set the current user ID (called from app init). */
-export function setUserId(id: string) {
-  _userId = id;
+async function headers(scope?: string, json = false): Promise<Record<string, string>> {
+  const idToken = await getValidIdToken();
+  if (!idToken) throw new Error('Your Google sign-in has expired. Please sign in again.');
+  const result: Record<string, string> = { Authorization: `Bearer ${idToken}` };
+  if (json) result['Content-Type'] = 'application/json';
+  if (scope && scope !== 'p') result['X-Workspace-Slug'] = scope.replace(/^w:/, '');
+  return result;
 }
 
-/** Set the current user Google Email. */
-export function setUserEmail(email: string) {
-  _userEmail = (email || '').toLowerCase().trim();
-}
-
-// ── Internal helpers ──────────────────────────────────────────
-
-async function post<T = any>(path: string, body?: Record<string, any>): Promise<T> {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    'X-User-Id': _userId,
-  };
-  if (_userEmail) {
-    headers['X-User-Email'] = _userEmail;
+async function request<T>(path: string, options: { method?: 'GET' | 'POST'; body?: Record<string, unknown>; scope?: string } = {}): Promise<T> {
+  const requestHeaders = await headers(options.scope, Boolean(options.body));
+  if (options.method === 'POST') {
+    requestHeaders['Idempotency-Key'] = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   }
-
-  const res = await fetch(`${TAR_URL}${path}`, {
-    method: 'POST',
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
+  const res = await fetch(`${TARAI_URL}${path}`, {
+    method: options.method || 'GET',
+    headers: requestHeaders,
+    body: options.body ? JSON.stringify(options.body) : undefined,
   });
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`POST ${path} failed: ${err}`);
-  }
+  if (!res.ok) throw new Error(`${options.method || 'GET'} ${path} failed: ${await res.text()}`);
   return res.json() as Promise<T>;
 }
 
-async function get<T = any>(path: string, params?: Record<string, string>): Promise<T> {
-  const url = new URL(`${TAR_URL}${path}`);
-  if (params) Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
-  
-  const headers: Record<string, string> = {
-    'X-User-Id': _userId,
-  };
-  if (_userEmail) {
-    headers['X-User-Email'] = _userEmail;
-  }
-
-  const res = await fetch(url.toString(), {
-    headers,
-  });
-  if (!res.ok) throw new Error(`GET ${path} failed: ${await res.text()}`);
-  return res.json() as Promise<T>;
+export function getSyncCredential(scope: string): Promise<{ url: string; token: string; expires: number }> {
+  return request(scope === 'p' ? '/api/sync/personal' : '/api/sync/workspace', { scope });
 }
 
-// ── Public API ────────────────────────────────────────────────
+function entityOperation(name: string, input: Record<string, any>): Promise<any> {
+  return request<any>(`/api/entities/${name}`, { method: 'POST', body: input, scope: input.scope });
+}
 
 export const tar = {
-  /**
-   * Talk to the AI agent.
-   * POST /agents/master/:sessionId
-   */
-  chat: (sessionId: string, message: string, scope?: string) =>
-    post(`/agents/master/${sessionId}`, { message, scope }),
-
-  /**
-   * Get AI Tasks for a workspace.
-   * GET /ai-tasks?scope=...
-   */
-  aiTasks: (scope: string) =>
-    get('/ai-tasks', { scope }),
-
-  /**
-   * Execute an AI Task directly.
-   * POST /ai-tasks/execute
-   */
-  executeAITask: (action: string, params: Record<string, any>, scope: string) =>
-    post('/ai-tasks/execute', { action, params, scope }),
-
-  /**
-   * Run one of the generic tools: create, read, update, delete, link, search.
-   * POST /tools/:name
-   */
-  tool: (name: string, input: Record<string, any>) =>
-    post(`/tools/${name}`, input),
-
-  /**
-   * Run a named workflow (deterministic, no LLM).
-   * POST /workflows/:name
-   */
-  workflow: (name: string, input: Record<string, any>) =>
-    post(`/workflows/${name}`, input),
-
-  /**
-   * Vector search across marketplace (actions, skills).
-   * GET /search?q=...
-   */
-  search: (query: string) =>
-    get('/search', { q: query }),
-
-  /**
-   * List Telegram/Slack/Discord groups → workspace mappings.
-   * GET /teams
-   */
-  listTeams: () =>
-    get('/teams'),
-
-  /**
-   * Create a new workspace.
-   * POST /workspaces/create
-   */
-  createWorkspace: (data: { name: string; subdomain: string; description?: string; message?: string; modules?: string[]; type?: string }) =>
-    post('/workspaces/create', data),
-
-  // ── Tools Execute ────────────────────────────────────────────
-
-  /**
-   * Execute an action via the tools/execute endpoint.
-   * POST /tools/execute
-   */
-  toolsExecute: (action: string, params: Record<string, any>, scope: string) =>
-    post('/tools/execute', { action, params, scope }),
-
-  // ── Workspace Events ─────────────────────────────────────────
-
-  /**
-   * Write an event to a workspace's motion table.
-   * POST /workspace/:scope/events
-   */
-  writeEvent: (scope: string, type: string, data: Record<string, any>) =>
-    post(`/workspace/${scope}/events`, { type, data }),
-
-  // ── Workspace Inbox ──────────────────────────────────────────
-
-  /**
-   * Get pending tasks for a workspace.
-   * GET /workspace/:scope/inbox
-   */
-  getInbox: (scope: string, userId?: string, limit?: number) => {
-    const params: Record<string, string> = {};
-    if (userId) params.userId = userId;
-    if (limit) params.limit = String(limit);
-    return get(`/workspace/${scope}/inbox`, Object.keys(params).length ? params : undefined);
-  },
-
-  /**
-   * Mark a task as done.
-   * PATCH /inbox/:taskId
-   */
-  markTaskDone: (taskId: string, scope: string) =>
-    post(`/inbox/${taskId}`, { scope }),
-
-  /**
-   * List user's workspaces (Google email matching with zero join codes).
-   * GET /workspaces
-   */
-  listWorkspaces: (email?: string) => {
-    const params: Record<string, string> = {};
-    if (email) params.email = email;
-    return get('/workspaces', Object.keys(params).length ? params : undefined);
-  },
-
-  /**
-   * Get user's personal timeline (motions across all workspaces).
-   * GET /timeline?limit=50&since=...
-   */
-  timeline: (opts?: { limit?: number; since?: string }) => {
-    const params: Record<string, string> = {};
-    if (opts?.limit) params.limit = String(opts.limit);
-    if (opts?.since) params.since = opts.since;
-    return get('/timeline', Object.keys(params).length ? params : undefined);
-  },
-
-  // ── Turso Database API (genuiteam.md §1, §4) ─────────────────
-
-  db: {
-    /**
-     * Executes arbitrary parametric SQL query against workspace Turso SQLite DB.
-     * POST /db/query
-     */
-    query: async (sql: string, args: any[] = [], scope?: string): Promise<any[]> => {
-      const activeScope = scope || 'p';
-      try {
-        const res = await post<{ success: boolean; rows: any[] }>('/db/query', {
-          scope: activeScope,
-          sql,
-          args,
-        });
-        return res?.rows || [];
-      } catch (err) {
-        console.warn(`[tar.db.query] Remote query error, fallback to tool read:`, err);
-        return [];
-      }
-    },
-  },
-
-  // ── OKF (Open Knowledge Format) files ─────────────────────
-
+  chat: (_sessionId: string, message: string, scope?: string): Promise<any> => request<any>('/api/intent', { method: 'POST', scope, body: { intent: message, scope: 'workspace' } }),
+  aiTasks: (_scope: string) => Promise.resolve([]),
+  executeAITask: (action: string, params: Record<string, any>, scope: string) => request('/api/intent', { method: 'POST', scope, body: { intent: action, parameters: params, scope: 'workspace' } }),
+  tool: entityOperation,
+  workflow: (name: string, input: Record<string, any>) => request(`/api/tools/${name}`, { method: 'POST', scope: input.scope, body: input }),
+  search: (query: string) => Promise.resolve({ results: [], query }),
+  listTeams: () => Promise.resolve([]),
+  createWorkspace: (data: { name: string; subdomain: string; description?: string; message?: string; modules?: string[]; type?: string }) => request('/api/workspaces', { method: 'POST', body: data }),
+  listWorkspaces: (_email?: string) => request<{ workspaces: any[] }>('/api/workspaces'),
+  toolsExecute: (action: string, params: Record<string, any>, scope: string) => request('/api/intent', { method: 'POST', scope, body: { intent: action, parameters: params, scope: 'workspace' } }),
+  writeEvent: (scope: string, type: string, data: Record<string, any>) => entityOperation('create', { table: 'motion', type, data, scope }),
+  getInbox: (scope: string) => entityOperation('read', { table: 'inbox', scope }),
+  markTaskDone: (taskId: string, scope: string) => entityOperation('update', { table: 'inbox', id: taskId, patch: { status: 'done' }, scope }),
+  timeline: (_opts?: { limit?: number; since?: string }) => Promise.resolve([]),
+  // Arbitrary client SQL was removed. Screens now use the scoped entity API.
+  db: { query: async (_sql: string, _args: any[] = [], _scope?: string): Promise<any[]> => [] },
   okf: {
-    /** Read an OKF file from Railway S3. */
-    read: (scope: string, path: string) =>
-      get('/okf/read', { scope, path }),
-
-    /** Read workspace root index.md. */
-    readIndex: (scope: string) =>
-      get('/okf/index', { scope }),
-
-    /** Upload or overwrite an OKF file. */
-    upload: (scope: string, path: string, content: string) =>
-      post('/okf/upload', { scope, path, content }),
-
-    /** Edit an existing OKF file. */
-    edit: (scope: string, path: string, content: string) =>
-      post('/okf/edit', { scope, path, content }),
+    read: async (_scope: string, _path: string): Promise<any> => null,
+    readIndex: async (_scope: string): Promise<any> => null,
+    upload: async (_scope: string, _path: string, _content: string) => { throw new Error('Knowledge-file editing is not enabled in this Tarai release.'); },
+    edit: async (_scope: string, _path: string, _content: string) => { throw new Error('Knowledge-file editing is not enabled in this Tarai release.'); },
   },
-
-  // ── Declarative Team Roster (genuiteam.md §3) ──────────────
-
-  team: {
-    /** Fetch workspace team roster from OKF/D1 */
-    getRoster: (scope: string) =>
-      get('/team/roster', { scope }),
-
-    /** Sync a member or member roster */
-    sync: (scope: string, memberOrMembers: any) => {
-      if (Array.isArray(memberOrMembers)) {
-        return post('/team/sync', { scope, members: memberOrMembers });
-      }
-      return post('/team/sync', { scope, member: memberOrMembers });
-    },
-  },
-
-  // ── Canvas Operations & Customizer ────────────────────────
-
-  canvas: {
-    /** Add a skill or block to active canvas.md */
-    add: (scope: string, block: string | { title?: string; type: string; props?: Record<string, any> }) =>
-      post('/canvas/add', { scope, block }),
-
-    /** Remove a skill or block from active canvas.md */
-    remove: (scope: string, moduleOrTitle: string) =>
-      post('/canvas/remove', { scope, module: moduleOrTitle }),
-  },
-
-  // ── AI Engine (Groq Whisper & Canvas Layouts) ──────────────
-
+  team: { getRoster: async (_scope: string) => ({ members: [] }), sync: async (_scope: string, _members: any) => ({ success: false }) },
+  canvas: { add: async (_scope: string, _block: any) => ({ success: false }), remove: async (_scope: string, _module: string) => ({ success: false }) },
   ai: {
-    /**
-     * Near-instant voice transcription with Groq Whisper whisper-large-v3-turbo (<300ms)
-     */
-    transcribe: async (audioBase64: string, mimeType = 'audio/m4a') => {
-      return post<{ text: string }>('/ai/transcribe', { audioBase64, mimeType });
-    },
-
-    /**
-     * AI Canvas layout generator for Admin Customizer
-     */
-    planCanvas: async (prompt: string, workspaceName?: string, vertical?: string, scope?: string) => {
-      return post<{ success: boolean; chips: any[]; blocks: any[]; canvasMarkdown: string }>('/ai/canvas-plan', {
-        prompt,
-        workspaceName,
-        vertical,
-        scope,
-      });
-    },
+    transcribe: async (_audioBase64: string, _mimeType = 'audio/m4a') => ({ text: '' }),
+    planCanvas: async (_prompt: string, _workspaceName?: string, _vertical?: string, _scope?: string) => ({ success: false, chips: [], blocks: [], canvasMarkdown: '' }),
   },
 };
+
+export const taraiUrl = TARAI_URL;

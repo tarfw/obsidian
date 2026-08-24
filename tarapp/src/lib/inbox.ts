@@ -6,9 +6,8 @@
  */
 
 import { getUserDb } from './db';
+import { tar } from './tar';
 import { INBOX_TYPE_NAMES, INBOX_TYPES } from '../constants/types-config';
-
-const TAR_URL = process.env.EXPO_PUBLIC_TARFLUE_URL || 'https://taragent.tar-54d.workers.dev';
 
 export interface InboxItem {
   id: string;
@@ -82,14 +81,7 @@ export async function markTaskDone(
     }
 
     if (workspaceScope) {
-      await fetch(`${TAR_URL}/inbox/${taskId}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-User-Id': _userId,
-        },
-        body: JSON.stringify({ scope: workspaceScope }),
-      }).catch(() => {});
+      await tar.markTaskDone(taskId, workspaceScope).catch(() => {});
     }
 
     return true;
@@ -107,16 +99,8 @@ export async function fetchRemoteInbox(
   limit: number = 50
 ): Promise<InboxItem[]> {
   try {
-    const url = new URL(`${TAR_URL}/workspace/${scope}/inbox`);
-    url.searchParams.set('userId', _userId);
-    url.searchParams.set('limit', String(limit));
-
-    const res = await fetch(url.toString(), {
-      headers: { 'X-User-Id': _userId },
-    });
-    if (!res.ok) return [];
-    const data = await res.json() as { tasks?: any[] };
-    return (data.tasks || []).map((r: any) => ({
+    const data = await tar.getInbox(scope);
+    return (data.rows || []).slice(0, limit).map((r: any) => ({
       id: r.id,
       user_id: r.user_id || _userId,
       workspace_id: r.workspace_id || scope,

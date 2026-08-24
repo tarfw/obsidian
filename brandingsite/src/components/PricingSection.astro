@@ -1,0 +1,647 @@
+---
+const workspaces = [
+  { usage: "Personal workspace", credits: "0", note: "Local on-device SQLite & .md folder" },
+  { usage: "Each active owned workspace", credits: "100 / month", note: "Reserved first from wallet on the 1st" },
+  { usage: "Joined workspace", credits: "0 for the member", note: "Invited members use owner's wallet" },
+  { usage: "Public browsing, ordering, or booking", credits: "0", note: "Zero charge for your end customers" },
+  { usage: "Archived workspace", credits: "0", note: "Preserved historical workspaces at rest" }
+];
+
+const agentGroups = [
+  {
+    title: "Workspace & Core (CRUD, Sync & Memory)",
+    color: "#2563eb",
+    actions: [
+      { name: "Local on-device CRUD (cached SQLite reads & views)", credits: "0", isFree: true },
+      { name: "Cloud DB write, sync & search (Turso writes + sync bandwidth)", credits: "1 / 100 ops", isFree: false },
+      { name: "Workspace answer or summary", credits: "2", isFree: false },
+      { name: "OCR document scan", credits: "3 / page", isFree: false },
+      { name: "Bill audit", credits: "5 / bill", isFree: false },
+      { name: "Analyst or tax report", credits: "20", isFree: false }
+    ]
+  },
+  {
+    title: "Messaging & CRM",
+    color: "#059669",
+    actions: [
+      { name: "Sales or support reply", credits: "2", isFree: false },
+      { name: "Voice note to order", credits: "5", isFree: false },
+      { name: "Quote or proposal", credits: "10", isFree: false },
+      { name: "Customer retention campaign", credits: "20", isFree: false }
+    ]
+  },
+  {
+    title: "Sites & Publishing",
+    color: "#0891b2",
+    actions: [
+      { name: "Publish or update a site", credits: "5 / run", isFree: false },
+      { name: "Edit a site section", credits: "10 / run", isFree: false },
+      { name: "Keep a public site active", credits: "50 / month", isFree: false },
+      { name: "Generate a site draft", credits: "100 / run", isFree: false }
+    ]
+  },
+  {
+    title: "Intelligence & Swarms",
+    color: "#7c3aed",
+    actions: [
+      { name: "Competitor price check", credits: "2 / product / source", isFree: false },
+      { name: "Operations workflow", credits: "10", isFree: false },
+      { name: "Product photo cleanup", credits: "10 / image", isFree: false },
+      { name: "Verified lead batch", credits: "50", isFree: false },
+      { name: "Deep research swarm", credits: "100 / task", isFree: false }
+    ]
+  }
+];
+
+const creditPacks = [
+  { pack: "500 credits", price: "₹99", unit: "₹0.20 / credit", suitable: "Individuals & light daily workflows" },
+  { pack: "2,500 credits", price: "₹449", unit: "₹0.18 / credit", suitable: "Growing teams, active CRM & daily OCR" },
+  { pack: "6,000 credits", price: "₹999", unit: "₹0.166 / credit", suitable: "High-volume stores, workflows & research swarms" }
+];
+
+const modelTiers = [
+  { 
+    tier: "Main Reasoning LLM", 
+    modelName: "DeepSeek-V4-Flash-0731", 
+    rawCost: "$0.08 in / $0.18 out ($0.016 cached) / 1M", 
+    credits: "10–20 credits", 
+    examples: "Quotes, proposals, pipelines, analyst/tax reports, site draft engine (100 cr)" 
+  },
+  { 
+    tier: "Fast Routing & Chat", 
+    modelName: "Gemma-4-E4B-it", 
+    rawCost: "$0.02 in / $0.10 out / 1M tokens", 
+    credits: "2 credits", 
+    examples: "Customer WhatsApp/Telegram replies, workspace summaries, price checks" 
+  },
+  { 
+    tier: "Vision & Document OCR", 
+    modelName: "DeepSeek-OCR-2 (EU Hosted, FP16)", 
+    rawCost: "€0.02 per request (8k context)", 
+    credits: "3 credits / page", 
+    examples: "Invoice & receipt OCR scans, multi-layout document parsing, bill audits (5 cr)" 
+  },
+  { 
+    tier: "Speech-to-Text Audio", 
+    modelName: "Whisper-large-v3-turbo (Groq)", 
+    rawCost: "$0.04 per hour (~$0.00067 / min)", 
+    credits: "5 credits", 
+    examples: "Voice note to structured order conversion, audio message transcription" 
+  },
+  { 
+    tier: "Edge Database & Sync", 
+    modelName: "Turso SQLite + Transfer Bandwidth", 
+    rawCost: "$1.00 / 1M writes · $0.001 / 10k reads", 
+    credits: "1 / 100 ops", 
+    examples: "Cloud CRUD mutations (Create/Update/Delete/Link), vector search & edge sync" 
+  }
+];
+
+const sampleCalculation = [
+  { item: "1 Active owned workspace", modelUsed: "Storage & edge sync reservation", formula: "100 credits × 1 month", credits: "100 credits" },
+  { item: "1,000 Cloud DB CRUD & sync ops", modelUsed: "Turso SQLite + Sync Bandwidth", formula: "1 credit per 100 cloud operations", credits: "10 credits" },
+  { item: "150 Customer WhatsApp replies", modelUsed: "Gemma-4-E4B-it ($0.02 in / $0.10 out)", formula: "2 credits × 150 replies", credits: "300 credits" },
+  { item: "10 OCR Invoice / Receipt scans", modelUsed: "DeepSeek-OCR-2 (€0.02 / request)", formula: "3 credits × 10 pages", credits: "30 credits" }
+];
+---
+
+<section class="pricing-clean-section" id="pricing">
+  <div class="pricing-clean-inner">
+    
+    <!-- Title & Summary -->
+    <div class="pricing-intro">
+      <span class="pricing-kicker">Tar Pricing</span>
+      <h2 class="pricing-title">Simple credit pricing</h2>
+      <p class="pricing-lead">
+        One credit wallet pays for owned workspaces and AI agents. There are no fixed plans or workspace limits.
+      </p>
+    </div>
+
+    <!-- 1. Workspaces and Credits -->
+    <div class="pricing-block">
+      <h3 class="block-title">1. Workspaces and Credits</h3>
+      <p class="block-sub">Monthly workspace credits are reserved first. AI automation inside a workspace uses its owner's wallet.</p>
+
+      <div class="table-container">
+        <table class="clean-table">
+          <thead>
+            <tr>
+              <th>Workspace usage</th>
+              <th class="text-right">Credits</th>
+            </tr>
+          </thead>
+          <tbody>
+            {workspaces.map((w) => (
+              <tr>
+                <td>
+                  <strong class="row-main-text">{w.usage}</strong>
+                  <span class="table-note">{w.note}</span>
+                </td>
+                <td class="text-right credit-val">{w.credits}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 2. Agents and Credits -->
+    <div class="pricing-block" id="agents">
+      <h3 class="block-title">2. Agents and Credits</h3>
+      <p class="block-sub">Local on-device queries use 0 credits. Cloud DB syncs, agent runs, and swarms are charged only when executed.</p>
+
+      <div class="table-container">
+        <table class="clean-table">
+          <thead>
+            <tr>
+              <th>Agent action / Operation</th>
+              <th class="text-right">Credits</th>
+            </tr>
+          </thead>
+          <tbody>
+            {agentGroups.map((group) => (
+              <>
+                <tr class="group-header-row">
+                  <td colspan="2">
+                    <div class="group-title-wrap">
+                      <span class="tar-pixel-logo" style={`color: ${group.color}`}>
+                        <svg width="18" height="18" viewBox="0 0 7 7.1" fill="currentColor" aria-hidden="true">
+                          <rect x="0" y="0.000" width="1" height="1.000"/>
+                          <rect x="1" y="0.000" width="1" height="1.000"/>
+                          <rect x="5" y="0.000" width="1" height="1.000"/>
+                          <rect x="6" y="0.000" width="1" height="1.000"/>
+                          <rect x="1" y="1.000" width="1" height="1.000"/>
+                          <rect x="2" y="1.000" width="1" height="1.000"/>
+                          <rect x="3" y="1.000" width="1" height="1.000"/>
+                          <rect x="4" y="1.000" width="1" height="1.000"/>
+                          <rect x="5" y="1.000" width="1" height="1.000"/>
+                          <rect x="0" y="2.000" width="1" height="1.000"/>
+                          <rect x="1" y="2.000" width="1" height="1.000"/>
+                          <rect x="2" y="2.000" width="1" height="1.000"/>
+                          <rect x="3" y="2.000" width="1" height="1.000"/>
+                          <rect x="4" y="2.000" width="1" height="1.000"/>
+                          <rect x="5" y="2.000" width="1" height="1.000"/>
+                          <rect x="6" y="2.000" width="1" height="1.000"/>
+                          <rect x="0" y="3.000" width="1" height="1.000"/>
+                          <rect x="1" y="3.000" width="1" height="1.000"/>
+                          <rect x="3" y="3.000" width="1" height="1.000"/>
+                          <rect x="5" y="3.000" width="1" height="1.000"/>
+                          <rect x="6" y="3.000" width="1" height="1.000"/>
+                          <rect x="0" y="4.000" width="1" height="1.100"/>
+                          <rect x="1" y="4.000" width="1" height="1.100"/>
+                          <rect x="2" y="4.000" width="1" height="1.100"/>
+                          <rect x="3" y="4.000" width="1" height="1.100"/>
+                          <rect x="4" y="4.000" width="1" height="1.100"/>
+                          <rect x="5" y="4.000" width="1" height="1.100"/>
+                          <rect x="6" y="4.000" width="1" height="1.100"/>
+                          <rect x="0" y="5.100" width="1" height="1.100"/>
+                          <rect x="1" y="5.100" width="1" height="1.100"/>
+                          <rect x="2" y="5.100" width="1" height="1.100"/>
+                          <rect x="3" y="5.100" width="1" height="1.100"/>
+                          <rect x="4" y="5.100" width="1" height="1.100"/>
+                          <rect x="5" y="5.100" width="1" height="1.100"/>
+                          <rect x="6" y="5.100" width="1" height="1.100"/>
+                          <rect x="0" y="6.200" width="1" height="0.550"/>
+                          <rect x="3" y="6.200" width="1" height="0.550"/>
+                          <rect x="6" y="6.200" width="1" height="0.550"/>
+                          <rect x="3" y="6.750" width="1" height="0.350"/>
+                        </svg>
+                      </span>
+                      <span class="group-title-text">{group.title}</span>
+                    </div>
+                  </td>
+                </tr>
+                {group.actions.map((act) => (
+                  <tr class="action-item-row">
+                    <td><span class="action-name">{act.name}</span></td>
+                    <td class:list={["text-right", "credit-val", { "credit-val--free": act.isFree }]}>{act.credits}</td>
+                  </tr>
+                ))}
+              </>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 3. Credits and Cost -->
+    <div class="pricing-block">
+      <h3 class="block-title">3. Credits and Cost</h3>
+      <p class="block-sub">Purchase credits on demand. Purchased credits do not expire while the account is active.</p>
+
+      <div class="table-container">
+        <table class="clean-table">
+          <thead>
+            <tr>
+              <th>Credit pack</th>
+              <th>Indicative price*</th>
+              <th>Unit price</th>
+              <th class="text-right">Best for</th>
+            </tr>
+          </thead>
+          <tbody>
+            {creditPacks.map((pack) => (
+              <tr>
+                <td><strong class="row-main-text">{pack.pack}</strong></td>
+                <td><span class="pack-price-text">{pack.price}</span></td>
+                <td><span class="pack-unit-text">{pack.unit}</span></td>
+                <td class="text-right"><span class="table-note-inline">{pack.suitable}</span></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 4. Model and Credits Calculation -->
+    <div class="pricing-block">
+      <h3 class="block-title">4. Model and Credits Calculation</h3>
+      <p class="block-sub">Credits accurately bridge real LLM token costs, multimodal vision/audio APIs, and edge database infrastructure into simple fixed actions.</p>
+
+      <!-- Model Infrastructure Breakdown Table -->
+      <div class="table-container model-table-wrap">
+        <table class="clean-table">
+          <thead>
+            <tr>
+              <th>Tier / Role</th>
+              <th>Model & Real Infrastructure Cost</th>
+              <th>Credit Rate</th>
+              <th class="text-right">Agent Tasks</th>
+            </tr>
+          </thead>
+          <tbody>
+            {modelTiers.map((tier) => (
+              <tr>
+                <td><strong class="row-main-text">{tier.tier}</strong></td>
+                <td>
+                  <span class="model-badge">{tier.modelName}</span>
+                  <span class="model-cost-sub">{tier.rawCost}</span>
+                </td>
+                <td><span class="credit-val">{tier.credits}</span></td>
+                <td class="text-right"><span class="table-note-inline">{tier.examples}</span></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Sample Monthly Calculation Example Box -->
+      <div class="calc-example-box">
+        <h4 class="calc-example-title">Example Monthly Calculation</h4>
+        <p class="calc-example-sub">How real model inference maps to an active business credit wallet:</p>
+
+        <div class="calc-breakdown-list">
+          {sampleCalculation.map((calc) => (
+            <div class="calc-breakdown-item">
+              <div class="calc-item-main">
+                <span class="calc-item-name">{calc.item}</span>
+                <span class="calc-item-model-tag">{calc.modelUsed}</span>
+              </div>
+              <span class="calc-item-formula">{calc.formula}</span>
+              <span class="calc-item-credits">{calc.credits}</span>
+            </div>
+          ))}
+          <div class="calc-breakdown-total">
+            <span class="calc-total-label">Total Monthly Need:</span>
+            <span class="calc-total-val">440 credits (~₹88 / month)</span>
+            <span class="calc-total-pack">Fully covered by <strong>500 Credit Pack (₹99)</strong></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footnote -->
+    <div class="clean-footnote">
+      <p>
+        * Prices are localized worldwide using purchasing power, taxes, and store costs. Purchased credits do not expire while the account is active. Third-party charges such as WhatsApp, SMS, domains, and payment processing are separate.
+      </p>
+    </div>
+
+  </div>
+</section>
+
+<style>
+  .pricing-clean-section {
+    background-color: #ffffff !important;
+    color: #0a0a0a !important;
+    padding: 88px 24px 108px;
+    width: 100%;
+    box-sizing: border-box;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, Helvetica, Arial, sans-serif;
+    border-top: 1px solid #e5e7eb;
+  }
+
+  .pricing-clean-inner {
+    max-width: 1080px;
+    margin: 0 auto;
+  }
+
+  .pricing-intro {
+    text-align: left;
+    margin-bottom: 56px;
+    max-width: 720px;
+  }
+
+  .pricing-kicker {
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #4b5563 !important;
+    display: block;
+    margin-bottom: 12px;
+  }
+
+  .pricing-title {
+    font-size: clamp(2rem, 3.5vw, 2.75rem);
+    font-weight: 700;
+    color: #0a0a0a !important;
+    line-height: 1.15;
+    letter-spacing: -0.03em;
+    margin: 0 0 16px;
+  }
+
+  .pricing-lead {
+    font-size: 1.1rem;
+    line-height: 1.6;
+    color: #4b5563 !important;
+    margin: 0;
+  }
+
+  .pricing-block {
+    margin-bottom: 56px;
+  }
+
+  .block-title {
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: #0a0a0a !important;
+    margin: 0 0 6px 0;
+    letter-spacing: -0.015em;
+  }
+
+  .block-sub {
+    font-size: 0.95rem;
+    color: #4b5563 !important;
+    margin: 0 0 20px 0;
+    line-height: 1.5;
+  }
+
+  /* Table */
+  .table-container {
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    overflow: hidden;
+    background: #ffffff !important;
+  }
+
+  .clean-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.925rem;
+    text-align: left;
+  }
+
+  .clean-table th {
+    background: #f9fafb !important;
+    padding: 12px 18px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #4b5563 !important;
+    border-bottom: 1px solid #e5e7eb;
+  }
+
+  .clean-table td {
+    padding: 12px 18px;
+    border-bottom: 1px solid #f3f4f6;
+    color: #111827 !important;
+  }
+
+  .clean-table tr:last-child td {
+    border-bottom: none;
+  }
+
+  .clean-table tr.action-item-row:hover td {
+    background: #f9fafb !important;
+  }
+
+  .row-main-text {
+    color: #111827 !important;
+  }
+
+  .table-note {
+    display: block;
+    font-size: 0.8rem;
+    color: #4b5563 !important;
+    margin-top: 2px;
+    font-weight: 400;
+  }
+
+  .table-note-inline {
+    font-size: 0.825rem;
+    color: #4b5563 !important;
+    font-weight: 400;
+  }
+
+  .text-right {
+    text-align: right;
+  }
+
+  .credit-val {
+    font-weight: 600;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.9rem;
+    color: #0a0a0a !important;
+  }
+
+  .credit-val--free {
+    color: #059669 !important;
+  }
+
+  .pack-price-text {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #0a0a0a !important;
+  }
+
+  .pack-unit-text {
+    font-size: 0.85rem;
+    color: #4b5563 !important;
+    font-weight: 500;
+  }
+
+  .model-badge {
+    display: inline-block;
+    font-size: 0.82rem;
+    font-weight: 600;
+    background: #f3f4f6;
+    color: #111827 !important;
+    padding: 2px 8px;
+    border-radius: 6px;
+    border: 1px solid #e5e7eb;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  }
+
+  .model-cost-sub {
+    display: block;
+    font-size: 0.775rem;
+    color: #6b7280 !important;
+    margin-top: 3px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  }
+
+  /* Group Header Rows with Colored Tar Logo */
+  .group-header-row td {
+    background: #f9fafb !important;
+    padding: 12px 18px;
+    border-bottom: 1px solid #e5e7eb;
+    border-top: 1px solid #e5e7eb;
+  }
+
+  .clean-table tbody tr:first-child.group-header-row td {
+    border-top: none;
+  }
+
+  .group-title-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .tar-pixel-logo {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .group-title-text {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: #0a0a0a !important;
+    letter-spacing: -0.01em;
+  }
+
+  .action-name {
+    padding-left: 26px;
+    color: #1f2937 !important;
+    display: inline-block;
+  }
+
+  /* Calculation Example Box */
+  .calc-example-box {
+    margin-top: 20px;
+    background: #fafafa;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 24px;
+  }
+
+  .calc-example-title {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #0a0a0a !important;
+    margin: 0 0 4px 0;
+  }
+
+  .calc-example-sub {
+    font-size: 0.875rem;
+    color: #4b5563 !important;
+    margin: 0 0 16px 0;
+  }
+
+  .calc-breakdown-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .calc-breakdown-item {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.88rem;
+    padding: 10px 14px;
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    gap: 12px;
+  }
+
+  .calc-item-main {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .calc-item-name {
+    font-weight: 600;
+    color: #111827 !important;
+  }
+
+  .calc-item-model-tag {
+    font-size: 0.775rem;
+    color: #6b7280 !important;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  }
+
+  .calc-item-formula {
+    color: #4b5563 !important;
+    font-size: 0.825rem;
+  }
+
+  .calc-item-credits {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-weight: 600;
+    color: #0a0a0a !important;
+  }
+
+  .calc-breakdown-total {
+    margin-top: 8px;
+    padding-top: 14px;
+    border-top: 1px dashed #d1d5db;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    font-size: 0.95rem;
+  }
+
+  .calc-total-label {
+    font-weight: 700;
+    color: #0a0a0a !important;
+  }
+
+  .calc-total-val {
+    font-weight: 700;
+    color: #059669 !important;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  }
+
+  .calc-total-pack {
+    font-size: 0.85rem;
+    color: #4b5563 !important;
+    background: #ecfdf5;
+    padding: 4px 10px;
+    border-radius: 6px;
+    border: 1px solid #a7f3d0;
+  }
+
+  /* Footnote */
+  .clean-footnote {
+    border-top: 1px solid #e5e7eb;
+    padding-top: 24px;
+    margin-top: 40px;
+  }
+
+  .clean-footnote p {
+    font-size: 0.85rem;
+    line-height: 1.6;
+    color: #4b5563 !important;
+    margin: 0;
+  }
+</style>

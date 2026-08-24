@@ -8,7 +8,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { useTheme } from '@/hooks/use-theme';
 import { signInWithGoogle, getCurrentUser, trySilentSignIn } from '@/lib/auth';
-import { setUserId } from '@/lib/tar';
+import { setUserId, tar } from '@/lib/tar';
 import { TarLogo } from '@/components/TarLogo';
 import { TarLogoLoader } from '@/components/TarLogoLoader';
 
@@ -40,15 +40,9 @@ export default function AuthScreen() {
         const user = await getCurrentUser();
         console.log(`[AUTH] ${Date.now() - t}ms — getCurrentUser: ${user ? user.email : 'null'}`);
         if (user) {
-          const { switchUser } = await import('@/lib/db');
-          await switchUser(user.id);
           setUserId(user.id);
-          // Check if user has any workspaces in D1
           try {
-            const res = await fetch(`${process.env.EXPO_PUBLIC_TARFLUE_URL || 'https://taragent.tar-54d.workers.dev'}/workspaces`, {
-              headers: { 'X-User-Id': user.id },
-            });
-            const data = await res.json();
+            const data = await tar.listWorkspaces();
             const hasWorkspaces = (data.workspaces || []).length > 0;
             console.log(`[AUTH] ${ms()} — has workspaces: ${hasWorkspaces}`);
             router.replace(hasWorkspaces ? '/(tabs)/workspaces' : '/(tabs)/workspaces?action=new');
@@ -62,14 +56,9 @@ export default function AuthScreen() {
         const silent = await trySilentSignIn();
         console.log(`[AUTH] ${Date.now() - t2}ms — trySilentSignIn: ${silent ? silent.email : 'null'}`);
         if (silent) {
-          const { switchUser } = await import('@/lib/db');
-          await switchUser(silent.id);
           setUserId(silent.id);
           try {
-            const res = await fetch(`${process.env.EXPO_PUBLIC_TARFLUE_URL || 'https://taragent.tar-54d.workers.dev'}/workspaces`, {
-              headers: { 'X-User-Id': silent.id },
-            });
-            const data = await res.json();
+            const data = await tar.listWorkspaces();
             const hasWorkspaces = (data.workspaces || []).length > 0;
             router.replace(hasWorkspaces ? '/(tabs)/workspaces' : '/(tabs)/workspaces?action=new');
           } catch {
@@ -89,14 +78,9 @@ export default function AuthScreen() {
     setLoading(true);
     try {
       const user = await signInWithGoogle();
-      const { switchUser } = await import('@/lib/db');
-      await switchUser(user.id);
       setUserId(user.id);
       try {
-        const res = await fetch(`${process.env.EXPO_PUBLIC_TARFLUE_URL || 'https://taragent.tar-54d.workers.dev'}/workspaces`, {
-          headers: { 'X-User-Id': user.id },
-        });
-        const data = await res.json();
+        const data = await tar.listWorkspaces();
         const hasWorkspaces = (data.workspaces || []).length > 0;
         router.replace(hasWorkspaces ? '/(tabs)/workspaces' : '/(tabs)/workspaces?action=new');
       } catch {

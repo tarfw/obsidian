@@ -1,8 +1,7 @@
 import { Database, getDbPath } from "@tursodatabase/sync-react-native";
 import { SCHEMA_STATEMENTS } from "./schema";
 import { getCurrentUser } from "./auth";
-
-const TARFLUE_URL = process.env.EXPO_PUBLIC_TARFLUE_URL || 'https://taragent.tar-54d.workers.dev';
+import { getSyncCredential } from "./tar";
 
 const dbConnections: Record<string, Database> = {};
 export let cachedSelfId: string | null = null;
@@ -12,8 +11,7 @@ export const syncReady = new Promise<void>(r => { syncReadyResolve = r; });
 const PARTIAL_SYNC_QUERY = [
   "SELECT id FROM matter WHERE type IN ('product', 'stock')",
   "SELECT id FROM motion WHERE type IN ('sale', 'payment', 'adjust', 'restock')",
-  "SELECT src AS id FROM graph",
-  "SELECT id FROM inbox",
+  "SELECT source AS id FROM graph",
 ].join(" UNION ALL ");
 
 export async function getSelfId(): Promise<string> {
@@ -77,6 +75,11 @@ function createSyncDbConnection(key: string, dbName: string, url: string, authTo
     path: getDbPath(dbName),
     url,
     authToken,
+    partialSyncExperimental: {
+      bootstrapStrategy: { kind: 'query', query: PARTIAL_SYNC_QUERY },
+      segmentSize: 131072,
+      prefetch: true,
+    },
   });
   dbConnections[key] = db;
   notifyDbChange(db);
@@ -101,7 +104,6 @@ export async function syncAllActiveDbs(): Promise<void> {
     const syncConns = Object.values(dbConnections).filter((db) => db && db.isSync);
     for (const db of syncConns) {
       try {
-        await db.push().catch(() => {});
         await db.pull().catch(() => {});
       } catch (e) {
         console.warn('[DB] sync error on active connection:', e);
@@ -242,32 +244,7 @@ export async function switchUser(userId: string): Promise<Database> {
   console.log(`[DB] switchUser START: switching session to user = ${userId}`);
   cachedSelfId = userId;
 
-  try {
-    // 1. Try to get or create remote Personal Turso DB
-    console.log(`[DB] switchUser: fetching Turso creds from ${TARFLUE_URL}/user-db`);
-    const res = await fetch(`${TARFLUE_URL}/user-db?userId=${encodeURIComponent(userId)}`);
-    if (res.ok) {
-      const data = await res.json();
-      const { url, authToken } = data;
-      if (url && authToken) {
-        console.log(`[DB] switchUser: got Turso creds for user ${userId}: ${url}`);
-        await closeConnection(userId);
-        const syncDb = getUserSyncDb(userId, url, authToken);
-        await syncDb.connect();
-        await migrateMemoryTable(syncDb, userId);
-        for (const sql of SCHEMA_STATEMENTS) {
-          try { await syncDb.exec(sql); } catch (_) {}
-        }
-        syncReadyResolve?.();
-        console.log(`[DB] switchUser DONE: remote sync initialized in ${Date.now() - t0}ms`);
-        return syncDb;
-      }
-    }
-  } catch (syncErr) {
-    console.warn(`[DB] switchUser: failed to initialize remote Turso sync, falling back to local:`, syncErr);
-  }
-
-  // 2. Fallback to local SQLite replica
+  // Personal drafts remain device-local; the app never receives database credentials.
   const db = getLocalPrivateDb(userId);
   try {
     await db.connect();
@@ -301,7 +278,8 @@ export async function closeConnection(key: string): Promise<void> {
 }
 
 export function getWorkspaceSyncDb(subdomain: string, url: string, authToken: string): Database {
-  return createSyncDbConnection(subdomain, `${subdomain}.db`, url, authToken);
+  // Keep the canonical read replica separate from pre-cutover local workspace files.
+  return createSyncDbConnection(subdomain, `${subdomain}.tenant-v1.db`, url, authToken);
 }
 
 export async function initWorkspaceSync(subdomain: string): Promise<void> {
@@ -314,50 +292,11 @@ export async function initWorkspaceSync(subdomain: string): Promise<void> {
   console.log(`[DB] initWorkspaceSync START for subdomain = ${subdomain}`);
 
   try {
-    console.log(`[DB] initWorkspaceSync: fetching Turso creds from ${TARFLUE_URL}/workspace-db`);
-    const res = await fetch(`${TARFLUE_URL}/workspace-db?subdomain=${subdomain}`);
-    console.log(`[DB] initWorkspaceSync: response ${res.status}`);
-    if (!res.ok) {
-      console.warn(`[DB] initWorkspaceSync: failed to fetch Turso creds (${res.status})`);
-      return;
-    }
-    const data = await res.json();
-    const { url, authToken } = data;
-    console.log(`[DB] initWorkspaceSync: got URL = ${url}`);
-    if (!url || !authToken) {
-      console.warn(`[DB] initWorkspaceSync: no Turso creds returned`, data);
-      return;
-    }
-
-    console.log(`[DB] initWorkspaceSync: closing old connection if exists...`);
-    await closeConnection(subdomain);
-
-    console.log(`[DB] initWorkspaceSync: creating sync DB connection...`);
-    const db = getWorkspaceSyncDb(subdomain, url, authToken);
-    console.log(`[DB] initWorkspaceSync: connecting...`);
+    const credential = await getSyncCredential(`w:${subdomain}`);
+    const db = getWorkspaceSyncDb(subdomain, credential.url, credential.token);
+    console.log(`[DB] initWorkspaceSync: connecting read replica...`);
     await db.connect();
-    console.log(`[DB] initWorkspaceSync: connected, applying schema locally...`);
-    await migrateMemoryTable(db, subdomain);
-    for (const sql of SCHEMA_STATEMENTS) {
-      try { await db.exec(sql); } catch (_) {}
-    }
-    const migrations = [
-      'ALTER TABLE form ADD COLUMN active INTEGER DEFAULT 1',
-      'ALTER TABLE form ADD COLUMN owner TEXT',
-      'ALTER TABLE form ADD COLUMN time TEXT',
-      'ALTER TABLE matter ADD COLUMN form TEXT',
-      'ALTER TABLE matter ADD COLUMN active INTEGER DEFAULT 1',
-      'ALTER TABLE matter ADD COLUMN owner TEXT',
-      'ALTER TABLE matter ADD COLUMN qty REAL DEFAULT 0',
-      'ALTER TABLE matter ADD COLUMN time TEXT',
-      'ALTER TABLE matter ADD COLUMN updated TEXT',
-      'ALTER TABLE matter ADD COLUMN role TEXT',
-      'CREATE INDEX IF NOT EXISTS idx_matter_scope_type_role ON matter(scope, type, role)',
-      'ALTER TABLE motion ADD COLUMN scope TEXT DEFAULT \'global\'',
-    ];
-    for (const sql of migrations) {
-      try { await db.exec(sql); } catch (_) {}
-    }
+    await db.pull();
     console.log(`[DB] initWorkspaceSync: DONE in ${Date.now() - t0}ms`);
     syncReadyResolve?.();
   } catch (e) {
@@ -378,14 +317,6 @@ export async function pullSync(userId: string): Promise<void> {
       return;
     }
     console.log(`[DB] pullSync: db type = sync`);
-
-    console.log(`[DB] pullSync: calling db.push()...`);
-    try {
-      await db.push();
-      console.log(`[DB] pullSync: db.push() success`);
-    } catch (pushErr) {
-      console.warn(`[DB] pullSync: db.push() failed:`, pushErr);
-    }
 
     console.log(`[DB] pullSync: calling db.pull()...`);
     const changed = await db.pull();

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import {
   StyleSheet,
   View,
@@ -15,51 +15,39 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Linking from 'expo-linking';
 import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '@/hooks/use-theme';
-import { tar } from '@/lib/tar';
 
-export interface ReferoStyleItem {
+/**
+ * Site Studio — drives the standalone siteagent worker (siteagent3.md).
+ *
+ *   styles     GET  /site/styles          (single source of truth — no local copy)
+ *   generate   POST /site/generate        { site, description, style_hint?, fresh? }
+ *   status     GET  /site/status?site=    (polled while a job runs)
+ *   edit       POST /site/edit            { site, section_id, instruction }
+ *   publish    POST /site/publish         { site }
+ *
+ * Pages open in the external browser (no in-app webview):
+ *   draft  ${SITE_API}/site/preview/<site>/
+ *   live   ${SITE_API}/site/page/<site>/
+ */
+
+const SITE_API = process.env.EXPO_PUBLIC_SITEAGENT_URL || 'https://siteagent.tar-54d.workers.dev';
+
+/** Style catalog entry as served by GET /site/styles. */
+export interface SiteStyleItem {
   id: string;
-  file: string;
   name: string;
-  vibe: string;
   theme: 'light' | 'dark' | 'mixed';
-  accent: string;
-  category: string;
-  fonts?: string;
+  tags: string;
+  vibe: string;
 }
 
-export const REFERO_STYLES: ReferoStyleItem[] = [
-  { id: 'hungrytiger', file: 'eathungrytiger.md', name: 'Hungry Tiger', vibe: 'Turmeric Fire · Street Food', theme: 'dark', accent: '#faae33', category: 'Food & Dining', fonts: 'Antonio + Plus Jakarta Sans' },
-  { id: 'sweetgreen', file: 'sweetgreen.md', name: 'Sweetgreen', vibe: 'Farm-Fresh · Organic Bowls', theme: 'light', accent: '#004733', category: 'Food & Dining', fonts: 'Playfair Display + Plus Jakarta' },
-  { id: 'adanola', file: 'adanola.md', name: 'Adanola', vibe: 'Activewear · White Lookbook', theme: 'light', accent: '#111827', category: 'Apparel', fonts: 'Syne + Inter' },
-  { id: 'redbrick', file: 'redbrickcoffee.md', name: 'Redbrick Coffee', vibe: 'Scarlet Ink · Butcher Paper', theme: 'light', accent: '#d9381e', category: 'Food & Dining', fonts: 'Space Grotesk + DM Sans' },
-  { id: 'seed', file: 'seed.md', name: 'Seed Health', vibe: 'Living Organism · Bio Glass', theme: 'light', accent: '#004d40', category: 'Health & Science', fonts: 'Marcellus + Plus Jakarta' },
-  { id: 'supermush', file: 'supermush.md', name: 'SuperMush', vibe: 'Skate Ramp · Functional Mists', theme: 'light', accent: '#ff4081', category: 'Health & Science', fonts: 'Outfit + Inter' },
-  { id: 'cos', file: 'cos.md', name: 'COS', vibe: 'Minimalist Tailoring · Gallery', theme: 'light', accent: '#000000', category: 'Apparel', fonts: 'Syne + Inter' },
-  { id: 'arte', file: 'arte.md', name: 'Arte Antwerp', vibe: 'Golden Harvest · Streetwear', theme: 'light', accent: '#b45309', category: 'Apparel', fonts: 'Plus Jakarta Sans' },
-  { id: 'afabrica', file: 'afabrica.md', name: 'Arsenijs Fabrica', vibe: 'Editorial Beauty · Cosmetics', theme: 'light', accent: '#3b82f6', category: 'Beauty & Skincare', fonts: 'Plus Jakarta Sans' },
-  { id: 'also', file: 'also.md', name: 'ALSO', vibe: 'Bicycle Zine · Urban Goods', theme: 'light', accent: '#10b981', category: 'Lifestyle', fonts: 'Space Grotesk' },
-  { id: 'aware', file: 'aware.md', name: 'A-WARE', vibe: 'Alpine Apothecary · Nutrition', theme: 'light', accent: '#84cc16', category: 'Health & Science', fonts: 'Marcellus' },
-  { id: 'basicspace', file: 'basicspace.md', name: 'Basic.Space', vibe: 'Curated Drops · Vintage Design', theme: 'light', accent: '#6366f1', category: 'Curated Drops', fonts: 'Inter' },
-  { id: 'counterprint', file: 'counterprint.md', name: 'Counter-Print', vibe: 'White Gallery · Design Books', theme: 'light', accent: '#ef4444', category: 'Publishing', fonts: 'Public Sans' },
-  { id: 'eatbehave', file: 'eatbehave.md', name: 'BEHAVE Candy', vibe: 'Neon Candy · Low Sugar', theme: 'light', accent: '#ec4899', category: 'Food & Dining', fonts: 'Outfit' },
-  { id: 'freitag', file: 'freitag.md', name: 'FREITAG', vibe: 'Swiss Industrial · Truck Tarp', theme: 'light', accent: '#0284c7', category: 'Apparel', fonts: 'Public Sans' },
-  { id: 'hartzler', file: 'hartzler.md', name: 'Hartzler Dairy', vibe: 'Creamery Billboard · Glass Milk', theme: 'light', accent: '#eab308', category: 'Food & Dining', fonts: 'Playfair Display' },
-  { id: 'herono1', file: 'herono1.md', name: 'Hero No. 1', vibe: 'Sculptor Atelier · Fragrance', theme: 'light', accent: '#14b8a6', category: 'Beauty & Skincare', fonts: 'Cinzel' },
-  { id: 'houseplant', file: 'houseplant.md', name: 'HOUSEPLANT', vibe: 'Walnut Bookstore · Seth Rogen', theme: 'light', accent: '#854d0e', category: 'Lifestyle', fonts: 'Cinzel' },
-  { id: 'lego', file: 'lego.md', name: 'LEGO', vibe: 'Primary Color · Toy Aisle', theme: 'light', accent: '#dc2626', category: 'Lifestyle', fonts: 'Plus Jakarta Sans' },
-  { id: 'limon', file: 'limon.md', name: 'Limón', vibe: 'Moody Brasserie · Candlelight', theme: 'dark', accent: '#f59e0b', category: 'Food & Dining', fonts: 'Cinzel' },
-  { id: 'misuko', file: 'misuko.md', name: 'Misuko', vibe: 'Linen Cookbook · Cold Pressed', theme: 'light', accent: '#f97316', category: 'Food & Dining', fonts: 'Marcellus' },
-  { id: 'swimclub', file: 'swimclub.md', name: 'SwimClub', vibe: 'Performance Dossier · LCD', theme: 'mixed', accent: '#06b6d4', category: 'Apparel', fonts: 'Space Grotesk' },
-  { id: 'symbolaudio', file: 'symbolaudio.md', name: 'Symbol Audio', vibe: 'Midcentury Vinyl · Dusk', theme: 'dark', accent: '#a855f7', category: 'Audio & Tech', fonts: 'Cinzel + Newsreader' },
-  { id: 'telepathicins', file: 'telepathicins.md', name: 'Telepathic Instruments', vibe: 'Broadcast Control · Synthesizers', theme: 'light', accent: '#f43f5e', category: 'Audio & Tech', fonts: 'Space Grotesk + JetBrains Mono' },
-  { id: 'zellerfeld', file: 'zellerfeld.md', name: 'Zellerfeld', vibe: '3D-Printed Footwear · Atelier', theme: 'light', accent: '#0f172a', category: 'Apparel', fonts: 'Syne' },
-];
+interface SectionProgress {
+  id: string;
+  kind: string;
+  state: 'pending' | 'done' | 'failed';
+}
 
-const CATEGORIES = ['All', 'Food & Dining', 'Apparel', 'Health & Science', 'Beauty & Skincare', 'Lifestyle', 'Audio & Tech'];
-
-const SITEAGENT_URL = 'https://siteagent.tar-54d.workers.dev';
+type Phase = 'idle' | 'generating' | 'publishing' | 'published' | 'error';
 
 export interface SiteScreenProps {
   visible: boolean;
@@ -78,810 +66,438 @@ export function SiteScreen({
   scope,
   products = [],
 }: SiteScreenProps) {
-  const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const [activeStyle, setActiveStyle] = useState<ReferoStyleItem>(REFERO_STYLES[0]);
+  const site = slugify(subdomain || workspaceName || 'store');
+
+  const [styles, setStyles] = useState<SiteStyleItem[]>([]);
+  const [stylesLoaded, setStylesLoaded] = useState(false);
+  const [activeStyleId, setActiveStyleId] = useState<string>('');
   const [showCatalogModal, setShowCatalogModal] = useState(false);
   const [catalogSearch, setCatalogSearch] = useState('');
-  const [catalogCategory, setCatalogCategory] = useState('All');
-  const [publishState, setPublishState] = useState<'idle' | 'publishing' | 'published' | 'error'>('idle');
-  const [lastPublishedAt, setLastPublishedAt] = useState<number>(Date.now());
+  const [catalogTag, setCatalogTag] = useState('All');
+
+  const [phase, setPhase] = useState<Phase>('idle');
+  const [progressText, setProgressText] = useState('');
+  const [sections, setSections] = useState<SectionProgress[]>([]);
   const [aiPrompt, setAiPrompt] = useState('');
+  const [editSection, setEditSection] = useState<SectionProgress | null>(null);
+  const [editInstruction, setEditInstruction] = useState('');
+  const [liveReady, setLiveReady] = useState(false);
+  const [previewStamp, setPreviewStamp] = useState(Date.now());
 
-  // Hydrate active design system from OKF workspace file on open
-  useEffect(() => {
-    if (!visible || !scope) return;
-    tar.okf.read(scope, 'site.md').then((res: any) => {
-      if (res?.content) {
-        const match = res.content.match(/style:\s*["']?([^"'\n]+)["']?/);
-        if (match && match[1]) {
-          const styleTarget = match[1].toLowerCase().replace('.md', '');
-          const found = REFERO_STYLES.find(
-            s => s.file === match[1] || s.id === styleTarget || s.file.includes(styleTarget)
-          );
-          if (found) {
-            setActiveStyle(found);
-          }
-        }
-      }
-    }).catch(() => null);
-  }, [visible, scope]);
+  const lastDescriptionRef = useRef<string>('');
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const cleanSubdomain = (subdomain || workspaceName || 'store')
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, '');
+  const statusUrl = `${SITE_API}/site/status?site=${encodeURIComponent(site)}`;
+  const previewUrl = `${SITE_API}/site/preview/${site}/?t=${previewStamp}`;
+  const liveUrl = `${SITE_API}/site/page/${site}/`;
 
-  const liveStoreUrl = `${SITEAGENT_URL}/?ws=${cleanSubdomain}&t=${lastPublishedAt}`;
+  const activeStyle = useMemo(
+    () => styles.find(s => s.id === activeStyleId) || null,
+    [styles, activeStyleId]
+  );
 
-  // Filtered styles for Directory Modal
+  // catalog filtering: categories derived from the worker's tags
+  const allTags = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const s of styles) for (const t of s.tags.split(',').map(x => x.trim()).filter(Boolean)) {
+      counts.set(t, (counts.get(t) || 0) + 1);
+    }
+    return ['All', ...[...counts.entries()].sort((a, b) => b[1] - a[1]).map(e => titleize(e[0]))];
+  }, [styles]);
+
   const filteredStyles = useMemo(() => {
-    return REFERO_STYLES.filter((item) => {
-      const matchCat = catalogCategory === 'All' || item.category === catalogCategory;
-      const q = catalogSearch.toLowerCase().trim();
-      const matchQuery =
-        !q ||
-        item.name.toLowerCase().includes(q) ||
-        item.vibe.toLowerCase().includes(q) ||
-        item.category.toLowerCase().includes(q);
+    const q = catalogSearch.toLowerCase().trim();
+    return styles.filter(s => {
+      const tagList = s.tags.split(',').map(t => titleize(t.trim()));
+      const matchCat = catalogTag === 'All' || tagList.includes(catalogTag);
+      const matchQuery = !q || s.name.toLowerCase().includes(q) || s.vibe.toLowerCase().includes(q) || s.tags.toLowerCase().includes(q);
       return matchCat && matchQuery;
     });
-  }, [catalogCategory, catalogSearch]);
+  }, [styles, catalogTag, catalogSearch]);
 
-  // Dynamic products list from workspace or defaults
-  const productItems = useMemo(() => {
+  // ── catalog: fetched from the worker, never duplicated here ──────
+  useEffect(() => {
+    if (!visible || stylesLoaded) return;
+    let cancelled = false;
+    fetch(`${SITE_API}/site/styles`)
+      .then(r => (r.ok ? r.json() : Promise.reject(new Error(`styles ${r.status}`))))
+      .then((data: any) => {
+        if (cancelled) return;
+        const list: SiteStyleItem[] = (data?.styles || []).map((s: any) => ({
+          id: String(s.id),
+          name: String(s.name || s.id),
+          theme: s.theme === 'dark' || s.theme === 'mixed' ? s.theme : 'light',
+          tags: String(s.tags || ''),
+          vibe: String(s.vibe || ''),
+        }));
+        setStyles(list);
+        setStylesLoaded(true);
+      })
+      .catch(() => { if (!cancelled) setStylesLoaded(false); });
+    return () => { cancelled = true; };
+  }, [visible, stylesLoaded]);
 
-    if (products && products.length > 0) {
-      return products.slice(0, 8).map((p: any) => ({
-        title: p.title || p.name || 'Signature Item',
-        price: p.data?.price ? `$${p.data.price}` : '$18.00',
-        badge: p.data?.badge || 'EXCLUSIVE',
-        desc: p.data?.description || p.description || 'Crafted with premium ingredients.',
-        image: p.data?.image_url || p.image_url || 'https://images.unsplash.com/photo-1596040033229-a9821ebd058d?auto=format&fit=crop&w=400&q=80'
-      }));
-    }
-    return [
-      {
-        title: "Golden Turmeric Crunch",
-        price: "$18.00",
-        badge: "BESTSELLER",
-        desc: "Crispy shallots, ground turmeric, and cold-pressed sesame oil.",
-        image: "https://images.unsplash.com/photo-1596040033229-a9821ebd058d?auto=format&fit=crop&w=400&q=80"
-      },
-      {
-        title: "Smoked Chili Oil",
-        price: "$16.00",
-        badge: "EXTRA HOT",
-        desc: "Charred habanero and whole smoked black cardamom.",
-        image: "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=400&q=80"
-      }
-    ];
-  }, [products]);
+  // ── hydrate the last job on open; attach if one is in flight ─────
+  useEffect(() => {
+    if (!visible || !site) return;
+    let cancelled = false;
+    fetch(statusUrl)
+      .then(r => (r.ok ? r.json() : null))
+      .then((st: any) => {
+        if (cancelled || !st || st.error) return;
+        if (st.style) setActiveStyleId(String(st.style).toLowerCase());
+        if (st.description) lastDescriptionRef.current = st.description;
+        if (Array.isArray(st.section_kinds) && st.section_kinds.length) setSections(st.section_kinds);
+        if (Array.isArray(st.pages) && st.pages.length) setLiveReady(true);
+        const running = ['queued', 'matching', 'briefing', 'synthesizing', 'assembling'].includes(st.status);
+        if (running) {
+          setPhase('generating');
+          setProgressText(progressLine(st));
+          startPolling();
+        }
+      })
+      .catch(() => null);
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, site]);
 
-  // Smart domain-aware site generator for when products are empty or offline
-  const generateDomainSiteMd = (
-    brand: string,
-    styleItem: ReferoStyleItem,
-    subdomainStr: string,
-    customPrompt?: string
-  ): string => {
-    const promptLower = (customPrompt || '').toLowerCase();
-    const isMatcha = promptLower.includes('matcha') || promptLower.includes('tea') || promptLower.includes('hojicha') || promptLower.includes('yuzu') || promptLower.includes('japanese');
-    const isCafe = brand.toLowerCase().includes('cafe') || brand.toLowerCase().includes('coffee') || styleItem.id === 'redbrick' || promptLower.includes('coffee') || promptLower.includes('espresso');
-    const isFashion = styleItem.category === 'Apparel' || styleItem.id === 'adanola' || styleItem.id === 'cos' || styleItem.id === 'arte' || promptLower.includes('apparel') || promptLower.includes('clothing');
+  useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
 
-    const brandDisplay = brand || (isMatcha ? 'Matcha Studio' : isCafe ? 'The Roast Room Cafe' : isFashion ? 'Atelier Studio' : 'Craft & Goods');
-
-    if (isMatcha) {
-      return `---
-brand: "${brandDisplay}"
-tagline: "Ceremonial Uji Matcha, Roasted Hojicha & Japanese Daily Bakes"
-style: "${styleItem.file}"
-subdomain: "${subdomainStr}"
-currency: "USD"
-cart_mode: "drawer"
-
-nav:
-  - label: "Tea Bar Menu"
-    link: "#menu"
-  - label: "Ceremonial Tins"
-    link: "#products"
-  - label: "Our Story"
-    link: "#story"
-  - label: "Tea House & Hours"
-    link: "#location"
-
-header_cta:
-  label: "Order Ahead"
-  link: "#menu"
-  type: "pill"
----
-
-# 1. Announcement (marquee)
-items:
-  - text: "🍵 Fresh Spring Harvest: First-Flush Ceremonial Uji Matcha now whisked daily"
-  - text: "🍋 Yuzu Glazed Choux & Sourdough Pastries warm out of the oven at 8:00 AM"
-
-# 2. Hero (poster)
-headline: "${customPrompt ? customPrompt.toUpperCase() : 'CEREMONIAL MATCHA & ARTISAN BAKES'}"
-lead: "Single-cultivar ceremonial matcha stone-milled in Kyoto, rich roasted hojicha lattes, and hand-laminated yuzu pastries crafted fresh every morning."
-cta_primary:
-  label: "Explore Ceremonial Tins — $28"
-  link: "#products"
-cta_secondary:
-  label: "View Tea Bar Menu"
-  link: "#menu"
-image: "https://images.unsplash.com/photo-1576092768241-dec231879fc3?auto=format&fit=crop&w=900&q=80"
-
-# 3. Japanese Tea Bar & Patisserie (menu)
-category: "Ceremonial Tea Bar & Daily Bakes"
-items:
-  - item: "Ceremonial Uji Matcha Latte"
-    price: "$6.50"
-    tag: "FIRST FLUSH"
-    desc: "Single-origin Okumidori cultivar whisked with organic oat milk and raw cane syrup."
-  - item: "Kyoto Roasted Hojicha Latte"
-    price: "$6.00"
-    tag: "SIGNATURE"
-    desc: "Deeply roasted green tea with warm caramel and nutty tasting notes."
-  - item: "Sparkling Yuzu Matcha Tonic"
-    price: "$7.00"
-    tag: "SEASONAL"
-    desc: "Cold-whisked ceremonial matcha over sparkling water and fresh Kochi yuzu juice."
-  - item: "Yuzu Sesame Sourdough Pastry"
-    price: "$5.50"
-    tag: "FRESH BAKED"
-    desc: "Flaky layered laminate filled with tart yuzu curd and roasted black sesame."
-  - item: "Hojicha Basque Cheesecake"
-    price: "$6.75"
-    tag: "HOUSE FAV"
-    desc: "Caramelized crust with a silky, tea-infused molten center."
-
-# 4. Whisk at Home Tins (grid)
-items:
-  - title: "First-Flush Ceremonial Matcha (30g)"
-    price: "$28.00"
-    badge: "UJI DIRECT"
-    desc: "Stone-milled Okumidori cultivar. Vibrant jade green with deep umami and zero astringency."
-    image: "https://images.unsplash.com/photo-1536256263959-770b48d82b0a?auto=format&fit=crop&w=400&q=80"
-  - title: "Single-Origin Hojicha Powder (50g)"
-    price: "$22.00"
-    badge: "SLOW ROAST"
-    desc: "Charcoal-roasted bancha tea leaves milled for lattes, baking, and desserts."
-    image: "https://images.unsplash.com/photo-1582793988951-9aed5509eb97?auto=format&fit=crop&w=400&q=80"
-  - title: "Bamboo Chasen Whisk & Spoon Set"
-    price: "$24.00"
-    badge: "HANDCRAFTED"
-    desc: "100-prong golden bamboo whisk and carved measuring chashaku."
-    image: "https://images.unsplash.com/photo-1515694346937-94d85e41e6f0?auto=format&fit=crop&w=400&q=80"
-
-# 5. Sourcing & Philosophy (bento)
-title: "The Art of the Whisk"
-subtitle: "Direct-trade tea leaves harvested from multi-generational family farms in Kyoto"
-cards:
-  - title: "100% Stone-Milled in Uji"
-    desc: "Ground slowly on traditional granite mills to preserve volatile aroma and chlorophyll."
-    stat: "100% Uji"
-  - title: "Spring First Flush Only"
-    desc: "Shade-grown for 28 days before harvest to maximize L-theanine and natural sweetness."
-    stat: "1st Flush"
-  - title: "Daily Scratch Baking"
-    desc: "French laminating technique paired with Japanese citrus, sesame, and tea."
-    stat: "Baked 6 AM"
-
-# 6. Brand Heritage (story)
-headline: "HONORING THE TEA TRADITION WITH MODERN RESTRAINT"
-desc: "We founded our tea house to celebrate the mindful ritual of ceremonial tea. Every bowl is whisked by hand with pristine mountain water, bringing ancient Japanese tea craft into modern daily life."
-author: "Master Tea Blender & Founder"
-image: "https://images.unsplash.com/photo-1544787219-7f47ccb76574?auto=format&fit=crop&w=800&q=80"
-
-# 7. Reviews (testimonials)
-title: "Press & Tea Enthusiast Reviews"
-quotes:
-  - quote: "The smoothest, richest ceremonial matcha in California. The yuzu pastry is world class."
-    author: "Culinary Review San Francisco"
-    rating: 5
-  - quote: "The hojicha latte paired with the basque cheesecake is our weekly meditation ritual."
-    author: "Kenji Sato"
-    rating: 5
-
-# 8. Tea House Studio (location)
-title: "Visit The Tea House"
-address: "510 Laguna Street, San Francisco, CA 94102"
-hours: "Tuesday – Sunday: 8:00 AM – 6:00 PM"
-phone: "+1 (415) 555-0382"
-
-# 9. FAQ (faq)
-questions:
-  - q: "What makes ceremonial grade different from culinary matcha?"
-    a: "Our ceremonial matcha is harvested exclusively during the first spring harvest from shade-grown tender leaves, yielding vivid green color, sweet umami, and zero bitterness."
-  - q: "Do you have gluten-free or dairy-free options?"
-    a: "Yes, all our tea lattes are crafted with organic oat or house-made almond milk, and we offer daily gluten-free pastries."
-`;
-    }
-
-    if (isCafe) {
-      return `---
-brand: "${brandDisplay}"
-tagline: "Single-Origin Espresso & Fresh Daily Bakes"
-style: "${styleItem.file}"
-subdomain: "${subdomainStr}"
-currency: "USD"
-cart_mode: "drawer"
-
-nav:
-  - label: "Menu"
-    link: "#menu"
-  - label: "Beans & Drops"
-    link: "#products"
-  - label: "Our Story"
-    link: "#story"
-  - label: "Hours & Location"
-    link: "#location"
-
-header_cta:
-  label: "Order Ahead"
-  link: "#menu"
-  type: "pill"
----
-
-# 1. Announcement (marquee)
-items:
-  - text: "☕ Fresh Roasts Live: Ethiopian Yirgacheffe roasted this morning"
-  - text: "🥐 Sourdough Pastries warm out of the oven at 7:30 AM"
-
-# 2. Hero (poster)
-headline: "${customPrompt ? customPrompt.toUpperCase() : 'SLOW ROASTS & MORNING RITUALS'}"
-lead: "Direct-trade single origin beans roasted in-house daily. Handcrafted espresso, organic oat lattes, and artisan baked goods."
-cta_primary:
-  label: "Explore Whole Beans — $19"
-  link: "#products"
-cta_secondary:
-  label: "View Cafe Menu"
-  link: "#menu"
-image: "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?auto=format&fit=crop&w=900&q=80"
-
-# 3. Espresso & Brew Bar (menu)
-category: "Espresso & Hand Pour Bar"
-items:
-  - item: "Cortado / Flat White"
-    price: "$4.75"
-    tag: "SIGNATURE"
-    desc: "Double shot single-origin espresso with velvety steamed whole milk."
-  - item: "Single-Origin Pour Over"
-    price: "$5.50"
-    tag: "ROTATING"
-    desc: "Rotating microlot with delicate floral and stonefruit tasting notes."
-  - item: "Cardamom Cold Brew"
-    price: "$5.25"
-    tag: "HOUSE FAV"
-    desc: "16-hour slow steep with crushed organic green cardamom."
-  - item: "Brown Butter Almond Croissant"
-    price: "$4.50"
-    tag: "FRESH BAKED"
-    desc: "Twice-baked butter croissant with rich almond frangipane."
-
-# 4. Whole Bean Drops (grid)
-items:
-  - title: "Guji Highland Natural"
-    price: "$19.00"
-    badge: "LIGHT ROAST"
-    desc: "Notes of blueberry jam, Meyer lemon, and wild honey."
-    image: "https://images.unsplash.com/photo-1559056199-641a0ac8b55e?auto=format&fit=crop&w=400&q=80"
-  - title: "Antioquia Reserva"
-    price: "$18.00"
-    badge: "MEDIUM ROAST"
-    desc: "Milk chocolate, toasted hazelnut, and brown sugar finish."
-    image: "https://images.unsplash.com/photo-1587734195503-904fca47e0e9?auto=format&fit=crop&w=400&q=80"
-  - title: "Sumatra Mandheling Dark"
-    price: "$20.00"
-    badge: "DARK ROAST"
-    desc: "Cedar, dark cocoa, and lingering sweet spice aroma."
-    image: "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=400&q=80"
-
-# 5. Roasting & Craft (bento)
-title: "From Farm to Cup"
-subtitle: "Transparent sourcing and small-batch roasting"
-cards:
-  - title: "100% Direct Trade"
-    desc: "Direct partnership with generational smallholder coffee farms."
-    stat: "100%"
-  - title: "Roasted Weekly"
-    desc: "Never shipped or served more than 7 days past roast date."
-    stat: "7 Days"
-  - title: "Zero Defect Sorting"
-    desc: "Hand-sorted and sample-cupped for peak sweetness."
-    stat: "88+ Q-Score"
-
-# 6. Brand Heritage (story)
-headline: "CRAFTED FOR THE MORNING PURIST"
-desc: "We started with a single cast-iron roaster and a simple mission: celebrate the nuance of exceptional coffee without pretension. Every cup is poured with intention."
-author: "Head Roaster & Founder"
-image: "https://images.unsplash.com/photo-1442512595331-e89e73853f31?auto=format&fit=crop&w=800&q=80"
-
-# 7. Reviews (testimonials)
-title: "Community & Press Reviews"
-quotes:
-  - quote: "The cleanest, brightest pour over in the city. The Guji Natural is unforgettable."
-    author: "James Peterson"
-    rating: 5
-  - quote: "Their cardamom cold brew is a daily ritual. Flawless hospitality and vibe."
-    author: "Maya Lin"
-    rating: 5
-
-# 8. Flagship Cafe & Studio (location)
-title: "Visit The Cafe & Roastery"
-address: "742 Valencia Street, San Francisco, CA 94110"
-hours: "Monday – Sunday: 7:00 AM – 6:00 PM"
-phone: "+1 (415) 555-0192"
-
-# 9. FAQ (faq)
-questions:
-  - q: "What grind size should I choose?"
-    a: "We recommend whole beans for maximum aroma, or select Drip/Espresso grind at checkout."
-  - q: "Do you offer plant-based milk options?"
-    a: "Yes, house-made oat and almond milks are crafted daily with no upcharge."
-`;
-    }
-
-    if (isFashion) {
-      return `---
-brand: "${brandDisplay}"
-tagline: "Architectural Tailoring & Everyday Essentials"
-style: "${styleItem.file}"
-subdomain: "${subdomainStr}"
-currency: "USD"
-cart_mode: "drawer"
-
-nav:
-  - label: "Collection"
-    link: "#products"
-  - label: "Lookbook"
-    link: "#story"
-  - label: "Atelier"
-    link: "#location"
-
-header_cta:
-  label: "Shop Drop"
-  link: "#products"
-  type: "pill"
----
-
-# 1. Announcement (marquee)
-items:
-  - text: "✦ Autumn / Winter Capsule 04 is now live worldwide"
-  - text: "✦ Complimentary courier shipping on orders over $150"
-
-# 2. Hero (poster)
-headline: "${customPrompt ? customPrompt.toUpperCase() : 'FORM, FUNCTION & RESTRAINT'}"
-lead: "Engineered silhouettes crafted from heavyweight Japanese cotton and organic virgin wool."
-cta_primary:
-  label: "Shop Capsule — $120"
-  link: "#products"
-cta_secondary:
-  label: "View Lookbook"
-  link: "#story"
-image: "https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&w=900&q=80"
-
-# 3. Category Filter (category)
-tabs:
-  - "All"
-  - "Outerwear"
-  - "Tailored Trousers"
-  - "Heavyweight Knits"
-
-# 4. Products (grid)
-items:
-  - title: "Heavyweight Boxy Overshirt"
-    price: "$145.00"
-    badge: "CORE ESSENTIAL"
-    desc: "420gsm organic structured cotton with concealed horn buttons."
-    image: "https://images.unsplash.com/photo-1591047139829-d91aecb6caea?auto=format&fit=crop&w=400&q=80"
-  - title: "Pleated Relaxed Trouser"
-    price: "$160.00"
-    badge: "LIMITED"
-    desc: "Double-pleated Italian wool blend with tailored drape."
-    image: "https://images.unsplash.com/photo-1509631179647-0177331693ae?auto=format&fit=crop&w=400&q=80"
-  - title: "Merino Mockneck Knit"
-    price: "$130.00"
-    badge: "RESTOCK"
-    desc: "100% extrafine Australian merino wool with seamless knit construction."
-    image: "https://images.unsplash.com/photo-1576995853123-5a10305d93c0?auto=format&fit=crop&w=400&q=80"
-
-# 5. Sourcing & Craft (bento)
-title: "Material Integrity"
-subtitle: "Built to endure seasons, not trends"
-cards:
-  - title: "Zero Synthetic Blends"
-    desc: "Pure natural fibers sourced from certified heritage mills."
-    stat: "100% Natural"
-  - title: "Ethical Manufacturing"
-    desc: "Crafted in family-owned ateliers in Portugal and Japan."
-    stat: "GOTS Certified"
-  - title: "Lifetime Repair Guarantee"
-    desc: "Complimentary repair service on all seam and stitch wear."
-    stat: "Guaranteed"
-
-# 6. Brand Heritage (story)
-headline: "DESIGNED IN RESTRAINT"
-desc: "We reject the cycle of seasonal excess. Every piece in our collection is refined over months of prototyping until only the essential remains."
-author: "Design Studio"
-image: "https://images.unsplash.com/photo-1490481651871-ab68de25d43d?auto=format&fit=crop&w=800&q=80"
-
-# 7. Reviews (testimonials)
-title: "Press & Client Notes"
-quotes:
-  - quote: "The fabric weight and drape are comparable to luxury fashion houses at triple the price."
-    author: "Monocle Dossier"
-    rating: 5
-  - quote: "Flawless minimal tailoring. The trousers are a masterpiece."
-    author: "Marcus Chen"
-    rating: 5
-
-# 8. Storefront Studio (location)
-title: "Visit The Flagship Atelier"
-address: "18 Mercer Street, New York, NY 10013"
-hours: "Tuesday – Saturday: 11:00 AM – 7:00 PM"
-phone: "+1 (212) 555-0144"
-
-# 9. FAQ (faq)
-questions:
-  - q: "How do your sizing and fits run?"
-    a: "Our silhouettes feature a relaxed, contemporary drape. We recommend your true size."
-  - q: "What is your worldwide shipping policy?"
-    a: "Orders ship carbon-neutral via DHL Express with all duties pre-paid."
-`;
-    }
-
-    // Default High-End Goods Template
-    const productListYaml = productItems.map(it => `  - title: "${it.title}"\n    price: "${it.price}"\n    badge: "${it.badge}"\n    desc: "${it.desc}"\n    image: "${it.image}"`).join('\n');
-
-    return `---
-brand: "${brandDisplay}"
-tagline: "Formulated with Intention and Uncompromising Quality"
-style: "${styleItem.file}"
-subdomain: "${subdomainStr}"
-currency: "USD"
-cart_mode: "drawer"
-
-nav:
-  - label: "Shop Drops"
-    link: "#products"
-  - label: "Our Story"
-    link: "#story"
-  - label: "Locations"
-    link: "#location"
-
-header_cta:
-  label: "Quick Order"
-  link: "#products"
-  type: "pill"
----
-
-# 1. Announcement (marquee)
-items:
-  - text: "🔥 Batch Live: Complimentary worldwide shipping over $50"
-  - text: "📦 Same-day dispatch on all orders"
-
-# 2. Hero (poster)
-headline: "${customPrompt ? customPrompt.toUpperCase() : brandDisplay.toUpperCase()}"
-lead: "Small-batch formulations crafted with heirloom ingredients and uncompromising precision."
-cta_primary:
-  label: "Shop The Drops — $18"
-  link: "#products"
-cta_secondary:
-  label: "Explore Story"
-  link: "#story"
-
-# 3. Category Filter (category)
-tabs:
-  - "All"
-  - "Signature Drops"
-  - "Small Batches"
-  - "Refills"
-
-# 4. Products (grid)
-items:
-${productListYaml}
-
-# 5. Brand Heritage (story)
-headline: "CRAFTED IN SMALL ARTISANAL BATCHES"
-desc: "Founded on the belief that real quality comes from patient craft and uncompromising heirloom ingredients. Handcrafted with precision."
-author: "Founder & Master Blender"
-image: "https://images.unsplash.com/photo-1556910103-1c02745aae4d?auto=format&fit=crop&w=800&q=80"
-
-# 6. Sourcing & Craft (bento)
-title: "Sourcing & Craft"
-subtitle: "Every item is formulated in small intentional batches"
-cards:
-  - title: "100% Pure Sourcing"
-    desc: "Directly sourced from organic certified family farms."
-    stat: "100%"
-  - title: "Slow Process"
-    desc: "Crafted patiently for unmatched quality."
-    stat: "Small Batch"
-  - title: "Zero Fillers"
-    desc: "Pure natural components and cold extracted botanicals."
-    stat: "0 Chemical"
-
-# 7. Reviews (testimonials)
-title: "Community Reviews"
-quotes:
-  - quote: "The highest quality product in this category. Absolutely phenomenal."
-    author: "Elena Rostova"
-    rating: 5
-  - quote: "A staple in our daily routine. Unmatched depth and aroma."
-    author: "Marcus Lin"
-    rating: 5
-
-# 8. Storefront & Studio (location)
-title: "Storefront & Studio"
-address: "482 Market Street, San Francisco, CA 94105"
-hours: "Tuesday – Sunday: 11:00 AM – 8:00 PM"
-phone: "+1 (415) 890-4421"
-
-# 9. FAQ (faq)
-questions:
-  - q: "How long does each batch take to craft?"
-    a: "Every batch undergoes slow extraction and rigorous testing before bottling."
-  - q: "Are all formulations vegan & cruelty-free?"
-    a: "Yes, 100% of our products are certified vegan and cruelty-free."
-`;
+  const stopPolling = () => {
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
   };
 
-  // Re-point an existing site.md at a new style WITHOUT regenerating content.
-  const applyStyleToSiteMd = (baseMd: string, styleItem: ReferoStyleItem): string => {
-    if (/^style:\s*["']?/m.test(baseMd)) {
-      return baseMd.replace(/^style:\s*["']?[^\n"'`]+["']?/m, `style: "${styleItem.file}"`);
-    }
-    return baseMd.replace(/^---\s*$/m, `---\nstyle: "${styleItem.file}"`);
-  };
+  const defaultDescription = useMemo(() => {
+    const items = (products || []).slice(0, 8).map((p: any) => p.title || p.name).filter(Boolean);
+    return `${workspaceName || 'storefront'} — a business workspace${items.length ? ` offering: ${items.join(', ')}` : ''}.`;
+  }, [products, workspaceName]);
 
-  // 1-Tap Publish to Cloudflare Edge with Groq Qwen planner support.
-  // Invariant: existing OKF site.md content is NEVER discarded — style switches
-  // only mutate the frontmatter `style:` line; AI edits are applied on top of
-  // the current document (the server rejects section-losing mutations).
-  const handlePublishLive = async (styleToUse = activeStyle, promptText?: string) => {
-    setPublishState('publishing');
-
+  // ── publish: promote the finished draft (no generation) ──────────
+  const publishNow = useCallback(async () => {
+    setPhase('publishing');
+    setProgressText('Publishing…');
     try {
-      // 1. Load the current document from OKF as the base for this update.
-      let baseSiteMd: string | null = null;
-      if (scope) {
-        try {
-          const res: any = await tar.okf.read(scope, 'site.md');
-          if (res?.content && res.content.length > 200) baseSiteMd = res.content;
-        } catch { /* no existing site.md yet */ }
-      }
-
-      let siteMd: string;
-      if (baseSiteMd && !promptText?.trim()) {
-        // Style switch (or re-publish): keep ALL content, swap the design system only.
-        siteMd = applyStyleToSiteMd(baseSiteMd, styleToUse);
-      } else if (baseSiteMd) {
-        // AI edit: start from the live document so nothing is lost.
-        siteMd = baseSiteMd;
-      } else {
-        // First publish: generate a vertical-appropriate starter document.
-        siteMd = generateDomainSiteMd(workspaceName, styleToUse, cleanSubdomain, promptText);
-      }
-
-      // 2. If the user provided a prompt, let the planner surgically mutate the doc.
-      if (promptText && promptText.trim()) {
-        try {
-          const plannerRes = await fetch(`${SITEAGENT_URL}/planner`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              currentSiteMarkdown: siteMd,
-              instruction: promptText.trim(),
-              brandName: workspaceName || 'Storefront',
-              styleName: styleToUse.file,
-              vertical: styleToUse.category
-            })
-          });
-
-          if (plannerRes.ok) {
-            const plannerData: any = await plannerRes.json();
-            if (plannerData?.updatedSiteMarkdown && plannerData.updatedSiteMarkdown.length > 100) {
-              siteMd = plannerData.updatedSiteMarkdown;
-            }
-          } else {
-            throw new Error(`Planner HTTP ${plannerRes.status}`);
-          }
-        } catch (planErr) {
-          console.warn('Planner request warning, using current document:', planErr);
-          setPublishState('error');
-          setTimeout(() => setPublishState('idle'), 2500);
-          return;
-        }
-      }
-
-      // 3. Persist to OKF (awaited — the next publish must see this version).
-      if (scope) {
-        try {
-          await tar.okf.upload(scope, 'site.md', siteMd);
-        } catch (e: any) {
-          console.warn('OKF site.md upload error:', e);
-        }
-      }
-
-      // 4. Compile & push to the edge.
-      const res = await fetch(`${SITEAGENT_URL}/publish`, {
+      const res = await fetch(`${SITE_API}/site/publish`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          siteMarkdown: siteMd,
-          styleName: styleToUse.file,
-          route: '/'
-        })
+        body: JSON.stringify({ site }),
       });
+      const body = await res.json().catch(() => null);
+      if (res.ok) {
+        setLiveReady(true);
+        setPreviewStamp(Date.now());
+        setProgressText('');
+        setPhase('published');
+        setTimeout(() => setPhase('idle'), 2500);
+      } else {
+        setProgressText(body?.error || 'Publish failed — tap Publish to retry');
+        setPhase('error');
+      }
+    } catch (e: any) {
+      setProgressText(e?.message || 'Network error');
+      setPhase('error');
+    }
+  }, [site]);
 
+  // ── poll the running job; auto-publish the moment it lands ───────
+  const startPolling = useCallback(() => {
+    stopPolling();
+    const deadline = Date.now() + 10 * 60 * 1000;
+    pollRef.current = setInterval(async () => {
+      try {
+        if (Date.now() > deadline) {
+          stopPolling();
+          setProgressText('Still working — the worker resumes automatically; tap Publish to re-attach');
+          setPhase('error');
+          return;
+        }
+        const r = await fetch(statusUrl);
+        if (!r.ok) return;
+        const st = await r.json();
+        if (Array.isArray(st.section_kinds)) setSections(st.section_kinds);
+        if (st.status === 'failed') {
+          stopPolling();
+          setProgressText(st.error || 'Generation failed — tap Publish to resume from the checkpoint');
+          setPhase('error');
+          return;
+        }
+        if (st.status === 'done') {
+          stopPolling();
+          await publishNow();
+          return;
+        }
+        setProgressText(progressLine(st));
+      } catch {}
+    }, 3000);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusUrl, publishNow]);
+
+  // ── kick off (or resume) a generation job, then poll ─────────────
+  const startGeneration = async (description: string, styleId: string | undefined, fresh: boolean) => {
+    setPhase('generating');
+    setProgressText(fresh ? 'Planning…' : 'Resuming…');
+    try {
+      const res = await fetch(`${SITE_API}/site/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ site, description, style_hint: styleId, fresh }),
+      });
+      const started = await res.json().catch(() => null);
       if (!res.ok) {
-        const detail = await res.text().catch(() => '');
-        console.warn('Publish failed:', res.status, detail);
-        setPublishState('error');
-        setTimeout(() => setPublishState('idle'), 2500);
+        setProgressText(started?.error || 'Failed to start generation');
+        setPhase('error');
         return;
       }
-
-      // Persist the chosen design system into OKF as the workspace's design.md
-      // (per-workspace artifact, editable by agents, source of truth for tokens).
-      if (scope) {
-        fetch(`${SITEAGENT_URL}/design/${styleToUse.file}`)
-          .then(r => (r.ok ? r.text() : Promise.reject(new Error(`HTTP ${r.status}`))))
-          .then(designMd => tar.okf.upload(scope, 'design.md', designMd))
-          .catch((e: any) => console.warn('OKF design.md upload error:', e));
+      if (started?.status === 'done' || started?.url) {
+        setLiveReady(true);
+        setPreviewStamp(Date.now());
+        setProgressText('');
+        setPhase('published');
+        setTimeout(() => setPhase('idle'), 2500);
+        return;
       }
-
-      setLastPublishedAt(Date.now());
-      setPublishState('published');
-      setTimeout(() => setPublishState('idle'), 2000);
-    } catch (e) {
-      console.warn('Publish error:', e);
-      setPublishState('error');
-      setTimeout(() => setPublishState('idle'), 2500);
+      startPolling();
+    } catch (e: any) {
+      setProgressText(e?.message || 'Network error');
+      setPhase('error');
     }
   };
 
-  const handleSelectStyle = (style: ReferoStyleItem) => {
-    setActiveStyle(style);
+  // Publish never regenerates: it promotes a finished draft, attaches to
+  // a running job, or resumes a failed one. Fresh generation only on
+  // explicit intent — an AI prompt or a different style.
+  const handlePublish = async (promptText?: string, styleId?: string, forceGenerate = false) => {
+    stopPolling();
+    if (promptText || forceGenerate) {
+      const description = promptText
+        ? (lastDescriptionRef.current
+            ? `${lastDescriptionRef.current}\n\nChange request: ${promptText}`
+            : promptText)
+        : (lastDescriptionRef.current || defaultDescription);
+      lastDescriptionRef.current = description;
+      await startGeneration(description, styleId || activeStyleId || undefined, true);
+      return;
+    }
+
+    let job: any = null;
+    try {
+      const st = await fetch(statusUrl);
+      if (st.ok) job = await st.json().catch(() => null);
+    } catch {}
+
+    if (job?.status === 'done') { await publishNow(); return; }
+
+    if (job && job.status !== 'failed' && job.status !== 'error') {
+      setPhase('generating');
+      setProgressText(progressLine(job));
+      startPolling();
+      return;
+    }
+
+    if (job?.status === 'failed') {
+      setProgressText('Resuming from checkpoint…');
+      await startGeneration(String(job.description || defaultDescription), activeStyleId || undefined, false);
+      return;
+    }
+
+    const description = lastDescriptionRef.current || defaultDescription;
+    lastDescriptionRef.current = description;
+    await startGeneration(description, activeStyleId || undefined, false);
+  };
+
+  const handleSelectStyle = (item: SiteStyleItem) => {
+    const unchanged = item.id === activeStyleId;
+    setActiveStyleId(item.id);
     setShowCatalogModal(false);
-    handlePublishLive(style);
+    if (!unchanged) handlePublish(undefined, item.id, true);
+  };
+
+  // ── per-section edit (single-section regeneration) ───────────────
+  const submitSectionEdit = async () => {
+    if (!editSection || !editInstruction.trim()) return;
+    const target = editSection;
+    const instruction = editInstruction.trim();
+    setEditSection(null);
+    setEditInstruction('');
+    setPhase('generating');
+    setProgressText(`Rebuilding ${target.kind}…`);
+    try {
+      const res = await fetch(`${SITE_API}/site/edit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ site, section_id: target.id, instruction }),
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) {
+        setProgressText(body?.error || 'Edit failed');
+        setPhase('error');
+        return;
+      }
+      setPreviewStamp(Date.now());
+      setPhase('published');
+      setProgressText(body?.used_fallback ? `${target.kind} rebuilt (simplified)` : `${target.kind} rebuilt`);
+      setTimeout(() => setPhase('idle'), 2500);
+      const st = await fetch(statusUrl).then(r => r.ok ? r.json() : null).catch(() => null);
+      if (st?.section_kinds) setSections(st.section_kinds);
+    } catch (e: any) {
+      setProgressText(e?.message || 'Network error');
+      setPhase('error');
+    }
   };
 
   if (!visible) return null;
 
+  const busy = phase === 'generating' || phase === 'publishing';
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
-      <View style={[styles.container, { paddingTop: Math.max(insets.top, 16), paddingBottom: Math.max(insets.bottom, 12) }]}>
-        
-        {/* Top Header Bar: Clean Domain + Text-Only State Transition + Arrow-Alone Open */}
-        <View style={styles.header}>
-          <Text style={styles.headerTitle} numberOfLines={1}>
-            {cleanSubdomain}.tarai.space
-          </Text>
+      <View style={[styles_.container, { paddingTop: Math.max(insets.top, 16), paddingBottom: Math.max(insets.bottom, 12) }]}>
 
-          <View style={styles.headerRightActions}>
-            {/* Text-Only Publish Button with State Cycle: Publish -> Publishing... -> Published -> Publish */}
-            <TouchableOpacity
-              onPress={() => handlePublishLive()}
-              disabled={publishState === 'publishing'}
-              style={styles.publishTextBtn}
-              activeOpacity={0.7}
-            >
-              <Text style={[
-                styles.publishTextBtnLabel,
-                publishState === 'published' && { color: '#16a34a' },
-                publishState === 'error' && { color: '#dc2626' }
-              ]}>
-                {publishState === 'publishing' ? 'Publishing...' : publishState === 'published' ? 'Published' : publishState === 'error' ? 'Failed — Retry' : 'Publish'}
+        {/* Header */}
+        <View style={styles_.header}>
+          <View style={styles_.headerTitleWrap}>
+            <Text style={styles_.headerTitle} numberOfLines={1}>{site}</Text>
+            <Text style={styles_.headerSub} numberOfLines={1}>siteagent studio</Text>
+            {busy && (
+              <View style={styles_.headerProgressRow}>
+                <ActivityIndicator size="small" color="#0f172a" />
+                <Text style={styles_.headerProgressText} numberOfLines={1}>{progressText || 'Working…'}</Text>
+              </View>
+            )}
+            {phase === 'error' && !!progressText && (
+              <Text style={[styles_.headerProgressText, { color: '#dc2626' }]} numberOfLines={2}>{progressText}</Text>
+            )}
+          </View>
+
+          <View style={styles_.headerRightActions}>
+            <TouchableOpacity onPress={() => handlePublish()} disabled={busy} style={styles_.publishTextBtn} activeOpacity={0.7}>
+              <Text style={[styles_.publishTextBtnLabel, phase === 'published' && { color: '#16a34a' }]}>
+                {phase === 'generating' ? 'Generating…' : phase === 'publishing' ? 'Publishing…' : phase === 'published' ? 'Published' : 'Publish'}
               </Text>
             </TouchableOpacity>
-
-            {/* Arrow-Alone Open Button */}
             <TouchableOpacity
-              onPress={() => {
-                const freshUrl = `${SITEAGENT_URL}/?ws=${cleanSubdomain}&t=${Date.now()}`;
-                Linking.openURL(freshUrl);
-              }}
-              style={styles.arrowOnlyBtn}
+              onPress={() => Linking.openURL(previewUrl)}
+              style={styles_.arrowOnlyBtn}
               activeOpacity={0.7}
-              accessibilityLabel="Open Storefront in Browser"
+              accessibilityLabel="Open preview in browser"
             >
-              <Text style={styles.arrowOnlyGlyph}>↗</Text>
+              <Text style={styles_.arrowOnlyGlyph}>↗</Text>
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* Main Content Area */}
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          style={styles.mainScroll}
-          contentContainerStyle={styles.mainScrollContent}
-        >
-          {/* Design System Block */}
-          <View style={styles.sectionBlock}>
-            <Text style={styles.sectionLabel}>Design System</Text>
-            
-            <TouchableOpacity
-              onPress={() => setShowCatalogModal(true)}
-              style={styles.styleCard}
-              activeOpacity={0.75}
-            >
-              <View style={styles.styleCardLeft}>
-                <View style={[styles.styleColorDot, { backgroundColor: activeStyle.accent }]} />
-                <View>
-                  <Text style={styles.styleCardName}>{activeStyle.name}</Text>
-                  <Text style={styles.styleCardVibe}>{activeStyle.vibe}</Text>
+        <ScrollView showsVerticalScrollIndicator={false} style={styles_.mainScroll} contentContainerStyle={styles_.mainScrollContent}>
+
+          {/* Design System */}
+          <View style={styles_.sectionBlock}>
+            <Text style={styles_.sectionLabel}>Design System</Text>
+            <TouchableOpacity onPress={() => setShowCatalogModal(true)} style={styles_.styleCard} activeOpacity={0.75}>
+              <View style={styles_.styleCardLeft}>
+                <View style={[styles_.styleColorDot, { backgroundColor: themeDot(activeStyle?.theme) }]} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles_.styleCardName}>{activeStyle ? activeStyle.name : 'Auto (matched to your business)'}</Text>
+                  <Text style={styles_.styleCardVibe} numberOfLines={1}>
+                    {activeStyle ? activeStyle.vibe : 'siteagent picks the best of 25 references'}
+                  </Text>
                 </View>
               </View>
-
-              <View style={styles.changeStylePill}>
-                <Text style={styles.changeStylePillText}>Change</Text>
+              <View style={styles_.changeStylePill}>
+                <Text style={styles_.changeStylePillText}>Change</Text>
                 <Ionicons name="chevron-forward" size={13} color="#64748b" />
               </View>
             </TouchableOpacity>
           </View>
 
-          {/* Storefront Structure Sections Block */}
-          <View style={styles.sectionBlock}>
-            <View style={styles.sectionLabelRow}>
-              <Text style={styles.sectionLabel}>Storefront Structure</Text>
-              <Text style={styles.sectionCountText}>9 Sections</Text>
+          {/* Site Structure — live from the job; tap a section to edit it */}
+          <View style={styles_.sectionBlock}>
+            <View style={styles_.sectionLabelRow}>
+              <Text style={styles_.sectionLabel}>Site Structure</Text>
+              <Text style={styles_.sectionCountText}>
+                {sections.length ? `${sections.length} Sections · tap to edit` : 'AI-planned'}
+              </Text>
             </View>
 
-            <View style={styles.sectionsContainer}>
-              {[
-                { title: 'Announcement Marquee', sub: 'Worldwide shipping bar' },
-                { title: 'Hero Poster Banner', sub: 'Headline & shop button' },
-                { title: 'Category Filter Tabs', sub: 'Interactive category filters' },
-                { title: 'Product Catalog Grid', sub: 'Items with 1-tap cart buttons' },
-                { title: 'Brand Heritage & Story', sub: 'Craft & founder origin' },
-                { title: 'Sourcing & Craft (Bento)', sub: '3 feature highlights & stats' },
-                { title: 'Customer Reviews', sub: 'Verified 5-star testimonials' },
-                { title: 'Flagship Studio & Hours', sub: 'Address, hours & reservation' },
-                { title: 'FAQ & Accordion', sub: 'Shelf-life & vegan info drawers' },
-              ].map((sec, idx) => (
-                <View key={idx} style={[styles.sectionRow, idx === 8 && { borderBottomWidth: 0 }]}>
-                  <Text style={styles.sectionIndex}>{idx + 1}</Text>
+            <View style={styles_.sectionsContainer}>
+              {sections.length === 0 ? (
+                <View style={styles_.sectionRow}>
+                  <Text style={styles_.sectionIndex}>·</Text>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.sectionRowTitle}>{sec.title}</Text>
-                    <Text style={styles.sectionRowSub}>{sec.sub}</Text>
+                    <Text style={styles_.sectionRowTitle}>Tap Publish to generate</Text>
+                    <Text style={styles_.sectionRowSub}>siteagent plans every section from your business</Text>
                   </View>
                 </View>
-              ))}
+              ) : (
+                sections.map((sec, idx) => (
+                  <TouchableOpacity
+                    key={sec.id || idx}
+                    onPress={() => { setEditSection(sec); setEditInstruction(''); }}
+                    disabled={busy}
+                    style={[styles_.sectionRow, idx === sections.length - 1 && { borderBottomWidth: 0 }]}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles_.sectionIndex}>{idx + 1}</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles_.sectionRowTitle}>{titleize(sec.kind)}</Text>
+                      <Text style={styles_.sectionRowSub}>{sec.id}</Text>
+                    </View>
+                    {sec.state === 'done' ? (
+                      <Ionicons name="checkmark-circle" size={15} color="#16a34a" />
+                    ) : sec.state === 'failed' ? (
+                      <Ionicons name="alert-circle" size={15} color="#f59e0b" />
+                    ) : (
+                      <ActivityIndicator size="small" color="#94a3b8" />
+                    )}
+                  </TouchableOpacity>
+                ))
+              )}
             </View>
+          </View>
+
+          {/* Links */}
+          <View style={styles_.linksRow}>
+            <TouchableOpacity style={styles_.linkChip} onPress={() => Linking.openURL(previewUrl)} activeOpacity={0.7}>
+              <Ionicons name="eye-outline" size={13} color="#475569" />
+              <Text style={styles_.linkChipText}>Preview draft ↗</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles_.linkChip, liveReady && styles_.linkChipLive]}
+              onPress={() => Linking.openURL(liveUrl)}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="globe-outline" size={13} color={liveReady ? '#16a34a' : '#94a3b8'} />
+              <Text style={[styles_.linkChipText, liveReady && { color: '#16a34a' }]}>Live page ↗</Text>
+            </TouchableOpacity>
           </View>
         </ScrollView>
 
-        {/* Bottom Input matching Workspace screen design & behaviour */}
+        {/* AI prompt */}
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <View style={styles.bottomBarContainer}>
-            <View style={styles.bottomInputBox}>
+          <View style={styles_.bottomBarContainer}>
+            <View style={styles_.bottomInputBox}>
               <TextInput
-                style={styles.bottomInput}
+                style={styles_.bottomInput}
                 value={aiPrompt}
                 onChangeText={setAiPrompt}
-                placeholder="Ask TAR to redesign, add items, or tweak copy..."
+                placeholder="Describe your business, ask for a redesign, or add sections…"
                 placeholderTextColor="#94a3b8"
                 returnKeyType="send"
                 onSubmitEditing={() => {
-                  if (aiPrompt.trim()) {
-                    handlePublishLive(activeStyle, aiPrompt.trim());
+                  if (aiPrompt.trim() && !busy) {
+                    handlePublish(aiPrompt.trim());
                     setAiPrompt('');
                   }
                 }}
               />
               <TouchableOpacity
                 onPress={() => {
-                  if (aiPrompt.trim()) {
-                    handlePublishLive(activeStyle, aiPrompt.trim());
+                  if (aiPrompt.trim() && !busy) {
+                    handlePublish(aiPrompt.trim());
                     setAiPrompt('');
                   }
                 }}
-                style={[styles.sendBtn, !aiPrompt.trim() && { opacity: 0.4 }]}
-                disabled={!aiPrompt.trim()}
+                style={[styles_.sendBtn, (!aiPrompt.trim() || busy) && { opacity: 0.4 }]}
+                disabled={!aiPrompt.trim() || busy}
                 activeOpacity={0.7}
               >
                 <Ionicons name="arrow-up" size={16} color="#ffffff" />
@@ -890,96 +506,137 @@ questions:
           </View>
         </KeyboardAvoidingView>
 
-        {/* ------------------------------------------------------------- */}
-        {/* DESIGN SYSTEMS FLAT LIST DIRECTORY MODAL                      */}
-        {/* ------------------------------------------------------------- */}
+        {/* Section edit modal */}
+        <Modal
+          visible={!!editSection}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setEditSection(null)}
+        >
+          <View style={styles_.editOverlay}>
+            <View style={styles_.editCard}>
+              <Text style={styles_.editTitle}>Edit “{editSection ? titleize(editSection.kind) : ''}”</Text>
+              <Text style={styles_.editSub}>
+                siteagent rebuilds just this section and re-verifies it — seconds, not minutes.
+              </Text>
+              <TextInput
+                style={styles_.editInput}
+                value={editInstruction}
+                onChangeText={setEditInstruction}
+                placeholder={
+                  editSection?.state === 'failed'
+                    ? 'e.g. Rebuild simply: cards with prices, all colors via tokens'
+                    : 'e.g. Make prices bigger, add a third column, change the copy…'
+                }
+                placeholderTextColor="#94a3b8"
+                multiline
+                autoFocus
+              />
+              <View style={styles_.editActions}>
+                <TouchableOpacity style={styles_.editCancelBtn} onPress={() => setEditSection(null)} activeOpacity={0.7}>
+                  <Text style={styles_.editCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles_.editApplyBtn, !editInstruction.trim() && { opacity: 0.4 }]}
+                  disabled={!editInstruction.trim()}
+                  onPress={submitSectionEdit}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles_.editApplyText}>Rebuild section</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        {/* Design-system catalog — straight from the worker */}
         <Modal
           visible={showCatalogModal}
           animationType="slide"
           presentationStyle="pageSheet"
           onRequestClose={() => setShowCatalogModal(false)}
         >
-          <View style={[styles.modalContainer, { paddingTop: Math.max(insets.top, 16) }]}>
-            {/* Modal Header */}
-            <View style={styles.modalHeader}>
+          <View style={[styles_.modalContainer, { paddingTop: Math.max(insets.top, 16) }]}>
+            <View style={styles_.modalHeader}>
               <View>
-                <Text style={styles.modalTitle}>Design Systems</Text>
-                <Text style={styles.modalSubtitle}>{REFERO_STYLES.length} Refero Archetypes</Text>
+                <Text style={styles_.modalTitle}>Design Systems</Text>
+                <Text style={styles_.modalSubtitle}>
+                  {stylesLoaded ? `${styles.length} styles · live from siteagent` : 'Loading catalog…'}
+                </Text>
               </View>
-              <TouchableOpacity onPress={() => setShowCatalogModal(false)} style={styles.modalCloseBtn} activeOpacity={0.7}>
+              <TouchableOpacity onPress={() => setShowCatalogModal(false)} style={styles_.modalCloseBtn} activeOpacity={0.7}>
                 <Ionicons name="close" size={20} color="#0f172a" />
               </TouchableOpacity>
             </View>
 
-            {/* Search Input */}
-            <View style={styles.searchContainer}>
-              <Ionicons name="search" size={16} color="#94a3b8" />
-              <TextInput
-                style={styles.searchInput}
-                value={catalogSearch}
-                onChangeText={setCatalogSearch}
-                placeholder="Search styles, vibes, industries..."
-                placeholderTextColor="#94a3b8"
-                clearButtonMode="while-editing"
-              />
-            </View>
+            {!stylesLoaded ? (
+              <View style={styles_.catalogLoading}>
+                <ActivityIndicator size="small" color="#94a3b8" />
+                <Text style={styles_.catalogLoadingText}>Fetching styles from the worker…</Text>
+              </View>
+            ) : (
+              <>
+                <View style={styles_.searchContainer}>
+                  <Ionicons name="search" size={16} color="#94a3b8" />
+                  <TextInput
+                    style={styles_.searchInput}
+                    value={catalogSearch}
+                    onChangeText={setCatalogSearch}
+                    placeholder="Search styles, vibes, industries…"
+                    placeholderTextColor="#94a3b8"
+                    clearButtonMode="while-editing"
+                  />
+                </View>
 
-            {/* Category Filter Pills */}
-            <View style={styles.categoryPillsWrapper}>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryPillsScroll}>
-                {CATEGORIES.map((cat) => {
-                  const isSelected = catalogCategory === cat;
-                  return (
-                    <TouchableOpacity
-                      key={cat}
-                      onPress={() => setCatalogCategory(cat)}
-                      style={[styles.categoryPill, isSelected && styles.categoryPillActive]}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={[styles.categoryPillText, isSelected && styles.categoryPillTextActive]}>
-                        {cat}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
-            </View>
+                <View style={styles_.categoryPillsWrapper}>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles_.categoryPillsScroll}>
+                    {allTags.map((tag) => {
+                      const isSelected = catalogTag === tag;
+                      return (
+                        <TouchableOpacity
+                          key={tag}
+                          onPress={() => setCatalogTag(tag)}
+                          style={[styles_.categoryPill, isSelected && styles_.categoryPillActive]}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={[styles_.categoryPillText, isSelected && styles_.categoryPillTextActive]}>{tag}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+                </View>
 
-            {/* Flat List of Styles */}
-            <FlatList
-              data={filteredStyles}
-              keyExtractor={(item) => item.id}
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={styles.directoryListContent}
-              renderItem={({ item }) => {
-                const isSelected = item.id === activeStyle.id;
-                return (
-                  <TouchableOpacity
-                    onPress={() => handleSelectStyle(item)}
-                    activeOpacity={0.7}
-                    style={[
-                      styles.directoryItem,
-                      isSelected && [styles.directoryItemSelected, { borderColor: item.accent }],
-                    ]}
-                  >
-                    <View style={[styles.directoryItemColorDot, { backgroundColor: item.accent }]} />
-                    <View style={styles.directoryItemBody}>
-                      <View style={styles.directoryItemTopRow}>
-                        <Text style={[styles.directoryItemName, isSelected && { fontWeight: '700', color: '#0f172a' }]}>
-                          {item.name}
-                        </Text>
-                        <Text style={styles.directoryItemCategory}>{item.category}</Text>
-                      </View>
-                      <Text style={styles.directoryItemVibe}>{item.vibe}</Text>
-                      <Text style={styles.directoryItemFonts}>{item.fonts}</Text>
-                    </View>
-                    {isSelected && (
-                      <Ionicons name="checkmark-circle" size={18} color={item.accent} style={{ marginLeft: 6 }} />
-                    )}
-                  </TouchableOpacity>
-                );
-              }}
-            />
+                <FlatList
+                  data={filteredStyles}
+                  keyExtractor={item => item.id}
+                  showsVerticalScrollIndicator={false}
+                  contentContainerStyle={styles_.directoryListContent}
+                  renderItem={({ item }) => {
+                    const isSelected = item.id === activeStyleId;
+                    return (
+                      <TouchableOpacity
+                        onPress={() => handleSelectStyle(item)}
+                        activeOpacity={0.7}
+                        style={[styles_.directoryItem, isSelected && styles_.directoryItemSelected]}
+                      >
+                        <View style={[styles_.directoryItemColorDot, { backgroundColor: themeDot(item.theme) }]} />
+                        <View style={styles_.directoryItemBody}>
+                          <View style={styles_.directoryItemTopRow}>
+                            <Text style={[styles_.directoryItemName, isSelected && { fontWeight: '700', color: '#0f172a' }]}>
+                              {item.name}
+                            </Text>
+                            <Text style={styles_.directoryItemTheme}>{item.theme}</Text>
+                          </View>
+                          <Text style={styles_.directoryItemVibe} numberOfLines={2}>{item.vibe}</Text>
+                          {!!item.tags && <Text style={styles_.directoryItemFonts} numberOfLines={1}>{item.tags}</Text>}
+                        </View>
+                        {isSelected && <Ionicons name="checkmark-circle" size={18} color="#0f172a" style={{ marginLeft: 6 }} />}
+                      </TouchableOpacity>
+                    );
+                  }}
+                />
+              </>
+            )}
           </View>
         </Modal>
 
@@ -988,13 +645,39 @@ questions:
   );
 }
 
+/** Mirror the worker's siteSlug so KV keys line up exactly. */
+function slugify(s: string): string {
+  return (s || 'store')
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 63) || 'store';
+}
+
+function titleize(kind: string): string {
+  return (kind || '').split(/[-_]/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+}
+
+function progressLine(st: any): string {
+  const done = st?.sections_done || 0;
+  const total = st?.sections_total || 0;
+  if (st?.status === 'briefing') return 'Planning the site…';
+  if (st?.status === 'matching') return 'Matching a design reference…';
+  if (st?.status === 'assembling') return 'Assembling pages…';
+  return st?.style ? `${st.style} — ${done}/${total} sections` : `${done}/${total} sections`;
+}
+
+function themeDot(theme?: string): string {
+  if (theme === 'dark') return '#0f172a';
+  if (theme === 'mixed') return '#0891b2';
+  return '#0f172a';
+}
+
 export default SiteScreen;
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#ffffff',
-  },
+const styles_ = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#ffffff' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1005,300 +688,142 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#f1f5f9',
   },
-  headerTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#0f172a',
-  },
-  headerRightActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-  },
-  publishTextBtn: {
-    paddingVertical: 4,
-    paddingHorizontal: 2,
-  },
-  publishTextBtnLabel: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#0f172a',
-  },
-  arrowOnlyBtn: {
-    paddingVertical: 2,
-    paddingHorizontal: 4,
-  },
-  arrowOnlyGlyph: {
-    fontSize: 20,
-    fontWeight: '900',
-    color: '#0f172a',
-    lineHeight: 22,
-  },
-  mainScroll: {
-    flex: 1,
-    backgroundColor: '#ffffff',
-  },
-  mainScrollContent: {
-    padding: 18,
-    gap: 22,
-  },
-  sectionBlock: {
-    gap: 8,
-  },
-  sectionLabelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
+  headerTitleWrap: { flex: 1, marginRight: 12 },
+  headerTitle: { fontSize: 16, fontWeight: '700', color: '#0f172a' },
+  headerSub: { fontSize: 10, color: '#94a3b8', marginTop: 1, letterSpacing: 0.03 },
+  headerProgressRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
+  headerProgressText: { fontSize: 11, color: '#64748b', marginTop: 2 },
+  headerRightActions: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  publishTextBtn: { paddingVertical: 4, paddingHorizontal: 2 },
+  publishTextBtnLabel: { fontSize: 14, fontWeight: '700', color: '#0f172a' },
+  arrowOnlyBtn: { paddingVertical: 2, paddingHorizontal: 4 },
+  arrowOnlyGlyph: { fontSize: 20, fontWeight: '900', color: '#0f172a', lineHeight: 22 },
+  mainScroll: { flex: 1, backgroundColor: '#ffffff' },
+  mainScrollContent: { padding: 18, gap: 22 },
+  sectionBlock: { gap: 8 },
+  sectionLabelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   sectionLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#64748b',
-    textTransform: 'uppercase',
-    letterSpacing: 0.05,
+    fontSize: 11, fontWeight: '700', color: '#64748b',
+    textTransform: 'uppercase', letterSpacing: 0.05,
   },
-  sectionCountText: {
-    fontSize: 11,
-    color: '#94a3b8',
-  },
+  sectionCountText: { fontSize: 11, color: '#94a3b8' },
   styleCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 14,
-    borderRadius: 10,
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    padding: 14, borderRadius: 10, backgroundColor: '#ffffff',
+    borderWidth: 1, borderColor: '#e2e8f0',
   },
-  styleCardLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    flex: 1,
-  },
-  styleColorDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-  },
-  styleCardName: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#0f172a',
-  },
-  styleCardVibe: {
-    fontSize: 12,
-    color: '#64748b',
-    marginTop: 1,
-  },
+  styleCardLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
+  styleColorDot: { width: 12, height: 12, borderRadius: 6 },
+  styleCardName: { fontSize: 14, fontWeight: '700', color: '#0f172a' },
+  styleCardVibe: { fontSize: 12, color: '#64748b', marginTop: 1 },
   changeStylePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    backgroundColor: '#f8fafc',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6,
+    backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0',
   },
-  changeStylePillText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#475569',
-  },
+  changeStylePillText: { fontSize: 12, fontWeight: '600', color: '#475569' },
   sectionsContainer: {
-    backgroundColor: '#ffffff',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    overflow: 'hidden',
+    backgroundColor: '#ffffff', borderRadius: 10,
+    borderWidth: 1, borderColor: '#e2e8f0', overflow: 'hidden',
   },
   sectionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f1f5f9',
-    gap: 12,
+    flexDirection: 'row', alignItems: 'center',
+    paddingVertical: 12, paddingHorizontal: 14,
+    borderBottomWidth: 1, borderBottomColor: '#f1f5f9', gap: 12,
   },
-  sectionIndex: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#94a3b8',
-    width: 16,
+  sectionIndex: { fontSize: 12, fontWeight: '700', color: '#94a3b8', width: 16 },
+  sectionRowTitle: { fontSize: 13, fontWeight: '600', color: '#1e293b' },
+  sectionRowSub: { fontSize: 11, color: '#94a3b8', marginTop: 1 },
+  linksRow: { flexDirection: 'row', gap: 10 },
+  linkChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 12, paddingVertical: 8, borderRadius: 18,
+    backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0',
   },
-  sectionRowTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#1e293b',
-  },
-  sectionRowSub: {
-    fontSize: 11,
-    color: '#94a3b8',
-    marginTop: 1,
-  },
+  linkChipLive: { borderColor: '#bbf7d0', backgroundColor: '#f0fdf4' },
+  linkChipText: { fontSize: 12, fontWeight: '600', color: '#475569' },
   bottomBarContainer: {
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 6,
-    backgroundColor: '#ffffff',
-    borderTopWidth: 1,
-    borderTopColor: '#f1f5f9',
+    paddingHorizontal: 16, paddingTop: 8, paddingBottom: 6,
+    backgroundColor: '#ffffff', borderTopWidth: 1, borderTopColor: '#f1f5f9',
   },
   bottomInputBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f8fafc',
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    paddingHorizontal: 14,
-    paddingVertical: 4,
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#f8fafc', borderRadius: 24,
+    borderWidth: 1, borderColor: '#e2e8f0',
+    paddingHorizontal: 14, paddingVertical: 4,
   },
-  bottomInput: {
-    flex: 1,
-    fontSize: 13,
-    color: '#0f172a',
-    paddingVertical: 8,
-  },
+  bottomInput: { flex: 1, fontSize: 13, color: '#0f172a', paddingVertical: 8 },
   sendBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 28, height: 28, borderRadius: 14, backgroundColor: '#0f172a',
+    alignItems: 'center', justifyContent: 'center', marginLeft: 6,
+  },
+  editOverlay: {
+    flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.45)',
+    alignItems: 'center', justifyContent: 'center', padding: 24,
+  },
+  editCard: {
+    width: '100%', backgroundColor: '#ffffff', borderRadius: 14, padding: 18, gap: 10,
+  },
+  editTitle: { fontSize: 16, fontWeight: '700', color: '#0f172a' },
+  editSub: { fontSize: 12, color: '#64748b' },
+  editInput: {
+    minHeight: 84, borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 10,
+    padding: 12, fontSize: 13, color: '#0f172a', backgroundColor: '#f8fafc',
+    textAlignVertical: 'top',
+  },
+  editActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 2 },
+  editCancelBtn: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8 },
+  editCancelText: { fontSize: 13, fontWeight: '600', color: '#64748b' },
+  editApplyBtn: {
+    paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8,
     backgroundColor: '#0f172a',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: 6,
   },
-  modalContainer: {
-    flex: 1,
-    backgroundColor: '#ffffff',
-  },
+  editApplyText: { fontSize: 13, fontWeight: '700', color: '#ffffff' },
+  modalContainer: { flex: 1, backgroundColor: '#ffffff' },
   modalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f1f5f9',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingVertical: 14,
+    borderBottomWidth: 1, borderBottomColor: '#f1f5f9',
   },
-  modalTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: '#0f172a',
-  },
-  modalSubtitle: {
-    fontSize: 12,
-    color: '#64748b',
-    marginTop: 1,
-  },
-  modalCloseBtn: {
-    padding: 6,
-    borderRadius: 8,
-    backgroundColor: '#f1f5f9',
-  },
+  modalTitle: { fontSize: 17, fontWeight: '700', color: '#0f172a' },
+  modalSubtitle: { fontSize: 12, color: '#64748b', marginTop: 1 },
+  modalCloseBtn: { padding: 6, borderRadius: 8, backgroundColor: '#f1f5f9' },
+  catalogLoading: { alignItems: 'center', gap: 8, padding: 32 },
+  catalogLoadingText: { fontSize: 12, color: '#94a3b8' },
   searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginHorizontal: 16,
-    marginTop: 12,
-    marginBottom: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: '#f8fafc',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    marginHorizontal: 16, marginTop: 12, marginBottom: 8,
+    paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8,
+    backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0',
   },
-  searchInput: {
-    flex: 1,
-    fontSize: 14,
-    color: '#0f172a',
-    padding: 0,
-  },
-  categoryPillsWrapper: {
-    paddingVertical: 4,
-    marginBottom: 8,
-  },
-  categoryPillsScroll: {
-    paddingHorizontal: 16,
-    gap: 6,
-  },
+  searchInput: { flex: 1, fontSize: 14, color: '#0f172a', padding: 0 },
+  categoryPillsWrapper: { paddingVertical: 4, marginBottom: 8 },
+  categoryPillsScroll: { paddingHorizontal: 16, gap: 6 },
   categoryPill: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    backgroundColor: '#f8fafc',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
+    paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16,
+    backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0',
   },
-  categoryPillActive: {
-    backgroundColor: '#0f172a',
-    borderColor: '#0f172a',
-  },
-  categoryPillText: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#64748b',
-  },
-  categoryPillTextActive: {
-    color: '#ffffff',
-    fontWeight: '600',
-  },
-  directoryListContent: {
-    padding: 16,
-    gap: 10,
-  },
+  categoryPillActive: { backgroundColor: '#0f172a', borderColor: '#0f172a' },
+  categoryPillText: { fontSize: 12, fontWeight: '500', color: '#64748b' },
+  categoryPillTextActive: { color: '#ffffff', fontWeight: '600' },
+  directoryListContent: { padding: 16, gap: 10 },
   directoryItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    padding: 14,
-    borderRadius: 10,
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    padding: 14, borderRadius: 10, backgroundColor: '#ffffff',
+    borderWidth: 1, borderColor: '#e2e8f0',
   },
-  directoryItemSelected: {
-    borderWidth: 1.5,
-    backgroundColor: '#f8fafc',
-  },
-  directoryItemColorDot: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-  },
-  directoryItemBody: {
-    flex: 1,
-  },
+  directoryItemSelected: { borderWidth: 1.5, backgroundColor: '#f8fafc' },
+  directoryItemColorDot: { width: 14, height: 14, borderRadius: 7 },
+  directoryItemBody: { flex: 1 },
   directoryItemTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 2,
+    flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'space-between', marginBottom: 2,
   },
-  directoryItemName: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#334155',
-  },
-  directoryItemCategory: {
-    fontSize: 11,
-    color: '#94a3b8',
-  },
-  directoryItemVibe: {
-    fontSize: 12,
-    color: '#64748b',
-    marginBottom: 2,
-  },
+  directoryItemName: { fontSize: 14, fontWeight: '600', color: '#334155' },
+  directoryItemTheme: { fontSize: 10, color: '#94a3b8', textTransform: 'capitalize' },
+  directoryItemVibe: { fontSize: 12, color: '#64748b', marginBottom: 2 },
   directoryItemFonts: {
-    fontSize: 10,
-    color: '#94a3b8',
+    fontSize: 10, color: '#94a3b8',
     fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
   },
 });

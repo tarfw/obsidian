@@ -1,111 +1,72 @@
 ---
 const agents = [
   {
-    id: "workspace",
-    title: "Workspace agent",
-    body: "Every worker owns their workspace as portable .md files - custom workspace name, unlimited workspaces, no lock-in, ever.",
-    iconColor: "#3b82f6",
-    bgColor: "#e0e7ff",
-    textColor: "#1e1b4b"
+    name: "Workspace Agent",
+    cost: "2 credits / query",
+    description: "Instant summaries, document queries, and memory synthesis across your portable .md and SQLite workspace files.",
+    actions: ["Workspace answer or summary (2 cr)", "Personal workspace storage (0 cr)"]
   },
   {
-    id: "crm",
-    title: "CRM",
-    body: "Turn every conversation into a customer record - contacts, orders, invoices, and follow-ups, all in one workspace.",
-    iconColor: "#8b5cf6",
-    bgColor: "#ede9fe",
-    textColor: "#2e1065"
+    name: "Messaging & CRM",
+    cost: "2–5 credits / action",
+    description: "Automated customer support and sales replies on WhatsApp & Telegram, plus voice note transcription directly to orders.",
+    actions: ["Sales or support reply (2 cr)", "Voice note to order (5 cr)"]
   },
   {
-    id: "leads",
-    title: "Leads agent",
-    body: "Capture, qualify, and route every lead automatically - no inquiry ever slips through the cracks.",
-    iconColor: "#f97316",
-    bgColor: "#ffedd5",
-    textColor: "#431407"
+    name: "Sales & Growth",
+    cost: "10–50 credits / task",
+    description: "Generate structured quotes and commercial proposals, run customer retention campaigns, and extract verified lead batches.",
+    actions: ["Quote or proposal (10 cr)", "Customer retention campaign (20 cr)", "Verified lead batch (50 cr)"]
   },
   {
-    id: "whatsapp",
-    title: "WhatsApp agent",
-    body: "Reply to every customer on WhatsApp automatically - orders, follow-ups, and support, right in the chat.",
-    iconColor: "#16a34a",
-    bgColor: "#dcfce7",
-    textColor: "#052e16"
+    name: "Operations & Finance",
+    cost: "3–20 credits / action",
+    description: "Scan receipts and invoices with OCR, run automated bill audits, execute workflow pipelines, and produce tax reports.",
+    actions: ["OCR document scan (3 cr / page)", "Bill audit (5 cr / bill)", "Operations workflow (10 cr)", "Analyst or tax report (20 cr)"]
   },
   {
-    id: "marketing",
-    title: "Marketing agent",
-    body: "Plan, write, and send campaigns across every channel - content, segments, and analytics in one place.",
-    iconColor: "#ec4899",
-    bgColor: "#fce7f3",
-    textColor: "#500724"
+    name: "Site Builder & Stores",
+    cost: "5–100 credits / run",
+    description: "Generate full website drafts from prompts, edit individual sections via plain language, and publish updates live.",
+    actions: ["Publish or update site (5 cr)", "Edit a site section (10 cr)", "Keep site active (50 cr / mo)", "Generate site draft (100 cr)"]
   },
   {
-    id: "computer",
-    title: "Computer agent",
-    body: "Automate desktop work - files, folders, and apps, orchestrated by plain-English commands.",
-    iconColor: "#06b6d4",
-    bgColor: "#cff4fc",
-    textColor: "#042f2e"
+    name: "Research & Intelligence",
+    cost: "2–100 credits / task",
+    description: "Track competitor pricing across multiple sources, clean up product catalogue photos, and dispatch deep research swarms.",
+    actions: ["Competitor price check (2 cr / item)", "Product photo cleanup (10 cr / img)", "Deep research swarm (100 cr)"]
   }
 ];
 ---
 
-<section class="agents-section" id="agents">
-  <div class="agents-container">
-    <div class="agents-header">
-      <h2 class="agents-title">Built for teams at every scale</h2>
+<section class="agents-clean-section" id="agents">
+  <div class="agents-clean-inner">
+    <div class="section-intro">
+      <span class="section-kicker">AI Agents</span>
+      <h2 class="section-heading">Agents built for real work</h2>
+      <p class="section-lead">
+        No seat fees or fixed subscription bundles. Trigger agents on demand across messaging, workspaces, sites, and operations — charged only per action.
+      </p>
     </div>
 
-    <div class="agents-grid">
+    <div class="agents-clean-grid">
       {agents.map((agent) => (
-        <div class="agent-card" style={`--card-bg: ${agent.bgColor}; --card-text: ${agent.textColor}; --icon-color: ${agent.iconColor}`}>
-          <div class="agent-icon">
-            <svg width="34" height="34" viewBox="0 0 7 7.1" fill="currentColor" style="display:block" aria-hidden="true">
-              <rect x="0" y="0.000" width="1" height="1.000"/>
-              <rect x="1" y="0.000" width="1" height="1.000"/>
-              <rect x="5" y="0.000" width="1" height="1.000"/>
-              <rect x="6" y="0.000" width="1" height="1.000"/>
-              <rect x="1" y="1.000" width="1" height="1.000"/>
-              <rect x="2" y="1.000" width="1" height="1.000"/>
-              <rect x="3" y="1.000" width="1" height="1.000"/>
-              <rect x="4" y="1.000" width="1" height="1.000"/>
-              <rect x="5" y="1.000" width="1" height="1.000"/>
-              <rect x="0" y="2.000" width="1" height="1.000"/>
-              <rect x="1" y="2.000" width="1" height="1.000"/>
-              <rect x="2" y="2.000" width="1" height="1.000"/>
-              <rect x="3" y="2.000" width="1" height="1.000"/>
-              <rect x="4" y="2.000" width="1" height="1.000"/>
-              <rect x="5" y="2.000" width="1" height="1.000"/>
-              <rect x="6" y="2.000" width="1" height="1.000"/>
-              <rect x="0" y="3.000" width="1" height="1.000"/>
-              <rect x="1" y="3.000" width="1" height="1.000"/>
-              <rect x="3" y="3.000" width="1" height="1.000"/>
-              <rect x="5" y="3.000" width="1" height="1.000"/>
-              <rect x="6" y="3.000" width="1" height="1.000"/>
-              <rect x="0" y="4.000" width="1" height="1.100"/>
-              <rect x="1" y="4.000" width="1" height="1.100"/>
-              <rect x="2" y="4.000" width="1" height="1.100"/>
-              <rect x="3" y="4.000" width="1" height="1.100"/>
-              <rect x="4" y="4.000" width="1" height="1.100"/>
-              <rect x="5" y="4.000" width="1" height="1.100"/>
-              <rect x="6" y="4.000" width="1" height="1.100"/>
-              <rect x="0" y="5.100" width="1" height="1.100"/>
-              <rect x="1" y="5.100" width="1" height="1.100"/>
-              <rect x="2" y="5.100" width="1" height="1.100"/>
-              <rect x="3" y="5.100" width="1" height="1.100"/>
-              <rect x="4" y="5.100" width="1" height="1.100"/>
-              <rect x="5" y="5.100" width="1" height="1.100"/>
-              <rect x="6" y="5.100" width="1" height="1.100"/>
-              <rect x="0" y="6.200" width="1" height="0.550"/>
-              <rect x="3" y="6.200" width="1" height="0.550"/>
-              <rect x="6" y="6.200" width="1" height="0.550"/>
-              <rect x="3" y="6.750" width="1" height="0.350"/>
-            </svg>
+        <div class="agent-clean-card">
+          <div class="card-head">
+            <h3 class="agent-name">{agent.name}</h3>
+            <span class="agent-cost-pill">{agent.cost}</span>
           </div>
+          
+          <p class="agent-desc">{agent.description}</p>
 
-          <h3 class="agent-card-title">{agent.title}</h3>
-          <p class="agent-card-body">{agent.body}</p>
+          <div class="card-actions-list">
+            <span class="actions-label">Key Actions</span>
+            <ul>
+              {agent.actions.map((act) => (
+                <li>{act}</li>
+              ))}
+            </ul>
+          </div>
         </div>
       ))}
     </div>
@@ -113,103 +74,160 @@ const agents = [
 </section>
 
 <style>
-  .agents-section {
-    position: relative;
-    padding: 4rem 1.5rem 6rem;
-    max-width: 1200px;
-    margin: 0 auto;
+  .agents-clean-section {
+    background-color: #ffffff !important;
+    color: #0a0a0a !important;
+    padding: 96px 24px 72px;
     width: 100%;
-    z-index: 10;
-    font-family: "PolySans Arabic VF Variable Slim", "PolySans Arabic VF Variable Slim Placeholder", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    box-sizing: border-box;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, Helvetica, Arial, sans-serif;
+    border-top: 1px solid #e5e7eb;
   }
 
-  .agents-container {
-    display: flex;
-    flex-direction: column;
-    gap: 3rem;
-    align-items: center;
+  .agents-clean-inner {
+    max-width: 1160px;
+    margin: 0 auto;
   }
 
-  .agents-header {
-    text-align: center;
+  .section-intro {
+    text-align: left;
+    margin-bottom: 48px;
     max-width: 720px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
   }
 
-  .agents-title {
-    font-size: clamp(2.25rem, 4.5vw, 3rem);
+  .section-kicker {
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #4b5563 !important;
+    display: block;
+    margin-bottom: 12px;
+  }
+
+  .section-heading {
+    font-size: clamp(2rem, 3.5vw, 2.75rem);
     font-weight: 700;
-    color: #ffffff;
-    line-height: 1.1;
-    letter-spacing: -0.025em;
-    margin: 0;
-    font-family: "PolySans Arabic VF Variable Slim", "PolySans Arabic VF Variable Slim Placeholder", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    color: #0a0a0a !important;
+    line-height: 1.15;
+    letter-spacing: -0.03em;
+    margin: 0 0 16px;
   }
 
-  .agents-grid {
+  .section-lead {
+    font-size: 1.1rem;
+    line-height: 1.6;
+    color: #4b5563 !important;
+    margin: 0;
+  }
+
+  .agents-clean-grid {
     display: grid;
     grid-template-columns: repeat(1, 1fr);
-    gap: 1.75rem;
-    width: 100%;
+    gap: 24px;
   }
 
-  @media (min-width: 768px) {
-    .agents-grid {
+  @media (min-width: 700px) {
+    .agents-clean-grid {
       grid-template-columns: repeat(2, 1fr);
     }
   }
 
-  @media (min-width: 1024px) {
-    .agents-grid {
+  @media (min-width: 1040px) {
+    .agents-clean-grid {
       grid-template-columns: repeat(3, 1fr);
     }
   }
 
-  .agent-card {
+  .agent-clean-card {
+    background: #ffffff !important;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 24px;
     display: flex;
     flex-direction: column;
-    justify-content: flex-start;
-    background-color: var(--card-bg);
-    color: var(--card-text);
-    border-radius: 24px;
-    padding: 2.25rem 2rem 2.25rem 2rem;
-    min-height: 230px;
-    width: 100%;
-    box-sizing: border-box;
-    position: relative;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
-    border: 1px solid rgba(0, 0, 0, 0.05);
-    transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    justify-content: space-between;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
   }
 
-  .agent-card:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.12);
+  .agent-clean-card:hover {
+    border-color: #9ca3af;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
   }
 
-  .agent-icon {
-    color: var(--icon-color);
-    margin-bottom: 1.25rem;
+  .card-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 12px;
   }
 
-  .agent-card-title {
-    font-size: 1.35rem;
-    font-weight: 700;
-    color: inherit;
-    margin: 0 0 0.65rem 0;
-    line-height: 1.2;
-    letter-spacing: -0.015em;
-    font-family: "PolySans Arabic VF Variable Slim", "PolySans Arabic VF Variable Slim Placeholder", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  }
-
-  .agent-card-body {
-    font-size: 1.05rem;
-    line-height: 1.6;
-    color: inherit;
-    opacity: 0.92;
+  .agent-name {
+    font-size: 1.15rem;
+    font-weight: 600;
+    color: #0a0a0a !important;
     margin: 0;
-    font-family: "PolySans Arabic VF Variable Slim", "PolySans Arabic VF Variable Slim Placeholder", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.25;
+    letter-spacing: -0.015em;
+  }
+
+  .agent-cost-pill {
+    font-size: 12px;
+    font-weight: 600;
+    color: #047857 !important;
+    background: #ecfdf5 !important;
+    padding: 3px 8px;
+    border-radius: 6px;
+    white-space: nowrap;
+    border: 1px solid #d1fae5;
+  }
+
+  .agent-desc {
+    font-size: 0.925rem;
+    line-height: 1.55;
+    color: #4b5563 !important;
+    margin: 0 0 20px;
+    flex: 1;
+  }
+
+  .card-actions-list {
+    border-top: 1px solid #f3f4f6;
+    padding-top: 14px;
+  }
+
+  .actions-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #6b7280 !important;
+    display: block;
+    margin-bottom: 8px;
+  }
+
+  .card-actions-list ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .card-actions-list li {
+    font-size: 0.85rem;
+    color: #374151 !important;
+    line-height: 1.4;
+    position: relative;
+    padding-left: 14px;
+  }
+
+  .card-actions-list li::before {
+    content: "•";
+    position: absolute;
+    left: 0;
+    color: #9ca3af;
+    font-weight: bold;
   }
 </style>

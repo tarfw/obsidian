@@ -1,5 +1,5 @@
 /**
- * Gen UI types — shared with taragent.
+ * Gen UI types shared with the Tarai API surface.
  */
 
 export interface UINode {

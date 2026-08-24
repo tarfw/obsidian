@@ -1,0 +1,479 @@
+import { Hono } from 'hono';
+import type { Client } from '@libsql/client';
+import { resolveVerifiedIdentity } from './domain/auth.ts';
+import type { AuthContext } from './domain/types.ts';
+import { ControlRepository } from './control/control.ts';
+import { ControlError, type AgentRun, type ControlSpace } from './control/types.ts';
+import { createDatabaseClientForHost } from './data/turso.ts';
+import { TenantRepository, type TenantTable } from './data/repositories/tenant.ts';
+import { R2StorageService, type R2BucketBinding } from './data/r2.ts';
+import { KVCacheService, type KVNamespaceBinding } from './data/kv.ts';
+import { createReadToken } from './data/platform.ts';
+import { createRazorpayOrder, verifyRazorpayWebhook } from './payments/razorpay.ts';
+import { verifyHmacSha256 } from './channels/signature.ts';
+import type { AgentParams } from './workflows/agent.ts';
+import type { ArchiveParams, RestoreParams } from './workflows/archive.ts';
+import type { ProjectionParams } from './workflows/projection.ts';
+import type { ProvisionParams } from './workflows/provision.ts';
+
+interface WorkflowBinding<P> {
+  createBatch(options: Array<{ id?: string; params: P }>): Promise<unknown[]>;
+}
+
+export interface Env {
+  CONTROL: D1Database;
+  USAGE?: AnalyticsEngineDataset;
+  OKF_STORAGE?: R2BucketBinding;
+  TARAI_KV?: KVNamespaceBinding;
+  PROVISION_WORKFLOW?: WorkflowBinding<ProvisionParams>;
+  AGENT_WORKFLOW?: WorkflowBinding<AgentParams>;
+  PROJECTION_WORKFLOW?: WorkflowBinding<ProjectionParams>;
+  ARCHIVE_WORKFLOW?: WorkflowBinding<ArchiveParams>;
+  RESTORE_WORKFLOW?: WorkflowBinding<RestoreParams>;
+  TURSO_ORG?: string;
+  TURSO_PLATFORM_TOKEN?: string;
+  TURSO_AUTH_TOKEN?: string;
+  TURSO_GROUP_APAC?: string;
+  TURSO_GROUP_EU?: string;
+  TURSO_GROUP_US?: string;
+  OIDC_ISSUER?: string;
+  OIDC_AUDIENCE?: string;
+  OIDC_JWKS_URL?: string;
+  WHATSAPP_WEBHOOK_SECRET?: string;
+  WHATSAPP_WORKSPACE_ID?: string;
+  WHATSAPP_PHONE_NUMBER_ID?: string;
+  RAZORPAY_KEY_ID?: string;
+  RAZORPAY_KEY_SECRET?: string;
+  RAZORPAY_WEBHOOK_SECRET?: string;
+}
+
+type Variables = {
+  auth: AuthContext;
+  identity: { userId: string; email: string };
+  data: Client;
+  personal: Client | undefined;
+  space: ControlSpace;
+};
+
+const app = new Hono<{ Bindings: Env; Variables: Variables }>();
+
+function errorStatus(error: ControlError): 400 | 402 | 403 | 404 | 409 | 503 {
+  if (error.code === 'funds') return 402;
+  if (error.code === 'budget' || error.code === 'access') return 403;
+  if (error.code === 'missing') return 404;
+  if (error.code === 'conflict') return 409;
+  if (error.code === 'unavailable') return 503;
+  return 400;
+}
+
+async function startAgent(env: Env, auth: AuthContext, action: string, idem: string, input: Record<string, unknown>): Promise<AgentRun> {
+  if (!env.AGENT_WORKFLOW) throw new ControlError('unavailable', 'Agent execution is unavailable');
+  const control = new ControlRepository(env.CONTROL);
+  const run = await control.reserveRun({ user: auth.userId, space: auth.workspaceId, action, idem });
+  if (run.state !== 'reserved') return run;
+  try {
+    await env.AGENT_WORKFLOW.createBatch([{
+      id: `agent-${run.id}`,
+      params: { run: run.id, user: auth.userId, space: auth.workspaceId, action, input },
+    }]);
+  } catch (error) {
+    await control.refundRun(run.id, 'workflow_unavailable');
+    throw error;
+  }
+  return run;
+}
+
+async function enqueueProjection(env: Env, input: ProjectionParams): Promise<void> {
+  if (!env.PROJECTION_WORKFLOW) return;
+  await env.PROJECTION_WORKFLOW.createBatch([{ id: `projection-${input.id}`, params: input }]);
+}
+
+function present(row: { id: string; type: string; data: Record<string, unknown>; state?: string; ref?: string | null; created: number; updated?: number }) {
+  return { id: row.id, type: row.type, ...row.data, state: row.state, ref: row.ref, created_at: row.created, updated_at: row.updated };
+}
+
+app.get('/api/ping', (c) => c.json({ ok: true }));
+
+app.post('/webhooks/razorpay', async (c) => {
+  if (!c.env.RAZORPAY_WEBHOOK_SECRET) return c.json({ error: 'Razorpay is not configured' }, 503);
+  const raw = await c.req.text();
+  if (!await verifyRazorpayWebhook(c.env, raw, c.req.header('X-Razorpay-Signature'))) return c.json({ error: 'Invalid signature' }, 401);
+  const event = JSON.parse(raw) as {
+    event?: string;
+    payload?: { payment?: { entity?: { id?: string; order_id?: string; amount?: number; currency?: string; status?: string } } };
+  };
+  const payment = event.payload?.payment?.entity;
+  if (event.event !== 'payment.captured' || payment?.status !== 'captured') return c.json({ accepted: true });
+  if (!payment.id || !payment.order_id || typeof payment.amount !== 'number' || !Number.isInteger(payment.amount) || !payment.currency) return c.json({ error: 'Invalid payment payload' }, 400);
+  await new ControlRepository(c.env.CONTROL).settlePayment({ checkout: payment.order_id, receipt: payment.id, amount: payment.amount, currency: payment.currency });
+  return c.json({ accepted: true });
+});
+
+app.get('/sites/:space', async (c) => {
+  const control = new ControlRepository(c.env.CONTROL);
+  const space = await control.getSpace(c.req.param('space'));
+  if (!space || !['active', 'grace', 'readonly'].includes(space.state)) return c.text('Site unavailable', 404);
+  const service = await control.getService(space.id, 'site');
+  if (!service || !['active', 'grace'].includes(service.state)) return c.text('Site unavailable', 404);
+  const kv = new KVCacheService(c.env.TARAI_KV);
+  const key = `site_live_${space.id}`;
+  const cached = await kv.get(key);
+  if (cached) return c.html(cached, 200, { 'Content-Security-Policy': "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; script-src 'none'" });
+  const r2 = new R2StorageService(c.env.OKF_STORAGE);
+  const pointer = await r2.readText(`workspaces/${space.id}/site/live.json`);
+  if (!pointer) return c.text('Site not published', 404);
+  const version = JSON.parse(pointer) as { currentVersionId?: string };
+  if (!version.currentVersionId) return c.text('Site not published', 404);
+  const html = await r2.readText(`workspaces/${space.id}/site/versions/${version.currentVersionId}.html`);
+  if (!html) return c.text('Site artifact missing', 404);
+  await kv.set(key, html, 3600);
+  return c.html(html, 200, { 'Content-Security-Policy': "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; script-src 'none'" });
+});
+
+app.post('/channels/whatsapp', async (c) => {
+  if (!c.env.WHATSAPP_WORKSPACE_ID || !c.env.WHATSAPP_WEBHOOK_SECRET || !c.env.AGENT_WORKFLOW) return c.json({ error: 'WhatsApp is not configured' }, 503);
+  const raw = await c.req.text();
+  if (!await verifyHmacSha256(raw, c.env.WHATSAPP_WEBHOOK_SECRET, c.req.header('x-hub-signature-256'))) return c.json({ error: 'Invalid signature' }, 401);
+  const payload = JSON.parse(raw) as { entry?: Array<{ changes?: Array<{ value?: { metadata?: { phone_number_id?: string }; messages?: Array<{ id?: string; from?: string; text?: { body?: string } }> } }> }> };
+  const value = payload.entry?.[0]?.changes?.[0]?.value;
+  if (c.env.WHATSAPP_PHONE_NUMBER_ID && value?.metadata?.phone_number_id !== c.env.WHATSAPP_PHONE_NUMBER_ID) return c.json({ error: 'Wrong phone number' }, 403);
+  const control = new ControlRepository(c.env.CONTROL);
+  const space = await control.getSpace(c.env.WHATSAPP_WORKSPACE_ID);
+  if (!space || space.state !== 'active') return c.json({ error: 'Workspace unavailable' }, 503);
+  for (const message of value?.messages || []) {
+    if (!message.id) continue;
+    const action = /help|support|order/i.test(message.text?.body || '') ? 'support.reply' : 'sales.reply';
+    const run = await control.reserveRun({ user: space.owner, space: space.id, action, idem: `whatsapp:${message.id}` });
+    if (run.state === 'reserved') {
+      try {
+        await c.env.AGENT_WORKFLOW.createBatch([{
+          id: `agent-${run.id}`,
+          params: { run: run.id, user: space.owner, space: space.id, action, input: { query: message.text?.body || '', sender: message.from || '' } },
+        }]);
+      } catch (error) {
+        await control.refundRun(run.id, 'workflow_unavailable');
+        throw error;
+      }
+    }
+  }
+  return c.json({ accepted: true }, 202);
+});
+
+app.use('/api/*', async (c, next) => {
+  if (c.req.path === '/api/ping') return next();
+  const verified = await resolveVerifiedIdentity(c.req.header('Authorization'), {
+    issuer: c.env.OIDC_ISSUER || '', audience: c.env.OIDC_AUDIENCE || '', jwksUrl: c.env.OIDC_JWKS_URL || '',
+  });
+  if (!verified.valid || !verified.identity) return c.json({ error: verified.error || 'Unauthorized' }, 401);
+  c.set('identity', verified.identity);
+  const control = new ControlRepository(c.env.CONTROL);
+  const user = await control.bootstrapUser(verified.identity);
+  if (!user.host && user.state === 'provisioning' && c.env.PROVISION_WORKFLOW) {
+    const name = `user-${verified.identity.userId.toLowerCase().replace(/[^a-z0-9-]/g, '-').slice(0, 48)}`;
+    await c.env.PROVISION_WORKFLOW.createBatch([{ id: `provision-${name}`, params: { kind: 'user', id: user.id, name, region: user.region } }]);
+  }
+  const token = c.env.TURSO_AUTH_TOKEN;
+  const personal = user.host && token ? createDatabaseClientForHost(user.host, token) : undefined;
+  c.set('personal', personal);
+  const identityOnly = new Set(['/api/workspaces', '/api/wallet', '/api/ledger', '/api/agents', '/api/payments/order', '/api/sync/personal']);
+  const restorePath = /^\/api\/workspaces\/[^/]+\/restore$/.test(c.req.path);
+  if (identityOnly.has(c.req.path) || restorePath) {
+    try { await next(); } finally { personal?.close(); }
+    return;
+  }
+  const slug = c.req.header('X-Workspace-Slug');
+  if (!slug) return c.json({ error: 'Missing X-Workspace-Slug' }, 400);
+  const space = await control.getSpaceBySlug(slug);
+  if (!space) return c.json({ error: 'Workspace not found' }, 404);
+  const member = await control.getMember(verified.identity.userId, space.id);
+  if (!member || member.state !== 'active') return c.json({ error: 'Workspace access denied' }, 403);
+  if (space.state === 'provisioning' || space.state === 'restoring') return c.json({ error: 'Workspace is being prepared' }, 409);
+  if (!space.host || !['active', 'grace', 'readonly'].includes(space.state)) return c.json({ error: 'Workspace unavailable' }, 423);
+  if (!token) return c.json({ error: 'Database access is not configured' }, 503);
+  const readOperation = /^\/api\/entities\/(read|search)$/.test(c.req.path);
+  if (space.state === 'readonly' && c.req.method !== 'GET' && !readOperation) return c.json({ error: 'Workspace is read-only' }, 423);
+  const data = createDatabaseClientForHost(space.host, token);
+  c.set('space', space);
+  c.set('data', data);
+  c.set('auth', {
+    userId: verified.identity.userId, email: verified.identity.email, workspaceId: space.id, role: member.role, status: member.state,
+    audience: member.role === 'owner' ? 'owner' : member.role === 'guest' ? 'customer' : 'member',
+  });
+  try { await next(); } finally { data.close(); personal?.close(); }
+});
+
+app.get('/api/workspaces', async (c) => {
+  const spaces = await new ControlRepository(c.env.CONTROL).listSpaces(c.get('identity').userId);
+  return c.json({ workspaces: spaces.map((space) => ({ ...space, scope: space.slug, subdomain: space.slug })) });
+});
+
+app.post('/api/workspaces', async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const name = typeof body.name === 'string' ? body.name.trim() : '';
+  const slug = typeof body.subdomain === 'string' ? body.subdomain.trim().toLowerCase() : '';
+  const idem = c.req.header('Idempotency-Key') || (typeof body.idem === 'string' ? body.idem : '');
+  const region = typeof body.region === 'string' && ['apac', 'eu', 'us'].includes(body.region) ? body.region : 'apac';
+  if (!name || !/^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])?$/.test(slug) || !idem || idem.length > 128) return c.json({ error: 'Valid name, subdomain and Idempotency-Key are required' }, 400);
+  const identity = c.get('identity');
+  const control = new ControlRepository(c.env.CONTROL);
+  if (!c.env.PROVISION_WORKFLOW) return c.json({ error: 'Provisioning is unavailable' }, 503);
+  try {
+    const existing = await control.getSpaceByCreateIdem(idem);
+    if (existing) return c.json({ workspace: { ...existing, scope: existing.slug, subdomain: existing.slug } }, 200);
+    const id = `ws_${crypto.randomUUID()}`;
+    const space = await control.createSpace({ id, owner: identity.userId, slug, name, region, idem });
+    const db = `space-${id.replace(/[^a-z0-9-]/gi, '-').toLowerCase().slice(0, 48)}`;
+    try {
+      await c.env.PROVISION_WORKFLOW.createBatch([{ id: `provision-${db}`, params: { kind: 'space', id, name: db, region } }]);
+    } catch (error) {
+      await control.failSpace(id, 'workflow_unavailable');
+      throw error;
+    }
+    return c.json({ workspace: { ...space, scope: slug, subdomain: slug } }, 202);
+  } catch (error) {
+    if (error instanceof ControlError) return c.json({ error: error.message }, errorStatus(error));
+    throw error;
+  }
+});
+
+app.post('/api/workspaces/:id/restore', async (c) => {
+  const identity = c.get('identity');
+  const control = new ControlRepository(c.env.CONTROL);
+  const space = await control.getSpace(c.req.param('id'));
+  if (!space) return c.json({ error: 'Workspace not found' }, 404);
+  if (space.owner !== identity.userId) return c.json({ error: 'Only the owner can restore this workspace' }, 403);
+  if (!c.env.RESTORE_WORKFLOW) return c.json({ error: 'Restore is unavailable' }, 503);
+  const idem = c.req.header('Idempotency-Key');
+  if (!idem) return c.json({ error: 'Idempotency-Key is required' }, 400);
+  if (!await control.beginRestore(space.id, identity.userId, idem)) return c.json({ error: 'Workspace is not cold' }, 409);
+  try {
+    await c.env.RESTORE_WORKFLOW.createBatch([{ id: `restore-${space.id}-${idem}`, params: { space: space.id } }]);
+  } catch (error) {
+    await control.failRestore(space.id, 'workflow_unavailable');
+    throw error;
+  }
+  return c.json({ state: 'restoring' }, 202);
+});
+
+app.get('/api/wallet', async (c) => c.json({ wallet: await new ControlRepository(c.env.CONTROL).getWallet(c.get('identity').userId) }));
+app.get('/api/ledger', async (c) => c.json({ ledger: await new ControlRepository(c.env.CONTROL).listLedger(c.get('identity').userId) }));
+app.get('/api/agents', async (c) => c.json({ agents: await new ControlRepository(c.env.CONTROL).listAgents() }));
+
+app.get('/api/runs/:id', async (c) => {
+  const run = await new ControlRepository(c.env.CONTROL).getRun(c.req.param('id'));
+  if (!run || run.user !== c.get('identity').userId) return c.json({ error: 'Run not found' }, 404);
+  return c.json({ run });
+});
+
+app.post('/api/agents/:action/run', async (c) => {
+  const auth = c.get('auth');
+  const action = c.req.param('action');
+  const idem = c.req.header('Idempotency-Key');
+  if (!idem || idem.length > 128) return c.json({ error: 'Idempotency-Key is required' }, 400);
+  const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
+  try {
+    if (action === 'site.active') {
+      const service = await new ControlRepository(c.env.CONTROL).activateSite(auth.workspaceId, auth.userId, idem);
+      return c.json({ service }, 201);
+    }
+    const run = await startAgent(c.env, auth, action, idem, body);
+    return c.json({ run }, run.state === 'reserved' ? 202 : 200);
+  } catch (error) {
+    if (error instanceof ControlError) return c.json({ error: error.message }, errorStatus(error));
+    throw error;
+  }
+});
+
+app.post('/api/intent', async (c) => {
+  const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
+  const idem = c.req.header('Idempotency-Key') || (typeof body.requestId === 'string' ? body.requestId : '');
+  if (!idem) return c.json({ error: 'Idempotency-Key is required' }, 400);
+  try {
+    const action = typeof body.action === 'string' ? body.action : 'workspace.summary';
+    const run = await startAgent(c.env, c.get('auth'), action, idem, body);
+    return c.json({ run }, run.state === 'reserved' ? 202 : 200);
+  } catch (error) {
+    if (error instanceof ControlError) return c.json({ error: error.message }, errorStatus(error));
+    throw error;
+  }
+});
+
+app.post('/api/entities/:operation', async (c) => {
+  const auth = c.get('auth');
+  const operation = c.req.param('operation');
+  const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
+  const table = (typeof body.table === 'string' ? body.table : 'matter') as TenantTable;
+  if (!['matter', 'motion', 'graph', 'inbox'].includes(table)) return c.json({ error: 'Unsupported collection' }, 400);
+  const database = table === 'inbox' ? c.get('personal') : c.get('data');
+  if (!database) return c.json({ error: 'Personal database is being prepared' }, 409);
+  const repo = new TenantRepository(database);
+  if (operation === 'read' || operation === 'search') {
+    let rows = await repo.list(table, { id: typeof body.id === 'string' ? body.id : undefined, type: typeof body.type === 'string' ? body.type : undefined, space: auth.workspaceId });
+    if (operation === 'search' && typeof body.query === 'string') {
+      const query = body.query.toLowerCase();
+      rows = rows.filter((row) => JSON.stringify(row.data).toLowerCase().includes(query));
+    }
+    return c.json({ rows: rows.map(present) });
+  }
+  if (operation === 'create' || operation === 'insert') {
+    const data = typeof body.data === 'object' && body.data ? body.data as Record<string, unknown> : {};
+    if (table === 'graph') {
+      if (typeof body.source !== 'string' || typeof body.target !== 'string' || typeof body.kind !== 'string') return c.json({ error: 'Graph source, target and kind are required' }, 400);
+      return c.json({ row: await repo.link({ id: `grf_${crypto.randomUUID()}`, source: body.source, target: body.target, kind: body.kind, data }) }, 201);
+    }
+    const id = `${table.slice(0, 3)}_${crypto.randomUUID()}`;
+    const row = await repo.create(table, { id, type: String(body.type || table), data, actor: auth.userId, ref: typeof body.ref === 'string' ? body.ref : undefined, space: auth.workspaceId });
+    if (table !== 'inbox') await enqueueProjection(c.env, { id, space: auth.workspaceId, type: table === 'motion' ? row.type : `matter.${row.type}`, ref: id, data: present(row) });
+    return c.json({ id, row: present(row) }, 201);
+  }
+  if (operation === 'update' || operation === 'delete') {
+    if (table !== 'matter' && table !== 'inbox') return c.json({ error: `${table} records are immutable` }, 400);
+    if (typeof body.id !== 'string') return c.json({ error: 'Record id is required' }, 400);
+    const patch = operation === 'delete' ? { state: 'deleted' } : (typeof body.patch === 'object' && body.patch ? body.patch as Record<string, unknown> : {});
+    const row = await repo.update(table, body.id, patch);
+    if (!row) return c.json({ error: 'Record not found' }, 404);
+    if (table === 'matter') await enqueueProjection(c.env, { id: `update-${body.id}-${row.updated}`, space: auth.workspaceId, type: `matter.${row.type}`, ref: row.id, data: present(row) });
+    return c.json({ row: present(row) });
+  }
+  return c.json({ error: 'Unsupported operation' }, 400);
+});
+
+app.get('/api/metrics', async (c) => {
+  const rows = await new TenantRepository(c.get('data')).list('matter');
+  const types: Record<string, number> = {};
+  for (const row of rows) types[row.type] = (types[row.type] || 0) + 1;
+  return c.json({ total: rows.length, types });
+});
+
+app.post('/api/tools/:name', async (c) => {
+  const name = c.req.param('name');
+  const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
+  const repo = new TenantRepository(c.get('data'));
+  if (name === 'tasks.list') return c.json({ success: true, data: (await repo.list('matter', { type: 'task' })).map(present) });
+  if (name === 'inventory.list') return c.json({ success: true, data: (await repo.list('matter', { type: 'product' })).map(present) });
+  if (name === 'metrics.get') {
+    const rows = await repo.list('matter');
+    return c.json({ success: true, data: { total: rows.length } });
+  }
+  if (name === 'task.create') {
+    const row = await repo.create('matter', { id: `mat_${crypto.randomUUID()}`, type: 'task', data: body, actor: c.get('auth').userId });
+    await enqueueProjection(c.env, { id: row.id, space: c.get('auth').workspaceId, type: 'matter.task', ref: row.id, data: present(row) });
+    return c.json({ success: true, data: present(row) }, 201);
+  }
+  if (name === 'task.update' || name === 'task.archive' || name === 'inventory.correct') {
+    if (typeof body.id !== 'string') return c.json({ error: 'Record id is required' }, 400);
+    const patch = name === 'task.archive' ? { state: 'archived' } : (typeof body.patch === 'object' && body.patch ? body.patch as Record<string, unknown> : body);
+    const row = await repo.update('matter', body.id, patch);
+    if (!row) return c.json({ error: 'Record not found' }, 404);
+    return c.json({ success: true, data: present(row) });
+  }
+  return c.json({ error: 'Unsupported manual tool' }, 404);
+});
+
+app.get('/api/approvals', async (c) => {
+  const rows = await new TenantRepository(c.get('data')).list('matter', { type: 'approval' });
+  return c.json(rows.filter((row) => row.state === 'pending' || row.data.status === 'pending').map(present));
+});
+
+app.post('/api/approvals/:id/decide', async (c) => {
+  const auth = c.get('auth');
+  if (auth.role !== 'owner' && auth.role !== 'admin') return c.json({ error: 'Only owners and admins can decide approvals' }, 403);
+  const body = await c.req.json().catch(() => ({}));
+  if (body.decision !== 'approved' && body.decision !== 'rejected') return c.json({ error: 'Decision must be approved or rejected' }, 400);
+  const repo = new TenantRepository(c.get('data'));
+  const row = await repo.update('matter', c.req.param('id'), { status: body.decision, state: body.decision, reason: body.reason || '' });
+  if (!row) return c.json({ error: 'Approval not found' }, 404);
+  await repo.create('motion', { id: `mot_${crypto.randomUUID()}`, type: 'approval.decided', data: { decision: body.decision, reason: body.reason || '' }, actor: auth.userId, ref: row.id });
+  return c.json({ updated: true, approval: present(row) });
+});
+
+app.post('/api/sales/query', async (c) => {
+  const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
+  const idem = c.req.header('Idempotency-Key');
+  if (!idem) return c.json({ error: 'Idempotency-Key is required' }, 400);
+  const run = await startAgent(c.env, c.get('auth'), 'sales.reply', idem, body);
+  return c.json({ run }, 202);
+});
+
+app.post('/api/support/query', async (c) => {
+  const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
+  const idem = c.req.header('Idempotency-Key');
+  if (!idem) return c.json({ error: 'Idempotency-Key is required' }, 400);
+  const run = await startAgent(c.env, c.get('auth'), 'support.reply', idem, body);
+  return c.json({ run }, 202);
+});
+
+app.get('/api/members', async (c) => c.json({ members: await new ControlRepository(c.env.CONTROL).listMembers(c.get('auth').workspaceId) }));
+app.post('/api/members', async (c) => {
+  const auth = c.get('auth');
+  const body = await c.req.json().catch(() => ({}));
+  const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
+  const role = body.role === 'admin' || body.role === 'guest' ? body.role : 'member';
+  const budget = Number.isInteger(body.budget) ? body.budget : 0;
+  if (!email) return c.json({ error: 'Member email is required' }, 400);
+  try {
+    const member = await new ControlRepository(c.env.CONTROL).addMember({ space: auth.workspaceId, actor: auth.userId, email, role, budget });
+    return c.json({ member }, 201);
+  } catch (error) {
+    if (error instanceof ControlError) return c.json({ error: error.message }, errorStatus(error));
+    throw error;
+  }
+});
+app.post('/api/members/:id/budget', async (c) => {
+  const auth = c.get('auth');
+  if (auth.role !== 'owner' && auth.role !== 'admin') return c.json({ error: 'Only owners and admins can set budgets' }, 403);
+  const body = await c.req.json().catch(() => ({}));
+  if (!Number.isInteger(body.budget) || body.budget < 0) return c.json({ error: 'Budget must be a non-negative integer' }, 400);
+  await new ControlRepository(c.env.CONTROL).setMemberBudget(auth.workspaceId, c.req.param('id'), body.budget);
+  return c.json({ updated: true });
+});
+
+app.get('/api/canvas', async (c) => {
+  const value = await new R2StorageService(c.env.OKF_STORAGE).readText(`workspaces/${c.get('auth').workspaceId}/canvas.json`);
+  return c.json(value ? JSON.parse(value) : { blocks: [] });
+});
+app.post('/api/canvas', async (c) => {
+  const auth = c.get('auth');
+  if (auth.role !== 'owner' && auth.role !== 'admin') return c.json({ error: 'Only owners and admins can edit the canvas' }, 403);
+  const body = await c.req.json();
+  await new R2StorageService(c.env.OKF_STORAGE).writeText(`workspaces/${auth.workspaceId}/canvas.json`, JSON.stringify(body));
+  return c.json({ updated: true });
+});
+
+app.get('/api/sync/personal', async (c) => {
+  const user = await new ControlRepository(c.env.CONTROL).getUser(c.get('identity').userId);
+  if (!user?.db || !user.host || user.state !== 'active') return c.json({ error: 'Personal database is being prepared' }, 409);
+  return c.json({ url: `libsql://${user.host}`, token: await createReadToken(c.env, user.db), expires: Math.floor(Date.now() / 1000) + 3600 });
+});
+app.get('/api/sync/workspace', async (c) => {
+  const auth = c.get('auth');
+  if (auth.role !== 'owner' && auth.role !== 'admin') return c.json({ error: 'Use the role-filtered API cache' }, 403);
+  const space = c.get('space');
+  if (!space.db || !space.host) return c.json({ error: 'Workspace database is being prepared' }, 409);
+  return c.json({ url: `libsql://${space.host}`, token: await createReadToken(c.env, space.db), expires: Math.floor(Date.now() / 1000) + 3600 });
+});
+
+app.post('/api/payments/order', async (c) => {
+  if (!c.env.RAZORPAY_KEY_ID || !c.env.RAZORPAY_KEY_SECRET) return c.json({ error: 'Razorpay keys are not configured yet' }, 503);
+  const body = await c.req.json().catch(() => ({}));
+  const pack = typeof body.pack === 'string' ? body.pack : '';
+  const idem = c.req.header('Idempotency-Key') || '';
+  if (!pack || !idem) return c.json({ error: 'Pack and Idempotency-Key are required' }, 400);
+  const control = new ControlRepository(c.env.CONTROL);
+  const existing = await control.getPaymentByIdem(idem);
+  if (existing) return c.json({ payment: existing });
+  const price = await control.getPack(pack);
+  if (!price) return c.json({ error: 'Pack not found' }, 404);
+  const id = `pay_${crypto.randomUUID()}`;
+  const order = await createRazorpayOrder(c.env, { amount: price.price, currency: price.currency, receipt: id });
+  const payment = await control.createPayment({ id, user: c.get('identity').userId, pack, checkout: order.id, idem });
+  return c.json({ payment, key: c.env.RAZORPAY_KEY_ID }, 201);
+});
+
+app.onError((error, c) => {
+  console.error(JSON.stringify({ message: 'request failed', path: c.req.path, error: error instanceof Error ? error.message : String(error) }));
+  if (error instanceof ControlError) return c.json({ error: error.message }, errorStatus(error));
+  return c.json({ error: 'Internal server error' }, 500);
+});
+
+export default app;

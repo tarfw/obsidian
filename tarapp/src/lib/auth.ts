@@ -92,6 +92,26 @@ export async function getCurrentUser(): Promise<UserProfile | null> {
   return JSON.parse(savedUserJson) as UserProfile;
 }
 
+function tokenExpiresSoon(token: string | null): boolean {
+  if (!token) return true;
+  try {
+    const encoded = token.split('.')[1];
+    if (!encoded) return true;
+    const payload = JSON.parse(atob(encoded.replace(/-/g, '+').replace(/_/g, '/')));
+    return typeof payload.exp !== 'number' || payload.exp * 1000 <= Date.now() + 2 * 60_000;
+  } catch {
+    return true;
+  }
+}
+
+/** Returns a current Google ID token for Tarai, silently refreshing it when needed. */
+export async function getValidIdToken(): Promise<string | null> {
+  const user = await getCurrentUser();
+  if (user?.idToken && !tokenExpiresSoon(user.idToken)) return user.idToken;
+  const refreshed = await trySilentSignIn();
+  return refreshed?.idToken || null;
+}
+
 export async function trySilentSignIn(): Promise<UserProfile | null> {
   const t0 = Date.now();
   try {

@@ -2,7 +2,7 @@
  * Gen UI module for tarapp — exports all public APIs per genui.md.
  */
 
-// Types (shared with taragent)
+// Types shared with Tarai
 export interface UINode {
   id: string;
   type: string;

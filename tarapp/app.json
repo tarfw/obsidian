@@ -7,11 +7,6 @@
     "icon": "./assets/images/tarlogo.png",
     "scheme": "tar",
     "userInterfaceStyle": "automatic",
-    "splash": {
-      "image": "./assets/images/tarlogo.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#208AEF"
-    },
     "ios": {
       "icon": "./assets/images/tarlogo.png",
       "supportsTablet": true
@@ -59,7 +54,9 @@
       "expo-file-system",
       "expo-asset",
       "expo-font",
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-image",
+      "expo-status-bar"
     ],
     "experiments": {
       "typedRoutes": true,

@@ -6,14 +6,16 @@ import {
   Modal,
   TouchableOpacity,
   ScrollView,
+  ActivityIndicator,
+  Pressable,
 } from 'react-native';
-import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import * as WebBrowser from 'expo-web-browser';
 import { TarLogo } from './TarLogo';
 import { AnimatedTarLogoAgent, AgentStateMode, AgentRoleType } from './AnimatedTarLogoAgent';
 import SiteScreen from './site';
-import { tar, type AgentRate } from '@/lib/tar';
+import { tar, type CreditPack } from '@/lib/tar';
 
 interface FeatureRow {
   title: string;
@@ -30,101 +32,72 @@ interface PlanAgentItem {
   features?: (ownedWorkspaces?: number, joinedWorkspaces?: number) => FeatureRow[];
 }
 
-interface MicroAgentEntry {
-  id: string;
-  action: string;
-  name: string;
-  desc: string;
-  credits: number;
-  color: string;
-  bg: string;
-}
-
-const MICRO_AGENTS_DIRECTORY: MicroAgentEntry[] = [
+const PLAN_AGENT_GROUPS = [
   {
-    id: 'ocr_intake',
-    action: 'ocr.scan',
-    name: 'Tar Intake OCR',
-    desc: 'Scans paper bills, vendor receipts, and delivery notes into stock',
-    credits: 3,
-    color: '#8B5CF6',
-    bg: '#F5F3FF',
-  },
-  {
-    id: 'lead_hunter',
-    action: 'lead.batch',
-    name: 'Supplier & Lead Hunter',
-    desc: 'Finds verified wholesale suppliers, B2B buyers & direct contacts',
-    credits: 50,
-    color: '#10B981',
-    bg: '#ECFDF5',
-  },
-  {
-    id: 'price_monitor',
-    action: 'price.check',
-    name: 'Competitor Price Monitor',
-    desc: 'Tracks live product prices across quick-commerce apps and local stores',
-    credits: 2,
-    color: '#F97316',
-    bg: '#FFF7ED',
-  },
-  {
-    id: 'gst_recon',
-    action: 'tax.report',
-    name: 'GST & Tax Estimator',
-    desc: 'Calculates advance tax liabilities and input tax credits automatically',
-    credits: 20,
-    color: '#D97706',
-    bg: '#FFFBEB',
-  },
-  {
-    id: 'bill_auditor',
-    action: 'bill.audit',
-    name: 'Bank & Bill Margin Auditor',
-    desc: 'Matches purchase orders with bills and flags supplier price hikes',
-    credits: 5,
+    id: 'agents_workspace',
+    name: 'Workspace Agent',
+    cost: '2 credits / query',
+    description: 'Instant summaries, document queries, and memory synthesis across your portable .md and SQLite workspace files.',
+    actions: ['Workspace answer or summary (2 cr)', 'Personal workspace storage (0 cr)'],
     color: '#2563EB',
-    bg: '#EFF6FF',
   },
   {
-    id: 'lapsed_recovery',
-    action: 'retention.campaign',
-    name: 'Lapsed Customer Retention',
-    desc: 'Finds inactive customers and drafts tailored WhatsApp win-back offers',
-    credits: 20,
-    color: '#E11D48',
-    bg: '#FFF1F2',
+    id: 'agents_messaging',
+    name: 'Messaging & CRM',
+    cost: '2–5 credits / action',
+    description: 'Automated customer support and sales replies on WhatsApp & Telegram, plus voice note transcription directly to orders.',
+    actions: ['Sales or support reply (2 cr)', 'Voice note to order (5 cr)'],
+    color: '#059669',
   },
   {
-    id: 'image_clean',
-    action: 'photo.clean',
-    name: 'Product Photo AI Clean',
-    desc: 'Removes messy backgrounds and formats studio-grade product photos',
-    credits: 10,
-    color: '#6366F1',
-    bg: '#EEF2FF',
+    id: 'agents_sales',
+    name: 'Sales & Growth',
+    cost: '10–50 credits / task',
+    description: 'Generate structured quotes and commercial proposals, run customer retention campaigns, and extract verified lead batches.',
+    actions: ['Quote or proposal (10 cr)', 'Customer retention campaign (20 cr)', 'Verified lead batch (50 cr)'],
+    color: '#8B5CF6',
   },
   {
-    id: 'voice_order',
-    action: 'voice.order',
-    name: 'Voice Note Order Parser',
-    desc: 'Transcribes customer audio notes directly into checkout items',
-    credits: 5,
-    color: '#0D9488',
-    bg: '#F0FDFA',
+    id: 'agents_ops',
+    name: 'Operations & Finance',
+    cost: '3–20 credits / action',
+    description: 'Scan receipts and invoices with OCR, run automated bill audits, execute workflow pipelines, and produce tax reports.',
+    actions: ['OCR document scan (3 cr / page)', 'Bill audit (5 cr / bill)', 'Operations workflow (10 cr)', 'Analyst or tax report (20 cr)'],
+    color: '#F97316',
   },
   {
-    id: 'research_swarm',
-    action: 'research.task',
-    name: 'Multi-Agent Research Swarm',
-    desc: 'Deep multi-agent research across business registries, licenses & tenders',
-    credits: 100,
+    id: 'agents_sites',
+    name: 'Site Builder & Stores',
+    cost: '5–100 credits / run',
+    description: 'Generate full website drafts from prompts, edit individual sections via plain language, and publish updates live.',
+    actions: ['Publish or update site (5 cr)', 'Edit a site section (10 cr)', 'Keep site active (50 cr / mo)', 'Generate site draft (100 cr)'],
     color: '#0891B2',
-    bg: '#ECFEFF',
+  },
+  {
+    id: 'agents_research',
+    name: 'Research & Intelligence',
+    cost: '2–100 credits / task',
+    description: 'Track competitor pricing across multiple sources, clean up product catalogue photos, and dispatch deep research swarms.',
+    actions: ['Competitor price check (2 cr / item)', 'Product photo cleanup (10 cr / img)', 'Deep research swarm (100 cr)'],
+    color: '#D97706',
   },
 ];
 
 const PLAN_AGENTS: PlanAgentItem[] = [
+  {
+    id: 'tier_2',
+    tabLabel: 'Credits',
+    role: 'sales_agent',
+    title: 'Credits',
+    description: '1 credit = ₹0.10. Pure pass-through rates with 0% token markup.',
+    features: () => [
+      { title: 'Base Activation', value: '₹500 (1,000 credits)' },
+      { title: 'Top-Up: Starter', value: '₹100 (1,000 credits)' },
+      { title: 'Top-Up: Growth', value: '₹500 (5,000 credits)' },
+      { title: 'Top-Up: Scale', value: '₹1,000 (10,000 credits)' },
+      { title: 'Expiry', value: 'None while account is active' },
+    ],
+  },
   {
     id: 'tier_1',
     tabLabel: 'Workspace',
@@ -141,27 +114,17 @@ const PLAN_AGENTS: PlanAgentItem[] = [
     ],
   },
   {
-    id: 'tier_2',
-    tabLabel: 'Credits',
-    role: 'sales_agent',
-    title: 'One Credit Wallet',
-    description: 'Credits pay for owned workspaces and AI actions. No fixed plans.',
-    features: () => [
-      { title: '500 credits', value: '₹99' },
-      { title: '2,500 credits', value: '₹449' },
-      { title: '6,000 credits', value: '₹999' },
-      { title: 'Expiry', value: 'None while account is active' },
-      { title: 'Third-party fees', value: 'Separate' },
-    ],
-  },
-  {
     id: 'tier_4',
-    tabLabel: 'All Agents',
+    tabLabel: 'Agents',
     role: 'lead_hunter',
-    title: 'All Agents',
-    description: 'Specialized AI tools called automatically in your workspace.',
+    title: 'Agents',
+    description: 'Autonomous agents and workflows orchestrated for real business tasks.',
   },
 ];
+
+const MIN_CREDITS = 1000;
+const MAX_CREDITS = 10000;
+const STEP_CREDITS = 1000;
 
 interface EphemeralPlanCanvasProps {
   visible: boolean;
@@ -182,21 +145,26 @@ export function EphemeralPlanCanvas({
   workspaces,
   onOpenCanvasCustomizer,
 }: EphemeralPlanCanvasProps) {
-  const router = useRouter();
   const insets = useSafeAreaInsets();
-  const [activeTab, setActiveTab] = useState<string>('tier_1');
+  const [activeTab, setActiveTab] = useState<string>('tier_2');
   const [siteGenMode] = useState<AgentStateMode>('active');
   const [workspacesExpanded, setWorkspacesExpanded] = useState<boolean>(false);
   const [showSiteScreen, setShowSiteScreen] = useState<boolean>(false);
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
-  const [catalog, setCatalog] = useState<AgentRate[]>([]);
+  const [packs, setPacks] = useState<CreditPack[]>([]);
+  const [selectedCredits, setSelectedCredits] = useState(1000);
+  const [buying, setBuying] = useState(false);
+  const [granting, setGranting] = useState(false);
+  const [creditError, setCreditError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!visible) return;
-    Promise.all([tar.wallet(), tar.agents()]).then(([wallet, agents]) => {
+    Promise.all([tar.wallet(), tar.packs()]).then(([wallet, packsResult]) => {
       setWalletBalance(wallet.wallet?.balance ?? 0);
-      setCatalog(agents.agents || []);
-    }).catch(() => {});
+      setPacks(packsResult.packs);
+    }).catch((caught: any) => {
+      setCreditError(caught?.message || 'Could not load credits.');
+    });
   }, [visible]);
 
   const cleanSub = (subdomain || 'site').replace(/^w:/, '');
@@ -213,27 +181,53 @@ export function EphemeralPlanCanvas({
 
   const currentAgent = PLAN_AGENTS.find((a) => a.id === activeTab) || PLAN_AGENTS[0];
 
-  const handleOpenCreditPacks = () => {
-    onClose();
-    router.push('/credits');
+  const incrementCredits = () => setSelectedCredits((prev) => Math.min(MAX_CREDITS, prev + STEP_CREDITS));
+  const decrementCredits = () => setSelectedCredits((prev) => Math.max(MIN_CREDITS, prev - STEP_CREDITS));
+
+  const selectedPrice = Math.round(selectedCredits * 0.1);
+  const selectedPriceFormatted = `₹${selectedPrice.toLocaleString('en-IN')}`;
+
+  const resolvedPackId = packs.find((p) => p.credits === selectedCredits && p.id.startsWith('topup-'))?.id
+    ?? (selectedCredits <= 1000 ? 'topup-starter-1000' : selectedCredits <= 5000 ? 'topup-growth-5000' : 'topup-scale-10000');
+
+  const reloadWallet = async () => {
+    try {
+      const result = await tar.wallet();
+      setWalletBalance(result.wallet?.balance ?? 0);
+    } catch {}
+  };
+
+  const buySelected = async () => {
+    setBuying(true);
+    setCreditError(null);
+    try {
+      const order = await tar.createPaymentOrder(resolvedPackId);
+      if (!order.checkoutUrl) throw new Error('Checkout is unavailable.');
+      await WebBrowser.openBrowserAsync(order.checkoutUrl, {
+        presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
+      });
+      await reloadWallet();
+    } catch (caught: any) {
+      setCreditError(caught?.message || 'Could not start checkout.');
+    } finally {
+      setBuying(false);
+    }
+  };
+
+  const grantDevelopmentCredits = async () => {
+    setGranting(true);
+    setCreditError(null);
+    try {
+      await tar.grantDevelopmentCredits(selectedCredits);
+      await reloadWallet();
+    } catch (caught: any) {
+      setCreditError(caught?.message || 'Could not add test credits.');
+    } finally {
+      setGranting(false);
+    }
   };
 
   const activeFeatures = currentAgent.features ? currentAgent.features(ownerCount, memberCount) : [];
-  const agentDirectory = catalog.length > 0
-    ? catalog.map((agent, index) => {
-        const fallback = MICRO_AGENTS_DIRECTORY.find((item) => item.action === agent.action);
-        const colors = ['#8B5CF6', '#10B981', '#F97316', '#2563EB', '#E11D48', '#0891B2'];
-        return {
-          id: agent.id,
-          action: agent.action,
-          name: agent.name,
-          desc: fallback?.desc || agent.action.replace(/\./g, ' '),
-          credits: agent.credits,
-          color: fallback?.color || colors[index % colors.length],
-          bg: fallback?.bg || '#F8FAFC',
-        };
-      })
-    : MICRO_AGENTS_DIRECTORY;
 
   return (
     <Modal
@@ -259,12 +253,9 @@ export function EphemeralPlanCanvas({
             </TouchableOpacity>
             <Text style={styles.pageTitle}>Credits & Agents</Text>
           </View>
-          <View style={styles.workspacePill}>
-            <Text style={styles.workspacePillText}>{cleanSub}</Text>
-          </View>
         </View>
 
-        {/* ── 2. FLAT SEGMENTED SELECTOR (Workspace | Sales Agent | All Agents) ── */}
+        {/* ── 2. FLAT SEGMENTED SELECTOR (Credits | Workspace | Agents) ── */}
         <View style={styles.tabsRow}>
           {PLAN_AGENTS.map((agent) => {
             const isActive = agent.id === activeTab;
@@ -287,7 +278,7 @@ export function EphemeralPlanCanvas({
 
         {/* ── 3. CONTENT VIEW ── */}
         {activeTab === 'tier_4' ? (
-          /* ── ALL AGENTS DIRECTORY ── */
+          /* ── ALL AGENTS (brandsite-style cards) ── */
           <ScrollView
             style={styles.contentScroll}
             contentContainerStyle={[
@@ -296,33 +287,163 @@ export function EphemeralPlanCanvas({
             ]}
             showsVerticalScrollIndicator={false}
           >
-            <View style={styles.directoryContainer}>
-              {agentDirectory.map((item, idx) => (
-                <View
-                  key={item.id}
-                  style={[
-                    styles.directoryRow,
-                    idx < agentDirectory.length - 1 && styles.directoryRowBorder,
-                  ]}
-                >
-                  {/* Non-animated TarLogo Icon differing by work color */}
-                  <View style={[styles.agentIconBox, { backgroundColor: item.bg }]}>
-                    <TarLogo size={24} color={item.color} />
-                  </View>
-
-                  {/* Agent Info + Right Bottom Cost Text */}
-                  <View style={styles.directoryContentCol}>
-                    <Text style={styles.directoryName}>{item.name}</Text>
-                    <Text style={styles.directoryDesc}>{item.desc}</Text>
-                    <View style={styles.directoryCostRow}>
-                      <Text style={styles.directoryCostText}>{item.credits} credits</Text>
+            <View style={styles.agentCardsWrap}>
+              {PLAN_AGENT_GROUPS.map((agent) => (
+                <View key={agent.id} style={styles.agentCard}>
+                  <View style={styles.agentCardHead}>
+                    <View style={styles.agentCardTitleRow}>
+                      <TarLogo size={20} color={agent.color} />
+                      <Text style={styles.agentCardName}>{agent.name}</Text>
                     </View>
+                    <Text style={styles.agentCardCost}>{agent.cost}</Text>
+                  </View>
+                  <Text style={styles.agentCardDesc}>{agent.description}</Text>
+                  <View style={styles.agentCardActions}>
+                    <Text style={styles.agentCardActionsLabel}>Key Actions</Text>
+                    {agent.actions.map((act, i) => (
+                      <View key={i} style={styles.agentCardActionRow}>
+                        <Text style={styles.agentCardActionBullet}>•</Text>
+                        <Text style={styles.agentCardActionText}>{act}</Text>
+                      </View>
+                    ))}
                   </View>
                 </View>
               ))}
             </View>
           </ScrollView>
+        ) : activeTab === 'tier_2' ? (
+          /* ── CREDITS TAB: BALANCE + TOP-UP ── */
+          <ScrollView
+            style={styles.contentScroll}
+            contentContainerStyle={[
+              styles.contentScrollInside,
+              { paddingBottom: Math.max(insets.bottom, 16) + 24 },
+            ]}
+            showsVerticalScrollIndicator={false}
+          >
+            {/* Main Upper Balance */}
+            <View style={styles.balanceSection}>
+              <Text style={styles.balanceNumber}>
+                {walletBalance === null ? '—' : walletBalance.toLocaleString('en-IN')}
+              </Text>
+              <Text style={styles.balanceSubtitle}>credits</Text>
+              {creditError && (
+                <View style={styles.errorBox}>
+                  <Text style={styles.errorText}>{creditError}</Text>
+                </View>
+              )}
+            </View>
+
+            {/* Stepper + Actions */}
+            <View style={styles.creditsBottomSection}>
+              {/* Stepper Row */}
+              <View style={styles.stepperRow}>
+                <Pressable
+                  onPress={decrementCredits}
+                  disabled={selectedCredits <= MIN_CREDITS}
+                  hitSlop={12}
+                  style={({ pressed }) => [
+                    styles.stepperButton,
+                    {
+                      borderColor: '#e4e4e7',
+                      opacity: selectedCredits <= MIN_CREDITS ? 0.25 : pressed ? 0.6 : 1,
+                    },
+                  ]}
+                  accessibilityLabel="Decrease amount"
+                >
+                  <Ionicons name="remove" size={22} color="#09090b" />
+                </Pressable>
+
+                <Text style={styles.stepperValueText}>
+                  +{selectedCredits.toLocaleString('en-IN')}
+                </Text>
+
+                <Pressable
+                  onPress={incrementCredits}
+                  disabled={selectedCredits >= MAX_CREDITS}
+                  hitSlop={12}
+                  style={({ pressed }) => [
+                    styles.stepperButton,
+                    {
+                      borderColor: '#e4e4e7',
+                      opacity: selectedCredits >= MAX_CREDITS ? 0.25 : pressed ? 0.6 : 1,
+                    },
+                  ]}
+                  accessibilityLabel="Increase amount"
+                >
+                  <Ionicons name="add" size={22} color="#09090b" />
+                </Pressable>
+              </View>
+
+              {/* Action Row: Pay and Add Test */}
+              <View style={styles.actionRow}>
+                <Pressable
+                  onPress={() => void buySelected()}
+                  disabled={buying || granting}
+                  style={({ pressed }) => [
+                    styles.actionButton,
+                    {
+                      backgroundColor: '#09090b',
+                      opacity: buying ? 0.7 : pressed ? 0.88 : 1,
+                      flex: 1,
+                    },
+                  ]}
+                >
+                  {buying ? (
+                    <ActivityIndicator color="#ffffff" size="small" />
+                  ) : (
+                    <Text style={[styles.actionButtonText, { color: '#ffffff' }]}>
+                      Pay {selectedPriceFormatted}
+                    </Text>
+                  )}
+                </Pressable>
+
+                {__DEV__ && (
+                  <Pressable
+                    onPress={() => void grantDevelopmentCredits()}
+                    disabled={granting || buying}
+                    style={({ pressed }) => [
+                      styles.testButton,
+                      {
+                        borderColor: '#e4e4e7',
+                        opacity: granting ? 0.7 : pressed ? 0.6 : 1,
+                      },
+                    ]}
+                    accessibilityLabel="Add test credits"
+                  >
+                    {granting ? (
+                      <ActivityIndicator color="#09090b" size="small" />
+                    ) : (
+                      <Text style={styles.testButtonText}>+Test</Text>
+                    )}
+                  </Pressable>
+                )}
+              </View>
+            </View>
+
+            {/* Credit pack reference */}
+            <Text style={styles.creditsReferenceLabel}>Credit Packs</Text>
+            {activeFeatures.length > 0 && (
+              <View style={styles.pointsBox}>
+                {activeFeatures.map((feat, index) => (
+                  <View
+                    key={`feat_wrap_${index}`}
+                    style={[
+                      styles.featureRow,
+                      index < activeFeatures.length - 1 && styles.featureRowBorder,
+                    ]}
+                  >
+                    <Text style={styles.featureTitleText}>{feat.title}</Text>
+                    <View style={styles.featureValueRow}>
+                      <Text style={styles.featureValueText}>{feat.value}</Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+          </ScrollView>
         ) : (
+          /* ── WORKSPACE TAB ── */
           <ScrollView
             style={styles.contentScroll}
             contentContainerStyle={[
@@ -346,9 +467,6 @@ export function EphemeralPlanCanvas({
               <Text style={styles.agentDesc} numberOfLines={1}>
                 {currentAgent.description}
               </Text>
-              {currentAgent.id === 'tier_2' && walletBalance !== null ? (
-                <Text style={styles.walletBalance}>{walletBalance.toLocaleString()} credits available</Text>
-              ) : null}
             </View>
 
             {/* ── 2-COLUMN KEY-VALUE FEATURE SPECS ── */}
@@ -441,35 +559,6 @@ export function EphemeralPlanCanvas({
           </View>
         )}
 
-        {activeTab === 'tier_2' && (
-          /* Sales Agent Tab: Brand Logo with Left-Aligned Text & Top-Right Arrow for External Link */
-          <View
-            style={[
-              styles.actionDockText,
-              {
-                paddingBottom: Math.max(insets.bottom, 16) + 8,
-              },
-            ]}
-          >
-            <TouchableOpacity
-              activeOpacity={0.7}
-              style={styles.actionTextRowBtn}
-              onPress={handleOpenCreditPacks}
-            >
-              <View style={styles.actionLeftWithLogo}>
-                <TarLogo size={18} color="#09090b" />
-                <Text style={styles.actionTextRowLabel}>Buy Credit Pack</Text>
-              </View>
-              <Ionicons
-                name="arrow-forward"
-                size={17}
-                color="#09090b"
-                style={{ transform: [{ rotate: '-45deg' }] }}
-              />
-            </TouchableOpacity>
-          </View>
-        )}
-
         {/* Live Site Manager & Theme Editor Modal */}
         <SiteScreen
           visible={showSiteScreen}
@@ -515,20 +604,6 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#09090b',
     letterSpacing: -0.3,
-  },
-  workspacePill: {
-    backgroundColor: '#f4f4f5',
-    paddingHorizontal: 8,
-    paddingVertical: 3.5,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#e4e4e7',
-  },
-  workspacePillText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#52525b',
-    fontFamily: 'monospace',
   },
   tabsRow: {
     flexDirection: 'row',
@@ -586,12 +661,100 @@ const styles = StyleSheet.create({
     lineHeight: 17,
     color: '#52525b',
   },
-  walletBalance: {
-    marginTop: 8,
-    fontSize: 20,
+  balanceSection: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: 28,
+    paddingBottom: 8,
+    gap: 4,
+  },
+  balanceNumber: {
+    fontSize: 56,
+    lineHeight: 60,
     fontWeight: '800',
+    letterSpacing: -2,
     color: '#09090b',
-    letterSpacing: -0.4,
+  },
+  balanceSubtitle: {
+    fontSize: 14,
+    fontWeight: '500',
+    letterSpacing: 0.2,
+    color: '#52525b',
+  },
+  errorBox: {
+    borderRadius: 8,
+    backgroundColor: '#FEF2F2',
+    padding: 12,
+    marginTop: 16,
+  },
+  errorText: {
+    color: '#B91C1C',
+    fontSize: 13,
+    textAlign: 'center',
+  },
+  creditsBottomSection: {
+    gap: 16,
+    paddingTop: 12,
+  },
+  stepperRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 28,
+    paddingBottom: 8,
+  },
+  stepperButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepperValueText: {
+    fontSize: 32,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+    minWidth: 130,
+    textAlign: 'center',
+    color: '#09090b',
+  },
+  actionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  actionButton: {
+    height: 54,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+  },
+  testButton: {
+    height: 54,
+    paddingHorizontal: 16,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  testButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#09090b',
+  },
+  creditsReferenceLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#09090b',
+    letterSpacing: -0.3,
+    marginTop: 24,
+    marginBottom: 8,
   },
   billingToggleWrap: {
     flexDirection: 'row',
@@ -705,55 +868,83 @@ const styles = StyleSheet.create({
     color: '#09090b',
     fontFamily: 'monospace',
   },
-  directoryContainer: {
-    backgroundColor: '#fafafa',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#f4f4f5',
-    paddingHorizontal: 12,
+  agentCardsWrap: {
+    gap: 12,
     paddingVertical: 4,
   },
-  directoryRow: {
+  agentCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    padding: 16,
+  },
+  agentCardHead: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    paddingVertical: 10,
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 10,
   },
-  directoryRowBorder: {
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  agentIconBox: {
-    width: 34,
-    height: 34,
-    borderRadius: 8,
+  agentCardTitleRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 10,
-    marginTop: 2,
-  },
-  directoryContentCol: {
+    gap: 8,
     flex: 1,
   },
-  directoryName: {
-    fontSize: 13,
+  agentCardName: {
+    fontSize: 15,
     fontWeight: '700',
     color: '#09090b',
+    letterSpacing: -0.3,
+    flexShrink: 1,
+  },
+  agentCardCost: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#047857',
+    backgroundColor: '#ecfdf5',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#d1fae5',
+  },
+  agentCardDesc: {
+    fontSize: 12.5,
+    lineHeight: 18,
+    color: '#52525b',
+    marginBottom: 14,
+  },
+  agentCardActions: {
+    borderTopWidth: 1,
+    borderTopColor: '#f3f4f6',
+    paddingTop: 12,
+    gap: 6,
+  },
+  agentCardActionsLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    color: '#6b7280',
     marginBottom: 2,
   },
-  directoryDesc: {
-    fontSize: 11.5,
-    lineHeight: 15,
-    color: '#52525b',
-    marginBottom: 4,
+  agentCardActionRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
   },
-  directoryCostRow: {
-    alignItems: 'flex-end',
+  agentCardActionBullet: {
+    fontSize: 12,
+    color: '#9ca3af',
+    lineHeight: 17,
   },
-  directoryCostText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#09090b',
-    fontFamily: 'monospace',
+  agentCardActionText: {
+    fontSize: 12,
+    lineHeight: 17,
+    color: '#374151',
+    flex: 1,
   },
   actionDockText: {
     paddingTop: 8,

@@ -40,6 +40,7 @@ import ExploreOverlay from '@/components/ExploreOverlay';
 import CanvasOverlay from '@/components/CanvasOverlay';
 import CanvasCustomizerModal from '@/components/CanvasCustomizerModal';
 import CreateWorkspace from '@/components/CreateWorkspace';
+import { EphemeralPlanCanvas } from '@/components/plans';
 import { TarLogoLoader } from '@/components/TarLogoLoader';
 import { updateStock } from '@/lib/inventory';
 
@@ -174,6 +175,7 @@ export default function WorkspacesScreen() {
   const [input, setInput] = useState('');
   const [executing, setExecuting] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
+  const [showPlanCanvas, setShowPlanCanvas] = useState(false);
   
   // Dynamic workspace blueprints/modules
   const [loadingIndex, setLoadingIndex] = useState(false);
@@ -1886,15 +1888,20 @@ export default function WorkspacesScreen() {
           </ScrollView>
 
           <View style={styles.switcherAccountSection}>
-            <Text style={styles.switcherAccountTitle}>Credits & Agents</Text>
             <TouchableOpacity
-              onPress={() => { setShowDropdown(false); router.push('/credits'); }}
+              onPress={() => {
+                setShowDropdown(false);
+                setShowPlanCanvas(true);
+              }}
               style={styles.creditBalanceRow}
               accessibilityLabel="Open credits and billing"
+              activeOpacity={0.7}
             >
               <View>
-                <Text style={styles.creditBalanceLabel}>Available credits</Text>
-                <Text style={styles.creditBalanceValue}>{creditBalance === null ? '—' : creditBalance.toLocaleString('en-IN')}</Text>
+                <Text style={styles.switcherAccountTitle}>Credits & Agents</Text>
+                <Text style={styles.creditBalanceLabel}>
+                  {creditBalance === null ? '—' : creditBalance.toLocaleString('en-IN')} available
+                </Text>
               </View>
               <Ionicons name="chevron-forward" size={19} color="#64748b" />
             </TouchableOpacity>
@@ -1922,7 +1929,7 @@ export default function WorkspacesScreen() {
         onClose={closeCreateModal}
         onOpenCredits={() => {
           closeCreateModal();
-          router.push('/credits');
+          setShowPlanCanvas(true);
         }}
         onSuccess={async (slug) => {
           closeCreateModal();
@@ -2253,6 +2260,20 @@ export default function WorkspacesScreen() {
         subdomain={currentWorkspace?.subdomain || ''}
         scope={activeScope || ''}
         products={products}
+      />
+
+      {/* Credits & Agents Plan Canvas */}
+      <EphemeralPlanCanvas
+        visible={showPlanCanvas}
+        onClose={() => setShowPlanCanvas(false)}
+        workspaces={workspaces}
+        workspaceName={currentWorkspace?.name || currentWorkspace?.subdomain || 'Workspace'}
+        subdomain={currentWorkspace?.subdomain}
+        scope={activeScope || ''}
+        onOpenCanvasCustomizer={() => {
+          setShowPlanCanvas(false);
+          setShowCanvasCustomizer(true);
+        }}
       />
 
       {/* Overlay Panels — Bottom Bar triggers */}
@@ -3093,9 +3114,9 @@ const styles = StyleSheet.create({
   },
   switcherAccountTitle: {
     color: '#0f172a',
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '700',
-    marginBottom: 8,
+    marginBottom: 2,
   },
   creditBalanceRow: {
     minHeight: 58,

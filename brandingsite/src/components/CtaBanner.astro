@@ -1,32 +1,31 @@
 ---
-// Human Pre-Footer Call to Action in Turn.io Canopy Green (#0a3922) - Official Google Play Badge
+// Pre-Footer Call to Action — Elegant, Compact & Reflecting TAR
 import GooglePlayBadge from "./GooglePlayBadge.astro";
+import TarLogo from "./TarLogo.astro";
 ---
 
-<section class="cta-editorial-section room-canopy-green reveal-item">
-  <div class="container cta-editorial-inner">
+<section class="cta-editorial-section room-canopy-green">
+  <div class="container cta-editorial-inner font-dm-sans">
     
-    <h2 class="display-section-lg cta-heading">
-      Start connecting with your people today.
-    </h2>
-
-    <p class="cta-narrative font-dm-sans">
-      Install the native TAR Android app from Google Play. Base activation is ₹500 (pre-loaded with ₹100 usage credits). Connect WhatsApp, invite your entire team for ₹0, and never pay monthly software seat taxes again.
-    </p>
-
-    <div class="cta-buttons-cluster">
-      <GooglePlayBadge height={48} />
-      <a href="#pricing" class="btn-ghost-light btn-lg font-dm-sans">
-        View Rate Calculator
-      </a>
+    <!-- Brand Lockup -->
+    <div class="cta-brand-lockup">
+      <TarLogo size={24} color="#55dd4a" />
+      <span class="cta-brand-name">tar.</span>
     </div>
 
-    <div class="cta-footnotes font-dm-sans">
-      <span>✓ Native Android App on Play Store</span>
-      <span>•</span>
-      <span>✓ iOS App Store Coming Soon</span>
-      <span>•</span>
-      <span>✓ ₹0 for Invited Team Members</span>
+    <!-- Main Editorial Headline -->
+    <h2 class="display-section-lg cta-heading">
+      Start connecting your<br />
+      operations today.
+    </h2>
+
+    <p class="cta-narrative">
+      Calm, honest software built for everyday commerce. Available on Android with zero per-seat software taxes.
+    </p>
+
+    <!-- App Store Action -->
+    <div class="cta-actions">
+      <GooglePlayBadge height={44} />
     </div>
 
   </div>
@@ -36,53 +35,62 @@ import GooglePlayBadge from "./GooglePlayBadge.astro";
   .cta-editorial-section {
     background-color: var(--color-canopy-green);
     color: var(--color-paper-white);
-    padding: 88px 0;
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 64px 0;
+    box-sizing: border-box;
     text-align: center;
     border-top: 1px solid rgba(255, 255, 255, 0.08);
   }
 
   .cta-editorial-inner {
-    max-width: 780px;
+    max-width: 680px;
     margin: 0 auto;
     display: flex;
     flex-direction: column;
     align-items: center;
+    gap: 20px;
+  }
+
+  .cta-brand-lockup {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background-color: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    padding: 6px 16px;
+    border-radius: 9999px;
+  }
+
+  .cta-brand-name {
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: -0.04em;
+    color: #ffffff;
   }
 
   .cta-heading {
     color: #ffffff;
-    margin-bottom: 18px;
     line-height: 1.08;
+    letter-spacing: -0.025em;
+    margin: 0;
   }
 
   .cta-narrative {
-    font-size: clamp(1.05rem, 1.5vw, 1.2rem);
+    font-size: 16px;
     color: var(--color-mint-wash);
-    line-height: 1.6;
-    max-width: 620px;
-    margin-bottom: 32px;
+    line-height: 1.55;
+    max-width: 520px;
+    margin: 0;
   }
 
-  .cta-buttons-cluster {
+  .cta-actions {
+    margin-top: 6px;
     display: flex;
-    flex-wrap: wrap;
     align-items: center;
     justify-content: center;
-    gap: 16px;
-    margin-bottom: 24px;
-  }
-
-  .btn-lg {
-    padding: 12px 24px;
-    font-size: 14.5px;
-  }
-
-  .cta-footnotes {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 12px;
-    font-size: 13px;
-    color: rgba(210, 242, 227, 0.85);
   }
 </style>

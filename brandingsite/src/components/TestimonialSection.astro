@@ -1,5 +1,5 @@
 ---
-// Clean Editorial Stories — Turn.io Sage Wash Room (#e4f7ee)
+// Community Stories & Impact — Compact & Uncluttered
 const stories = [
   {
     quote: "We cut missed appointments by 38% simply by sending patients gentle WhatsApp reminders 24 hours before their visit. People can confirm with a single tap.",
@@ -8,13 +8,13 @@ const stories = [
     impact: "38% Fewer Missed Visits"
   },
   {
-    quote: "Patients love sending voice notes in Tamil and Hindi to check if their medicines are ready. Our pharmacy staff spends far less time stuck on phone calls and much more time helping people face-to-face.",
+    quote: "Patients love sending voice notes in Tamil to check if medicines are ready. Our staff spends far less time on phone calls and more time helping people face-to-face.",
     org: "Neighborhood Care Pharmacy",
     author: "Managing Pharmacist",
     impact: "3,000+ Voice Notes / Mo"
   },
   {
-    quote: "During seasonal flooding, we broadcast real-time shelter updates and supply points to thousands of families on Telegram without spending thousands of dollars on software seat taxes.",
+    quote: "During seasonal flooding, we broadcast real-time shelter updates to thousands of families on Telegram without spending thousands on software seat taxes.",
     org: "Civic Relief Network",
     author: "Emergency Response Coordinator",
     impact: "10,000+ Families Reached"
@@ -22,7 +22,7 @@ const stories = [
 ];
 ---
 
-<section class="stories-editorial-section pastel-room-sage reveal-item" id="stories">
+<section class="stories-editorial-section pastel-room-sage" id="stories">
   <div class="container">
     
     <div class="section-head-left">
@@ -30,11 +30,11 @@ const stories = [
         Real impact in real communities.
       </h2>
       <p class="section-lead font-dm-sans">
-        See how clinics, community pharmacies, and local response teams use TAR to stay connected with the people they serve every day.
+        How clinics, pharmacies, and local response teams use TAR to stay connected with the people they serve.
       </p>
     </div>
 
-    <!-- 3 Stories Editorial Columns with Subtle Dividers -->
+    <!-- 3 Stories Editorial Columns -->
     <div class="stories-editorial-grid font-dm-sans">
       {stories.map((s) => (
         <div class="story-editorial-col">
@@ -54,26 +54,33 @@ const stories = [
 
 <style>
   .stories-editorial-section {
-    padding: var(--section-gap) 0;
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 64px 0;
+    box-sizing: border-box;
     color: var(--color-ink-black);
-    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
   }
 
   .section-head-left {
     max-width: 800px;
-    margin-bottom: 48px;
+    margin-bottom: 32px;
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 10px;
   }
 
   .section-title {
     color: var(--color-canopy-green);
     line-height: 1.08;
+    font-size: clamp(1.9rem, 3vw, 2.5rem);
   }
 
   .section-lead {
-    font-size: 16px;
+    font-size: 15px;
     line-height: 1.6;
     color: var(--color-graphite);
   }
@@ -81,7 +88,7 @@ const stories = [
   .stories-editorial-grid {
     display: grid;
     grid-template-columns: 1fr;
-    border-top: 1px solid rgba(0, 0, 0, 0.1);
+    border-top: 1px solid rgba(0, 0, 0, 0.08);
   }
 
   @media (min-width: 768px) {
@@ -91,47 +98,48 @@ const stories = [
   }
 
   .story-editorial-col {
-    padding: 32px 28px;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
-    border-right: 1px solid rgba(0, 0, 0, 0.1);
+    padding: 24px 20px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+    border-right: 1px solid rgba(0, 0, 0, 0.08);
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-    gap: 20px;
+    gap: 16px;
     background-color: rgba(255, 255, 255, 0.35);
   }
 
   .story-impact-badge {
     align-self: flex-start;
-    font-size: 11px;
+    font-size: 10.5px;
     font-weight: 700;
-    color: var(--color-coral-pulse);
+    color: var(--color-canopy-green);
     text-transform: uppercase;
     letter-spacing: 0.05em;
   }
 
   .story-quote-txt {
-    font-size: 14.5px;
-    line-height: 1.6;
+    font-size: 13.5px;
+    line-height: 1.55;
     color: var(--color-graphite);
     flex: 1;
+    margin: 0;
   }
 
   .story-footer {
     display: flex;
     flex-direction: column;
     gap: 2px;
-    border-top: 1px solid rgba(0, 0, 0, 0.08);
-    padding-top: 14px;
+    border-top: 1px solid rgba(0, 0, 0, 0.06);
+    padding-top: 12px;
   }
 
   .story-org {
-    font-size: 14px;
+    font-size: 13.5px;
     color: var(--color-canopy-green);
   }
 
   .story-author {
-    font-size: 12px;
+    font-size: 11.5px;
     color: var(--color-slate);
   }
 </style>

@@ -1,0 +1,159 @@
+---
+// Terms & Conditions Page for TAR
+import Layout from "../layouts/Layout.astro";
+import Nav from "../components/Nav.astro";
+import FooterSection from "../components/FooterSection.astro";
+---
+
+<Layout 
+  title="Terms & Conditions — TAR" 
+  description="TAR Terms & Conditions: Plain-English terms for credit packs, at-cost compute pass-through, and software licensing."
+>
+  <Nav />
+
+  <main class="legal-main">
+    <div class="container legal-container font-dm-sans">
+      <header class="legal-header">
+        <div class="legal-badge">Legal Terms</div>
+        <h1 class="legal-title">Terms & Conditions</h1>
+        <p class="legal-lead">Last updated: August 2026</p>
+      </header>
+
+      <hr class="legal-divider" />
+
+      <article class="legal-body">
+        <section class="legal-section">
+          <h2>1. Overview & Acceptance</h2>
+          <p>
+            By installing the TAR native mobile application, creating a workspace, or using TAR credit packs, you agree to these Terms. If you are using TAR on behalf of an organization, clinic, or business, you represent that you have the authority to bind that entity.
+          </p>
+        </section>
+
+        <section class="legal-section">
+          <h2>2. Workspace Ownership & License</h2>
+          <p>
+            You retain all rights, title, and interest in and to your business records, product catalogs, customer lists, documents, and communications. TAR grants you a non-exclusive license to use the TAR application and services in accordance with these terms.
+          </p>
+        </section>
+
+        <section class="legal-section">
+          <h2>3. Credit Packs & Billing</h2>
+          <ul>
+            <li><strong>Unit of Account:</strong> 1 TAR Credit is priced at ₹0.10 (10 Paise).</li>
+            <li><strong>At-Cost Pass-Through:</strong> Credits are deducted solely based on the actual compute and API resources consumed by your workspace actions.</li>
+            <li><strong>Zero Per-Seat Markup:</strong> You may invite an unlimited number of staff, cashiers, nurses, or field workers to your workspace at ₹0.00 additional seat license cost.</li>
+            <li><strong>Non-Expiring Wallet:</strong> Credits in your active account wallet do not expire.</li>
+          </ul>
+        </section>
+
+        <section class="legal-section">
+          <h2>4. Fair Use & Channel Compliance</h2>
+          <p>
+            You are responsible for ensuring that all messages dispatched to third-party interfaces (such as WhatsApp, Telegram, Google Chat, or MS Teams) comply with the applicable terms and anti-spam policies of those respective channel providers.
+          </p>
+        </section>
+
+        <section class="legal-section">
+          <h2>5. Limitation of Liability</h2>
+          <p>
+            TAR is provided on an "as is" and "as available" basis. While we build for offline resilience and high availability, we are not liable for external third-party messaging API outages or telecommunication disruptions.
+          </p>
+        </section>
+      </article>
+    </div>
+  </main>
+
+  <FooterSection />
+</Layout>
+
+<style>
+  .legal-main {
+    background-color: #ffffff;
+    color: var(--color-ink-black);
+    min-height: 80vh;
+    padding: 56px 0 88px 0;
+  }
+
+  .legal-container {
+    max-width: 760px;
+    margin: 0 auto;
+  }
+
+  .legal-header {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .legal-badge {
+    align-self: flex-start;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-canopy-green);
+    background-color: #ecfdf5;
+    padding: 4px 10px;
+    border-radius: 4px;
+  }
+
+  .legal-title {
+    font-size: clamp(2.2rem, 3.6vw, 2.8rem);
+    font-weight: 700;
+    color: var(--color-canopy-green);
+    letter-spacing: -0.02em;
+    margin: 0;
+  }
+
+  .legal-lead {
+    font-size: 14px;
+    color: var(--color-slate);
+    margin: 0;
+  }
+
+  .legal-divider {
+    border: none;
+    border-top: 1px solid rgba(0, 0, 0, 0.08);
+    margin: 28px 0 36px 0;
+  }
+
+  .legal-body {
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+  }
+
+  .legal-section {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .legal-section h2 {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--color-canopy-green);
+    margin: 0;
+  }
+
+  .legal-section p {
+    font-size: 14.5px;
+    line-height: 1.65;
+    color: var(--color-graphite);
+    margin: 0;
+  }
+
+  .legal-section ul {
+    margin: 4px 0 0 0;
+    padding-left: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .legal-section li {
+    font-size: 14px;
+    line-height: 1.55;
+    color: var(--color-graphite);
+  }
+</style>

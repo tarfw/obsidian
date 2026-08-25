@@ -1,0 +1,171 @@
+---
+// Privacy Policy Page for TAR
+import Layout from "../layouts/Layout.astro";
+import Nav from "../components/Nav.astro";
+import FooterSection from "../components/FooterSection.astro";
+---
+
+<Layout 
+  title="Privacy Policy — TAR" 
+  description="TAR Privacy Policy: Local-first data architecture, zero user data selling, zero model training on private messages, and full data sovereignty."
+>
+  <Nav />
+
+  <main class="legal-main">
+    <div class="container legal-container font-dm-sans">
+      <header class="legal-header">
+        <div class="legal-badge">Legal Policy</div>
+        <h1 class="legal-title">Privacy Policy</h1>
+        <p class="legal-lead">Last updated: August 2026</p>
+      </header>
+
+      <hr class="legal-divider" />
+
+      <article class="legal-body">
+        <section class="legal-section">
+          <h2>1. Fundamental Principles</h2>
+          <p>
+            At TAR, we believe that your business data, patient conversations, customer contacts, and operational records belong exclusively to you. Our architecture is designed around a local-first philosophy where data resides primarily on your hardware.
+          </p>
+        </section>
+
+        <section class="legal-section">
+          <h2>2. Data We Do and Do Not Collect</h2>
+          <p><strong>What stays on your device:</strong></p>
+          <ul>
+            <li>Your local store database, sales ledgers, customer lists, inventory, and order records.</li>
+            <li>Your local business documents and product catalogs.</li>
+            <li>Direct local chat transcripts and customer interaction logs.</li>
+          </ul>
+          <p><strong>What is processed for service delivery:</strong></p>
+          <ul>
+            <li><strong>AI Operations:</strong> When you invoke AI actions (e.g. WhatsApp auto-reply, audio note transcription, or OCR scan), the specific prompt text or media is sent transiently to provider APIs (Groq Whisper, Gemma, DeepSeek) to fulfill the operation.</li>
+            <li><strong>Zero Model Training:</strong> Your inputs and customer messages are <strong>never</strong> used to train or fine-tune public or third-party AI models.</li>
+            <li><strong>Encrypted Cloud Sync (Optional):</strong> If you enable multi-device sync, encrypted data transactions are replicated via TLS 1.3 over secure cloud servers.</li>
+          </ul>
+        </section>
+
+        <section class="legal-section">
+          <h2>3. Zero Data Monetization or Selling</h2>
+          <p>
+            We do not sell, rent, monetize, or broker personal data, patient communications, or business telemetry to any third party, data broker, or advertiser.
+          </p>
+        </section>
+
+        <section class="legal-section">
+          <h2>4. Data Portability and Erasure</h2>
+          <p>
+            Because TAR uses standard open data formats, you can export your entire workspace at any moment with a single tap. If you delete your workspace, local records are immediately erased from your device and any synced cloud backups are purged.
+          </p>
+        </section>
+
+        <section class="legal-section">
+          <h2>5. Contact Us</h2>
+          <p>
+            If you have questions regarding our privacy practices or data handling, contact us directly at <a href="mailto:privacy@tarfw.com" class="legal-link">privacy@tarfw.com</a>.
+          </p>
+        </section>
+      </article>
+    </div>
+  </main>
+
+  <FooterSection />
+</Layout>
+
+<style>
+  .legal-main {
+    background-color: #ffffff;
+    color: var(--color-ink-black);
+    min-height: 80vh;
+    padding: 56px 0 88px 0;
+  }
+
+  .legal-container {
+    max-width: 760px;
+    margin: 0 auto;
+  }
+
+  .legal-header {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .legal-badge {
+    align-self: flex-start;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-canopy-green);
+    background-color: #ecfdf5;
+    padding: 4px 10px;
+    border-radius: 4px;
+  }
+
+  .legal-title {
+    font-size: clamp(2.2rem, 3.6vw, 2.8rem);
+    font-weight: 700;
+    color: var(--color-canopy-green);
+    letter-spacing: -0.02em;
+    margin: 0;
+  }
+
+  .legal-lead {
+    font-size: 14px;
+    color: var(--color-slate);
+    margin: 0;
+  }
+
+  .legal-divider {
+    border: none;
+    border-top: 1px solid rgba(0, 0, 0, 0.08);
+    margin: 28px 0 36px 0;
+  }
+
+  .legal-body {
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+  }
+
+  .legal-section {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .legal-section h2 {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--color-canopy-green);
+    margin: 0;
+  }
+
+  .legal-section p {
+    font-size: 14.5px;
+    line-height: 1.65;
+    color: var(--color-graphite);
+    margin: 0;
+  }
+
+  .legal-section ul {
+    margin: 4px 0 0 0;
+    padding-left: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .legal-section li {
+    font-size: 14px;
+    line-height: 1.55;
+    color: var(--color-graphite);
+  }
+
+  .legal-link {
+    color: var(--color-canopy-green);
+    font-weight: 600;
+    text-decoration: underline;
+  }
+</style>

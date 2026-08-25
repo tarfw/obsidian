@@ -1,25 +1,25 @@
 ---
-// Run Your Teams on Channels — Following Hero Section Design & Aesthetic (Room Sky #ccf0f8)
+// Run Your Teams on Channels — Simple, Compact & Direct
 const teamCapabilities = [
   {
     badge: "TEAM INBOX",
-    title: "One unified inbox with zero seat fees.",
-    desc: "Invite your entire team, doctors, volunteers, and cashiers for ₹0. Everyone sees assigned conversations, internal notes, and live customer statuses."
+    title: "Shared Team Feed (₹0)",
+    desc: "Invite unlimited cashiers, drivers, and staff. Everyone collaborates in one calm feed."
   },
   {
     badge: "WORKFLOWS",
-    title: "One-tap approvals inside chat.",
-    desc: "Approve supply requests, confirm patient reschedules, and review invoices directly from WhatsApp or Telegram without opening clunky portals."
+    title: "1-Tap In-Chat Approvals",
+    desc: "Approve supply orders, schedule changes, and bills directly from WhatsApp or Telegram."
   },
   {
-    badge: "FIELD AUDIO",
-    title: "Voice notes transcribed instantly.",
-    desc: "On-the-ground staff can speak audio updates in their mother tongue. TAR transcribes the note into structured records and notifies the team."
+    badge: "VOICE NOTES",
+    title: "Voice Notes to Records",
+    desc: "Send audio notes in any language. Whisper transcribes them into orders and ledgers instantly."
   }
 ];
 ---
 
-<section class="teams-channel-section pastel-room-sky reveal-item" id="genui">
+<section class="teams-channel-section pastel-room-sky" id="genui">
   <div class="container">
     
     <div class="editorial-split-grid">
@@ -27,12 +27,12 @@ const teamCapabilities = [
       <!-- Left Column: Headline & Team Capabilities -->
       <div class="teams-narrative-col">
         <h2 class="display-section-lg section-title">
-          Run your Teams<br />
-          <span class="text-canopy">on Everyday Channels.</span>
+          Run your teams<br />
+          <span class="text-canopy">on everyday channels.</span>
         </h2>
 
         <p class="section-lead font-dm-sans">
-          Eliminate expensive software seat taxes and complicated training. Connect your frontline workers, coordinators, and management on the channels they already use every day.
+          One shared inbox with zero per-seat software fees. Connect frontline workers, staff, and customers on the messaging apps they already use.
         </p>
 
         <div class="team-caps-list font-dm-sans">
@@ -50,25 +50,25 @@ const teamCapabilities = [
         </div>
       </div>
 
-      <!-- Right Column: Dark Window Mockup matching Hero Design Pattern -->
+      <!-- Right Column: Clean Dark Window Mockup -->
       <div class="teams-visual-col">
         <div class="dark-window-frame font-dm-sans">
           
-          <!-- macOS Window Controls Top-Left -->
+          <!-- macOS Window Controls -->
           <div class="window-controls-bar">
             <span class="window-dot"></span>
             <span class="window-dot"></span>
             <span class="window-dot"></span>
           </div>
 
-          <!-- 3 Centered Team Operation Message Cards -->
+          <!-- 3 Compact Team Operation Message Cards -->
           <div class="whatsapp-cards-stack">
             
             <!-- Message 1: Roster & Shift Approval -->
             <div class="wa-bubble-card">
               <div class="wa-bubble-main">
                 <p class="wa-msg-text">
-                  Dr. Rao approved shift swap with Dr. Kumar for Friday clinic. 14 patient appointments re-assigned.
+                  Dr. Rao approved shift swap with Dr. Kumar for Friday clinic. 14 patient visits re-assigned.
                 </p>
                 <span class="wa-timestamp">11:20 AM</span>
               </div>
@@ -114,29 +114,36 @@ const teamCapabilities = [
 
 <style>
   .teams-channel-section {
-    padding: var(--section-gap) 0;
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 64px 0;
+    box-sizing: border-box;
     color: var(--color-ink-black);
-    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
   }
 
   .editorial-split-grid {
     display: grid;
     grid-template-columns: 1fr;
-    gap: 48px;
+    gap: 36px;
     align-items: center;
   }
 
   @media (min-width: 960px) {
     .editorial-split-grid {
       grid-template-columns: 1.1fr 0.9fr;
-      gap: 56px;
+      gap: 48px;
     }
   }
 
   .teams-narrative-col {
     display: flex;
     flex-direction: column;
-    gap: 20px;
+    gap: 14px;
+    max-width: 520px;
   }
 
   .section-title {
@@ -149,31 +156,31 @@ const teamCapabilities = [
   }
 
   .section-lead {
-    font-size: 16px;
+    font-size: 15px;
     line-height: 1.6;
     color: var(--color-graphite);
-    max-width: 580px;
+    margin: 0;
   }
 
   .team-caps-list {
     display: flex;
     flex-direction: column;
-    border-top: 1px solid rgba(0, 0, 0, 0.1);
-    margin-top: 12px;
+    border-top: 1px solid rgba(0, 0, 0, 0.08);
+    margin-top: 8px;
   }
 
   .cap-row {
     display: grid;
     grid-template-columns: 1fr;
     gap: 6px;
-    padding: 18px 0;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+    padding: 14px 0;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
   }
 
   @media (min-width: 540px) {
     .cap-row {
-      grid-template-columns: 110px 1fr;
-      gap: 16px;
+      grid-template-columns: 100px 1fr;
+      gap: 14px;
     }
   }
 
@@ -183,7 +190,7 @@ const teamCapabilities = [
   }
 
   .cap-badge {
-    font-size: 11px;
+    font-size: 10.5px;
     font-weight: 700;
     color: var(--color-canopy-green);
     letter-spacing: 0.06em;
@@ -192,22 +199,24 @@ const teamCapabilities = [
   .cap-desc-col {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 3px;
   }
 
   .cap-title {
-    font-size: 15.5px;
+    font-size: 15px;
     font-weight: 700;
     color: var(--color-canopy-green);
+    margin: 0;
   }
 
   .cap-desc {
-    font-size: 13.5px;
+    font-size: 13px;
     color: var(--color-graphite);
-    line-height: 1.5;
+    line-height: 1.45;
+    margin: 0;
   }
 
-  /* Right Visual: Dark Window Mockup matching Hero Design Pattern */
+  /* Right Visual */
   .teams-visual-col {
     display: flex;
     justify-content: center;
@@ -215,12 +224,11 @@ const teamCapabilities = [
 
   .dark-window-frame {
     width: 100%;
-    max-width: 410px;
+    max-width: 320px;
     background-color: #232724;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 18px;
-    box-shadow: 0 20px 48px rgba(0, 0, 0, 0.35);
-    padding: 14px 16px 20px 16px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 14px;
+    padding: 12px 14px 16px 14px;
     display: flex;
     flex-direction: column;
   }
@@ -229,42 +237,40 @@ const teamCapabilities = [
     display: flex;
     align-items: center;
     gap: 5px;
-    margin-bottom: 12px;
+    margin-bottom: 10px;
   }
 
   .window-dot {
-    width: 7px;
-    height: 7px;
+    width: 6px;
+    height: 6px;
     border-radius: 50%;
     background-color: #525854;
   }
 
-  /* 3 Centered WhatsApp Dark Mode Message Cards */
   .whatsapp-cards-stack {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 8px;
     width: 100%;
   }
 
   .wa-bubble-card {
     background-color: #2b302c;
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    border-radius: 12px;
-    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
     overflow: hidden;
     color: #e9edef;
   }
 
   .wa-bubble-main {
-    padding: 12px 14px 8px 14px;
+    padding: 10px 12px 6px 12px;
     display: flex;
     flex-direction: column;
     gap: 4px;
   }
 
   .wa-msg-text {
-    font-size: 13px;
+    font-size: 12.5px;
     line-height: 1.4;
     color: #f1f3f4;
     margin: 0;
@@ -272,7 +278,7 @@ const teamCapabilities = [
 
   .wa-timestamp {
     align-self: flex-end;
-    font-size: 10px;
+    font-size: 9.5px;
     color: #8e9590;
     line-height: 1;
     margin-top: 2px;
@@ -283,23 +289,18 @@ const teamCapabilities = [
     background: transparent;
     border: none;
     border-top: 1px solid rgba(255, 255, 255, 0.08);
-    padding: 8px 14px;
+    padding: 7px 12px;
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 6px;
     color: #22c55e;
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 500;
     cursor: pointer;
-    transition: background-color 0.15s ease;
-  }
-
-  .wa-action-bar-btn:hover {
-    background-color: rgba(34, 197, 94, 0.08);
   }
 
   .wa-btn-icon {
-    font-size: 13px;
+    font-size: 12px;
   }
 </style>

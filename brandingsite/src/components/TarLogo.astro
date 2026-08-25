@@ -1,0 +1,51 @@
+---
+// Canonical TAR Mascot Vector — 100% Exact to TarLogo.tsx proportions
+// Grid: 7 columns wide x 7.1 units tall
+// Slices: [1.0, 1.0, 1.0, 1.0, 1.1, 1.1, 0.55, 0.35]
+
+interface Props {
+  size?: number;
+  color?: string;
+  class?: string;
+}
+
+const { size = 26, color = "currentColor", class: className = "" } = Astro.props;
+const height = Math.round(((size * 7.1) / 7) * 10) / 10;
+---
+
+<svg
+  class={className}
+  width={size}
+  height={height}
+  viewBox="0 0 7 7.1"
+  fill={color}
+  xmlns="http://www.w3.org/2000/svg"
+  style="display: inline-block; vertical-align: middle; flex-shrink: 0;"
+  aria-label="TAR Logo"
+>
+  <!-- Row 0: Ear tips (Cols 0..1 and 5..6) -->
+  <rect x="0" y="0" width="2" height="1" />
+  <rect x="5" y="0" width="2" height="1" />
+
+  <!-- Row 1: Head top (Cols 1..5) -->
+  <rect x="1" y="1" width="5" height="1" />
+
+  <!-- Row 2: Forehead (Cols 0..6) -->
+  <rect x="0" y="2" width="7" height="1" />
+
+  <!-- Row 3: Eyes Row (Cols 0..1, Col 3 nose bridge, Cols 5..6, with transparent eye cutouts at Col 2 & 4) -->
+  <rect x="0" y="3" width="2" height="1" />
+  <rect x="3" y="3" width="1" height="1" />
+  <rect x="5" y="3" width="2" height="1" />
+
+  <!-- Row 4: Cheeks (Cols 0..6) -->
+  <rect x="0" y="4" width="7" height="1.1" />
+
+  <!-- Row 5: Jaw/Mouth (Cols 0..6) -->
+  <rect x="0" y="5.1" width="7" height="1.1" />
+
+  <!-- Row 6 & 7: Feet & Center Extension -->
+  <rect x="0" y="6.2" width="1" height="0.55" />
+  <rect x="3" y="6.2" width="1" height="0.9" />
+  <rect x="6" y="6.2" width="1" height="0.55" />
+</svg>

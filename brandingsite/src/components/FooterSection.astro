@@ -1,79 +1,51 @@
 ---
-// Clean, Human Directory Footer in Turn.io Canopy Green (#0a3922) with Official Google Play Badge
-import GooglePlayBadge from "./GooglePlayBadge.astro";
+// Clean, Human Directory Footer in Canopy Green (#0a3922) — 100vh Room Layout
+import TarLogo from "./TarLogo.astro";
 
 const channelLinks = [
-  { name: "WhatsApp Messaging", href: "#overview" },
-  { name: "Telegram Bot Channels", href: "#overview" },
-  { name: "Websites & Web Ordering", href: "#overview" },
-  { name: "Voice Notes in 40+ Languages", href: "#overview" }
+  { name: "WhatsApp", href: "/#overview" },
+  { name: "Telegram", href: "/#overview" },
+  { name: "Websites", href: "/#overview" },
+  { name: "Voice in 40+ Languages", href: "/#overview" }
 ];
 
 const capabilityLinks = [
-  { name: "Offline SQLite Sync", href: "#capabilities" },
-  { name: "Unified Team Inbox", href: "#genui" },
-  { name: "Automated Care Loops", href: "#capabilities" },
-  { name: "Zero Per-Seat Taxes", href: "#pricing" }
+  { name: "Works Offline", href: "/#capabilities" },
+  { name: "Unified Team Feed", href: "/#genui" },
+  { name: "Automated Care Loops", href: "/#capabilities" },
+  { name: "Zero Per-Seat Fees", href: "/#pricing" }
 ];
 
 const resourceLinks = [
-  { name: "How It Works", href: "#setup" },
-  { name: "Teams on Channels", href: "#genui" },
-  { name: "Transparent Pricing", href: "#pricing" },
-  { name: "Frequently Asked Questions", href: "#faq" }
+  { name: "Manifesto", href: "/manifesto" },
+  { name: "Documentation", href: "/docs" },
+  { name: "Agents & Rates", href: "/agents" },
+  { name: "Pricing", href: "/#pricing" },
+  { name: "FAQ", href: "/#faq" }
 ];
 
 const companyLinks = [
-  { name: "About TAR", href: "#" },
   { name: "Google Play Store", href: "https://play.google.com/store/apps" },
-  { name: "Privacy Policy", href: "#" },
-  { name: "Terms of Service", href: "#" }
+  { name: "Privacy Policy", href: "/privacy" },
+  { name: "Terms & Conditions", href: "/terms" },
+  { name: "Security Architecture", href: "/security" }
 ];
 ---
 
 <footer class="footer-section room-canopy-green">
-  <div class="container">
+  <div class="container footer-container font-dm-sans">
     
-    <!-- Top Footer Banner -->
-    <div class="footer-top-cluster">
-      <div class="footer-cta-left">
-        <h2 class="display-section footer-headline">
-          Helpful messaging for everyone.
-        </h2>
-        <p class="footer-sublead font-dm-sans">
-          Connect with your patients, customers, and community on the messaging apps they already trust.
-        </p>
-      </div>
-
-      <div class="footer-cta-right">
-        <GooglePlayBadge height={42} />
-      </div>
-    </div>
-
     <!-- Navigation Columns Grid -->
-    <div class="footer-nav-grid font-dm-sans">
+    <div class="footer-nav-grid">
       
       <!-- Brand Column -->
       <div class="footer-col brand-col">
-        <a href="/" class="footer-logo">
-          <svg width="24" height="24" viewBox="0 0 7 7.1" fill="currentColor">
-            <rect x="0" y="0" width="1" height="1"/>
-            <rect x="1" y="0" width="1" height="1"/>
-            <rect x="5" y="0" width="1" height="1"/>
-            <rect x="6" y="0" width="1" height="1"/>
-            <rect x="1" y="1" width="5" height="1"/>
-            <rect x="0" y="2" width="7" height="1"/>
-            <rect x="0" y="3" width="7" height="1"/>
-            <rect x="0" y="4" width="7" height="1.1"/>
-            <rect x="0" y="5.1" width="7" height="1.1"/>
-            <rect x="0" y="6.2" width="1" height="0.55"/>
-            <rect x="3" y="6.2" width="1" height="0.55"/>
-            <rect x="6" y="6.2" width="1" height="0.55"/>
-          </svg>
-          <span class="footer-logo-txt font-dm-sans">tar</span>
+        <a href="/" class="footer-logo" aria-label="TAR Homepage">
+          <TarLogo size={28} color="#55dd4a" />
+          <span class="footer-logo-txt">tar.</span>
         </a>
         <p class="brand-tagline">
-          Calm, reliable, and honest messaging software built for organizations that serve people. Native Android app on Google Play (iOS coming soon).
+          Calm, honest messaging for everyday commerce and operations.
         </p>
       </div>
 
@@ -107,9 +79,9 @@ const companyLinks = [
         </ul>
       </div>
 
-      <!-- Column 4: Company -->
+      <!-- Column 4: Legal & Apps -->
       <div class="footer-col">
-        <h4 class="col-title">NATIVE APPS</h4>
+        <h4 class="col-title">LEGAL & APPS</h4>
         <ul class="col-links">
           {companyLinks.map((l) => (
             <li><a href={l.href} class="footer-link">{l.name}</a></li>
@@ -120,14 +92,14 @@ const companyLinks = [
     </div>
 
     <!-- Bottom Legal Bar -->
-    <div class="footer-bottom-bar font-dm-sans">
+    <div class="footer-bottom-bar">
       <span class="copy-txt">
-        © 2026 TAR. Simple, transparent messaging for everyone. Native mobile platform.
+        © 2026 TAR. Built from Tamil with ❤️ for the world.
       </span>
       <div class="bottom-legal-links">
-        <a href="#">Privacy</a>
-        <a href="#">Terms</a>
-        <a href="#">Security</a>
+        <a href="/privacy">Privacy</a>
+        <a href="/terms">Terms</a>
+        <a href="/security">Security</a>
       </div>
     </div>
 
@@ -138,53 +110,28 @@ const companyLinks = [
   .footer-section {
     background-color: var(--color-canopy-green);
     color: var(--color-paper-white);
-    padding: 72px 0 36px 0;
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 64px 0;
+    box-sizing: border-box;
     border-top: 1px solid rgba(255, 255, 255, 0.08);
   }
 
-  .footer-top-cluster {
+  .footer-container {
+    width: 100%;
     display: flex;
     flex-direction: column;
-    gap: 24px;
-    padding-bottom: 48px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  }
-
-  @media (min-width: 860px) {
-    .footer-top-cluster {
-      flex-direction: row;
-      justify-content: space-between;
-      align-items: center;
-    }
-  }
-
-  .footer-cta-left {
-    max-width: 580px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .footer-headline {
-    color: #ffffff;
-  }
-
-  .footer-sublead {
-    font-size: 15px;
-    color: var(--color-mint-wash);
-    line-height: 1.5;
-  }
-
-  .footer-cta-right {
-    display: flex;
-    align-items: center;
+    gap: 48px;
   }
 
   .footer-nav-grid {
     display: grid;
     grid-template-columns: 1fr;
     gap: 36px;
-    padding: 48px 0;
+    padding-bottom: 40px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   }
 
@@ -196,15 +143,15 @@ const companyLinks = [
 
   @media (min-width: 960px) {
     .footer-nav-grid {
-      grid-template-columns: 1.5fr repeat(4, 1fr);
-      gap: 32px;
+      grid-template-columns: 1.4fr repeat(4, 1fr);
+      gap: 36px;
     }
   }
 
   .brand-col {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 14px;
   }
 
   .footer-logo {
@@ -216,17 +163,18 @@ const companyLinks = [
   }
 
   .footer-logo-txt {
-    font-size: 24px;
+    font-size: 26px;
     font-weight: 700;
     letter-spacing: -0.04em;
     color: #ffffff;
   }
 
   .brand-tagline {
-    font-size: 13px;
+    font-size: 14px;
     color: var(--color-mint-wash);
-    line-height: 1.55;
+    line-height: 1.6;
     max-width: 260px;
+    margin: 0;
   }
 
   .col-title {
@@ -243,7 +191,7 @@ const companyLinks = [
     margin: 0;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 12px;
   }
 
   .footer-link {
@@ -261,7 +209,6 @@ const companyLinks = [
     display: flex;
     flex-direction: column;
     gap: 12px;
-    padding-top: 32px;
     font-size: 13px;
     color: rgba(255, 255, 255, 0.6);
   }
@@ -276,12 +223,13 @@ const companyLinks = [
 
   .bottom-legal-links {
     display: flex;
-    gap: 16px;
+    gap: 18px;
   }
 
   .bottom-legal-links a {
     color: rgba(255, 255, 255, 0.6);
     text-decoration: none;
+    transition: color 0.15s ease;
   }
 
   .bottom-legal-links a:hover {

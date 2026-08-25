@@ -1,71 +1,42 @@
 ---
-// Reaching Across Channels: WhatsApp, SMS & Voice (Lilac Wash Room #fdf0ff)
-const channelComparisons = [
+// Multi-Channel Solutions — Ultra-Compact & Uncluttered
+const channels = [
   {
-    channel: "WhatsApp Business",
-    badge: "Interactive & Rich",
-    desc: "Interactive care loops, calendar buttons, and pre-visit guides delivered on the app customers use most.",
-    items: [
-      "One-tap calendar and confirmation buttons",
-      "Send prescription PDFs, invoices & directions",
-      "Verified green checkmark identity"
-    ]
+    title: "WhatsApp Business",
+    desc: "Interactive booking buttons, catalog orders, and PDF invoices on the app customers open daily."
   },
   {
-    channel: "SMS Global",
-    badge: "100% Guaranteed Reach",
-    desc: "Critical alerts and one-time verification passcodes delivered to any phone worldwide, without requiring data.",
-    items: [
-      "Arrives immediately even in low-signal areas",
-      "Two-way replies (e.g. Reply 'YES' to confirm)",
-      "Direct global carrier routing across 190+ countries"
-    ]
+    title: "SMS Global",
+    desc: "Guaranteed OTP and urgent dispatch delivery to any basic mobile phone in 190+ countries."
   },
   {
-    channel: "Voice Notes & Audio",
-    badge: "Accessible in 40+ Languages",
-    desc: "Spoken conversations for non-literate, elderly, or hands-free users in their mother tongue.",
-    items: [
-      "Instant audio transcription to structured records",
-      "Spoken voice replies generated naturally",
-      "Supports Hindi, Tamil, Telugu, Spanish, Arabic & more"
-    ]
+    title: "Voice Notes",
+    desc: "Speak naturally in Tamil, English, and 40+ languages. Whisper transcribes audio into records instantly."
   }
 ];
 ---
 
-<section class="channels-compare-section pastel-room-lilac reveal-item" id="channels">
+<section class="channels-compare-section pastel-room-lilac" id="channels">
   <div class="container">
     
     <!-- Section Header -->
     <div class="section-head-left">
       <h2 class="display-section-lg section-title">
-        Reaching the same customer on SMS<br />
-        or Voice is the same simple flow.
+        Reach every customer on<br />
+        WhatsApp, SMS, or Voice.
       </h2>
       <p class="section-lead font-dm-sans">
-        One unified customer record, one team inbox, and one credit balance. Choose the right channel for every situation without switching tools.
+        One unified customer feed. Choose the right channel for every interaction.
       </p>
     </div>
 
-    <!-- 3 Channels Editorial Split Columns -->
+    <!-- 3 Clean Columns -->
     <div class="channels-compare-grid font-dm-sans">
-      {channelComparisons.map((c) => (
+      {channels.map((c, idx) => (
         <div class="channel-col">
-          <div class="channel-top">
-            <span class="channel-badge">{c.badge}</span>
-            <h3 class="channel-title">{c.channel}</h3>
-            <p class="channel-desc">{c.desc}</p>
-          </div>
-
-          <ul class="channel-points-list">
-            {c.items.map((item) => (
-              <li>
-                <span class="check-mark">✓</span>
-                <span>{item}</span>
-              </li>
-            ))}
-          </ul>
+          <span class="channel-num">{String(idx + 1).padStart(2, '0')}</span>
+          <h3 class="channel-title">{c.title}</h3>
+          <p class="channel-desc">{c.desc}</p>
         </div>
       ))}
     </div>
@@ -75,17 +46,23 @@ const channelComparisons = [
 
 <style>
   .channels-compare-section {
-    padding: var(--section-gap) 0;
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 64px 0;
+    box-sizing: border-box;
     color: var(--color-ink-black);
-    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
   }
 
   .section-head-left {
-    max-width: 800px;
-    margin-bottom: 48px;
+    max-width: 680px;
+    margin-bottom: 32px;
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 8px;
   }
 
   .section-title {
@@ -94,15 +71,16 @@ const channelComparisons = [
   }
 
   .section-lead {
-    font-size: 16px;
-    line-height: 1.6;
+    font-size: 15px;
+    line-height: 1.5;
     color: var(--color-graphite);
+    margin: 0;
   }
 
   .channels-compare-grid {
     display: grid;
     grid-template-columns: 1fr;
-    border-top: 1px solid rgba(0, 0, 0, 0.1);
+    border-top: 1px solid rgba(0, 0, 0, 0.08);
   }
 
   @media (min-width: 768px) {
@@ -112,67 +90,46 @@ const channelComparisons = [
   }
 
   .channel-col {
-    padding: 32px 28px;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
-    border-right: 1px solid rgba(0, 0, 0, 0.1);
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    gap: 24px;
-    background-color: rgba(255, 255, 255, 0.35);
-  }
-
-  .channel-top {
+    padding: 24px 20px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
     display: flex;
     flex-direction: column;
     gap: 8px;
   }
 
-  .channel-badge {
-    align-self: flex-start;
-    font-size: 11px;
+  @media (min-width: 768px) {
+    .channel-col {
+      border-bottom: none;
+      border-right: 1px solid rgba(0, 0, 0, 0.08);
+      padding: 28px 24px;
+    }
+    .channel-col:first-child {
+      padding-left: 0;
+    }
+    .channel-col:last-child {
+      border-right: none;
+      padding-right: 0;
+    }
+  }
+
+  .channel-num {
+    font-size: 11.5px;
     font-weight: 700;
-    color: var(--color-coral-pulse);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
+    color: var(--color-slate);
+    letter-spacing: 0.06em;
   }
 
   .channel-title {
-    font-size: 20px;
+    font-size: 17.5px;
     font-weight: 700;
     color: var(--color-canopy-green);
-    letter-spacing: -0.01em;
+    margin: 0;
   }
 
   .channel-desc {
-    font-size: 14px;
-    line-height: 1.55;
+    font-size: 13.5px;
+    line-height: 1.5;
     color: var(--color-graphite);
-  }
-
-  .channel-points-list {
-    list-style: none;
-    padding: 0;
     margin: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    border-top: 1px solid rgba(0, 0, 0, 0.08);
-    padding-top: 16px;
-  }
-
-  .channel-points-list li {
-    display: flex;
-    align-items: flex-start;
-    gap: 8px;
-    font-size: 13px;
-    color: var(--color-graphite);
-    line-height: 1.45;
-  }
-
-  .check-mark {
-    color: #059669;
-    font-weight: 700;
-    flex-shrink: 0;
   }
 </style>

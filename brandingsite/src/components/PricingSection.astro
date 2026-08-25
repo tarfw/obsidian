@@ -1,115 +1,70 @@
 ---
-// Authentic TAR Credit Pricing — Bird.com Editorial Style (Cream Wash Room #faf7e8)
+// Authentic TAR Credit Pricing — 3 Horizontal Cards (Base Pack ₹0, Work Pack ₹500/mo, Top-Up Refill)
 const packs = [
   {
-    name: "Base Activation",
-    price: "₹500",
-    credits: "1,000 Credits (₹100 Wallet)",
-    details: "Includes ₹400 onboarding fee + ₹100 pre-loaded credit balance. Covers 8+ months of typical operations.",
-    badge: "One-Time Activation"
+    badge: "FREE TO START",
+    name: "Base Pack",
+    price: "₹0",
+    wallet: "100% Free Forever",
+    desc: "Offline sales, product catalog, inventory, and unlimited team members on your device."
   },
   {
-    name: "Starter Top-Up",
-    price: "₹100",
-    credits: "1,000 Credits (100% Wallet)",
-    details: "Pure at-cost usage credits. Refills balance anytime with zero expiration and zero token markups.",
-    badge: "On-Demand"
+    badge: "MONTHLY WORKSPACE",
+    name: "Work Pack",
+    price: "₹500 / mo",
+    wallet: "Includes 1,000 cr / mo (₹100 wallet)",
+    desc: "Unlocks encrypted cloud sync, WhatsApp messaging, and ₹100 monthly credit wallet."
   },
   {
-    name: "Growth Top-Up",
-    price: "₹500",
-    credits: "5,000 Credits (100% Wallet)",
-    details: "For active clinics and shops running high-volume daily WhatsApp CRM, voice orders, and invoice scans.",
-    badge: "Most Popular"
+    badge: "PAY AS YOU GO",
+    name: "Top-Up Refill",
+    price: "From ₹100",
+    wallet: "100% wallet credit (1 cr = ₹0.10)",
+    desc: "Refill on demand directly in the app. Pure at-cost pass-through, credits never expire."
   }
-];
-
-const operationsCost = [
-  { task: "Customer WhatsApp / Chat Reply", cost: "~₹0.002 / reply", note: "1 credit = 50 replies" },
-  { task: "Voice Note Transcription to Order", cost: "~₹0.03 / order", note: "Whisper audio in 40+ languages" },
-  { task: "Document / Invoice OCR Scan", cost: "~₹0.005 / page", note: "Instant receipt & bill parsing" },
-  { task: "Commercial Quote or Proposal", cost: "~₹0.025 / doc", note: "Custom PDF generation" },
-  { task: "Active Owned Workspace Hosting", cost: "₹10.00 / month", note: "100 credits / mo for dedicated edge sync" },
-  { task: "Invited Team Members & Staff", cost: "₹0.00 (Free)", note: "Unlimited staff, cashiers & doctors" }
 ];
 ---
 
-<section class="tar-pricing-section pastel-room-cream reveal-item" id="pricing">
+<section class="tar-pricing-section" id="pricing">
   <div class="container">
     
     <!-- Section Header -->
-    <div class="pricing-editorial-header">
+    <div class="section-head-left">
       <h2 class="display-section-lg section-title">
-        One simple credit wallet.<br />
-        Zero seat license markups.
+        Simple credit pricing.
       </h2>
       <p class="section-lead font-dm-sans">
-        Traditional software vendors charge ₹10,000 to ₹25,000 every month just for seat licenses. TAR charges strictly for actual operations consumed at 100% direct at-cost pass-through.
+        1 Credit = ₹0.10. Zero monthly seat licenses. Invited team members are always ₹0.
       </p>
     </div>
 
-    <!-- Pricing Packs List with Dividers (Bird.com Style) -->
-    <div class="pricing-packs-row font-dm-sans">
+    <!-- 3 Horizontal Pack Cards in a Row -->
+    <div class="packs-horizontal-grid font-dm-sans">
       {packs.map((p) => (
-        <div class="pack-editorial-item">
-          <div class="pack-top-bar">
+        <div class="pack-card">
+          <div class="pack-card-top">
             <span class="pack-badge">{p.badge}</span>
             <h3 class="pack-name">{p.name}</h3>
           </div>
-
-          <div class="pack-price-cluster">
-            <span class="pack-price">{p.price}</span>
-            <span class="pack-credits">{p.credits}</span>
+          
+          <div class="pack-price-block">
+            <div class="pack-price font-mono">{p.price}</div>
+            <div class="pack-wallet-text">{p.wallet}</div>
           </div>
 
-          <p class="pack-details">{p.details}</p>
+          <div class="pack-divider"></div>
 
-          <a href="https://play.google.com/store/apps" target="_blank" rel="noopener noreferrer" class="btn-pack-dark pack-cta">
-            Select in App
-          </a>
+          <p class="pack-desc">{p.desc}</p>
         </div>
       ))}
     </div>
 
-    <!-- Transparent At-Cost Operations Breakdown Table -->
-    <div class="at-cost-table-box font-dm-sans">
-      <div class="table-title-bar">
-        <h3 class="table-heading">Transparent Pass-Through Operation Rates</h3>
-        <span class="table-subnote">1 Credit = ₹0.10 (10 Paise) · Zero Token Profit Markup</span>
-      </div>
-
-      <div class="rates-table-wrapper">
-        <table class="rates-table">
-          <thead>
-            <tr>
-              <th>Operation / Capability</th>
-              <th>Direct At-Cost Rate</th>
-              <th>Notes</th>
-            </tr>
-          </thead>
-          <tbody>
-            {operationsCost.map((op) => (
-              <tr>
-                <td class="op-name"><strong>{op.task}</strong></td>
-                <td class="op-cost font-mono">{op.cost}</td>
-                <td class="op-note">{op.note}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- Typical Business Monthly Example -->
-    <div class="monthly-example-strip font-dm-sans">
-      <div class="example-left">
-        <strong>Typical Monthly Active Clinic:</strong>
-        <span>1 Workspace (₹10) + 500 WhatsApp replies (₹1) + 50 Voice Orders (₹1.50) + 100 Bill Scans (₹0.52)</span>
-      </div>
-      <div class="example-right">
-        <span class="example-total-lbl">Total Estimated Cost:</span>
-        <strong class="example-total-val">~₹13.02 / month</strong>
-      </div>
+    <!-- Bottom Reference Link -->
+    <div class="pricing-bottom-bar font-dm-sans">
+      <a href="/agents" class="agents-link">
+        <span>View Detailed Agent & Model Rates</span>
+        <span class="arrow">→</span>
+      </a>
     </div>
 
   </div>
@@ -117,17 +72,24 @@ const operationsCost = [
 
 <style>
   .tar-pricing-section {
-    padding: var(--section-gap) 0;
-    color: var(--color-ink-black);
-    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
-  }
-
-  .pricing-editorial-header {
-    max-width: 820px;
-    margin-bottom: 48px;
+    background-color: #ffffff;
+    min-height: 100vh;
+    min-height: 100dvh;
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    justify-content: center;
+    padding: 64px 0;
+    box-sizing: border-box;
+    color: var(--color-ink-black);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  }
+
+  .section-head-left {
+    max-width: 720px;
+    margin-bottom: 32px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
   }
 
   .section-title {
@@ -136,219 +98,122 @@ const operationsCost = [
   }
 
   .section-lead {
-    font-size: 16px;
-    line-height: 1.6;
+    font-size: 15px;
+    line-height: 1.5;
     color: var(--color-graphite);
+    margin: 0;
   }
 
-  /* Packs 3-Column Editorial Row */
-  .pricing-packs-row {
+  /* 3 Horizontal Pack Cards Side-by-Side */
+  .packs-horizontal-grid {
     display: grid;
-    grid-template-columns: 1fr;
-    border-top: 1px solid rgba(0, 0, 0, 0.1);
-    margin-bottom: 48px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 20px;
+    width: 100%;
+    margin-bottom: 24px;
   }
 
-  @media (min-width: 768px) {
-    .pricing-packs-row {
-      grid-template-columns: repeat(3, 1fr);
+  @media (max-width: 580px) {
+    .packs-horizontal-grid {
+      grid-template-columns: 1fr;
     }
   }
 
-  .pack-editorial-item {
-    padding: 32px 28px;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
-    border-right: 1px solid rgba(0, 0, 0, 0.1);
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-    background-color: rgba(255, 255, 255, 0.4);
-    transition: background-color 0.15s ease;
-  }
-
-  .pack-editorial-item:hover {
+  .pack-card {
     background-color: #ffffff;
-  }
-
-  .pack-top-bar {
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 14px;
+    padding: 24px 22px;
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 12px;
+    box-sizing: border-box;
+    transition: border-color 0.15s ease;
+  }
+
+  .pack-card:hover {
+    border-color: var(--color-canopy-green);
+  }
+
+  .pack-card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
   }
 
   .pack-badge {
-    align-self: flex-start;
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 700;
     color: var(--color-canopy-green);
+    background-color: rgba(10, 57, 34, 0.06);
+    padding: 3px 8px;
+    border-radius: 4px;
     text-transform: uppercase;
     letter-spacing: 0.05em;
   }
 
   .pack-name {
-    font-size: 20px;
+    font-size: 17px;
     font-weight: 700;
     color: var(--color-canopy-green);
+    margin: 0;
   }
 
-  .pack-price-cluster {
+  .pack-price-block {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 4px;
   }
 
   .pack-price {
-    font-size: 32px;
+    font-size: 28px;
     font-weight: 700;
     color: var(--color-canopy-green);
     line-height: 1;
   }
 
-  .pack-credits {
-    font-size: 12.5px;
-    color: var(--color-slate);
+  .pack-wallet-text {
+    font-size: 13px;
     font-weight: 600;
+    color: #15803d;
   }
 
-  .pack-details {
+  .pack-divider {
+    height: 1px;
+    background-color: rgba(0, 0, 0, 0.06);
+    width: 100%;
+  }
+
+  .pack-desc {
     font-size: 13.5px;
-    line-height: 1.5;
     color: var(--color-graphite);
-    flex: 1;
+    line-height: 1.5;
+    margin: 0;
   }
 
-  .btn-pack-dark {
-    text-align: center;
-    padding: 10px 20px;
+  /* Bottom Link */
+  .pricing-bottom-bar {
+    display: flex;
+    justify-content: flex-start;
+  }
+
+  .agents-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--color-canopy-green);
     font-size: 14px;
     font-weight: 600;
-    background-color: var(--color-canopy-green);
-    color: #ffffff;
-    border-radius: 8px;
     text-decoration: none;
-    transition: background-color 0.15s ease;
+    transition: color 0.15s ease;
   }
 
-  .btn-pack-dark:hover {
-    background-color: #124d30;
+  .agents-link:hover {
+    color: #124d30;
+    text-decoration: underline;
   }
 
-  /* Rates Table */
-  .at-cost-table-box {
-    background-color: #ffffff;
-    border: 1px solid rgba(0, 0, 0, 0.1);
-    border-radius: var(--radius-cards);
-    overflow: hidden;
-    margin-bottom: 24px;
-  }
-
-  .table-title-bar {
-    background-color: var(--color-canopy-green);
-    color: #ffffff;
-    padding: 16px 24px;
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: space-between;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .table-heading {
-    font-size: 16px;
-    font-weight: 700;
-  }
-
-  .table-subnote {
-    font-size: 12px;
-    color: var(--color-leaf-bright);
-  }
-
-  .rates-table-wrapper {
-    overflow-x: auto;
-  }
-
-  .rates-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 13.5px;
-    text-align: left;
-  }
-
-  .rates-table th {
-    background-color: #f7f9f8;
-    padding: 12px 24px;
-    font-size: 12px;
-    font-weight: 700;
-    color: var(--color-slate);
-    border-bottom: 1px solid var(--color-frost-gray);
-  }
-
-  .rates-table td {
-    padding: 14px 24px;
-    border-bottom: 1px solid var(--color-frost-gray);
-    color: var(--color-ink-black);
-  }
-
-  .rates-table tr:last-child td {
-    border-bottom: none;
-  }
-
-  .op-name strong {
-    color: var(--color-canopy-green);
-  }
-
-  .op-cost {
-    color: var(--color-canopy-green);
-    font-weight: 700;
-  }
-
-  .op-note {
-    color: var(--color-graphite);
-    font-size: 12.5px;
-  }
-
-  /* Monthly Example Strip */
-  .monthly-example-strip {
-    background-color: var(--color-mint-wash);
-    border: 1px solid rgba(0, 0, 0, 0.08);
-    border-radius: var(--radius-cards-sm);
-    padding: 18px 24px;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-
-  @media (min-width: 768px) {
-    .monthly-example-strip {
-      flex-direction: row;
-      justify-content: space-between;
-      align-items: center;
-    }
-  }
-
-  .example-left {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    font-size: 13px;
-    color: var(--color-canopy-green);
-  }
-
-  .example-right {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-    flex-shrink: 0;
-  }
-
-  .example-total-lbl {
-    font-size: 12px;
-    color: var(--color-slate);
-  }
-
-  .example-total-val {
-    font-size: 20px;
-    font-weight: 700;
-    color: var(--color-canopy-green);
+  .arrow {
+    font-size: 15px;
   }
 </style>

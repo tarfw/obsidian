@@ -1,0 +1,745 @@
+---
+// Clean White Documentation Page for TAR
+// Organized, compact, simple, and human-friendly
+import Layout from "../layouts/Layout.astro";
+import Nav from "../components/Nav.astro";
+import FooterSection from "../components/FooterSection.astro";
+import GooglePlayBadge from "../components/GooglePlayBadge.astro";
+
+const docSections = [
+  { id: "quickstart", title: "1. Getting Started" },
+  { id: "interfaces", title: "2. Connected Interfaces" },
+  { id: "workspaces", title: "3. Workspaces & Data" },
+  { id: "collaboration", title: "4. Team & Staff (₹0)" },
+  { id: "agents", title: "5. AI Agents & Operations" },
+  { id: "credits", title: "6. Credit Wallet & Pricing" },
+  { id: "security", title: "7. Privacy & Security" }
+];
+---
+
+<Layout 
+  title="TAR Documentation — Clean, Simple Guide for Organizations" 
+  description="Comprehensive, plain-English documentation for TAR: Native Android app, connected interfaces, offline-first workspaces, and direct at-cost AI agents."
+>
+  <Nav />
+
+  <main class="docs-main-container">
+    <div class="container docs-layout-grid">
+      
+      <!-- Left: Sticky Minimal Sidebar Navigation -->
+      <aside class="docs-sidebar font-dm-sans">
+        <div class="sidebar-sticky-box">
+          <span class="sidebar-label">DOCUMENTATION</span>
+          <nav class="sidebar-nav">
+            {docSections.map((s) => (
+              <a href={`#${s.id}`} class="sidebar-link">{s.title}</a>
+            ))}
+          </nav>
+        </div>
+      </aside>
+
+      <!-- Right: Clean White Documentation Content -->
+      <div class="docs-content-col font-dm-sans">
+        
+        <!-- Header -->
+        <header class="docs-header">
+          <div class="docs-badge">TAR User Guide</div>
+          <h1 class="docs-main-title">Getting started with TAR</h1>
+          <p class="docs-main-lead">
+            TAR connects your business, workforce, and AI agents to everyday messaging channels. Built on local on-device storage, open document formats, and transparent at-cost AI compute.
+          </p>
+        </header>
+
+        <hr class="docs-divider" />
+
+        <!-- Section 1: Getting Started -->
+        <section id="quickstart" class="doc-section">
+          <h2 class="section-heading">1. Getting Started</h2>
+          <p class="section-text">
+            TAR is a native mobile application. Setup takes under two minutes with zero server configuration or developer knowledge required.
+          </p>
+
+          <div class="steps-compact-list">
+            <div class="step-compact-item">
+              <div class="step-num">Step 1</div>
+              <div class="step-body">
+                <strong>Install from Google Play Store</strong>
+                <p>Download the official TAR application directly to your Android phone or tablet (iOS App Store release coming soon).</p>
+              </div>
+            </div>
+
+            <div class="step-compact-item">
+              <div class="step-num">Step 2</div>
+              <div class="step-body">
+                <strong>Create Your Local Workspace</strong>
+                <p>Your workspace is stored locally on your device. Personal local workspaces are 100% free with zero cloud fees.</p>
+              </div>
+            </div>
+
+            <div class="step-compact-item">
+              <div class="step-num">Step 3</div>
+              <div class="step-body">
+                <strong>Upgrade to Work Pack or Top-Up</strong>
+                <p>The ₹500/month Work Pack unlocks encrypted cloud backup, multi-channel messaging, and includes ₹100 in preloaded monthly usage credits.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <hr class="docs-divider" />
+
+        <!-- Section 2: Connected Interfaces -->
+        <section id="interfaces" class="doc-section">
+          <h2 class="section-heading">2. Connected Interfaces</h2>
+          <p class="section-text">
+            Your customers and team members do not need to install TAR. They communicate with your workspace through the channels they already use daily:
+          </p>
+
+          <div class="interfaces-compact-grid">
+            <div class="interface-card">
+              <div class="if-head">
+                <span class="if-dot wa-bg"></span>
+                <strong>WhatsApp Business</strong>
+              </div>
+              <p>Automated 24/7 appointment scheduling, booking confirmations, invoice delivery, and interactive one-tap action buttons.</p>
+            </div>
+
+            <div class="interface-card">
+              <div class="if-head">
+                <span class="if-dot tg-bg"></span>
+                <strong>Telegram</strong>
+              </div>
+              <p>Community broadcasts, internal field updates, inventory alerts, and instant bi-directional messaging bots.</p>
+            </div>
+
+            <div class="interface-card">
+              <div class="if-head">
+                <span class="if-dot voice-bg"></span>
+                <strong>Voice & Audio Notes</strong>
+              </div>
+              <p>Hands-free voice note transcription via Whisper in 40+ languages (Tamil, Telugu, Spanish, Arabic, English, and more).</p>
+            </div>
+
+            <div class="interface-card">
+              <div class="if-head">
+                <span class="if-dot web-bg"></span>
+                <strong>Websites & Web Ordering</strong>
+              </div>
+              <p>Instant hosted static web catalog, public ordering pages, and appointment booking widgets deployed to global edge CDNs.</p>
+            </div>
+
+            <div class="interface-card">
+              <div class="if-head">
+                <span class="if-dot chat-bg"></span>
+                <strong>Google Chat & MS Teams</strong>
+              </div>
+              <p>Seamless workspace bridge routing customer inquiries directly into your existing workplace channels.</p>
+            </div>
+
+            <div class="interface-card">
+              <div class="if-head">
+                <span class="if-dot pos-bg"></span>
+                <strong>POS & Counter Terminals</strong>
+              </div>
+              <p>Connect store counters and contactless card readers directly to customer records and digital receipt distribution.</p>
+            </div>
+          </div>
+        </section>
+
+        <hr class="docs-divider" />
+
+        <!-- Section 3: Workspaces & Data Ownership -->
+        <section id="workspaces" class="doc-section">
+          <h2 class="section-heading">3. Workspaces & Data Ownership</h2>
+          <p class="section-text">
+            TAR is built on an offline-first architecture. Unlike proprietary cloud SaaS, you retain 100% ownership of your records, documents, and customer communications.
+          </p>
+
+          <div class="info-table-wrap">
+            <table class="info-table">
+              <thead>
+                <tr>
+                  <th>Component</th>
+                  <th>How It Works</th>
+                  <th>Privacy & Storage</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>Local On-Device Store</strong></td>
+                  <td>Stores customers, orders, product stock, and sales records directly on your device.</td>
+                  <td>Runs 100% offline even with zero internet connection.</td>
+                </tr>
+                <tr>
+                  <td><strong>Open Standard Documents</strong></td>
+                  <td>Catalogs, customer notes, and business procedures stored in readable text formats.</td>
+                  <td>Open format with 1-click export and zero vendor lock-in.</td>
+                </tr>
+                <tr>
+                  <td><strong>Multi-Device Cloud Backup</strong></td>
+                  <td>Optional encrypted cloud sync across all your phones, tablets, and store registers.</td>
+                  <td>Encrypted multi-device sync at ₹10.00 / month.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <hr class="docs-divider" />
+
+        <!-- Section 4: Team Collaboration (₹0 Per Seat) -->
+        <section id="collaboration" class="doc-section">
+          <h2 class="section-heading">4. Team Collaboration & Staff (₹0 Per Seat)</h2>
+          <p class="section-text">
+            Traditional software charges ₹1,500 to ₹5,000 per user every month. TAR eliminates per-seat software taxes entirely:
+          </p>
+
+          <ul class="feature-bullets">
+            <li><strong>Unlimited Invited Staff:</strong> Add all doctors, cashiers, nurses, drivers, or volunteers for <strong>₹0.00 (Free)</strong>.</li>
+            <li><strong>Owner Credit Wallet:</strong> All invited team members consume AI operations directly from the workspace owner's central credit wallet.</li>
+            <li><strong>Role-Based Permissions:</strong> Grant staff access to specific channels, customer tags, or financial records with custom access controls.</li>
+            <li><strong>Instant Human Takeover:</strong> Staff can pause automated AI replies with a single tap to take over critical conversations.</li>
+          </ul>
+        </section>
+
+        <hr class="docs-divider" />
+
+        <!-- Section 5: AI Agents & Operations -->
+        <section id="agents" class="doc-section">
+          <h2 class="section-heading">5. AI Agents & Operations</h2>
+          <p class="section-text">
+            TAR integrates specialized AI models at raw provider rates with zero token profit markup.
+          </p>
+
+          <div class="agent-breakdown-grid">
+            <div class="agent-box">
+              <span class="agent-tag">Gemma-4</span>
+              <h4>Customer Support & WhatsApp Replies</h4>
+              <p>Answers customer questions, schedules appointments, and sends reminders.</p>
+              <div class="agent-cost">0.02 credits (~₹0.002 / reply) · 1 credit = 50 replies</div>
+            </div>
+
+            <div class="agent-box">
+              <span class="agent-tag">Whisper Groq</span>
+              <h4>Voice Note to Structured Orders</h4>
+              <p>Transcribes customer audio voice notes in 40+ languages and creates verified orders.</p>
+              <div class="agent-cost">0.30 credits (~₹0.03 / order)</div>
+            </div>
+
+            <div class="agent-box">
+              <span class="agent-tag">DeepSeek-OCR 2</span>
+              <h4>Document & Invoice OCR Scans</h4>
+              <p>Extracts line items, vendor names, and totals from uploaded bills and receipts.</p>
+              <div class="agent-cost">0.05 credits (~₹0.0052 / page) · 1 credit = 20 pages</div>
+            </div>
+
+            <div class="agent-box">
+              <span class="agent-tag">DeepSeek-V4</span>
+              <h4>Commercial Quotes & Swarms</h4>
+              <p>Generates itemized PDF quotes, audits financial ledgers, and runs market research swarms.</p>
+              <div class="agent-cost">0.25 cr / quote · 1 cr / report · 12 cr / swarm</div>
+            </div>
+          </div>
+        </section>
+
+        <hr class="docs-divider" />
+
+        <!-- Section 6: Credit Wallet & Transparent Pricing -->
+        <section id="credits" class="doc-section">
+          <h2 class="section-heading">6. Credit Wallet & Pricing</h2>
+          <p class="section-text">
+            One credit equals <strong>₹0.10 (10 Paise)</strong>. Credits pass through 100% at-cost compute with zero expiration.
+          </p>
+
+          <div class="info-table-wrap">
+            <table class="info-table">
+              <thead>
+                <tr>
+                  <th>Credit Pack</th>
+                  <th>Price</th>
+                  <th>Credits Included</th>
+                  <th>Best For</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>Base Credit Pack</strong></td>
+                  <td class="font-mono">₹500</td>
+                  <td class="font-mono">1,000 cr (₹100 wallet)</td>
+                  <td>Initial account activation (covers 8+ months of typical operations).</td>
+                </tr>
+                <tr>
+                  <td><strong>Starter Top-Up</strong></td>
+                  <td class="font-mono">₹100</td>
+                  <td class="font-mono">1,000 cr (100% wallet)</td>
+                  <td>On-demand refill with zero markup and zero expiration.</td>
+                </tr>
+                <tr>
+                  <td><strong>Growth Top-Up</strong></td>
+                  <td class="font-mono">₹500</td>
+                  <td class="font-mono">5,000 cr (100% wallet)</td>
+                  <td>Active businesses running daily WhatsApp CRM, voice orders & OCR.</td>
+                </tr>
+                <tr>
+                  <td><strong>Scale Top-Up</strong></td>
+                  <td class="font-mono">₹1,000</td>
+                  <td class="font-mono">10,000 cr (100% wallet)</td>
+                  <td>High-volume retail stores, large lead batches & research swarms.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <hr class="docs-divider" />
+
+        <!-- Section 7: Privacy & Security -->
+        <section id="security" class="doc-section">
+          <h2 class="section-heading">7. Privacy & Security</h2>
+          <div class="security-grid">
+            <div class="sec-item">
+              <strong>Local-First Storage</strong>
+              <p>Your records remain on your physical hardware. We never sell, monetize, or train third-party models on your private communications.</p>
+            </div>
+            <div class="sec-item">
+              <strong>Zero Vendor Lock-in</strong>
+              <p>Export your full business database and documents at any moment with a single click.</p>
+            </div>
+            <div class="sec-item">
+              <strong>Granular Role Controls</strong>
+              <p>Control exactly what invited team members can see, edit, or approve across all customer channels.</p>
+            </div>
+            <div class="sec-item">
+              <strong>Encrypted Cloud Sync</strong>
+              <p>Cloud edge replications utilize TLS 1.3 encryption in transit with dedicated cryptographic keys.</p>
+            </div>
+          </div>
+        </section>
+
+      </div>
+
+    </div>
+  </main>
+
+  <FooterSection />
+</Layout>
+
+<style>
+  .docs-main-container {
+    background-color: #ffffff;
+    color: var(--color-ink-black);
+    min-height: 80vh;
+    padding: 40px 0 80px 0;
+  }
+
+  .docs-layout-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 48px;
+  }
+
+  @media (min-width: 900px) {
+    .docs-layout-grid {
+      grid-template-columns: 240px 1fr;
+      gap: 56px;
+    }
+  }
+
+  /* Sticky Minimal Sidebar */
+  .docs-sidebar {
+    display: none;
+  }
+
+  @media (min-width: 900px) {
+    .docs-sidebar {
+      display: block;
+    }
+  }
+
+  .sidebar-sticky-box {
+    position: sticky;
+    top: 96px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .sidebar-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: var(--color-slate);
+    text-transform: uppercase;
+  }
+
+  .sidebar-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .sidebar-link {
+    font-size: 13.5px;
+    color: var(--color-graphite);
+    text-decoration: none;
+    padding: 6px 10px;
+    border-radius: 6px;
+    transition: background-color 0.15s ease, color 0.15s ease;
+  }
+
+  .sidebar-link:hover {
+    background-color: #f3f4f6;
+    color: var(--color-canopy-green);
+    font-weight: 600;
+  }
+
+  .sidebar-download-box {
+    margin-top: 24px;
+    padding-top: 16px;
+    border-top: 1px solid rgba(0, 0, 0, 0.08);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .sidebar-subnote {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--color-slate);
+  }
+
+  /* Main Content Column */
+  .docs-content-col {
+    max-width: 800px;
+    display: flex;
+    flex-direction: column;
+    gap: 40px;
+  }
+
+  .docs-header {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .docs-badge {
+    align-self: flex-start;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-canopy-green);
+    background-color: #ecfdf5;
+    padding: 4px 10px;
+    border-radius: 4px;
+  }
+
+  .docs-main-title {
+    font-size: clamp(2rem, 3.4vw, 2.8rem);
+    font-weight: 700;
+    color: var(--color-canopy-green);
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    margin: 0;
+  }
+
+  .docs-main-lead {
+    font-size: 16px;
+    line-height: 1.6;
+    color: var(--color-graphite);
+    margin: 0;
+  }
+
+  .docs-divider {
+    border: none;
+    border-top: 1px solid rgba(0, 0, 0, 0.08);
+    margin: 0;
+  }
+
+  /* Doc Sections */
+  .doc-section {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    scroll-margin-top: 88px;
+  }
+
+  .section-heading {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--color-canopy-green);
+    letter-spacing: -0.01em;
+    margin: 0;
+  }
+
+  .section-text {
+    font-size: 14.5px;
+    line-height: 1.65;
+    color: var(--color-graphite);
+    margin: 0;
+  }
+
+  /* Steps List */
+  .steps-compact-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 8px;
+  }
+
+  .step-compact-item {
+    display: flex;
+    gap: 16px;
+    padding: 14px 16px;
+    background-color: #f9fafb;
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    border-radius: 6px;
+  }
+
+  .step-num {
+    font-size: 11.5px;
+    font-weight: 700;
+    color: var(--color-canopy-green);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+    padding-top: 2px;
+  }
+
+  .step-body {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .step-body strong {
+    font-size: 14px;
+    color: var(--color-ink-black);
+  }
+
+  .step-body p {
+    font-size: 13px;
+    color: var(--color-graphite);
+    line-height: 1.5;
+    margin: 0;
+  }
+
+  /* Interfaces Compact Grid */
+  .interfaces-compact-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+    margin-top: 8px;
+  }
+
+  @media (min-width: 600px) {
+    .interfaces-compact-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+
+  .interface-card {
+    padding: 14px 16px;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 6px;
+    background-color: #ffffff;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .if-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .if-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .wa-bg { background-color: #25d366; }
+  .tg-bg { background-color: #24a1de; }
+  .voice-bg { background-color: #e11d48; }
+  .web-bg { background-color: #0284c7; }
+  .chat-bg { background-color: #00ac47; }
+  .pos-bg { background-color: #f59e0b; }
+
+  .if-head strong {
+    font-size: 13.5px;
+    color: var(--color-ink-black);
+  }
+
+  .interface-card p {
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: var(--color-graphite);
+    margin: 0;
+  }
+
+  /* Info Tables */
+  .info-table-wrap {
+    overflow-x: auto;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 6px;
+    margin-top: 8px;
+  }
+
+  .info-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    text-align: left;
+  }
+
+  .info-table th {
+    background-color: #f9fafb;
+    padding: 10px 14px;
+    font-size: 11.5px;
+    font-weight: 700;
+    color: var(--color-slate);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .info-table td {
+    padding: 10px 14px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+    color: var(--color-ink-black);
+    line-height: 1.5;
+  }
+
+  .info-table tr:last-child td {
+    border-bottom: none;
+  }
+
+  /* Feature Bullets */
+  .feature-bullets {
+    list-style: none;
+    padding: 0;
+    margin: 8px 0 0 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .feature-bullets li {
+    font-size: 13.5px;
+    line-height: 1.55;
+    color: var(--color-graphite);
+    padding-left: 20px;
+    position: relative;
+  }
+
+  .feature-bullets li::before {
+    content: "✓";
+    position: absolute;
+    left: 0;
+    top: 0;
+    color: var(--color-canopy-green);
+    font-weight: 700;
+  }
+
+  .feature-bullets strong {
+    color: var(--color-ink-black);
+  }
+
+  /* Agent Breakdown Grid */
+  .agent-breakdown-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+    margin-top: 8px;
+  }
+
+  @media (min-width: 600px) {
+    .agent-breakdown-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+
+  .agent-box {
+    padding: 14px 16px;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 6px;
+    background-color: #fafbfc;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .agent-tag {
+    align-self: flex-start;
+    font-size: 10.5px;
+    font-weight: 700;
+    color: var(--color-canopy-green);
+    background-color: #ecfdf5;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: var(--font-jetbrains-mono);
+  }
+
+  .agent-box h4 {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--color-ink-black);
+    margin: 0;
+  }
+
+  .agent-box p {
+    font-size: 12.5px;
+    color: var(--color-graphite);
+    line-height: 1.45;
+    margin: 0;
+    flex: 1;
+  }
+
+  .agent-cost {
+    font-size: 11.5px;
+    font-weight: 700;
+    color: var(--color-canopy-green);
+    font-family: var(--font-jetbrains-mono);
+    padding-top: 4px;
+    border-top: 1px solid rgba(0, 0, 0, 0.06);
+  }
+
+  /* Security Grid */
+  .security-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+    margin-top: 8px;
+  }
+
+  @media (min-width: 600px) {
+    .security-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+
+  .sec-item {
+    padding: 14px 16px;
+    background-color: #f9fafb;
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    border-radius: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .sec-item strong {
+    font-size: 13.5px;
+    color: var(--color-ink-black);
+  }
+
+  .sec-item p {
+    font-size: 12.5px;
+    color: var(--color-graphite);
+    line-height: 1.5;
+    margin: 0;
+  }
+</style>

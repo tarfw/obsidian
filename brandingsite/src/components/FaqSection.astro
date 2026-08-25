@@ -1,34 +1,34 @@
 ---
-// Plain-English FAQ Section grounded in TAR Architecture & Pricing
+// Plain-English FAQ Section — Compact & Uncluttered
 const faqs = [
   {
-    q: "How does TAR's credit pricing work?",
-    a: "Base activation is ₹500, which includes ₹400 onboarding and ₹100 in pre-loaded wallet credits (1,000 credits). Each active owned workspace costs 100 credits/month (₹10.00/mo). Top-ups are available on demand (₹100 = 1,000 credits) with 100% direct at-cost pass-through and zero expiration."
+    q: "How does TAR's pricing work?",
+    a: "The Base Pack is ₹0 (Free forever) for local offline operations. The Work Pack is ₹500/month, which includes encrypted cloud sync, WhatsApp messaging, and ₹100 in preloaded monthly usage credits. Additional on-demand top-ups start from ₹100 with zero expiration."
   },
   {
     q: "Do I have to pay extra for team members, cashiers, or doctors?",
-    a: "No, never. Joined team members use ₹0. You can invite your entire staff, clinic receptionists, drivers, and partners without paying extra per-seat monthly license fees. All automated actions run from the workspace owner's wallet."
+    a: "No. Invited team members are ₹0 (Free). Add your entire team, receptionists, nurses, and drivers without paying per-seat monthly license fees. AI operations run from the owner's central credit wallet."
   },
   {
     q: "Does TAR work offline when the internet goes down?",
-    a: "Yes. TAR is built on local on-device SQLite sync. You can continue taking orders, checking patient schedules, and viewing catalogs offline. Changes sync securely with the cloud database as soon as connectivity returns."
+    a: "Yes. TAR is built to work offline. You can ring up sales, check product stock, record orders, and check schedules without internet. All updates sync securely as soon as you reconnect."
   },
   {
     q: "Can my customers send voice notes in regional languages?",
-    a: "Yes. Customers can send spoken voice notes in over 40 languages (including Hindi, Tamil, Telugu, Spanish, Arabic, and English). TAR transcribes the audio into structured records and replies with natural text or voice."
+    a: "Yes. Customers and staff can send voice notes in 40+ languages (Tamil, Telugu, Spanish, Arabic, English, etc.). Whisper transcribes the audio into structured records and replies with natural text or voice."
   },
   {
     q: "Can human staff take over a chat anytime?",
-    a: "Yes, immediately. You have a unified team inbox where staff can monitor incoming messages, answer questions, or seamlessly take over from the automated assistant with one tap."
+    a: "Yes, immediately. Staff monitor incoming messages in the unified team feed and can pause automated AI replies to take over conversations with a single tap."
   },
   {
-    q: "Do my customers or patients need to install an app?",
-    a: "No. Your customers communicate directly inside WhatsApp, Telegram, or standard SMS. They never have to download or learn any new application."
+    q: "Do my customers need to install an app?",
+    a: "No. Your customers communicate directly inside WhatsApp, Telegram, or standard SMS. They never have to download or learn any new software."
   }
 ];
 ---
 
-<section class="faq-editorial-section pastel-room-lilac reveal-item" id="faq">
+<section class="faq-editorial-section pastel-room-lilac" id="faq">
   <div class="container">
     
     <div class="section-head-left">
@@ -90,36 +90,43 @@ const faqs = [
 
 <style>
   .faq-editorial-section {
-    padding: var(--section-gap) 0;
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 64px 0;
+    box-sizing: border-box;
     color: var(--color-ink-black);
-    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
   }
 
   .section-head-left {
     max-width: 800px;
-    margin-bottom: 48px;
+    margin-bottom: 32px;
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 10px;
   }
 
   .section-title {
     color: var(--color-canopy-green);
     line-height: 1.08;
+    font-size: clamp(1.9rem, 3vw, 2.5rem);
   }
 
   .section-lead {
-    font-size: 16px;
+    font-size: 15px;
     line-height: 1.6;
     color: var(--color-graphite);
   }
 
   .faq-accordion-container {
-    border-top: 1px solid rgba(0, 0, 0, 0.1);
+    border-top: 1px solid rgba(0, 0, 0, 0.08);
   }
 
   .faq-item-row {
-    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
     transition: background-color 0.15s ease;
   }
 
@@ -129,7 +136,7 @@ const faqs = [
 
   .faq-item-toggle {
     width: 100%;
-    padding: 22px 0;
+    padding: 16px 0;
     background: transparent;
     border: none;
     display: flex;
@@ -137,14 +144,14 @@ const faqs = [
     align-items: center;
     text-align: left;
     cursor: pointer;
-    font-size: 16.5px;
+    font-size: 15.5px;
     font-weight: 600;
     color: var(--color-canopy-green);
     gap: 16px;
   }
 
   .faq-icon-indicator {
-    font-size: 22px;
+    font-size: 20px;
     color: var(--color-slate);
     transition: transform 0.2s ease, color 0.2s ease;
     flex-shrink: 0;
@@ -152,24 +159,25 @@ const faqs = [
 
   .faq-item-row.open .faq-icon-indicator {
     transform: rotate(45deg);
-    color: var(--color-coral-pulse);
+    color: var(--color-canopy-green);
   }
 
   .faq-item-body {
     max-height: 0;
     overflow: hidden;
-    transition: max-height 0.3s cubic-bezier(0.16, 1, 0.3, 1), padding 0.3s ease;
+    transition: max-height 0.25s ease, padding 0.25s ease;
     padding: 0;
   }
 
   .faq-item-row.open .faq-item-body {
     max-height: 200px;
-    padding-bottom: 22px;
+    padding-bottom: 16px;
   }
 
   .faq-answer-txt {
-    font-size: 14.5px;
+    font-size: 14px;
     color: var(--color-graphite);
-    line-height: 1.65;
+    line-height: 1.6;
+    margin: 0;
   }
 </style>

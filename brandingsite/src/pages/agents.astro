@@ -1,0 +1,426 @@
+---
+// AI Agents & Direct Pass-Through Rates — Clean Editorial Reference Page
+import Layout from "../layouts/Layout.astro";
+import Nav from "../components/Nav.astro";
+import FooterSection from "../components/FooterSection.astro";
+import TarLogo from "../components/TarLogo.astro";
+
+const agentCategories = [
+  {
+    name: "Workspace & Core Operations",
+    color: "#059669",
+    desc: "Everyday ledger, document scanning, offline sync, and accounting audits.",
+    items: [
+      { action: "Offline orders, sales & catalog", rate: "0 cr (₹0.00)", model: "On-Device", scope: "Instant local operations (Free)" },
+      { action: "Multi-device cloud backup & sync", rate: "1 cr / 600 ops (~₹0.016 / 100 ops)", model: "Cloud Sync", scope: "Encrypted background sync" },
+      { action: "Workspace answer / summary", rate: "0.02 cr (~₹0.002)", model: "Gemma-4", scope: "1 credit = 50 summaries" },
+      { action: "OCR document scan", rate: "0.05 cr / pg (~₹0.0052 / pg)", model: "DeepSeek-OCR 2", scope: "1 credit = 20 pages" },
+      { action: "Bill audit (OCR + ledger)", rate: "0.1 cr / bill (~₹0.01 / bill)", model: "DeepSeek-OCR 2", scope: "Receipt & invoice validation" },
+      { action: "Analyst or tax report", rate: "1 cr / report (~₹0.10 / report)", model: "DeepSeek-V4", scope: "Sales & financial audit" }
+    ]
+  },
+  {
+    name: "Messaging & Conversational Agents",
+    color: "#0284c7",
+    desc: "Automated customer support, appointment booking, and multi-language voice transcription.",
+    items: [
+      { action: "Customer WhatsApp / Chat reply", rate: "0.02 cr (~₹0.002 / reply)", model: "Gemma-4", scope: "1 credit = 50 replies" },
+      { action: "Voice note to order", rate: "0.3 cr (~₹0.03 / order)", model: "Whisper Groq", scope: "Tamil, Telugu, Spanish, Arabic, English (40+ languages)" },
+      { action: "Commercial quote or proposal", rate: "0.25 cr (~₹0.025 / doc)", model: "DeepSeek-V4", scope: "Custom PDF generation" },
+      { action: "Customer retention campaign", rate: "0.5 cr (~₹0.05 / batch)", model: "DeepSeek-V4", scope: "Automated batch messaging" }
+    ]
+  },
+  {
+    name: "Sites, Catalogs & Web Publishing",
+    color: "#7c3aed",
+    desc: "Autonomous static web publishing, instant online storefronts, and edge deployments.",
+    items: [
+      { action: "Publish or update a site", rate: "0.5 cr / run (~₹0.05 / run)", model: "Edge Build", scope: "Global edge CDN deployment" },
+      { action: "Edit a site section", rate: "0.25 cr / run (~₹0.025 / run)", model: "Astro Mutation", scope: "Live section component mutation" },
+      { action: "Active public site hosting", rate: "50 cr / mo (₹5.00 / mo)", model: "Global Edge", scope: "Fast global edge hosting" },
+      { action: "Generate a site draft", rate: "3 cr / draft (~₹0.30 / draft)", model: "DeepSeek-V4", scope: "Multi-turn design & copy draft" }
+    ]
+  },
+  {
+    name: "Intelligence & Autonomous Swarms",
+    color: "#d97706",
+    desc: "Deep research dossiers, competitive price checks, lead verification, and image processing.",
+    items: [
+      { action: "Competitor price check", rate: "0.02 cr / item (~₹0.002)", model: "Web Lookup", scope: "Real-time catalogue lookup" },
+      { action: "Operations workflow pipeline", rate: "0.5 cr / pipeline (~₹0.05)", model: "Agent Pipeline", scope: "Multi-step automated execution" },
+      { action: "Product photo cleanup", rate: "1 cr / image (~₹0.10 / image)", model: "Vision Agent", scope: "Background removal & cleanup" },
+      { action: "Verified lead batch", rate: "2 cr / batch (~₹0.20 / batch)", model: "DeepSeek-V4", scope: "B2B verification loop" },
+      { action: "Deep research swarm", rate: "12 cr / dossier (~₹1.20 / task)", model: "Multi-Agent Swarm", scope: "Autonomous multi-agent research" }
+    ]
+  }
+];
+---
+
+<Layout 
+  title="AI Agents & Direct Pass-Through Rates — TAR" 
+  description="Transparent, 0% markup pass-through rates for Whisper, Gemma, DeepSeek, OCR, and autonomous agent swarms in TAR."
+>
+  <Nav />
+
+  <main class="agents-main font-dm-sans">
+    <div class="container agents-container">
+      
+      <!-- Header -->
+      <header class="agents-header">
+        <div class="agents-badge">DIRECT PASS-THROUGH</div>
+        <h1 class="agents-title">Transparent AI Agent Rates.</h1>
+        <p class="agents-lead">
+          TAR connects your business to world-class language, vision, and voice models with <strong>0% token profit markups</strong>. You pay the exact at-cost pass-through fee: <strong>1 Credit = ₹0.10 (10 Paise)</strong>. Credits never expire.
+        </p>
+      </header>
+
+      <!-- Monthly Breakdown Callout Banner -->
+      <div class="calculator-banner">
+        <div class="calc-inner">
+          <div class="calc-left">
+            <span class="calc-tag">Typical Monthly Usage</span>
+            <h3 class="calc-title">Active Clinic or Retail Store</h3>
+            <p class="calc-desc">
+              1 Active Workspace (₹10) + 500 WhatsApp Replies (₹1) + 100 Invoice OCR Scans (₹0.52) + 20 Quotes (₹0.50)
+            </p>
+          </div>
+          <div class="calc-right">
+            <div class="calc-total-pill font-mono">
+              <span class="calc-total-val">~₹12.18 / mo</span>
+              <span class="calc-credits-val">(~121.6 credits)</span>
+            </div>
+            <span class="calc-subtext">A single ₹100 top-up covers 8+ months of active operations.</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Agent Categories Tables -->
+      <div class="tables-cluster">
+        {agentCategories.map((group) => (
+          <div class="agent-table-card">
+            <div class="table-card-head">
+              <div class="card-head-left">
+                <span class="category-dot" style={`background-color: ${group.color};`}></span>
+                <h2 class="category-name">{group.name}</h2>
+              </div>
+              <p class="category-desc">{group.desc}</p>
+            </div>
+
+            <div class="table-scroll-wrap">
+              <table class="agents-flat-table">
+                <thead>
+                  <tr>
+                    <th style="width: 35%;">Action / Capability</th>
+                    <th style="width: 30%;">Pass-Through Rate</th>
+                    <th style="width: 15%;">Model</th>
+                    <th style="width: 20%;">Scope & Notes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {group.items.map((item) => (
+                    <tr>
+                      <td class="action-cell">
+                        <strong>{item.action}</strong>
+                      </td>
+                      <td class="rate-cell font-mono">
+                        {item.rate}
+                      </td>
+                      <td class="model-cell">
+                        <span class="model-badge">{item.model}</span>
+                      </td>
+                      <td class="scope-cell">
+                        {item.scope}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <!-- Bottom Principle Statement -->
+      <div class="agents-bottom-box">
+        <h3 class="bottom-box-title">Why at-cost compute matters</h3>
+        <p class="bottom-box-desc">
+          Most enterprise platforms hide AI token costs behind opaque ₹5,000/month tier upgrades and charge a 500% markup on inference. TAR routes requests directly through open-source and specialized model endpoints at pure wholesale cost. You own your data, manage your wallet, and run agents with total financial predictability.
+        </p>
+      </div>
+
+    </div>
+  </main>
+
+  <FooterSection />
+</Layout>
+
+<style>
+  .agents-main {
+    background-color: var(--color-lavender-mist);
+    min-height: 80vh;
+    padding: 48px 0 80px 0;
+  }
+
+  .agents-container {
+    max-width: 980px;
+    display: flex;
+    flex-direction: column;
+    gap: 36px;
+  }
+
+  /* Header */
+  .agents-header {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .agents-badge {
+    align-self: flex-start;
+    display: inline-flex;
+    align-items: center;
+    background-color: var(--color-canopy-green);
+    color: #ffffff;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    padding: 4px 12px;
+    border-radius: 9999px;
+  }
+
+  .agents-title {
+    font-size: clamp(2rem, 4vw, 3rem);
+    color: var(--color-canopy-green);
+    line-height: 1.08;
+    letter-spacing: -0.02em;
+  }
+
+  .agents-lead {
+    font-size: 16px;
+    line-height: 1.6;
+    color: var(--color-graphite);
+    max-width: 780px;
+    margin: 0;
+  }
+
+  /* Calculator Banner */
+  .calculator-banner {
+    background-color: #ffffff;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 14px;
+    padding: 24px;
+    box-sizing: border-box;
+  }
+
+  .calc-inner {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  @media (min-width: 768px) {
+    .calc-inner {
+      flex-direction: row;
+      justify-content: space-between;
+      align-items: center;
+      gap: 32px;
+    }
+  }
+
+  .calc-left {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .calc-tag {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-canopy-green);
+  }
+
+  .calc-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--color-canopy-green);
+    margin: 0;
+  }
+
+  .calc-desc {
+    font-size: 13.5px;
+    color: var(--color-slate);
+    line-height: 1.5;
+    margin: 0;
+  }
+
+  .calc-right {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+  @media (min-width: 768px) {
+    .calc-right {
+      align-items: flex-end;
+    }
+  }
+
+  .calc-total-pill {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    background-color: var(--color-canopy-green);
+    color: #ffffff;
+    padding: 8px 16px;
+    border-radius: 8px;
+  }
+
+  .calc-total-val {
+    font-size: 18px;
+    font-weight: 700;
+    color: #55dd4a;
+  }
+
+  .calc-credits-val {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.8);
+  }
+
+  .calc-subtext {
+    font-size: 12px;
+    color: var(--color-slate);
+  }
+
+  /* Table Cards */
+  .tables-cluster {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  .agent-table-card {
+    background-color: #ffffff;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 14px;
+    overflow: hidden;
+  }
+
+  .table-card-head {
+    padding: 16px 20px;
+    background-color: #ffffff;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .card-head-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .category-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .category-name {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--color-canopy-green);
+    margin: 0;
+  }
+
+  .category-desc {
+    font-size: 13px;
+    color: var(--color-slate);
+    margin: 0;
+    padding-left: 20px;
+  }
+
+  .table-scroll-wrap {
+    overflow-x: auto;
+    width: 100%;
+  }
+
+  .agents-flat-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    text-align: left;
+  }
+
+  .agents-flat-table th {
+    background-color: #ffffff;
+    padding: 10px 20px;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--color-slate);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .agents-flat-table td {
+    padding: 12px 20px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+    color: var(--color-ink-black);
+    vertical-align: middle;
+  }
+
+  .agents-flat-table tr:last-child td {
+    border-bottom: none;
+  }
+
+  .rate-cell {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--color-canopy-green);
+  }
+
+  .model-badge {
+    display: inline-flex;
+    background-color: rgba(10, 57, 34, 0.06);
+    color: var(--color-canopy-green);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 4px;
+  }
+
+  .scope-cell {
+    font-size: 12.5px;
+    color: var(--color-slate);
+  }
+
+  /* Bottom Statement */
+  .agents-bottom-box {
+    background-color: #ffffff;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 14px;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .bottom-box-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--color-canopy-green);
+    margin: 0;
+  }
+
+  .bottom-box-desc {
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--color-graphite);
+    margin: 0;
+  }
+</style>

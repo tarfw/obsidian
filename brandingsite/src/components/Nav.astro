@@ -1,6 +1,7 @@
 ---
 // Clean Transparent Header Navigation in Canopy Green with Official Google Play Badge
 import GooglePlayBadge from "./GooglePlayBadge.astro";
+import TarLogo from "./TarLogo.astro";
 ---
 
 <header class="clean-nav-header">
@@ -8,31 +9,17 @@ import GooglePlayBadge from "./GooglePlayBadge.astro";
     
     <!-- Left: Brand Logo -->
     <a href="/" class="nav-logo" aria-label="TAR Homepage">
-      <svg class="logo-icon" width="26" height="26" viewBox="0 0 7 7.1" fill="currentColor">
-        <rect x="0" y="0" width="1" height="1"/>
-        <rect x="1" y="0" width="1" height="1"/>
-        <rect x="5" y="0" width="1" height="1"/>
-        <rect x="6" y="0" width="1" height="1"/>
-        <rect x="1" y="1" width="5" height="1"/>
-        <rect x="0" y="2" width="7" height="1"/>
-        <rect x="0" y="3" width="7" height="1"/>
-        <rect x="0" y="4" width="7" height="1.1"/>
-        <rect x="0" y="5.1" width="7" height="1.1"/>
-        <rect x="0" y="6.2" width="1" height="0.55"/>
-        <rect x="3" y="6.2" width="1" height="0.55"/>
-        <rect x="6" y="6.2" width="1" height="0.55"/>
-      </svg>
-      <span class="logo-text font-dm-sans">tar</span>
+      <TarLogo size={26} color="#55dd4a" />
+      <span class="logo-text font-dm-sans">tar.</span>
     </a>
 
-    <!-- Center: Clean Menu Links -->
+    <!-- Center: Clean Efficient Menu Links -->
     <nav class="nav-menu" aria-label="Main Navigation">
-      <a href="#overview" class="nav-link">Overview</a>
-      <a href="#setup" class="nav-link">How It Works</a>
-      <a href="#capabilities" class="nav-link">Capabilities</a>
-      <a href="#genui" class="nav-link">Experience</a>
-      <a href="#pricing" class="nav-link">Pricing</a>
-      <a href="#faq" class="nav-link">FAQ</a>
+      <a href="/manifesto" class="nav-link">Manifesto</a>
+      <a href="/#capabilities" class="nav-link">Capabilities</a>
+      <a href="/agents" class="nav-link">Agents</a>
+      <a href="/#pricing" class="nav-link">Pricing</a>
+      <a href="/docs" class="nav-link nav-link-docs">Docs</a>
     </nav>
 
     <!-- Right: Official Google Play Store Badge -->
@@ -50,12 +37,11 @@ import GooglePlayBadge from "./GooglePlayBadge.astro";
   <!-- Mobile Drawer -->
   <div class="mobile-nav-drawer" id="mobileNavDrawer">
     <div class="container mobile-drawer-inner">
-      <a href="#overview" class="mobile-link">Overview</a>
-      <a href="#setup" class="mobile-link">How It Works</a>
-      <a href="#capabilities" class="mobile-link">Capabilities</a>
-      <a href="#genui" class="mobile-link">Experience</a>
-      <a href="#pricing" class="mobile-link">Pricing</a>
-      <a href="#faq" class="mobile-link">FAQ</a>
+      <a href="/manifesto" class="mobile-link">Manifesto</a>
+      <a href="/#capabilities" class="mobile-link">Capabilities</a>
+      <a href="/agents" class="mobile-link">Agents & Rates</a>
+      <a href="/#pricing" class="mobile-link">Pricing</a>
+      <a href="/docs" class="mobile-link">Documentation</a>
       <div class="mobile-drawer-cta">
         <GooglePlayBadge height={40} class="full-width" />
       </div>
@@ -158,9 +144,20 @@ import GooglePlayBadge from "./GooglePlayBadge.astro";
     background-color: rgba(255, 255, 255, 0.08);
   }
 
+  .nav-link-docs {
+    color: var(--color-leaf-bright);
+    font-weight: 600;
+  }
+
   .nav-right-actions {
-    display: flex;
+    display: none;
     align-items: center;
+  }
+
+  @media (min-width: 600px) {
+    .nav-right-actions {
+      display: flex;
+    }
   }
 
   .mobile-menu-btn {
@@ -206,7 +203,6 @@ import GooglePlayBadge from "./GooglePlayBadge.astro";
     right: 0;
     background-color: var(--color-canopy-green);
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
     padding: 24px 0;
   }
 

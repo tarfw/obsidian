@@ -1,0 +1,203 @@
+---
+// TAR Manifesto — The Principles of Local-First, At-Cost, Human-Centric Software
+import Layout from "../layouts/Layout.astro";
+import Nav from "../components/Nav.astro";
+import FooterSection from "../components/FooterSection.astro";
+import GooglePlayBadge from "../components/GooglePlayBadge.astro";
+---
+
+<Layout 
+  title="The TAR Manifesto — Calm, Honest Software for Organizations" 
+  description="Why we built TAR: local on-device records, zero per-seat software taxes, direct at-cost AI compute, and software that respects human agency."
+>
+  <Nav />
+
+  <main class="manifesto-main">
+    <div class="container manifesto-container">
+      
+      <!-- Header -->
+      <header class="manifesto-header font-dm-sans">
+        <div class="manifesto-badge">TAR Manifesto</div>
+        <h1 class="manifesto-title">Software should serve people,<br />not extract rents from them.</h1>
+        <p class="manifesto-lead">
+          For twenty years, enterprise software took a wrong turn. It locked essential records into proprietary silos, taxed organizations for every doctor, cashier, or volunteer they hired, and forced everyday people to learn clunky corporate dashboards. We built TAR to return to sanity.
+        </p>
+      </header>
+
+      <hr class="manifesto-divider" />
+
+      <!-- Body Content -->
+      <article class="manifesto-article font-dm-sans">
+        
+        <section class="manifesto-block">
+          <h2 class="block-title">1. Your data belongs on your hardware</h2>
+          <p>
+            When internet connectivity goes down, a clinic cannot stop prescribing medicine, and a shop cannot stop serving customers. TAR stores your business records directly on your physical device in open, transparent formats. 
+          </p>
+          <p>
+            You own the files. You can copy them, back them up, inspect them with standard tools, or migrate them at any time. The cloud is an optional convenience for multi-device sync — never a hostage-taker.
+          </p>
+        </section>
+
+        <section class="manifesto-block">
+          <h2 class="block-title">2. Zero per-seat software taxes</h2>
+          <p>
+            Charging ₹2,000 to ₹5,000 every month just to give a cashier, field worker, or relief volunteer a login is an arbitrary tax on organizational growth. It forces small businesses to share passwords and limits the number of people who can help.
+          </p>
+          <p>
+            In TAR, invited team members, cashiers, nurses, and staff are always <strong>₹0.00 (Free)</strong>. You only pay for the raw computational resources your business actually uses.
+          </p>
+        </section>
+
+        <section class="manifesto-block">
+          <h2 class="block-title">3. Transparent, at-cost AI compute</h2>
+          <p>
+            Artificial intelligence is a utility, like electricity or clean water. There is no reason to mark up token costs by 500% or lock organizations into opaque tiered subscriptions.
+          </p>
+          <p>
+            With TAR, <strong>1 Credit = ₹0.10 (10 Paise)</strong>. When an agent answers a patient’s WhatsApp query via Gemma, transcribes a voice note via Whisper, or scans a receipt via DeepSeek-OCR, you pay the direct at-cost pass-through fee with zero profit markup on tokens.
+          </p>
+        </section>
+
+        <section class="manifesto-block">
+          <h2 class="block-title">4. Meet people on the channels they already trust</h2>
+          <p>
+            Expecting everyday citizens, patients, and customers to download custom apps or navigate complex web portals creates friction and excludes people. 
+          </p>
+          <p>
+            TAR bridges your core records to the interfaces people use naturally: WhatsApp, Telegram, voice notes in 40+ languages, simple web ordering links, and POS card counters.
+          </p>
+        </section>
+
+        <section class="manifesto-block">
+          <h2 class="block-title">5. Deterministic foundations, agentic assist</h2>
+          <p>
+            AI hallucination is unacceptable for accounting, medical records, or inventory. TAR uses a clean separation of concerns:
+          </p>
+          <ul class="manifesto-bullets">
+            <li><strong>Deterministic Records:</strong> Strict transactional guarantees ensure that inventory, sales ledgers, and appointments are mathematically accurate.</li>
+            <li><strong>Agentic Assistance:</strong> AI drafts replies, summarizes conversations, extracts line items from images, and transcribes voice notes.</li>
+            <li><strong>Human Agency:</strong> Humans always have 1-tap override controls to review, approve, or take over conversations instantly.</li>
+          </ul>
+        </section>
+
+      </article>
+
+    </div>
+  </main>
+
+  <FooterSection />
+</Layout>
+
+<style>
+  .manifesto-main {
+    background-color: #ffffff;
+    color: var(--color-ink-black);
+    min-height: 80vh;
+    padding: 56px 0 88px 0;
+  }
+
+  .manifesto-container {
+    max-width: 760px;
+    margin: 0 auto;
+  }
+
+  .manifesto-header {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin-bottom: 32px;
+  }
+
+  .manifesto-badge {
+    align-self: flex-start;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-canopy-green);
+    background-color: #ecfdf5;
+    padding: 4px 10px;
+    border-radius: 4px;
+  }
+
+  .manifesto-title {
+    font-size: clamp(2.2rem, 3.8vw, 3rem);
+    font-weight: 700;
+    color: var(--color-canopy-green);
+    line-height: 1.1;
+    letter-spacing: -0.025em;
+    margin: 0;
+  }
+
+  .manifesto-lead {
+    font-size: 16.5px;
+    line-height: 1.65;
+    color: var(--color-graphite);
+    margin: 0;
+  }
+
+  .manifesto-divider {
+    border: none;
+    border-top: 1px solid rgba(0, 0, 0, 0.08);
+    margin: 32px 0 40px 0;
+  }
+
+  .manifesto-article {
+    display: flex;
+    flex-direction: column;
+    gap: 40px;
+  }
+
+  .manifesto-block {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .block-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--color-canopy-green);
+    letter-spacing: -0.01em;
+    margin: 0;
+  }
+
+  .manifesto-block p {
+    font-size: 15px;
+    line-height: 1.7;
+    color: var(--color-graphite);
+    margin: 0;
+  }
+
+  .manifesto-block strong {
+    color: var(--color-ink-black);
+  }
+
+  .manifesto-bullets {
+    list-style: none;
+    padding: 0;
+    margin: 8px 0 0 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .manifesto-bullets li {
+    font-size: 14.5px;
+    line-height: 1.6;
+    color: var(--color-graphite);
+    padding-left: 20px;
+    position: relative;
+  }
+
+  .manifesto-bullets li::before {
+    content: "•";
+    position: absolute;
+    left: 4px;
+    top: 0;
+    color: var(--color-canopy-green);
+    font-size: 18px;
+    line-height: 1.4;
+  }
+</style>

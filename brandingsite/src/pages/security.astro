@@ -1,0 +1,148 @@
+---
+// Security Architecture Page for TAR
+import Layout from "../layouts/Layout.astro";
+import Nav from "../components/Nav.astro";
+import FooterSection from "../components/FooterSection.astro";
+---
+
+<Layout 
+  title="Security Architecture — TAR" 
+  description="TAR Security: On-device encryption, zero credential exposure, strict tenant isolation, and cryptographic integrity."
+>
+  <Nav />
+
+  <main class="legal-main">
+    <div class="container legal-container font-dm-sans">
+      <header class="legal-header">
+        <div class="legal-badge">Security Whitepaper</div>
+        <h1 class="legal-title">Security & Architecture</h1>
+        <p class="legal-lead">Last updated: August 2026</p>
+      </header>
+
+      <hr class="legal-divider" />
+
+      <article class="legal-body">
+        <section class="legal-section">
+          <h2>1. Local-First Sandboxing</h2>
+          <p>
+            TAR runs as a native Android application. Operational records, local transaction tables, and cache files reside within OS-level app sandboxes with hardware-backed encryption.
+          </p>
+        </section>
+
+        <section class="legal-section">
+          <h2>2. Zero Workspace Write Credentials on Device</h2>
+          <p>
+            The mobile app communicates via authenticated API gateways. The client device never receives direct raw database administrative write credentials, preventing unauthorized table mutations even if a device is physically compromised.
+          </p>
+        </section>
+
+        <section class="legal-section">
+          <h2>3. Encryption in Transit (TLS 1.3)</h2>
+          <p>
+            All network traffic between TAR mobile clients, API gateways, messaging interfaces (WhatsApp, Telegram, Google Chat), and AI inference providers is strictly encrypted using TLS 1.3 with modern cipher suites.
+          </p>
+        </section>
+
+        <section class="legal-section">
+          <h2>4. Role-Based Access Control (RBAC)</h2>
+          <p>
+            Workspace owners maintain fine-grained controls over what invited staff, doctors, or dispatchers can view, approve, or execute across connected channels.
+          </p>
+        </section>
+
+        <section class="legal-section">
+          <h2>5. Vulnerability Reporting</h2>
+          <p>
+            We welcome responsible security disclosures. If you discover a vulnerability, please email our security team directly at <a href="mailto:security@tarfw.com" class="legal-link">security@tarfw.com</a>.
+          </p>
+        </section>
+      </article>
+    </div>
+  </main>
+
+  <FooterSection />
+</Layout>
+
+<style>
+  .legal-main {
+    background-color: #ffffff;
+    color: var(--color-ink-black);
+    min-height: 80vh;
+    padding: 56px 0 88px 0;
+  }
+
+  .legal-container {
+    max-width: 760px;
+    margin: 0 auto;
+  }
+
+  .legal-header {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .legal-badge {
+    align-self: flex-start;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-canopy-green);
+    background-color: #ecfdf5;
+    padding: 4px 10px;
+    border-radius: 4px;
+  }
+
+  .legal-title {
+    font-size: clamp(2.2rem, 3.6vw, 2.8rem);
+    font-weight: 700;
+    color: var(--color-canopy-green);
+    letter-spacing: -0.02em;
+    margin: 0;
+  }
+
+  .legal-lead {
+    font-size: 14px;
+    color: var(--color-slate);
+    margin: 0;
+  }
+
+  .legal-divider {
+    border: none;
+    border-top: 1px solid rgba(0, 0, 0, 0.08);
+    margin: 28px 0 36px 0;
+  }
+
+  .legal-body {
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+  }
+
+  .legal-section {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .legal-section h2 {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--color-canopy-green);
+    margin: 0;
+  }
+
+  .legal-section p {
+    font-size: 14.5px;
+    line-height: 1.65;
+    color: var(--color-graphite);
+    margin: 0;
+  }
+
+  .legal-link {
+    color: var(--color-canopy-green);
+    font-weight: 600;
+    text-decoration: underline;
+  }
+</style>

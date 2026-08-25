@@ -1,47 +1,41 @@
 ---
-// 5 Minutes From Setup to First Send — Bird.com Editorial Row Style
-import GooglePlayBadge from "./GooglePlayBadge.astro";
-
+// Up and Running in 5 Minutes — Clean, Compact & Direct
 const steps = [
   {
     num: "1",
-    title: "Download from Google Play",
-    desc: "Install the native TAR Android app on your phone or tablet in seconds. Offline SQLite database is initialized locally on your device."
+    title: "Download App",
+    desc: "Install TAR on Android. Your store database and catalog initialize offline instantly."
   },
   {
     num: "2",
-    title: "Connect your channel",
-    desc: "Link your official WhatsApp Business account, Telegram bot, or Web ordering flow. No complicated server configuration required."
+    title: "Connect Channels",
+    desc: "Link WhatsApp, Telegram, or Web links with zero server configuration."
   },
   {
     num: "3",
-    title: "Engage automatically & securely",
-    desc: "Your automated assistant replies in seconds with accurate details. Your human staff can monitor and take over any conversation at any time."
+    title: "Go Live & Invite Team (₹0)",
+    desc: "AI handles customer replies at direct cost. Add unlimited team members for ₹0."
   }
 ];
 ---
 
-<section class="setup-editorial-section pastel-room-mint reveal-item" id="setup">
+<section class="setup-editorial-section pastel-room-mint" id="setup">
   <div class="container">
     
     <div class="editorial-split-grid">
-      <!-- Left Column: Big Headline & Story -->
+      <!-- Left Column: Simple Direct Headline -->
       <div class="editorial-story-col">
         <h2 class="display-section-lg editorial-heading">
-          5 minutes from install<br />
-          to your first live conversation.
+          Up and running<br />
+          in 5 minutes.
         </h2>
         
         <p class="editorial-narrative font-dm-sans">
-          You don't need a team of software engineers or expensive consultants. Install the native Android app from Google Play, choose a ready-to-use flow, and test a live conversation on your own phone before rolling it out to customers. (iOS App Store coming soon).
+          No complex setup or technical consultants. Connect your channels, automate customer replies, and invite your entire team for free.
         </p>
-
-        <div class="store-badge-wrap">
-          <GooglePlayBadge height={44} />
-        </div>
       </div>
 
-      <!-- Right Column: Numbered Clean Steps List -->
+      <!-- Right Column: 3 Clean Compact Steps -->
       <div class="editorial-steps-col">
         {steps.map((s) => (
           <div class="step-item-row font-dm-sans">
@@ -60,29 +54,36 @@ const steps = [
 
 <style>
   .setup-editorial-section {
-    padding: var(--section-gap) 0;
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 64px 0;
+    box-sizing: border-box;
     color: var(--color-ink-black);
-    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
   }
 
   .editorial-split-grid {
     display: grid;
     grid-template-columns: 1fr;
-    gap: 48px;
-    align-items: flex-start;
+    gap: 36px;
+    align-items: center;
   }
 
   @media (min-width: 860px) {
     .editorial-split-grid {
       grid-template-columns: 1fr 1fr;
-      gap: 64px;
+      gap: 56px;
     }
   }
 
   .editorial-story-col {
     display: flex;
     flex-direction: column;
-    gap: 20px;
+    gap: 14px;
+    max-width: 480px;
   }
 
   .editorial-heading {
@@ -91,34 +92,29 @@ const steps = [
   }
 
   .editorial-narrative {
-    font-size: 16px;
+    font-size: 15px;
     line-height: 1.6;
     color: var(--color-graphite);
-  }
-
-  .store-badge-wrap {
-    margin-top: 4px;
-    display: flex;
-    align-items: center;
+    margin: 0;
   }
 
   .editorial-steps-col {
     display: flex;
     flex-direction: column;
-    border-top: 1px solid rgba(0, 0, 0, 0.1);
+    border-top: 1px solid rgba(0, 0, 0, 0.08);
   }
 
   .step-item-row {
     display: flex;
-    gap: 20px;
-    padding: 24px 0;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+    gap: 16px;
+    padding: 18px 0;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
     align-items: flex-start;
   }
 
   .step-badge {
-    width: 36px;
-    height: 36px;
+    width: 32px;
+    height: 32px;
     border-radius: 50%;
     background-color: var(--color-canopy-green);
     color: #ffffff;
@@ -126,25 +122,27 @@ const steps = [
     align-items: center;
     justify-content: center;
     font-weight: 700;
-    font-size: 15px;
+    font-size: 14px;
     flex-shrink: 0;
   }
 
   .step-text-block {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 4px;
   }
 
   .step-title {
-    font-size: 18px;
+    font-size: 16.5px;
     font-weight: 700;
     color: var(--color-canopy-green);
+    margin: 0;
   }
 
   .step-desc {
-    font-size: 14px;
-    line-height: 1.55;
+    font-size: 13.5px;
+    line-height: 1.5;
     color: var(--color-graphite);
+    margin: 0;
   }
 </style>

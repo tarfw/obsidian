@@ -1,0 +1,88 @@
+---
+// Human Pre-Footer Call to Action in Turn.io Canopy Green (#0a3922) - Official Google Play Badge
+import GooglePlayBadge from "./GooglePlayBadge.astro";
+---
+
+<section class="cta-editorial-section room-canopy-green reveal-item">
+  <div class="container cta-editorial-inner">
+    
+    <h2 class="display-section-lg cta-heading">
+      Start connecting with your people today.
+    </h2>
+
+    <p class="cta-narrative font-dm-sans">
+      Install the native TAR Android app from Google Play. Base activation is ₹500 (pre-loaded with ₹100 usage credits). Connect WhatsApp, invite your entire team for ₹0, and never pay monthly software seat taxes again.
+    </p>
+
+    <div class="cta-buttons-cluster">
+      <GooglePlayBadge height={48} />
+      <a href="#pricing" class="btn-ghost-light btn-lg font-dm-sans">
+        View Rate Calculator
+      </a>
+    </div>
+
+    <div class="cta-footnotes font-dm-sans">
+      <span>✓ Native Android App on Play Store</span>
+      <span>•</span>
+      <span>✓ iOS App Store Coming Soon</span>
+      <span>•</span>
+      <span>✓ ₹0 for Invited Team Members</span>
+    </div>
+
+  </div>
+</section>
+
+<style>
+  .cta-editorial-section {
+    background-color: var(--color-canopy-green);
+    color: var(--color-paper-white);
+    padding: 88px 0;
+    text-align: center;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .cta-editorial-inner {
+    max-width: 780px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .cta-heading {
+    color: #ffffff;
+    margin-bottom: 18px;
+    line-height: 1.08;
+  }
+
+  .cta-narrative {
+    font-size: clamp(1.05rem, 1.5vw, 1.2rem);
+    color: var(--color-mint-wash);
+    line-height: 1.6;
+    max-width: 620px;
+    margin-bottom: 32px;
+  }
+
+  .cta-buttons-cluster {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+
+  .btn-lg {
+    padding: 12px 24px;
+    font-size: 14.5px;
+  }
+
+  .cta-footnotes {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 12px;
+    font-size: 13px;
+    color: rgba(210, 242, 227, 0.85);
+  }
+</style>

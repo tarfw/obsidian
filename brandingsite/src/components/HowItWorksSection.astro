@@ -1,0 +1,150 @@
+---
+// 5 Minutes From Setup to First Send — Bird.com Editorial Row Style
+import GooglePlayBadge from "./GooglePlayBadge.astro";
+
+const steps = [
+  {
+    num: "1",
+    title: "Download from Google Play",
+    desc: "Install the native TAR Android app on your phone or tablet in seconds. Offline SQLite database is initialized locally on your device."
+  },
+  {
+    num: "2",
+    title: "Connect your channel",
+    desc: "Link your official WhatsApp Business account, Telegram bot, or Web ordering flow. No complicated server configuration required."
+  },
+  {
+    num: "3",
+    title: "Engage automatically & securely",
+    desc: "Your automated assistant replies in seconds with accurate details. Your human staff can monitor and take over any conversation at any time."
+  }
+];
+---
+
+<section class="setup-editorial-section pastel-room-mint reveal-item" id="setup">
+  <div class="container">
+    
+    <div class="editorial-split-grid">
+      <!-- Left Column: Big Headline & Story -->
+      <div class="editorial-story-col">
+        <h2 class="display-section-lg editorial-heading">
+          5 minutes from install<br />
+          to your first live conversation.
+        </h2>
+        
+        <p class="editorial-narrative font-dm-sans">
+          You don't need a team of software engineers or expensive consultants. Install the native Android app from Google Play, choose a ready-to-use flow, and test a live conversation on your own phone before rolling it out to customers. (iOS App Store coming soon).
+        </p>
+
+        <div class="store-badge-wrap">
+          <GooglePlayBadge height={44} />
+        </div>
+      </div>
+
+      <!-- Right Column: Numbered Clean Steps List -->
+      <div class="editorial-steps-col">
+        {steps.map((s) => (
+          <div class="step-item-row font-dm-sans">
+            <div class="step-badge">{s.num}</div>
+            <div class="step-text-block">
+              <h3 class="step-title">{s.title}</h3>
+              <p class="step-desc">{s.desc}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<style>
+  .setup-editorial-section {
+    padding: var(--section-gap) 0;
+    color: var(--color-ink-black);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  }
+
+  .editorial-split-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 48px;
+    align-items: flex-start;
+  }
+
+  @media (min-width: 860px) {
+    .editorial-split-grid {
+      grid-template-columns: 1fr 1fr;
+      gap: 64px;
+    }
+  }
+
+  .editorial-story-col {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .editorial-heading {
+    color: var(--color-canopy-green);
+    line-height: 1.08;
+  }
+
+  .editorial-narrative {
+    font-size: 16px;
+    line-height: 1.6;
+    color: var(--color-graphite);
+  }
+
+  .store-badge-wrap {
+    margin-top: 4px;
+    display: flex;
+    align-items: center;
+  }
+
+  .editorial-steps-col {
+    display: flex;
+    flex-direction: column;
+    border-top: 1px solid rgba(0, 0, 0, 0.1);
+  }
+
+  .step-item-row {
+    display: flex;
+    gap: 20px;
+    padding: 24px 0;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+    align-items: flex-start;
+  }
+
+  .step-badge {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background-color: var(--color-canopy-green);
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 15px;
+    flex-shrink: 0;
+  }
+
+  .step-text-block {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .step-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--color-canopy-green);
+  }
+
+  .step-desc {
+    font-size: 14px;
+    line-height: 1.55;
+    color: var(--color-graphite);
+  }
+</style>

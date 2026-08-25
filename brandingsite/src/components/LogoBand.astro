@@ -1,0 +1,74 @@
+---
+// Clean Horizontal Interface Strip with Subtle Dividers
+const channels = [
+  "TarApp",
+  "Web Sites",
+  "WhatsApp",
+  "Telegram",
+  "Discord",
+  "Slack",
+  "Google Chat",
+  "MS Teams",
+  "POS",
+  "Voice"
+];
+---
+
+<section class="channel-strip-section">
+  <div class="container">
+    <div class="channel-strip-row font-dm-sans">
+      <span class="strip-label">CONNECTED INTERFACES:</span>
+      <div class="strip-items">
+        {channels.map((ch, idx) => (
+          <>
+            <span class="strip-item">{ch}</span>
+            {idx < channels.length - 1 && <span class="strip-dot">·</span>}
+          </>
+        ))}
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+  .channel-strip-section {
+    background-color: var(--color-lavender-mist);
+    padding: 18px 0;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  }
+
+  .channel-strip-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    font-size: 13px;
+    color: var(--color-canopy-green);
+  }
+
+  .strip-label {
+    font-weight: 700;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    color: var(--color-slate);
+  }
+
+  .strip-items {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+  }
+
+  .strip-item {
+    font-weight: 600;
+    color: var(--color-canopy-green);
+  }
+
+  .strip-dot {
+    color: rgba(10, 57, 34, 0.35);
+    font-weight: bold;
+  }
+</style>

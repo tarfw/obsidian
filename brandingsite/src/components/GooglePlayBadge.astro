@@ -1,0 +1,59 @@
+---
+// Official Google Play Store Badge Component
+interface Props {
+  height?: number;
+  class?: string;
+}
+
+const { height = 40, class: className = "" } = Astro.props;
+const width = Math.round(height * (135 / 40));
+---
+
+<a
+  href="https://play.google.com/store/apps"
+  target="_blank"
+  rel="noopener noreferrer"
+  class={`google-play-official-badge ${className}`}
+  aria-label="Get it on Google Play"
+>
+  <svg viewBox="0 0 135 40" width={width} height={height} class="play-badge-svg">
+    <!-- Official Black Card with Subtle Border -->
+    <rect width="135" height="40" rx="6" fill="#000000" stroke="rgba(255, 255, 255, 0.2)" stroke-width="0.75" />
+    
+    <!-- 4-Color Official Google Play Triangle Mark -->
+    <g transform="translate(10, 8)">
+      <!-- Blue Base Triangle -->
+      <path fill="#00C1FF" d="M1.3 1.3L12.4 12.4 1.3 23.5C1.1 23.2 1 22.8 1 22.3V2.5C1 2 1.1 1.6 1.3 1.3Z"/>
+      <!-- Green Top Triangle -->
+      <path fill="#00E676" d="M16.1 8.7L12.4 12.4 1.3 1.3C1.6 1.1 2 1 2.5 1C3.1 1 3.7 1.2 4.2 1.5L16.1 8.7Z"/>
+      <!-- Red Bottom Triangle -->
+      <path fill="#FF3D00" d="M16.1 16.1L4.2 23.3C3.7 23.6 3.1 23.8 2.5 23.8C2 23.8 1.6 23.7 1.3 23.5L12.4 12.4 16.1 16.1Z"/>
+      <!-- Yellow Right Triangle -->
+      <path fill="#FFD600" d="M20.6 11.2L16.1 8.7L12.4 12.4L16.1 16.1L20.6 13.6C21.4 13.1 21.9 12.2 21.9 12.4C21.9 12.6 21.4 11.7 20.6 11.2Z"/>
+    </g>
+
+    <!-- Official Typography -->
+    <text x="38" y="14" fill="#ffffff" font-family="'DM Sans', -apple-system, Roboto, sans-serif" font-size="8" font-weight="600" letter-spacing="0.08em">GET IT ON</text>
+    <text x="38" y="28" fill="#ffffff" font-family="'DM Sans', -apple-system, Roboto, sans-serif" font-size="13.5" font-weight="700" letter-spacing="-0.01em">Google Play</text>
+  </svg>
+</a>
+
+<style>
+  .google-play-official-badge {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 6px;
+    transition: transform 0.15s ease, opacity 0.15s ease;
+    text-decoration: none;
+  }
+
+  .google-play-official-badge:hover {
+    transform: translateY(-1px);
+    opacity: 0.92;
+  }
+
+  .play-badge-svg {
+    display: block;
+    border-radius: 6px;
+  }
+</style>

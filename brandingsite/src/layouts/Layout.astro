@@ -1,39 +1,58 @@
 ---
 import "../styles/global.css";
-interface Props { title?: string; description?: string; }
+
+interface Props {
+  title?: string;
+  description?: string;
+}
+
 const {
-  title = "tarapp | Bring your agents to iMessage, WhatsApp, Telegram, Slack, and beyond",
-  description = "An open framework that connects your agents to iMessage, WhatsApp, Discord, Slack, Telegram, Instagram, and other interfaces people use every day.",
+  title = "TAR — Communications & AI Agent Infrastructure",
+  description = "Connect your AI agents to WhatsApp, Telegram, SMS, Discord, Slack, and voice. Built on 5 atomic tables, 6 tools, and transparent at-cost compute.",
 } = Astro.props;
 ---
+
 <!doctype html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content={description} />
-  <meta name="theme-color" content="#0b0b0b" />
-  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <title>{title}</title>
+  <meta name="description" content={description} />
+  <meta name="theme-color" content="#0a3922" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+
+  <!-- Open Graph / Meta -->
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content={title} />
+  <meta property="og:description" content={description} />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content={title} />
+  <meta name="twitter:description" content={description} />
+
+  <!-- Google Fonts: DM Sans & JetBrains Mono -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
-    href="https://fonts.googleapis.com/css2?family=Azeret+Mono:wght@400;500;600&family=Fragment+Mono&family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&display=swap"
+    href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
     rel="stylesheet"
   />
+
   <script>
-    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)');
     const reveal = () => {
       const io = new IntersectionObserver(
         (entries) => {
           for (const e of entries) {
-            if (e.isIntersecting) e.target.classList.add('in-view');
+            if (e.isIntersecting) {
+              e.target.classList.add('in-view');
+            }
           }
         },
-        { threshold: 0.12, rootMargin: '0px 0px -8% 0px' }
+        { threshold: 0.08, rootMargin: '0px 0px -4% 0px' }
       );
-      document.querySelectorAll('.reveal').forEach((el) => io.observe(el));
+      document.querySelectorAll('.reveal-item').forEach((el) => io.observe(el));
     };
+
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', reveal);
     } else {
@@ -41,5 +60,7 @@ const {
     }
   </script>
 </head>
-<body><slot /></body>
+<body>
+  <slot />
+</body>
 </html>

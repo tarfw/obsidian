@@ -1,105 +1,62 @@
 ---
-import "../styles/global.css";
-import Head from "../components/Head.astro";
+import Layout from "../layouts/Layout.astro";
 import Nav from "../components/Nav.astro";
 import HeroSection from "../components/HeroSection.astro";
+import HowItWorksSection from "../components/HowItWorksSection.astro";
+import ChannelPlayground from "../components/ChannelPlayground.astro";
+import UseCasesSection from "../components/UseCasesSection.astro";
+import BenefitsSection from "../components/BenefitsSection.astro";
 import PricingSection from "../components/PricingSection.astro";
+import TestimonialSection from "../components/TestimonialSection.astro";
+import FaqSection from "../components/FaqSection.astro";
+import CtaBanner from "../components/CtaBanner.astro";
 import FooterSection from "../components/FooterSection.astro";
 ---
-<!doctype html>
-<html lang="en">
-<head>
-  <Head />
-</head>
-<body>
-  <div id="main">
-    <div class="astro-gZhQL astro-2xzlkm">
-      <div class="astro-mf5sl3-container">
-        <Nav />
-        <HeroSection />
-      </div>
-      <PricingSection />
-      <div class="astro-Covf2">
-        <FooterSection />
-      </div>
-    </div>
-  </div>
-</body>
-</html>
-<style is:global>
-  /* Enforce dark theme background and text contrast across light/dark system settings */
-  :root,
-  html,
-  body,
-  :root body,
-  #main,
-  .astro-gZhQL.astro-2xzlkm {
-    background-color: #0e2a1a !important;
-    color: #ffffff;
-    color-scheme: dark !important;
-    --token-c3f02322-be9d-420d-8e79-93cce2505e72: #0e2a1a !important;
-    --token-5ef2cc4f-bbf5-45a1-b98e-639daedae9df: #ffffff !important;
-    --token-55083370-ab20-4c67-afb7-a07b02453172: #0e2a1a !important;
-    --token-0f5df43e-5ed0-4f1e-a6d2-7cb268036ab4: #ffffff !important;
-  }
 
-  /* Hide legacy customer block inside HeroSection so only AgentCards renders */
-  #customer,
-  .astro-9mj5g {
-    display: none !important;
-  }
+<Layout
+  title="TAR — Helpful messaging on WhatsApp & SMS for clinics, businesses & communities"
+  description="Automate appointment reminders, customer support, and helpful updates on WhatsApp, Telegram, SMS, and Voice. Simple to set up with zero monthly per-seat fees."
+>
+  <!-- Clean Header Navigation -->
+  <Nav />
 
-  .astro-16nt41d-container {
-    display: none !important;
-  }
+  <main class="page-body">
+    <!-- Human-Focused Hero Section (Fits 100vh) -->
+    <HeroSection />
 
-  /* Collapse the 600vh hero scroll wrapper down to content height.
-     The hero's sticky text no longer has scroll-through imagery, so the
-     wrapper must not reserve ~5400px of empty space. */
-  .astro-duhvo5,
-  .astro-1ix8595 {
-    height: auto !important;
-    min-height: 100vh !important;
-  }
+    <!-- How It Works in 3 Simple Steps -->
+    <HowItWorksSection />
 
-  /* Hide the leftover empty image/video zones that now render as blank
-     absolute boxes overlapping the hero text. */
-  .astro-160t8na,
-  .astro-hp1x3m,
-  .astro-1oz2rpf {
-    display: none !important;
-  }
+    <!-- Channels Showcase: WhatsApp, Telegram, SMS, Voice -->
+    <ChannelPlayground />
 
-  /* Hide the "Trusted by" X-card embed grid: it renders as a grid of empty
-     boxes (the embedded card content is no longer available) and creates a
-     ~1340px dead zone before the Deploy section. */
-  .astro-l0nf4r,
-  .astro-2fr4am {
-    display: none !important;
-  }
+    <!-- Everyday Solutions for Clinics, Businesses & Schools -->
+    <UseCasesSection />
 
-  /* Hide empty "image 42" placeholders in the Build-for-teams cards that
-     only render blank background wrappers. */
-  .astro-bydapr,
-  .astro-cpy06w {
-    display: none !important;
-  }
+    <!-- Core Benefits: Zero Seat Fees, 24/7 Replies, Voice Notes -->
+    <BenefitsSection />
 
-  /* Hide the empty image placeholder in the Manifesto section (astro-3vz3by)
-     that renders as a blank ~464px box between "Read blogs" and the CTA. */
-  .astro-3vz3by {
-    display: none !important;
-  }
+    <!-- Simple, Honest Pricing with Usage Slider -->
+    <PricingSection />
 
-  /* Footer: spread the four link columns across the full container width
-     instead of cramming them into the right edge. */
-  .astro-18bhv8a {
-    justify-content: space-between !important;
-  }
+    <!-- Community Stories & Impact -->
+    <TestimonialSection />
 
-  /* Footer link contrast: 0.25-alpha white is unreadable on the dark green
-     background, raise it for legibility. */
-  .astro-styles-preset-1iolcjx {
-    color: rgba(255, 255, 255, 0.7) !important;
+    <!-- Plain-English Frequently Asked Questions -->
+    <FaqSection />
+
+    <!-- Pre-Footer Call to Action -->
+    <CtaBanner />
+  </main>
+
+  <!-- Complete Directory Footer -->
+  <FooterSection />
+</Layout>
+
+<style>
+  .page-body {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
   }
 </style>

@@ -1,0 +1,146 @@
+---
+// Eight Core Capabilities — Bird.com 8-Item Editorial Grid (Sage Wash Room #e4f7ee)
+const capabilities = [
+  {
+    title: "Official WhatsApp & Telegram Channels",
+    desc: "Direct verified integrations with interactive buttons, quick replies, and real-time delivery receipts."
+  },
+  {
+    title: "Voice Notes in 40+ Languages",
+    desc: "Let customers speak naturally in audio notes. TAR transcribes and responds in their native mother tongue."
+  },
+  {
+    title: "Zero Per-Seat Software Taxes",
+    desc: "Add your entire team of staff, volunteers, or doctors with ₹0 per-user monthly subscription penalties."
+  },
+  {
+    title: "Offline-First On-Device SQLite",
+    desc: "Keep accessing records, viewing orders, and taking bookings on your device even during internet outages."
+  },
+  {
+    title: "Unified Team Inbox & Actions",
+    desc: "One calm, organized feed combining customer chats, urgent signals, and pending team approvals."
+  },
+  {
+    title: "Automated Care & Booking Loops",
+    desc: "Send appointment reminders, pre-visit instructions, and order dispatch notices automatically 24/7."
+  },
+  {
+    title: "Instant Human Takeover",
+    desc: "Step in and take over any conversation with a single tap from your desktop or mobile dashboard."
+  },
+  {
+    title: "100% Data Ownership & Privacy",
+    desc: "Your records and customer database belong solely to you. Zero data lock-in, zero selling of customer info."
+  }
+];
+---
+
+<section class="capabilities-section pastel-room-sage reveal-item" id="capabilities">
+  <div class="container">
+    
+    <!-- Section Header -->
+    <div class="section-head-left">
+      <h2 class="display-section-lg section-title">
+        Eight things TAR handles<br />
+        for your everyday operations.
+      </h2>
+      <p class="section-lead font-dm-sans">
+        Modern customer communications require template approvals, multi-language voice transcription, and reliable offline sync. TAR handles every layer seamlessly.
+      </p>
+    </div>
+
+    <!-- 8 Capabilities Grid with Clean Typography Dividers (Bird.com Style) -->
+    <div class="capabilities-grid font-dm-sans">
+      {capabilities.map((c, idx) => (
+        <div class="cap-item">
+          <span class="cap-index">{String(idx + 1).padStart(2, '0')}</span>
+          <h3 class="cap-title">{c.title}</h3>
+          <p class="cap-desc">{c.desc}</p>
+        </div>
+      ))}
+    </div>
+
+  </div>
+</section>
+
+<style>
+  .capabilities-section {
+    padding: var(--section-gap) 0;
+    color: var(--color-ink-black);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  }
+
+  .section-head-left {
+    max-width: 780px;
+    margin-bottom: 48px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .section-title {
+    color: var(--color-canopy-green);
+    line-height: 1.08;
+  }
+
+  .section-lead {
+    font-size: 16px;
+    line-height: 1.6;
+    color: var(--color-graphite);
+  }
+
+  /* 8-Item Clean Grid with Subtle Dividers */
+  .capabilities-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    border-top: 1px solid rgba(0, 0, 0, 0.1);
+  }
+
+  @media (min-width: 640px) {
+    .capabilities-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .capabilities-grid {
+      grid-template-columns: repeat(4, 1fr);
+    }
+  }
+
+  .cap-item {
+    padding: 32px 24px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+    border-right: 1px solid rgba(0, 0, 0, 0.1);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    background-color: rgba(255, 255, 255, 0.4);
+    transition: background-color 0.15s ease;
+  }
+
+  .cap-item:hover {
+    background-color: #ffffff;
+  }
+
+  .cap-index {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--color-coral-pulse);
+  }
+
+  .cap-title {
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--color-canopy-green);
+    line-height: 1.3;
+    letter-spacing: -0.01em;
+  }
+
+  .cap-desc {
+    font-size: 13.5px;
+    line-height: 1.55;
+    color: var(--color-graphite);
+  }
+</style>

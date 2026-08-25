@@ -1,837 +1,354 @@
 ---
-const workspaces = [
-  { usage: "Personal workspace", credits: "0", note: "Local on-device SQLite & .md folder" },
-  { usage: "Each active owned workspace", credits: "100 / month", note: "Reserved first from wallet on the 1st (₹10.00 / mo)" },
-  { usage: "Joined workspace", credits: "0 for the member", note: "Invited members use owner's wallet" },
-  { usage: "Public browsing, ordering, or booking", credits: "0", note: "Zero charge for your end customers" },
-  { usage: "Archived workspace", credits: "0", note: "Preserved historical workspaces at rest" }
-];
-
-const agentGroups = [
+// Authentic TAR Credit Pricing — Bird.com Editorial Style (Cream Wash Room #faf7e8)
+const packs = [
   {
-    title: "Workspace & Core (CRUD, Sync & Memory)",
-    color: "#2563eb",
-    actions: [
-      { name: "Local on-device CRUD (cached SQLite reads & views)", credits: "0", inr: "₹0.00", isFree: true },
-      { name: "Cloud DB write, sync & search (Turso writes + bandwidth)", credits: "1 cr / 600 ops", inr: "~₹0.016 / 100 ops", isFree: false },
-      { name: "Workspace answer or summary (Gemma-4)", credits: "0.02 cr", inr: "~₹0.002", isFree: false },
-      { name: "OCR document scan (DeepSeek-OCR 2 @ $0.03 / 1M)", credits: "0.05 cr / page", inr: "~₹0.0052 / page", isFree: false },
-      { name: "Bill audit (OCR scan + ledger check)", credits: "0.1 cr / bill", inr: "~₹0.01 / bill", isFree: false },
-      { name: "Analyst or tax report (DeepSeek-V4)", credits: "1 cr / report", inr: "~₹0.10 / report", isFree: false }
-    ]
+    name: "Base Activation",
+    price: "₹500",
+    credits: "1,000 Credits (₹100 Wallet)",
+    details: "Includes ₹400 onboarding fee + ₹100 pre-loaded credit balance. Covers 8+ months of typical operations.",
+    badge: "One-Time Activation"
   },
   {
-    title: "Messaging & CRM",
-    color: "#059669",
-    actions: [
-      { name: "Sales or support reply (Gemma-4 @ $0.02 in / $0.10 out)", credits: "0.02 cr", inr: "~₹0.002 / reply", isFree: false },
-      { name: "Voice note to order (Whisper Groq @ $0.04/hr + Gemma)", credits: "0.3 cr", inr: "~₹0.03 / order", isFree: false },
-      { name: "Quote or proposal (DeepSeek-V4 @ $0.08 in / $0.18 out)", credits: "0.25 cr", inr: "~₹0.025 / doc", isFree: false },
-      { name: "Customer retention campaign (DeepSeek-V4)", credits: "0.5 cr", inr: "~₹0.05 / batch", isFree: false }
-    ]
+    name: "Starter Top-Up",
+    price: "₹100",
+    credits: "1,000 Credits (100% Wallet)",
+    details: "Pure at-cost usage credits. Refills balance anytime with zero expiration and zero token markups.",
+    badge: "On-Demand"
   },
   {
-    title: "Sites & Publishing",
-    color: "#0891b2",
-    actions: [
-      { name: "Publish or update a site", credits: "0.5 cr / run", inr: "~₹0.05 / run", isFree: false },
-      { name: "Edit a site section", credits: "0.25 cr / run", inr: "~₹0.025 / run", isFree: false },
-      { name: "Keep a public site active", credits: "50 cr / month", inr: "₹5.00 / month", isFree: false },
-      { name: "Generate a site draft (Multi-turn DeepSeek-V4)", credits: "3 cr / draft", inr: "~₹0.30 / draft", isFree: false }
-    ]
-  },
-  {
-    title: "Intelligence & Swarms",
-    color: "#7c3aed",
-    actions: [
-      { name: "Competitor price check (Gemma-4)", credits: "0.02 cr / product", inr: "~₹0.002 / check", isFree: false },
-      { name: "Operations workflow (DeepSeek-V4)", credits: "0.5 cr / pipeline", inr: "~₹0.05 / run", isFree: false },
-      { name: "Product photo cleanup (Vision model)", credits: "1 cr / image", inr: "~₹0.10 / image", isFree: false },
-      { name: "Verified lead batch (DeepSeek-V4)", credits: "2 cr / batch", inr: "~₹0.20 / batch", isFree: false },
-      { name: "Deep research swarm (Autonomous multi-agent loop)", credits: "12 cr / dossier", inr: "~₹1.20 / task", isFree: false }
-    ]
+    name: "Growth Top-Up",
+    price: "₹500",
+    credits: "5,000 Credits (100% Wallet)",
+    details: "For active clinics and shops running high-volume daily WhatsApp CRM, voice orders, and invoice scans.",
+    badge: "Most Popular"
   }
 ];
 
-const creditPacks = [
-  { 
-    pack: "Base Credit Pack", 
-    price: "₹500", 
-    credits: "1,000 credits (₹100 wallet value)", 
-    breakdown: "₹400 platform fee + ₹100 usage credits",
-    suitable: "Initial account activation — pre-loaded with ₹100 credit wallet" 
-  },
-  { 
-    pack: "Top-Up: Starter", 
-    price: "₹100", 
-    credits: "1,000 credits (100% wallet value)", 
-    breakdown: "Pure at-cost usage top-up",
-    suitable: "Flexible on-demand top-up whenever balance runs low" 
-  },
-  { 
-    pack: "Top-Up: Growth", 
-    price: "₹500", 
-    credits: "5,000 credits (100% wallet value)", 
-    breakdown: "Pure at-cost usage top-up",
-    suitable: "Active businesses running daily CRM, OCR & proposals" 
-  },
-  { 
-    pack: "Top-Up: Scale", 
-    price: "₹1,000", 
-    credits: "10,000 credits (100% wallet value)", 
-    breakdown: "Pure at-cost usage top-up",
-    suitable: "High-volume stores, large lead batches & research swarms" 
-  }
-];
-
-const modelTiers = [
-  { 
-    tier: "Fast Chat & Routing", 
-    modelName: "Gemma-4-E4B-it", 
-    rawCost: "$0.02 in / $0.10 out / 1M", 
-    tokenUsage: "300 in / 150 out",
-    creditsWithUnit: "0.02 cr / reply", 
-    inrWithUnit: "~₹0.002 / reply",
-    tasks: "WhatsApp/Telegram replies, workspace summaries (1 cr = 50 replies)" 
-  },
-  { 
-    tier: "Document OCR", 
-    modelName: "DeepSeek-OCR 2", 
-    rawCost: "$0.03 in / $0.03 out / 1M", 
-    tokenUsage: "1.4k vision in / 600 text out",
-    creditsWithUnit: "0.05 cr / page", 
-    inrWithUnit: "~₹0.0052 / page",
-    tasks: "Invoice & receipt parsing, multi-layout OCR (1 cr = 20 pages)" 
-  },
-  { 
-    tier: "Voice-to-Order", 
-    modelName: "Whisper-v3 + Gemma-4", 
-    rawCost: "$0.04/hr + $0.02/$0.10", 
-    tokenUsage: "30s audio + 250 in / 100 out",
-    creditsWithUnit: "0.3 cr / order", 
-    inrWithUnit: "~₹0.03 / order",
-    tasks: "Audio voice note transcription to structured order" 
-  },
-  { 
-    tier: "Commercial Quotes", 
-    modelName: "DeepSeek-V4-Flash", 
-    rawCost: "$0.08 in / $0.18 out / 1M", 
-    tokenUsage: "1.5k in / 800 out",
-    creditsWithUnit: "0.25 cr / doc", 
-    inrWithUnit: "~₹0.025 / doc",
-    tasks: "Itemized commercial quotes & proposals (1 cr = 4 quotes)" 
-  },
-  { 
-    tier: "Analyst & Tax Reports", 
-    modelName: "DeepSeek-V4-Flash", 
-    rawCost: "$0.08 in / $0.18 out / 1M", 
-    tokenUsage: "6.0k in / 3.0k out",
-    creditsWithUnit: "1.0 cr / report", 
-    inrWithUnit: "~₹0.10 / report",
-    tasks: "Financial ledger audits, multi-month tax reports" 
-  },
-  { 
-    tier: "Site Draft Engine", 
-    modelName: "DeepSeek-V4 Multi-Turn", 
-    rawCost: "$0.08 in / $0.18 out / 1M", 
-    tokenUsage: "20k in / 8.0k out",
-    creditsWithUnit: "3.0 cr / draft", 
-    inrWithUnit: "~₹0.30 / draft",
-    tasks: "Full website component drafting, section edits (0.25 cr)" 
-  },
-  { 
-    tier: "Autonomous Swarms", 
-    modelName: "DeepSeek-V4 Swarm", 
-    rawCost: "Multi-agent loop at raw API cost", 
-    tokenUsage: "80k in / 30k out",
-    creditsWithUnit: "12 cr / dossier", 
-    inrWithUnit: "~₹1.20 / task",
-    tasks: "Comprehensive multi-source market research dossiers" 
-  },
-  { 
-    tier: "Edge Database & Sync", 
-    modelName: "Turso SQLite + Bandwidth", 
-    rawCost: "$1.00 / 1M writes · $0.09 / GB", 
-    tokenUsage: "100 row writes + 1 MB sync",
-    creditsWithUnit: "1 cr / 600 ops", 
-    inrWithUnit: "~₹0.016 / 100 ops",
-    tasks: "Cloud CRUD mutations, vector search & edge sync" 
-  }
-];
-
-const hundredRupeesBreakdown = [
-  {
-    capability: "Customer WhatsApp / Chat Replies",
-    model: "Gemma-4-E4B-it ($0.02 in / $0.10 out)",
-    unitRate: "0.02 cr (~₹0.002 / reply)",
-    capacityFor100Rs: "50,000 chat replies",
-    tokensFor100Rs: "22.5M tokens (15M in / 7.5M out)"
-  },
-  {
-    capability: "Document & Invoice OCR Scans",
-    model: "DeepSeek-OCR 2 ($0.03 in / $0.03 out)",
-    unitRate: "0.05 cr (~₹0.0052 / page)",
-    capacityFor100Rs: "20,000 scanned pages",
-    tokensFor100Rs: "40.0M tokens (28M vision in / 12M text out)"
-  },
-  {
-    capability: "Voice Note to Structured Orders",
-    model: "Whisper-v3 ($0.04/hr) + Gemma-4",
-    unitRate: "0.30 cr (~₹0.03 / order)",
-    capacityFor100Rs: "3,333 audio orders",
-    tokensFor100Rs: "~28 hours of continuous audio processing"
-  },
-  {
-    capability: "Commercial Quotes & Proposals",
-    model: "DeepSeek-V4-Flash ($0.08 in / $0.18 out)",
-    unitRate: "0.25 cr (~₹0.025 / quote)",
-    capacityFor100Rs: "4,000 custom quotes",
-    tokensFor100Rs: "9.2M tokens (6.0M in / 3.2M out)"
-  },
-  {
-    capability: "In-Depth Tax & Analyst Reports",
-    model: "DeepSeek-V4-Flash ($0.08 in / $0.18 out)",
-    unitRate: "1.00 cr (~₹0.10 / report)",
-    capacityFor100Rs: "1,000 comprehensive reports",
-    tokensFor100Rs: "9.0M tokens (6.0M in / 3.0M out)"
-  },
-  {
-    capability: "Full Website Component Drafts",
-    model: "DeepSeek-V4 Multi-Turn Swarm",
-    unitRate: "3.00 cr (~₹0.30 / draft)",
-    capacityFor100Rs: "333 full site drafts",
-    tokensFor100Rs: "9.3M tokens (6.6M in / 2.7M out)"
-  },
-  {
-    capability: "Deep Market Research Dossiers",
-    model: "DeepSeek-V4 Autonomous Swarm",
-    unitRate: "12.00 cr (~₹1.20 / task)",
-    capacityFor100Rs: "83 research dossiers",
-    tokensFor100Rs: "9.1M multi-agent loop tokens"
-  },
-  {
-    capability: "Cloud Database CRUD & Edge Sync",
-    model: "Turso SQLite + Transfer Bandwidth",
-    unitRate: "1 cr / 600 ops (~₹0.016 / 100 ops)",
-    capacityFor100Rs: "625,000 database ops",
-    tokensFor100Rs: "625k row writes + 6.25 GB sync transfer"
-  },
-  {
-    capability: "Active Owned Workspace Hosting",
-    model: "Edge SQLite DB & Folder Storage",
-    unitRate: "100 cr / month (₹10.00 / mo)",
-    capacityFor100Rs: "10 months active workspace",
-    tokensFor100Rs: "Full dedicated SQLite cloud edge node"
-  }
-];
-
-const sampleCalculation = [
-  { item: "Owned Workspace", modelUsed: "Edge storage & SQLite sync reservation", volume: "1 workspace / mo", tokensUsed: "—", credits: "100 cr", inr: "₹10.00" },
-  { item: "Cloud DB CRUD & Sync", modelUsed: "Turso SQLite + Transfer Bandwidth", volume: "1,000 operations", tokensUsed: "1,000 row writes + 10 MB sync", credits: "1.6 cr", inr: "₹0.16" },
-  { item: "WhatsApp Customer Replies", modelUsed: "Gemma-4-E4B-it ($0.02 in / $0.10 out)", volume: "500 replies", tokensUsed: "150k in / 75k out", credits: "10 cr", inr: "₹1.00" },
-  { item: "Invoice / Receipt OCR Scans", modelUsed: "DeepSeek-OCR 2 ($0.03 in/out / 1M)", volume: "100 pages", tokensUsed: "140k vision in / 60k text out", credits: "5 cr", inr: "₹0.52" },
-  { item: "Quotes & Commercial Proposals", modelUsed: "DeepSeek-V4-Flash-0731", volume: "20 quotes", tokensUsed: "30k in / 16k out", credits: "5 cr", inr: "₹0.50" }
+const operationsCost = [
+  { task: "Customer WhatsApp / Chat Reply", cost: "~₹0.002 / reply", note: "1 credit = 50 replies" },
+  { task: "Voice Note Transcription to Order", cost: "~₹0.03 / order", note: "Whisper audio in 40+ languages" },
+  { task: "Document / Invoice OCR Scan", cost: "~₹0.005 / page", note: "Instant receipt & bill parsing" },
+  { task: "Commercial Quote or Proposal", cost: "~₹0.025 / doc", note: "Custom PDF generation" },
+  { task: "Active Owned Workspace Hosting", cost: "₹10.00 / month", note: "100 credits / mo for dedicated edge sync" },
+  { task: "Invited Team Members & Staff", cost: "₹0.00 (Free)", note: "Unlimited staff, cashiers & doctors" }
 ];
 ---
 
-<section class="pricing-clean-section" id="pricing">
-  <div class="pricing-clean-inner">
+<section class="tar-pricing-section pastel-room-cream reveal-item" id="pricing">
+  <div class="container">
     
-    <!-- Title & Summary -->
-    <div class="pricing-intro">
-      <span class="pricing-kicker">Tar Pricing</span>
-      <h2 class="pricing-title">Simple credit pricing</h2>
-      <p class="pricing-lead">
-        Base activation is ₹500 (includes ₹100 pre-loaded usage credits). Top up anytime on demand at 100% direct at-cost pass-through.
+    <!-- Section Header -->
+    <div class="pricing-editorial-header">
+      <h2 class="display-section-lg section-title">
+        One simple credit wallet.<br />
+        Zero seat license markups.
+      </h2>
+      <p class="section-lead font-dm-sans">
+        Traditional software vendors charge ₹10,000 to ₹25,000 every month just for seat licenses. TAR charges strictly for actual operations consumed at 100% direct at-cost pass-through.
       </p>
     </div>
 
-    <!-- 1. Workspaces and Credits -->
-    <div class="pricing-block">
-      <h3 class="block-title">1. Workspaces and Credits</h3>
-      <p class="block-sub">Monthly workspace credits are reserved first. AI automation inside a workspace uses its owner's wallet.</p>
+    <!-- Pricing Packs List with Dividers (Bird.com Style) -->
+    <div class="pricing-packs-row font-dm-sans">
+      {packs.map((p) => (
+        <div class="pack-editorial-item">
+          <div class="pack-top-bar">
+            <span class="pack-badge">{p.badge}</span>
+            <h3 class="pack-name">{p.name}</h3>
+          </div>
 
-      <div class="table-container">
-        <table class="clean-table">
-          <thead>
-            <tr>
-              <th>Workspace usage</th>
-              <th class="text-right">Credits</th>
-            </tr>
-          </thead>
-          <tbody>
-            {workspaces.map((w) => (
-              <tr>
-                <td>
-                  <strong class="row-main-text">{w.usage}</strong>
-                  <span class="table-note">{w.note}</span>
-                </td>
-                <td class="text-right credit-val">{w.credits}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
+          <div class="pack-price-cluster">
+            <span class="pack-price">{p.price}</span>
+            <span class="pack-credits">{p.credits}</span>
+          </div>
 
-    <!-- 2. Agents and Credits -->
-    <div class="pricing-block" id="agents">
-      <h3 class="block-title">2. Agents and Credits</h3>
-      <p class="block-sub">Local on-device queries use 0 credits. Cloud DB syncs, agent actions, and research swarms are charged at exact pass-through cost.</p>
+          <p class="pack-details">{p.details}</p>
 
-      <div class="table-container">
-        <table class="clean-table">
-          <thead>
-            <tr>
-              <th>Agent action / Operation</th>
-              <th class="text-right">Credit Cost</th>
-              <th class="text-right">At-Cost INR</th>
-            </tr>
-          </thead>
-          <tbody>
-            {agentGroups.map((group) => (
-              <>
-                <tr class="group-header-row">
-                  <td colspan="3">
-                    <div class="group-title-wrap">
-                      <span class="tar-pixel-logo" style={`color: ${group.color}`}>
-                        <svg width="18" height="18" viewBox="0 0 7 7.1" fill="currentColor" aria-hidden="true">
-                          <rect x="0" y="0.000" width="1" height="1.000"/>
-                          <rect x="1" y="0.000" width="1" height="1.000"/>
-                          <rect x="5" y="0.000" width="1" height="1.000"/>
-                          <rect x="6" y="0.000" width="1" height="1.000"/>
-                          <rect x="1" y="1.000" width="1" height="1.000"/>
-                          <rect x="2" y="1.000" width="1" height="1.000"/>
-                          <rect x="3" y="1.000" width="1" height="1.000"/>
-                          <rect x="4" y="1.000" width="1" height="1.000"/>
-                          <rect x="5" y="1.000" width="1" height="1.000"/>
-                          <rect x="0" y="2.000" width="1" height="1.000"/>
-                          <rect x="1" y="2.000" width="1" height="1.000"/>
-                          <rect x="2" y="2.000" width="1" height="1.000"/>
-                          <rect x="3" y="2.000" width="1" height="1.000"/>
-                          <rect x="4" y="2.000" width="1" height="1.000"/>
-                          <rect x="5" y="2.000" width="1" height="1.000"/>
-                          <rect x="6" y="2.000" width="1" height="1.000"/>
-                          <rect x="0" y="3.000" width="1" height="1.000"/>
-                          <rect x="1" y="3.000" width="1" height="1.000"/>
-                          <rect x="3" y="3.000" width="1" height="1.000"/>
-                          <rect x="5" y="3.000" width="1" height="1.000"/>
-                          <rect x="6" y="3.000" width="1" height="1.000"/>
-                          <rect x="0" y="4.000" width="1" height="1.100"/>
-                          <rect x="1" y="4.000" width="1" height="1.100"/>
-                          <rect x="2" y="4.000" width="1" height="1.100"/>
-                          <rect x="3" y="4.000" width="1" height="1.100"/>
-                          <rect x="4" y="4.000" width="1" height="1.100"/>
-                          <rect x="5" y="4.000" width="1" height="1.100"/>
-                          <rect x="6" y="4.000" width="1" height="1.100"/>
-                          <rect x="0" y="5.100" width="1" height="1.100"/>
-                          <rect x="1" y="5.100" width="1" height="1.100"/>
-                          <rect x="2" y="5.100" width="1" height="1.100"/>
-                          <rect x="3" y="5.100" width="1" height="1.100"/>
-                          <rect x="4" y="5.100" width="1" height="1.100"/>
-                          <rect x="5" y="5.100" width="1" height="1.100"/>
-                          <rect x="6" y="5.100" width="1" height="1.100"/>
-                          <rect x="0" y="6.200" width="1" height="0.550"/>
-                          <rect x="3" y="6.200" width="1" height="0.550"/>
-                          <rect x="6" y="6.200" width="1" height="0.550"/>
-                          <rect x="3" y="6.750" width="1" height="0.350"/>
-                        </svg>
-                      </span>
-                      <span class="group-title-text">{group.title}</span>
-                    </div>
-                  </td>
-                </tr>
-                {group.actions.map((act) => (
-                  <tr class="action-item-row">
-                    <td><span class="action-name">{act.name}</span></td>
-                    <td class:list={["text-right", "credit-val", { "credit-val--free": act.isFree }]}>{act.credits}</td>
-                    <td class="text-right"><span class="inr-sub-val">{act.inr}</span></td>
-                  </tr>
-                ))}
-              </>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- 3. Credits and Cost -->
-    <div class="pricing-block">
-      <h3 class="block-title">3. Credits and Cost</h3>
-      <p class="block-sub">Initial activation costs ₹500 (includes ₹100 direct credit wallet value). All top-ups pass through 100% at-cost credit value without expiration.</p>
-
-      <div class="table-container">
-        <table class="clean-table">
-          <thead>
-            <tr>
-              <th>Pack</th>
-              <th>Price</th>
-              <th>Credits Included</th>
-              <th>Structure</th>
-              <th class="text-right">Best for</th>
-            </tr>
-          </thead>
-          <tbody>
-            {creditPacks.map((pack) => (
-              <tr>
-                <td><strong class="row-main-text">{pack.pack}</strong></td>
-                <td><span class="pack-price-text">{pack.price}</span></td>
-                <td><span class="credit-unit-pill">{pack.credits}</span></td>
-                <td><span class="pack-unit-text">{pack.breakdown}</span></td>
-                <td class="text-right"><span class="table-note-inline">{pack.suitable}</span></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- 4. Model and Credits Calculation -->
-    <div class="pricing-block">
-      <h3 class="block-title">4. Model and Credits Calculation</h3>
-      <p class="block-sub">Zero-profit, zero-loss pass-through calculation: real AI provider API rates, per-task token volumes, and edge database costs map directly to credits with 100% transparency.</p>
-
-      <!-- Compact Model Table with explicit Token Volumes, Credits and INR -->
-      <div class="table-container model-table-wrap">
-        <table class="clean-table">
-          <thead>
-            <tr>
-              <th>Tier / Capability</th>
-              <th>Model & API Rate</th>
-              <th>Tokens per Task (In / Out)</th>
-              <th class="text-right">Credit Cost (Unit)</th>
-              <th class="text-right">At-Cost INR (Unit)</th>
-              <th class="text-right">Scope / Tasks</th>
-            </tr>
-          </thead>
-          <tbody>
-            {modelTiers.map((tier) => (
-              <tr>
-                <td><strong class="row-main-text">{tier.tier}</strong></td>
-                <td>
-                  <span class="model-badge">{tier.modelName}</span>
-                  <span class="model-cost-sub">{tier.rawCost}</span>
-                </td>
-                <td><span class="token-usage-tag">{tier.tokenUsage}</span></td>
-                <td class="text-right"><span class="credit-unit-pill">{tier.creditsWithUnit}</span></td>
-                <td class="text-right"><span class="inr-unit-pill">{tier.inrWithUnit}</span></td>
-                <td class="text-right"><span class="table-note-inline">{tier.tasks}</span></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      <!-- Dedicated ₹100 = 1,000 Credits Purchasing Power Table -->
-      <div class="calc-example-box" style="margin-top: 24px;">
-        <h4 class="calc-example-title">How ₹100 = 1,000 Credits is Calculated (Zero Profit Margin)</h4>
-        <p class="calc-example-sub">1 Credit = ₹0.10 (10 Paise = ~$0.001156 USD). Here is what ₹100 (1,000 Credits) buys at exact pass-through provider cost:</p>
-
-        <div class="table-container" style="background: #ffffff !important; margin-top: 12px;">
-          <table class="clean-table">
-            <thead>
-              <tr>
-                <th>Infrastructure / Agent Capability</th>
-                <th>Underlying Model & Rate</th>
-                <th>At-Cost Unit Rate</th>
-                <th class="text-right">Capacity for ₹100 (1,000 cr)</th>
-                <th class="text-right">Total Tokens / Data for ₹100</th>
-              </tr>
-            </thead>
-            <tbody>
-              {hundredRupeesBreakdown.map((item) => (
-                <tr>
-                  <td><strong class="row-main-text">{item.capability}</strong></td>
-                  <td><span class="table-note-inline">{item.model}</span></td>
-                  <td><span class="token-usage-tag">{item.unitRate}</span></td>
-                  <td class="text-right"><strong class="credit-val" style="color: #059669 !important;">{item.capacityFor100Rs}</strong></td>
-                  <td class="text-right"><span class="table-note-inline">{item.tokensFor100Rs}</span></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <a href="https://play.google.com/store/apps" target="_blank" rel="noopener noreferrer" class="btn-pack-dark pack-cta">
+            Select in App
+          </a>
         </div>
+      ))}
+    </div>
+
+    <!-- Transparent At-Cost Operations Breakdown Table -->
+    <div class="at-cost-table-box font-dm-sans">
+      <div class="table-title-bar">
+        <h3 class="table-heading">Transparent Pass-Through Operation Rates</h3>
+        <span class="table-subnote">1 Credit = ₹0.10 (10 Paise) · Zero Token Profit Markup</span>
       </div>
 
-      <!-- Compact Sample Monthly Calculation Table with Token Volumes -->
-      <div class="calc-example-box">
-        <h4 class="calc-example-title">Example Monthly Business Consumption</h4>
-        <p class="calc-example-sub">How an active business consumes tokens & credits at direct provider cost:</p>
-
-        <div class="table-container" style="background: #ffffff !important; margin-top: 12px;">
-          <table class="clean-table">
-            <thead>
+      <div class="rates-table-wrapper">
+        <table class="rates-table">
+          <thead>
+            <tr>
+              <th>Operation / Capability</th>
+              <th>Direct At-Cost Rate</th>
+              <th>Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            {operationsCost.map((op) => (
               <tr>
-                <th>Activity</th>
-                <th>Underlying Model</th>
-                <th>Monthly Volume</th>
-                <th>Total Tokens Consumed</th>
-                <th class="text-right">Credits</th>
-                <th class="text-right">At-Cost INR</th>
+                <td class="op-name"><strong>{op.task}</strong></td>
+                <td class="op-cost font-mono">{op.cost}</td>
+                <td class="op-note">{op.note}</td>
               </tr>
-            </thead>
-            <tbody>
-              {sampleCalculation.map((calc) => (
-                <tr>
-                  <td><strong class="row-main-text">{calc.item}</strong></td>
-                  <td><span class="table-note-inline">{calc.modelUsed}</span></td>
-                  <td><span class="table-note-inline">{calc.volume}</span></td>
-                  <td><span class="token-usage-tag">{calc.tokensUsed}</span></td>
-                  <td class="text-right"><span class="credit-val">{calc.credits}</span></td>
-                  <td class="text-right inr-sub-val">{calc.inr}</td>
-                </tr>
-              ))}
-              <tr class="calc-total-row">
-                <td colspan="4"><strong style="color: #0a0a0a !important;">Total Monthly Need</strong></td>
-                <td class="text-right"><strong class="credit-val" style="color: #059669 !important; font-size: 1rem;">~121.6 cr</strong></td>
-                <td class="text-right"><strong class="inr-total-highlight">~₹12.18 / mo</strong></td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        
-        <div class="calc-summary-footer">
-          <span class="calc-pack-badge">The pre-loaded <strong>₹100 wallet credits (1,000 cr)</strong> from the Base Pack covers <strong>8+ months</strong> of active operations</span>
-          <span class="calc-rollover-note">Subsequent top-ups (₹100 = 1,000 cr) refill 100% of payment directly into your credit wallet with 0% token profit markup.</span>
-        </div>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
 
-    <!-- Footnote -->
-    <div class="clean-footnote">
-      <p>
-        * Prices are localized worldwide using purchasing power, taxes, and store costs. Purchased credits do not expire while the account is active. Third-party charges such as WhatsApp, SMS, domains, and payment processing are separate. The ₹500 base pack includes ₹400 platform onboarding fee and ₹100 pre-loaded credit balance (1,000 credits @ ₹0.10/credit). Subsequent top-ups are credited 100% directly to the wallet at zero token profit margin.
-      </p>
+    <!-- Typical Business Monthly Example -->
+    <div class="monthly-example-strip font-dm-sans">
+      <div class="example-left">
+        <strong>Typical Monthly Active Clinic:</strong>
+        <span>1 Workspace (₹10) + 500 WhatsApp replies (₹1) + 50 Voice Orders (₹1.50) + 100 Bill Scans (₹0.52)</span>
+      </div>
+      <div class="example-right">
+        <span class="example-total-lbl">Total Estimated Cost:</span>
+        <strong class="example-total-val">~₹13.02 / month</strong>
+      </div>
     </div>
 
   </div>
 </section>
 
 <style>
-  .pricing-clean-section {
-    background-color: #ffffff !important;
-    color: #0a0a0a !important;
-    padding: 88px 24px 108px;
-    width: 100%;
-    box-sizing: border-box;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, Helvetica, Arial, sans-serif;
-    border-top: 1px solid #e5e7eb;
+  .tar-pricing-section {
+    padding: var(--section-gap) 0;
+    color: var(--color-ink-black);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
   }
 
-  .pricing-clean-inner {
-    max-width: 1120px;
-    margin: 0 auto;
+  .pricing-editorial-header {
+    max-width: 820px;
+    margin-bottom: 48px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
   }
 
-  .pricing-intro {
-    text-align: left;
-    margin-bottom: 56px;
-    max-width: 720px;
+  .section-title {
+    color: var(--color-canopy-green);
+    line-height: 1.08;
   }
 
-  .pricing-kicker {
-    font-size: 13px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: #4b5563 !important;
-    display: block;
-    margin-bottom: 12px;
-  }
-
-  .pricing-title {
-    font-size: clamp(2rem, 3.5vw, 2.75rem);
-    font-weight: 700;
-    color: #0a0a0a !important;
-    line-height: 1.15;
-    letter-spacing: -0.03em;
-    margin: 0 0 16px;
-  }
-
-  .pricing-lead {
-    font-size: 1.1rem;
+  .section-lead {
+    font-size: 16px;
     line-height: 1.6;
-    color: #4b5563 !important;
-    margin: 0;
+    color: var(--color-graphite);
   }
 
-  .pricing-block {
-    margin-bottom: 56px;
+  /* Packs 3-Column Editorial Row */
+  .pricing-packs-row {
+    display: grid;
+    grid-template-columns: 1fr;
+    border-top: 1px solid rgba(0, 0, 0, 0.1);
+    margin-bottom: 48px;
   }
 
-  .block-title {
-    font-size: 1.35rem;
+  @media (min-width: 768px) {
+    .pricing-packs-row {
+      grid-template-columns: repeat(3, 1fr);
+    }
+  }
+
+  .pack-editorial-item {
+    padding: 32px 28px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+    border-right: 1px solid rgba(0, 0, 0, 0.1);
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    background-color: rgba(255, 255, 255, 0.4);
+    transition: background-color 0.15s ease;
+  }
+
+  .pack-editorial-item:hover {
+    background-color: #ffffff;
+  }
+
+  .pack-top-bar {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .pack-badge {
+    align-self: flex-start;
+    font-size: 11px;
     font-weight: 700;
-    color: #0a0a0a !important;
-    margin: 0 0 6px 0;
-    letter-spacing: -0.015em;
-  }
-
-  .block-sub {
-    font-size: 0.95rem;
-    color: #4b5563 !important;
-    margin: 0 0 20px 0;
-    line-height: 1.5;
-  }
-
-  /* Table */
-  .table-container {
-    border: 1px solid #e5e7eb;
-    border-radius: 12px;
-    overflow: hidden;
-    background: #ffffff !important;
-  }
-
-  .clean-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 0.925rem;
-    text-align: left;
-  }
-
-  .clean-table th {
-    background: #f9fafb !important;
-    padding: 12px 16px;
-    font-size: 0.78rem;
-    font-weight: 600;
+    color: var(--color-canopy-green);
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    color: #4b5563 !important;
-    border-bottom: 1px solid #e5e7eb;
   }
 
-  .clean-table td {
-    padding: 12px 16px;
-    border-bottom: 1px solid #f3f4f6;
-    color: #111827 !important;
-    vertical-align: middle;
-  }
-
-  .clean-table tr:last-child td {
-    border-bottom: none;
-  }
-
-  .clean-table tr.action-item-row:hover td {
-    background: #f9fafb !important;
-  }
-
-  .row-main-text {
-    color: #111827 !important;
-    font-weight: 600;
-  }
-
-  .table-note {
-    display: block;
-    font-size: 0.8rem;
-    color: #4b5563 !important;
-    margin-top: 2px;
-    font-weight: 400;
-  }
-
-  .table-note-inline {
-    font-size: 0.825rem;
-    color: #4b5563 !important;
-    font-weight: 400;
-  }
-
-  .text-right {
-    text-align: right;
-  }
-
-  .credit-val {
-    font-weight: 600;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    font-size: 0.9rem;
-    color: #0a0a0a !important;
-  }
-
-  .credit-val--free {
-    color: #059669 !important;
-  }
-
-  .credit-unit-pill {
-    font-weight: 600;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    font-size: 0.85rem;
-    color: #0a0a0a !important;
-    background: #f3f4f6;
-    padding: 3px 8px;
-    border-radius: 6px;
-    white-space: nowrap;
-    border: 1px solid #e5e7eb;
-  }
-
-  .inr-unit-pill {
-    font-weight: 600;
-    font-size: 0.85rem;
-    color: #059669 !important;
-    background: #ecfdf5;
-    padding: 3px 8px;
-    border-radius: 6px;
-    white-space: nowrap;
-    border: 1px solid #a7f3d0;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  }
-
-  .inr-sub-val {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    font-size: 0.875rem;
-    color: #374151 !important;
-    font-weight: 500;
-  }
-
-  .token-usage-tag {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    font-size: 0.8rem;
-    color: #4b5563 !important;
-    background: #f9fafb;
-    padding: 2px 6px;
-    border-radius: 4px;
-    border: 1px solid #e5e7eb;
-    display: inline-block;
-  }
-
-  .inr-total-highlight {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    font-size: 1rem;
-    color: #059669 !important;
+  .pack-name {
+    font-size: 20px;
     font-weight: 700;
+    color: var(--color-canopy-green);
   }
 
-  .calc-total-row td {
-    background: #f9fafb !important;
-    border-top: 2px solid #e5e7eb;
-    padding: 14px 16px;
+  .pack-price-cluster {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
   }
 
-  .pack-price-text {
-    font-size: 1.05rem;
+  .pack-price {
+    font-size: 32px;
     font-weight: 700;
-    color: #0a0a0a !important;
+    color: var(--color-canopy-green);
+    line-height: 1;
   }
 
-  .pack-unit-text {
-    font-size: 0.85rem;
-    color: #4b5563 !important;
-    font-weight: 500;
-  }
-
-  .model-badge {
-    display: inline-block;
-    font-size: 0.82rem;
+  .pack-credits {
+    font-size: 12.5px;
+    color: var(--color-slate);
     font-weight: 600;
-    background: #f3f4f6;
-    color: #111827 !important;
-    padding: 2px 8px;
-    border-radius: 6px;
-    border: 1px solid #e5e7eb;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   }
 
-  .model-cost-sub {
-    display: block;
-    font-size: 0.775rem;
-    color: #6b7280 !important;
-    margin-top: 3px;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  .pack-details {
+    font-size: 13.5px;
+    line-height: 1.5;
+    color: var(--color-graphite);
+    flex: 1;
   }
 
-  /* Group Header Rows with Colored Tar Logo */
-  .group-header-row td {
-    background: #f9fafb !important;
-    padding: 12px 16px;
-    border-bottom: 1px solid #e5e7eb;
-    border-top: 1px solid #e5e7eb;
+  .btn-pack-dark {
+    text-align: center;
+    padding: 10px 20px;
+    font-size: 14px;
+    font-weight: 600;
+    background-color: var(--color-canopy-green);
+    color: #ffffff;
+    border-radius: 8px;
+    text-decoration: none;
+    transition: background-color 0.15s ease;
   }
 
-  .clean-table tbody tr:first-child.group-header-row td {
-    border-top: none;
+  .btn-pack-dark:hover {
+    background-color: #124d30;
   }
 
-  .group-title-wrap {
-    display: inline-flex;
+  /* Rates Table */
+  .at-cost-table-box {
+    background-color: #ffffff;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: var(--radius-cards);
+    overflow: hidden;
+    margin-bottom: 24px;
+  }
+
+  .table-title-bar {
+    background-color: var(--color-canopy-green);
+    color: #ffffff;
+    padding: 16px 24px;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
     align-items: center;
     gap: 8px;
   }
 
-  .tar-pixel-logo {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
+  .table-heading {
+    font-size: 16px;
+    font-weight: 700;
+  }
+
+  .table-subnote {
+    font-size: 12px;
+    color: var(--color-leaf-bright);
+  }
+
+  .rates-table-wrapper {
+    overflow-x: auto;
+  }
+
+  .rates-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13.5px;
+    text-align: left;
+  }
+
+  .rates-table th {
+    background-color: #f7f9f8;
+    padding: 12px 24px;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--color-slate);
+    border-bottom: 1px solid var(--color-frost-gray);
+  }
+
+  .rates-table td {
+    padding: 14px 24px;
+    border-bottom: 1px solid var(--color-frost-gray);
+    color: var(--color-ink-black);
+  }
+
+  .rates-table tr:last-child td {
+    border-bottom: none;
+  }
+
+  .op-name strong {
+    color: var(--color-canopy-green);
+  }
+
+  .op-cost {
+    color: var(--color-canopy-green);
+    font-weight: 700;
+  }
+
+  .op-note {
+    color: var(--color-graphite);
+    font-size: 12.5px;
+  }
+
+  /* Monthly Example Strip */
+  .monthly-example-strip {
+    background-color: var(--color-mint-wash);
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: var(--radius-cards-sm);
+    padding: 18px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  @media (min-width: 768px) {
+    .monthly-example-strip {
+      flex-direction: row;
+      justify-content: space-between;
+      align-items: center;
+    }
+  }
+
+  .example-left {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 13px;
+    color: var(--color-canopy-green);
+  }
+
+  .example-right {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
     flex-shrink: 0;
   }
 
-  .group-title-text {
-    font-size: 0.9rem;
+  .example-total-lbl {
+    font-size: 12px;
+    color: var(--color-slate);
+  }
+
+  .example-total-val {
+    font-size: 20px;
     font-weight: 700;
-    color: #0a0a0a !important;
-    letter-spacing: -0.01em;
-  }
-
-  .action-name {
-    padding-left: 26px;
-    color: #1f2937 !important;
-    display: inline-block;
-  }
-
-  /* Calculation Example Box */
-  .calc-example-box {
-    margin-top: 20px;
-    background: #fafafa;
-    border: 1px solid #e5e7eb;
-    border-radius: 12px;
-    padding: 20px;
-  }
-
-  .calc-example-title {
-    font-size: 1.05rem;
-    font-weight: 700;
-    color: #0a0a0a !important;
-    margin: 0 0 4px 0;
-  }
-
-  .calc-example-sub {
-    font-size: 0.875rem;
-    color: #4b5563 !important;
-    margin: 0 0 12px 0;
-  }
-
-  .calc-summary-footer {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    margin-top: 14px;
-    padding-top: 12px;
-    border-top: 1px solid #e5e7eb;
-  }
-
-  .calc-pack-badge {
-    font-size: 0.875rem;
-    color: #047857 !important;
-    background: #ecfdf5;
-    padding: 4px 10px;
-    border-radius: 6px;
-    border: 1px solid #a7f3d0;
-  }
-
-  .calc-rollover-note {
-    font-size: 0.825rem;
-    color: #4b5563 !important;
-  }
-
-  /* Footnote */
-  .clean-footnote {
-    border-top: 1px solid #e5e7eb;
-    padding-top: 24px;
-    margin-top: 40px;
-  }
-
-  .clean-footnote p {
-    font-size: 0.85rem;
-    line-height: 1.6;
-    color: #4b5563 !important;
-    margin: 0;
+    color: var(--color-canopy-green);
   }
 </style>

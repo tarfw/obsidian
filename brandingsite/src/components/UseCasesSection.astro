@@ -32,9 +32,8 @@ const channels = [
 
     <!-- 3 Clean Columns -->
     <div class="channels-compare-grid font-dm-sans">
-      {channels.map((c, idx) => (
+      {channels.map((c) => (
         <div class="channel-col">
-          <span class="channel-num">{String(idx + 1).padStart(2, '0')}</span>
           <h3 class="channel-title">{c.title}</h3>
           <p class="channel-desc">{c.desc}</p>
         </div>
@@ -110,13 +109,6 @@ const channels = [
       border-right: none;
       padding-right: 0;
     }
-  }
-
-  .channel-num {
-    font-size: 11.5px;
-    font-weight: 700;
-    color: var(--color-slate);
-    letter-spacing: 0.06em;
   }
 
   .channel-title {

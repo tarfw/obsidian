@@ -1,65 +1,33 @@
 ---
-// Authentic TAR Credit Pricing — 3 Horizontal Cards (Base Pack ₹0, Work Pack ₹500/mo, Top-Up Refill)
 const packs = [
-  {
-    badge: "FREE TO START",
-    name: "Base Pack",
-    price: "₹0",
-    wallet: "100% Free Forever",
-    desc: "Offline sales, product catalog, inventory, and unlimited team members on your device."
-  },
-  {
-    badge: "MONTHLY WORKSPACE",
-    name: "Work Pack",
-    price: "₹500 / mo",
-    wallet: "Includes 1,000 cr / mo (₹100 wallet)",
-    desc: "Unlocks encrypted cloud sync, WhatsApp messaging, and ₹100 monthly credit wallet."
-  },
-  {
-    badge: "PAY AS YOU GO",
-    name: "Top-Up Refill",
-    price: "From ₹100",
-    wallet: "100% wallet credit (1 cr = ₹0.10)",
-    desc: "Refill on demand directly in the app. Pure at-cost pass-through, credits never expire."
-  }
+  { name: "Base Pack", price: "₹0", desc: "Free forever. Offline sales, catalog, inventory, unlimited team." },
+  { name: "Work Pack", price: "₹500 / mo", desc: "Cloud sync, WhatsApp messaging, 1,000 credits / mo." },
+  { name: "Top-Up Refill", price: "From ₹100", desc: "₹100 = 1,000 credits. Refill anytime, never expires." }
 ];
 ---
 
 <section class="tar-pricing-section" id="pricing">
   <div class="container">
-    
-    <!-- Section Header -->
+
     <div class="section-head-left">
       <h2 class="display-section-lg section-title">
         Simple credit pricing.
       </h2>
       <p class="section-lead font-dm-sans">
-        1 Credit = ₹0.10. Zero monthly seat licenses. Invited team members are always ₹0.
+        1 Credit = ₹0.10. No seat fees.
       </p>
     </div>
 
-    <!-- 3 Horizontal Pack Cards in a Row -->
     <div class="packs-horizontal-grid font-dm-sans">
       {packs.map((p) => (
         <div class="pack-card">
-          <div class="pack-card-top">
-            <span class="pack-badge">{p.badge}</span>
-            <h3 class="pack-name">{p.name}</h3>
-          </div>
-          
-          <div class="pack-price-block">
-            <div class="pack-price font-mono">{p.price}</div>
-            <div class="pack-wallet-text">{p.wallet}</div>
-          </div>
-
-          <div class="pack-divider"></div>
-
+          <h3 class="pack-name">{p.name}</h3>
+          <div class="pack-price font-mono">{p.price}</div>
           <p class="pack-desc">{p.desc}</p>
         </div>
       ))}
     </div>
 
-    <!-- Bottom Reference Link -->
     <div class="pricing-bottom-bar font-dm-sans">
       <a href="/agents" class="agents-link">
         <span>View Detailed Agent & Model Rates</span>
@@ -120,68 +88,31 @@ const packs = [
   }
 
   .pack-card {
-    background-color: #ffffff;
-    border: 1px solid rgba(0, 0, 0, 0.1);
+    background-color: #f4f7f5;
     border-radius: 14px;
     padding: 24px 22px;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 8px;
     box-sizing: border-box;
-    transition: border-color 0.15s ease;
   }
 
   .pack-card:hover {
-    border-color: var(--color-canopy-green);
-  }
-
-  .pack-card-top {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-
-  .pack-badge {
-    font-size: 10px;
-    font-weight: 700;
-    color: var(--color-canopy-green);
-    background-color: rgba(10, 57, 34, 0.06);
-    padding: 3px 8px;
-    border-radius: 4px;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
+    background-color: #eaf0ec;
   }
 
   .pack-name {
-    font-size: 17px;
-    font-weight: 700;
-    color: var(--color-canopy-green);
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--color-graphite);
     margin: 0;
   }
 
-  .pack-price-block {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-
   .pack-price {
-    font-size: 28px;
+    font-size: 30px;
     font-weight: 700;
     color: var(--color-canopy-green);
-    line-height: 1;
-  }
-
-  .pack-wallet-text {
-    font-size: 13px;
-    font-weight: 600;
-    color: #15803d;
-  }
-
-  .pack-divider {
-    height: 1px;
-    background-color: rgba(0, 0, 0, 0.06);
-    width: 100%;
+    line-height: 1.1;
   }
 
   .pack-desc {

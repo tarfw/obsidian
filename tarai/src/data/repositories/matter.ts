@@ -1,18 +1,20 @@
 /**
- * Matter Repository - Strongly-Typed Canonical Business Entities
+ * Matter Repository - Strongly-Typed Canonical Business Entities (matter.md §5)
  */
 import type { Client } from '@libsql/client';
 import * as v from 'valibot';
 import { executeQuery } from '../turso.ts';
-import type {
-  BookingMatter,
-  CustomerMatter,
-  InvoiceMatter,
-  Matter,
-  MatterPayloadMap,
-  MatterType,
-  ProductMatter,
-  TaskMatter,
+import {
+  toMatterTypeCode,
+  MATTER_STATE,
+  type BookingMatter,
+  type CustomerMatter,
+  type InvoiceMatter,
+  type Matter,
+  type MatterPayloadMap,
+  type MatterType,
+  type ProductMatter,
+  type TaskMatter,
 } from '../../domain/types.ts';
 
 // Valibot Schemas for deterministic entity validation
@@ -92,12 +94,13 @@ export class MatterRepository {
     data: MatterPayloadMap[T]
   ): Promise<Matter<T>> {
     const validated = this.validatePayload(type, data);
-    const now = new Date().toISOString();
+    const typeCode = toMatterTypeCode(type);
+    const now = Date.now();
 
     await this.client.execute({
-      sql: `INSERT INTO matter (id, workspace_id, type, data, version, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      args: [id, workspaceId, type, JSON.stringify(validated), 1, now, now],
+      sql: `INSERT INTO matter (id, type, data, state, version, created, updated)
+            VALUES (?, ?, ?, ?, 1, ?, ?)`,
+      args: [id, typeCode, JSON.stringify(validated), MATTER_STATE.active, now, now],
     });
 
     return {
@@ -106,58 +109,59 @@ export class MatterRepository {
       type,
       data: validated,
       version: 1,
-      createdAt: now,
-      updatedAt: now,
+      createdAt: new Date(now).toISOString(),
+      updatedAt: new Date(now).toISOString(),
     };
   }
 
   async findById<T extends MatterType>(workspaceId: string, id: string): Promise<Matter<T> | null> {
     const rows = await executeQuery<{
       id: string;
-      workspace_id: string;
-      type: T;
+      type: number;
       data: string;
+      state: number;
       version: number;
-      created_at: string;
-      updated_at: string;
-    }>(this.client, `SELECT * FROM matter WHERE workspace_id = ? AND id = ?`, [workspaceId, id]);
+      created: number;
+      updated: number;
+    }>(this.client, `SELECT * FROM matter WHERE id = ? AND deleted_at IS NULL`, [id]);
 
     if (rows.length === 0) return null;
     const r = rows[0];
     return {
       id: r.id,
-      workspaceId: r.workspace_id,
-      type: r.type,
+      workspaceId,
+      type: (typeof r.type === 'number' ? r.type : 1) as unknown as T,
       data: JSON.parse(r.data),
       version: r.version,
-      createdAt: r.created_at,
-      updatedAt: r.updated_at,
+      createdAt: new Date(r.created).toISOString(),
+      updatedAt: new Date(r.updated).toISOString(),
     };
   }
 
   async listByType<T extends MatterType>(workspaceId: string, type: T): Promise<Matter<T>[]> {
+    const typeCode = toMatterTypeCode(type);
     const rows = await executeQuery<{
       id: string;
-      workspace_id: string;
-      type: T;
+      type: number;
       data: string;
+      state: number;
       version: number;
-      created_at: string;
-      updated_at: string;
+      created: number;
+      updated: number;
     }>(
       this.client,
-      `SELECT * FROM matter WHERE workspace_id = ? AND type = ? ORDER BY created_at DESC`,
-      [workspaceId, type]
+      `SELECT * FROM matter WHERE type = ? AND deleted_at IS NULL ORDER BY updated DESC`,
+      [typeCode]
     );
 
     return rows.map((r) => ({
       id: r.id,
-      workspaceId: r.workspace_id,
-      type: r.type,
+      workspaceId,
+      type,
       data: JSON.parse(r.data),
       version: r.version,
-      createdAt: r.created_at,
-      updatedAt: r.updated_at,
+      createdAt: new Date(r.created).toISOString(),
+      updatedAt: new Date(r.updated).toISOString(),
     }));
   }
 
@@ -173,11 +177,11 @@ export class MatterRepository {
     const merged = { ...existing.data, ...data };
     const validated = this.validatePayload(type, merged);
     const nextVersion = existing.version + 1;
-    const now = new Date().toISOString();
+    const now = Date.now();
 
     const result = await this.client.execute({
-      sql: `UPDATE matter SET data = ?, version = ?, updated_at = ? WHERE workspace_id = ? AND id = ?`,
-      args: [JSON.stringify(validated), nextVersion, now, workspaceId, id],
+      sql: `UPDATE matter SET data = ?, version = ?, updated = ? WHERE id = ? AND deleted_at IS NULL`,
+      args: [JSON.stringify(validated), nextVersion, now, id],
     });
 
     if (result.rowsAffected === 0) return null;
@@ -189,7 +193,8 @@ export class MatterRepository {
       data: validated,
       version: nextVersion,
       createdAt: existing.createdAt,
-      updatedAt: now,
+      updatedAt: new Date(now).toISOString(),
     };
   }
 }
+

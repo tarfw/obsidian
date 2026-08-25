@@ -1,9 +1,10 @@
 /**
- * Metrics Repository - Deterministic Application Code Metrics
+ * Metrics Repository - Deterministic Application Code Metrics (matter.md §5)
  * Rule: Truth before prose. Metrics are calculated by application code, never by the model.
  */
 import type { Client } from '@libsql/client';
 import { executeQuery } from '../turso.ts';
+import { toMatterTypeCode } from '../../domain/types.ts';
 
 export interface WorkspaceMetrics {
   totalRevenueCents: number;
@@ -17,11 +18,11 @@ export class MetricsRepository {
   constructor(private client: Client) {}
 
   async getWorkspaceMetrics(workspaceId: string): Promise<WorkspaceMetrics> {
-    // 1. Calculate revenue and order counts from invoice matter
+    const invoiceTypeCode = toMatterTypeCode('invoice');
     const invoices = await executeQuery<{ data: string }>(
       this.client,
-      `SELECT data FROM matter WHERE workspace_id = ? AND type = 'invoice'`,
-      [workspaceId]
+      `SELECT data FROM matter WHERE type = ? AND deleted_at IS NULL`,
+      [invoiceTypeCode]
     );
 
     let totalRevenueCents = 0;
@@ -34,16 +35,14 @@ export class MetricsRepository {
           totalRevenueCents += inv.totalCents || 0;
           totalOrders += 1;
         }
-      } catch {
-        // Ignore unparseable
-      }
+      } catch {}
     }
 
-    // 2. Count low stock products
+    const productTypeCode = toMatterTypeCode('product');
     const products = await executeQuery<{ data: string }>(
       this.client,
-      `SELECT data FROM matter WHERE workspace_id = ? AND type = 'product'`,
-      [workspaceId]
+      `SELECT data FROM matter WHERE type = ? AND deleted_at IS NULL`,
+      [productTypeCode]
     );
 
     let lowStockItemsCount = 0;
@@ -53,35 +52,37 @@ export class MetricsRepository {
         if (prod.stockLevel <= prod.lowStockThreshold) {
           lowStockItemsCount += 1;
         }
-      } catch {
-        // Ignore unparseable
-      }
+      } catch {}
     }
 
-    // 3. Count open tasks
-    const taskRows = await executeQuery<{ count: number }>(
+    const taskTypeCode = toMatterTypeCode('task');
+    const tasks = await executeQuery<{ data: string }>(
       this.client,
-      `SELECT COUNT(*) as count FROM matter
-       WHERE workspace_id = ? AND type = 'task'
-         AND json_extract(data, '$.status') IN ('todo', 'in_progress')`,
-      [workspaceId]
+      `SELECT data FROM matter WHERE type = ? AND deleted_at IS NULL`,
+      [taskTypeCode]
     );
-    const openTasksCount = taskRows[0]?.count || 0;
 
-    // 4. Count pending approvals
-    const approvalRows = await executeQuery<{ count: number }>(
+    let openTasksCount = 0;
+    for (const row of tasks) {
+      try {
+        const t = JSON.parse(row.data);
+        if (t.status === 'todo' || t.status === 'in_progress') {
+          openTasksCount += 1;
+        }
+      } catch {}
+    }
+
+    const approvals = await executeQuery<{ id: string }>(
       this.client,
-      `SELECT COUNT(*) as count FROM approvals WHERE workspace_id = ? AND status = 'pending'`,
-      [workspaceId]
+      `SELECT id FROM approval WHERE status = 1 AND deleted_at IS NULL`
     );
-    const pendingApprovalsCount = approvalRows[0]?.count || 0;
 
     return {
       totalRevenueCents,
       totalOrders,
       lowStockItemsCount,
       openTasksCount,
-      pendingApprovalsCount,
+      pendingApprovalsCount: approvals.length,
     };
   }
 }

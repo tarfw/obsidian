@@ -1,5 +1,5 @@
 /**
- * Pure Native Component Catalog Builtins for GenUI (genui.md).
+ * Pure Native Component Catalog Builtins for GenUI (matter.md §9).
  * Registers all 8 native crash-proof components and standard aliases.
  */
 

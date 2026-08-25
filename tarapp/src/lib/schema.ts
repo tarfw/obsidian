@@ -1,91 +1,100 @@
 /**
- * Workspace and Personal DB Schemas (plan6.md architecture).
+ * Canonical Tenant Database Schemas (matter.md §5).
  *
- * Workspace DB:
- *   matter   — current state (stock, orders, staff, customers, locations) with integer type/status
- *   motion   — immutable event log with integer type, idempotency key (idem), and soft delete
- *   graph    — structural relationships with integer rel type
- *
- * Personal DB:
- *   matter   — personal items (type=13 expense, 1 contact, 12 goal, 11 note, 7 asset)
- *   motion   — personal events (type=201 expense_log, 202 reminder, etc.)
- *   graph    — personal relations (src=user rel=12 member_of tgt=workspace)
- *   inbox    — unified actionable tasks & notifications across all workspaces
+ * All records use integer type codes, integer timestamps (Unix ms UTC),
+ * and validated JSON payloads.
  */
 
-export const WORKSPACE_SCHEMA_STATEMENTS = [
-  // matter: current state — what EXISTS right now (with live price and stock)
+export const BASE_SCHEMA_STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS matter (
-    id         TEXT PRIMARY KEY,
-    type       INTEGER NOT NULL,
-    title      TEXT NOT NULL,
-    ref        TEXT,
-    price      REAL,
-    qty        REAL,
-    min_qty    REAL,
-    status     INTEGER DEFAULT 1,
-    data       TEXT,
-    role       TEXT,
-    scope      TEXT NOT NULL,
-    at         INTEGER DEFAULT (unixepoch()),
-    updated    INTEGER DEFAULT (unixepoch()),
-    deleted_at INTEGER DEFAULT NULL
+    id          TEXT PRIMARY KEY,
+    type        INTEGER NOT NULL,
+    data        TEXT NOT NULL CHECK (json_valid(data)),
+    state       INTEGER NOT NULL DEFAULT 1,
+    version     INTEGER NOT NULL DEFAULT 1,
+    created     INTEGER NOT NULL,
+    updated     INTEGER NOT NULL,
+    deleted_at  INTEGER
   )`,
 
-  // motion: immutable user-visible event log with idempotency constraint
   `CREATE TABLE IF NOT EXISTS motion (
-    id         TEXT PRIMARY KEY,
-    type       INTEGER NOT NULL,
-    ref        TEXT,
-    data       TEXT,
-    by         TEXT,
-    at         INTEGER DEFAULT (unixepoch()),
-    scope      TEXT NOT NULL,
-    idem       TEXT UNIQUE,
-    deleted_at INTEGER DEFAULT NULL
+    id           TEXT PRIMARY KEY,
+    type         INTEGER NOT NULL,
+    actor        TEXT NOT NULL,
+    ref          TEXT,
+    data         TEXT NOT NULL CHECK (json_valid(data)),
+    idem         TEXT NOT NULL UNIQUE,
+    payload_hash TEXT NOT NULL,
+    created      INTEGER NOT NULL,
+    deleted_at   INTEGER
   )`,
 
-  // graph: structural relationships (transactional links live in motion data JSON)
   `CREATE TABLE IF NOT EXISTS graph (
-    src        TEXT NOT NULL,
-    rel        INTEGER NOT NULL,
-    tgt        TEXT NOT NULL,
-    scope      TEXT NOT NULL,
-    time       INTEGER DEFAULT (unixepoch()),
-    deleted_at INTEGER DEFAULT NULL,
-    PRIMARY KEY (src, rel, tgt)
+    id          TEXT PRIMARY KEY,
+    source      TEXT NOT NULL,
+    target      TEXT NOT NULL,
+    kind        INTEGER NOT NULL,
+    data        TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(data)),
+    version     INTEGER NOT NULL DEFAULT 1,
+    created     INTEGER NOT NULL,
+    updated     INTEGER NOT NULL,
+    deleted_at  INTEGER
   )`,
 
-  // Composite and Partial Indexes (Rule 3 & 4)
-  `CREATE INDEX IF NOT EXISTS idx_matter ON matter (type, status) WHERE deleted_at IS NULL`,
-  `CREATE INDEX IF NOT EXISTS idx_matter_ref ON matter (ref) WHERE deleted_at IS NULL`,
-  `CREATE INDEX IF NOT EXISTS idx_motion ON motion (type, at DESC) WHERE deleted_at IS NULL`,
-  `CREATE INDEX IF NOT EXISTS idx_graph_src ON graph (src, rel) WHERE deleted_at IS NULL`,
-  `CREATE INDEX IF NOT EXISTS idx_graph_tgt ON graph (tgt, rel) WHERE deleted_at IS NULL`,
+  `CREATE INDEX IF NOT EXISTS idx_matter_live
+    ON matter(type, state, updated DESC) WHERE deleted_at IS NULL`,
+  `CREATE INDEX IF NOT EXISTS idx_motion_type
+    ON motion(type, created DESC, id) WHERE deleted_at IS NULL`,
+  `CREATE INDEX IF NOT EXISTS idx_motion_ref
+    ON motion(ref, created DESC, id) WHERE deleted_at IS NULL`,
+  `CREATE INDEX IF NOT EXISTS idx_graph_source
+    ON graph(source, kind) WHERE deleted_at IS NULL`,
+  `CREATE INDEX IF NOT EXISTS idx_graph_target
+    ON graph(target, kind) WHERE deleted_at IS NULL`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS unq_graph_live_edge
+    ON graph(source, target, kind) WHERE deleted_at IS NULL`,
 ];
 
 export const PERSONAL_SCHEMA_STATEMENTS = [
-  ...WORKSPACE_SCHEMA_STATEMENTS,
+  ...BASE_SCHEMA_STATEMENTS,
 
-  // inbox: ALL tasks and notifications unified across personal and all joined workspaces
   `CREATE TABLE IF NOT EXISTS inbox (
-    id             TEXT PRIMARY KEY,
-    user_id        TEXT NOT NULL,
-    workspace_id   TEXT,
-    workspace_name TEXT,
-    type           INTEGER NOT NULL,
-    title          TEXT NOT NULL,
-    ref            TEXT,
-    priority       INTEGER DEFAULT 1,
-    due            INTEGER,
-    status         INTEGER DEFAULT 1,
-    data           TEXT,
-    created_at     INTEGER DEFAULT (unixepoch()),
-    deleted_at     INTEGER DEFAULT NULL
+    id            TEXT PRIMARY KEY,
+    user_id       TEXT NOT NULL,
+    workspace_id  TEXT,
+    type          INTEGER NOT NULL,
+    title         TEXT NOT NULL,
+    ref           TEXT,
+    priority      INTEGER NOT NULL DEFAULT 1,
+    status        INTEGER NOT NULL DEFAULT 1,
+    data          TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(data)),
+    version       INTEGER NOT NULL DEFAULT 1,
+    created       INTEGER NOT NULL,
+    updated       INTEGER NOT NULL,
+    deleted_at    INTEGER
   )`,
 
-  `CREATE INDEX IF NOT EXISTS idx_inbox ON inbox (user_id, status, created_at DESC) WHERE deleted_at IS NULL`,
+  `CREATE TABLE IF NOT EXISTS projection (
+    id             TEXT PRIMARY KEY,
+    workspace_id   TEXT NOT NULL,
+    collection     INTEGER NOT NULL,
+    source_id      TEXT NOT NULL,
+    type           INTEGER NOT NULL,
+    data           TEXT NOT NULL CHECK (json_valid(data)),
+    source_version INTEGER NOT NULL,
+    expires        INTEGER,
+    updated        INTEGER NOT NULL,
+    deleted_at     INTEGER,
+    UNIQUE (workspace_id, collection, source_id)
+  )`,
+
+  `CREATE INDEX IF NOT EXISTS idx_inbox_pending
+    ON inbox(user_id, status, priority DESC, created DESC)
+    WHERE deleted_at IS NULL`,
+  `CREATE INDEX IF NOT EXISTS idx_projection_workspace
+    ON projection(workspace_id, collection, type, updated DESC)
+    WHERE deleted_at IS NULL`,
 ];
 
-// Personal DB is standard local DB replica on device
 export const SCHEMA_STATEMENTS = PERSONAL_SCHEMA_STATEMENTS;
+

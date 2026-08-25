@@ -1,26 +1,25 @@
 import { Database, getDbPath } from "@tursodatabase/sync-react-native";
 import { SCHEMA_STATEMENTS } from "./schema";
 import { getCurrentUser } from "./auth";
+import { tar } from "./tar";
 
 const dbConnections: Record<string, Database> = {};
 export let cachedSelfId: string | null = null;
+let activeSyncPullPromise: Promise<void> | null = null;
 
 export async function getSelfId(): Promise<string> {
   if (cachedSelfId) return cachedSelfId;
   const t0 = Date.now();
   try {
-    console.log(`[DB] ${Date.now() - t0}ms — getSelfId: getCurrentUser START`);
     const user = await getCurrentUser();
-    console.log(`[DB] ${Date.now() - t0}ms — getSelfId: getCurrentUser done, user: ${user ? user.id : 'null'}`);
     if (user && user.id) {
       cachedSelfId = user.id;
       return user.id;
     }
   } catch (e) {
-    console.warn(`[DB] ${Date.now() - t0}ms — getSelfId failed:`, e);
+    console.warn(`[DB] getSelfId failed:`, e);
   }
   cachedSelfId = "guest";
-  console.log(`[DB] ${Date.now() - t0}ms — getSelfId: fallback to guest`);
   return "guest";
 }
 
@@ -56,14 +55,18 @@ export function getLocalPrivateDb(userId: string): Database {
   return createLocalDbConnection(userId, `${userId}.db`);
 }
 
+/** Local-only mutable state: request outbox, drafts, preferences and metadata. */
+export function getDeviceDb(userId = cachedSelfId || 'guest'): Database {
+  return createLocalDbConnection(`device:${userId}`, `${userId}_device.db`);
+}
+
 export function getGlobalDb(): Database {
   return createLocalDbConnection("global", "global.db");
 }
 
 export function getUserDb(): Database {
   const userId = cachedSelfId || "guest";
-  // Return sync DB if available, otherwise local
-  if (dbConnections[userId]?.isSync) {
+  if (dbConnections[userId]) {
     return dbConnections[userId];
   }
   return getLocalPrivateDb(userId);
@@ -79,11 +82,12 @@ export function scopePrefix(scope: string | null): 'p' | 'w' | 'o' | 'g' {
 }
 
 /**
- * Initialize schema and run migrations for any database connection.
+ * Initialize schema and run migrations for local SQLite database.
  */
 export async function ensureDbSchema(db: Database, label: string): Promise<void> {
   await db.connect();
-  await migrateMemoryTable(db, label);
+  await migrateLegacyTables(db);
+  if ((db as any).isSync) return;
   for (const sql of SCHEMA_STATEMENTS) {
     try { await db.exec(sql); } catch (_) {}
   }
@@ -96,36 +100,24 @@ export function routeDbForEntity(_type: string | null, scope: string | null): Da
   if (prefix === 'p') {
     return getLocalPrivateDb(selfId);
   }
-
   if (prefix === 'g') {
     return getGlobalDb();
   }
-
   if (prefix === 'w' && scope) {
-    throw new Error('Workspace data is available only through the scoped Tarai API.');
+    throw new Error('Workspace mutations must pass through the authoritative Tarai gateway.');
   }
-
   if (prefix === 'o' && scope) {
-    throw new Error('Order data is available only through the scoped Tarai API.');
+    throw new Error('Order mutations must pass through the authoritative Tarai gateway.');
   }
-
   return getLocalPrivateDb(selfId);
 }
 
-/**
- * Return a database for a scope, ensuring it is connected and has the schema.
- */
 export async function getPreparedDbForScope(scope: string | null): Promise<Database> {
-  const db = routeDbForEntity('form', scope);
-  const label = scope || 'p';
-  await ensureDbSchema(db, label);
+  const db = routeDbForEntity('matter', scope);
+  await ensureDbSchema(db, scope || 'p');
   return db;
 }
 
-/**
- * Run a sequence of database operations inside a single SQLite transaction.
- * Automatically COMMIT on success, ROLLBACK on failure.
- */
 export async function withTransaction<T>(db: Database, fn: () => Promise<T>): Promise<T> {
   await db.exec('BEGIN');
   try {
@@ -138,68 +130,101 @@ export async function withTransaction<T>(db: Database, fn: () => Promise<T>): Pr
   }
 }
 
-/**
- * Handles database schema migrations for tables whose layout has changed
- * in the final unified system architecture (memory, graph, and deletion of action).
- */
-async function migrateMemoryTable(db: Database, label: string) {
+async function migrateLegacyTables(db: Database) {
   try {
-    // Drop old tables to ensure a clean slate aligned with dbrules.md
     await db.exec(`DROP TABLE IF EXISTS form`);
     await db.exec(`DROP TABLE IF EXISTS tasks`);
     await db.exec(`DROP TABLE IF EXISTS memory`);
   } catch (_) {}
 }
 
+/**
+ * Trigger read-only pull from Personal Sync DB (matter.md §4)
+ */
+export async function syncPull(): Promise<void> {
+  if (activeSyncPullPromise) return activeSyncPullPromise;
+
+  activeSyncPullPromise = (async () => {
+    try {
+      const db = getUserDb();
+      if ((db as any).pull && typeof (db as any).pull === 'function') {
+        await (db as any).pull();
+      }
+    } catch (err) {
+      console.warn('[Sync] Pull failed:', err);
+    } finally {
+      activeSyncPullPromise = null;
+    }
+  })();
+
+  return activeSyncPullPromise;
+}
+
 export async function switchUser(userId: string): Promise<Database> {
-  const t0 = Date.now();
-  console.log(`[DB] switchUser START: switching session to user = ${userId}`);
+  console.log(`[DB] switchUser: session for user = ${userId}`);
   cachedSelfId = userId;
 
-  // Personal drafts remain device-local; the app never receives database credentials.
-  const db = getLocalPrivateDb(userId);
+  let db: Database;
+  try {
+    // Attempt to bootstrap remote read-only sync
+    const syncInfo = await tar.getSyncBootstrap().catch(() => null);
+    if (syncInfo && syncInfo.url && syncInfo.token) {
+      db = new Database({
+        path: getDbPath(`${userId}_sync.db`),
+        url: syncInfo.url,
+        // The native SDK invokes this provider for every sync request, so the
+        // client never stores a long-lived database credential.
+        authToken: async () => (await tar.getSyncBootstrap()).token,
+      });
+      (db as any).isSync = true;
+      dbConnections[userId] = db;
+      notifyDbChange(db);
+    } else {
+      db = getLocalPrivateDb(userId);
+    }
+  } catch {
+    db = getLocalPrivateDb(userId);
+  }
+
   try {
     await db.connect();
-    await migrateMemoryTable(db, userId);
-    for (const sql of SCHEMA_STATEMENTS) {
-      try { await db.exec(sql); } catch (_) {}
+    await migrateLegacyTables(db);
+    if (!(db as any).isSync) {
+      for (const sql of SCHEMA_STATEMENTS) {
+        try { await db.exec(sql); } catch (_) {}
+      }
     }
+    // Perform initial pull if sync is enabled
+    syncPull().catch(() => {});
   } catch (e) {
-    console.error(`[DB] switchUser DB init FAILED:`, e);
+    console.error(`[DB] switchUser DB init failed:`, e);
     throw e;
   }
 
-  console.log(`[DB] switchUser DONE: local switched in ${Date.now() - t0}ms`);
   return db;
 }
 
 export async function closeConnection(key: string): Promise<void> {
   if (dbConnections[key]) {
     try {
-      console.log(`[DB] closing connection for key: ${key}`);
       dbConnections[key].close();
       delete dbConnections[key];
-      // Wait 150ms for SQLite native layer to fully release the file lock
       await new Promise(resolve => setTimeout(resolve, 150));
-      console.log(`[DB] connection closed and released for key: ${key}`);
     } catch (e) {
       console.warn(`[DB] failed to close connection for key: ${key}`, e);
     }
   }
 }
 
+export async function logoutAndWipeDb(): Promise<void> {
+  const currentKey = cachedSelfId || 'guest';
+  await closeConnection(currentKey);
+  await closeConnection(`device:${currentKey}`);
+  cachedSelfId = null;
+}
+
 export async function initDb() {
-  const t0 = Date.now();
-  console.log(`[DB] ${Date.now() - t0}ms — initDb START`);
-
   const userId = await getSelfId();
-  console.log(`[DB] ${Date.now() - t0}ms — initDb userId = ${userId}, cachedSelfId = ${cachedSelfId}`);
-
-  if (userId === "guest") {
-    console.log(`[DB] ${Date.now() - t0}ms — initDb SKIP (no profile)`);
-    return;
-  }
-
+  if (userId === "guest") return;
   await switchUser(userId);
-  console.log(`[DB] ${Date.now() - t0}ms — initDb DONE, cachedSelfId = ${cachedSelfId}`);
 }

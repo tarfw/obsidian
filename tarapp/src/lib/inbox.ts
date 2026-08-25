@@ -1,5 +1,5 @@
 /**
- * Client-Side Personal Inbox (plan6.md §2A, §3, §14, §18)
+ * Client-Side Personal Inbox (matter.md §6, §9, §11)
  *
  * Reads directly from local SQLite replica of Personal DB (0ms read latency).
  * Unified tasks and notifications across personal and all joined workspaces.
@@ -22,7 +22,10 @@ export interface InboxItem {
   due?: number | null;
   status: number; // 1=pending, 2=done, 3=dismissed
   data?: any;
-  created_at: number | string;
+  created: number;
+  created_at: string;
+  updated: number;
+  updated_at: string;
 }
 
 let _userId = 'guest';
@@ -43,23 +46,41 @@ export async function getLocalInboxItems(
     if (!db) return [];
 
     const sql = `
-      SELECT id, user_id, workspace_id, workspace_name, type, title, ref, priority, due, status, data, created_at
+      SELECT id, user_id, workspace_id, type, title, ref, priority, status, data, version, created, updated
       FROM inbox
       WHERE (user_id = ? OR user_id = 'guest' OR user_id = 'all')
         AND status = ?
         AND deleted_at IS NULL
-      ORDER BY priority DESC, created_at DESC
+      ORDER BY priority DESC, created DESC
       LIMIT ?
     `;
 
-    const rows = await db.all(sql, [_userId, status, limit]);
-    return (rows || []).map((r: any) => ({
-      ...r,
-      typeName: INBOX_TYPE_NAMES[r.type] || 'task',
-      data: typeof r.data === 'string' ? JSON.parse(r.data || '{}') : r.data,
-    }));
+    const rows = await db.all(sql, [_userId, status, limit]).catch(() => []);
+    return (rows || []).map((r: any) => {
+      const parsedData = typeof r.data === 'string' ? JSON.parse(r.data || '{}') : (r.data || {});
+      const createdMs = typeof r.created === 'number' ? r.created : Date.now();
+      const updatedMs = typeof r.updated === 'number' ? r.updated : createdMs;
+      return {
+        id: r.id,
+        user_id: r.user_id,
+        workspace_id: r.workspace_id,
+        workspace_name: r.workspace_id ? r.workspace_id.replace(/^ws_/, '') : undefined,
+        type: typeof r.type === 'number' ? r.type : INBOX_TYPES.task,
+        typeName: INBOX_TYPE_NAMES[r.type] || 'task',
+        title: r.title,
+        ref: r.ref,
+        priority: r.priority || 1,
+        due: parsedData.due || parsedData.dueDate || null,
+        status: r.status,
+        data: parsedData,
+        created: createdMs,
+        created_at: new Date(createdMs).toISOString(),
+        updated: updatedMs,
+        updated_at: new Date(updatedMs).toISOString(),
+      };
+    });
   } catch (err) {
-    console.warn('[inbox] Local DB query failed, attempting remote fallback:', err);
+    console.warn('[inbox] Local DB query failed:', err);
     return [];
   }
 }
@@ -73,11 +94,12 @@ export async function markTaskDone(
 ): Promise<boolean> {
   try {
     const db = getUserDb();
+    const now = Date.now();
     if (db) {
       await db.run(
-        `UPDATE inbox SET status = 2 WHERE id = ? AND deleted_at IS NULL`,
-        [taskId]
-      );
+        `UPDATE inbox SET status = 2, updated = ? WHERE id = ? AND deleted_at IS NULL`,
+        [now, taskId]
+      ).catch(() => {});
     }
 
     if (workspaceScope) {
@@ -100,21 +122,28 @@ export async function fetchRemoteInbox(
 ): Promise<InboxItem[]> {
   try {
     const data = await tar.getInbox(scope);
-    return (data.rows || []).slice(0, limit).map((r: any) => ({
-      id: r.id,
-      user_id: r.user_id || _userId,
-      workspace_id: r.workspace_id || scope,
-      workspace_name: r.workspace_name || scope,
-      type: typeof r.type === 'number' ? r.type : INBOX_TYPES.task,
-      typeName: typeof r.type === 'number' ? INBOX_TYPE_NAMES[r.type] : r.type,
-      title: r.title,
-      ref: r.ref,
-      priority: r.priority || 1,
-      due: r.due,
-      status: r.status === 'done' ? 2 : 1,
-      data: r.data,
-      created_at: r.created_at || r.at,
-    }));
+    return (data.rows || []).slice(0, limit).map((r: any) => {
+      const createdMs = typeof r.created === 'number' ? r.created : Date.now();
+      const updatedMs = typeof r.updated === 'number' ? r.updated : createdMs;
+      return {
+        id: r.id,
+        user_id: r.user_id || _userId,
+        workspace_id: r.workspace_id || scope,
+        workspace_name: r.workspace_id || scope,
+        type: typeof r.type === 'number' ? r.type : INBOX_TYPES.task,
+        typeName: typeof r.type === 'number' ? INBOX_TYPE_NAMES[r.type] : r.type,
+        title: r.title || String(r.data?.title || 'Inbox Item'),
+        ref: r.ref,
+        priority: r.priority || 1,
+        due: r.due,
+        status: r.status === 'done' || r.status === 2 ? 2 : 1,
+        data: r.data,
+        created: createdMs,
+        created_at: new Date(createdMs).toISOString(),
+        updated: updatedMs,
+        updated_at: new Date(updatedMs).toISOString(),
+      };
+    });
   } catch (err) {
     console.warn('[inbox] Failed to fetch remote inbox:', err);
     return [];
@@ -123,3 +152,4 @@ export async function fetchRemoteInbox(
 
 export const fetchInbox = fetchRemoteInbox;
 export type InboxTask = InboxItem;
+

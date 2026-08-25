@@ -3,6 +3,11 @@
  */
 import { createClient, type Client, type InArgs, type ResultSet } from '@libsql/client';
 
+/** Minimal query contract shared by a remote client and an interactive transaction. */
+export interface SqlExecutor {
+  execute(stmt: { sql: string; args?: InArgs } | string): Promise<ResultSet>;
+}
+
 export interface DatabaseEnv {
   TURSO_DATABASE_URL?: string;
   TURSO_AUTH_TOKEN?: string;
@@ -26,7 +31,7 @@ export function createDatabaseClient(env?: DatabaseEnv): Client {
 }
 
 export async function executeQuery<T = Record<string, unknown>>(
-  client: Client,
+  client: SqlExecutor,
   sql: string,
   args: InArgs = []
 ): Promise<T[]> {

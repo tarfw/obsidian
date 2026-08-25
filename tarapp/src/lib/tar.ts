@@ -18,6 +18,10 @@ export interface CreditPack { id: string; credits: number; price: number; curren
 export interface AgentRate { id: string; name: string; action: string; credits: number; version: number; }
 export interface CreditLedgerEntry { id: string; amount: number; kind: string; ref?: string; meta?: string; created: number; }
 export interface PaymentOrder { payment: { id: string; amount: number; currency: string; credits: number; state: string }; checkoutUrl: string; }
+export interface AgentRunResult {
+  run: { id: string; state: string };
+  result: { action?: string; summary?: string; data?: Record<string, unknown> } | null;
+}
 
 export class TaraiRequestError extends Error {
   constructor(public readonly status: number, message: string, public readonly path: string) {
@@ -73,7 +77,7 @@ function entityOperation(name: string, input: Record<string, any>): Promise<any>
     delete body.tgt;
     delete body.rel;
   }
-  return request<any>(`/api/entities/${name}`, { method: 'POST', body, scope: input.scope });
+  return request<any>(`/api/entities/${name}`, { method: 'POST', body, scope: input.scope, idempotencyKey: input.idem });
 }
 
 function knowledgePath(path: string): string {
@@ -129,6 +133,14 @@ export const tar = {
   agents: () => request<{ agents: AgentRate[] }>('/api/agents'),
   packs: () => request<{ packs: CreditPack[] }>('/api/packs'),
   runAgent: (action: string, input: Record<string, unknown>, scope: string) => request<{ run?: any; service?: any }>(`/api/agents/${encodeURIComponent(action)}/run`, { method: 'POST', scope, body: input }),
+  site: {
+    generate: (scope: string, input: { title: string; description?: string; style?: string }) =>
+      request<{ run: { id: string; state: string } }>(`/api/agents/site.generate/run`, { method: 'POST', scope, body: input }),
+    publish: (scope: string, job: string) =>
+      request<{ run: { id: string; state: string } }>(`/api/agents/site.publish/run`, { method: 'POST', scope, body: { job } }),
+    getRun: (scope: string, id: string) =>
+      request<AgentRunResult>(`/api/runs/${encodeURIComponent(id)}`, { scope }),
+  },
   createPaymentOrder: (pack: string) => request<PaymentOrder>('/api/payments/order', { method: 'POST', body: { pack } }),
   grantDevelopmentCredits: (credits: number) => request<{ wallet: CreditWallet }>('/api/dev/credits', { method: 'POST', body: { credits } }),
   approvals: (scope: string) => request<any[]>('/api/approvals', { scope }),
@@ -137,11 +149,11 @@ export const tar = {
   addMember: (scope: string, member: { email: string; role: 'admin' | 'member' | 'guest'; budget?: number }) => request('/api/members', { method: 'POST', scope, body: member }),
   setMemberBudget: (scope: string, id: string, budget: number) => request(`/api/members/${encodeURIComponent(id)}/budget`, { method: 'POST', scope, body: { budget } }),
   toolsExecute: (action: string, params: Record<string, any>, scope: string) => request('/api/intent', { method: 'POST', scope, body: { intent: action, action, parameters: params, scope: 'workspace' } }),
-  writeEvent: (scope: string, type: string, data: Record<string, any>) => entityOperation('create', { table: 'motion', type, data, scope }),
+  writeEvent: (scope: string, type: string, data: Record<string, any>, idem?: string) => entityOperation('create', { table: 'motion', type, data, scope, idem }),
   getInbox: (scope: string) => entityOperation('read', { table: 'inbox', scope }),
-  markTaskDone: (taskId: string, scope: string) => entityOperation('update', { table: 'inbox', id: taskId, patch: { status: 'done' }, scope }),
+  markTaskDone: (taskId: string, scope: string) => entityOperation('update', { table: 'inbox', id: taskId, patch: { status: 2 }, scope }),
+  getSyncBootstrap: () => request<{ url: string; token: string; host: string; db: string; expiresAt: number }>('/api/sync/bootstrap'),
   timeline: (_opts?: { limit?: number; since?: string }) => Promise.resolve([]),
-  db: { query: async (_sql: string, _args: any[] = [], _scope?: string): Promise<any[]> => [] },
   okf: {
     read: (scope: string, path: string) => request<{ path: string; content: string }>(`/api/knowledge/${knowledgePath(path)}`, { scope }),
     readIndex: (scope: string) => request<{ path: string; content: string }>('/api/knowledge/index.md', { scope }),

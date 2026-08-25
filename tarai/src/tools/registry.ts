@@ -88,13 +88,13 @@ export class ToolRegistry {
 
     // Check existing idempotency record
     const existingRows = await client.execute({
-      sql: `SELECT * FROM idempotency_records WHERE workspace_id = ? AND key = ?`,
-      args: [targetWorkspaceId, idempotencyKey],
+      sql: `SELECT * FROM request WHERE idem = ?`,
+      args: [idempotencyKey],
     });
 
     if (existingRows.rows.length > 0) {
-      const record = existingRows.rows[0];
-      if (record.status === 'completed' && record.response) {
+      const record = existingRows.rows[0] as any;
+      if (record.status === 2 && record.response) {
         return {
           success: true,
           status: 'replayed_from_cache',
@@ -150,20 +150,22 @@ export class ToolRegistry {
         workspaceId: targetWorkspaceId,
       });
 
-      // Save completed idempotency record
-      const now = new Date().toISOString();
-      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+      // Save completed request record
+      const now = Date.now();
       await client.execute({
-        sql: `INSERT OR REPLACE INTO idempotency_records (key, workspace_id, action_type, payload_hash, status, response, created_at, expires_at)
-              VALUES (?, ?, ?, ?, 'completed', ?, ?, ?)`,
+        sql: `INSERT INTO request (idem, actor, action, payload_hash, status, response, created, completed)
+              VALUES (?, ?, ?, ?, 2, ?, ?, ?)
+              ON CONFLICT(idem) DO UPDATE SET status = 2, response = ?, completed = ?`,
         args: [
           idempotencyKey,
-          targetWorkspaceId,
+          auth.userId,
           toolName,
           payloadHash,
           JSON.stringify(output),
           now,
-          expiresAt,
+          now,
+          JSON.stringify(output),
+          now,
         ],
       });
 

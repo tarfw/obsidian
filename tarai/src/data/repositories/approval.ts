@@ -1,9 +1,10 @@
 /**
- * Approval Repository - High-Risk Action State Machine & Governance
+ * Approval Repository - High-Risk Action State Machine & Governance (matter.md §5)
  */
 import type { Client } from '@libsql/client';
 import { executeQuery } from '../turso.ts';
 import type { ApprovalRecord, ApprovalStatus, Role } from '../../domain/types.ts';
+import { hashPayload } from '../../domain/idempotency.ts';
 
 export class ApprovalRepository {
   constructor(private client: Client) {}
@@ -16,29 +17,28 @@ export class ApprovalRepository {
     actionType: string;
     payloadHash: string;
     payload: Record<string, unknown>;
-    expiresAt: string;
+    expiresAt: string | number;
     policyVersion?: string;
     idempotencyKey: string;
   }): Promise<ApprovalRecord> {
-    const now = new Date().toISOString();
+    const now = Date.now();
+    const expiresMs = typeof record.expiresAt === 'number' ? record.expiresAt : new Date(record.expiresAt).getTime();
     const policyVersion = record.policyVersion || '1.0';
 
     await this.client.execute({
-      sql: `INSERT INTO approvals (
-              id, workspace_id, actor_id, required_role, action_type, payload_hash, payload,
-              status, expires_at, policy_version, idempotency_key, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)`,
+      sql: `INSERT INTO approval (
+              id, action, actor, required_role, payload, payload_hash,
+              policy_version, status, expires, created, updated
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`,
       args: [
         record.id,
-        record.workspaceId,
+        record.actionType,
         record.actorId,
         record.requiredRole,
-        record.actionType,
-        record.payloadHash,
         JSON.stringify(record.payload),
-        record.expiresAt,
+        record.payloadHash,
         policyVersion,
-        record.idempotencyKey,
+        expiresMs,
         now,
         now,
       ],
@@ -53,98 +53,94 @@ export class ApprovalRepository {
       payloadHash: record.payloadHash,
       payload: record.payload,
       status: 'pending',
-      expiresAt: record.expiresAt,
+      expiresAt: new Date(expiresMs).toISOString(),
       policyVersion,
       idempotencyKey: record.idempotencyKey,
-      createdAt: now,
-      updatedAt: now,
+      createdAt: new Date(now).toISOString(),
+      updatedAt: new Date(now).toISOString(),
     };
   }
 
   async findById(workspaceId: string, id: string): Promise<ApprovalRecord | null> {
     const rows = await executeQuery<{
       id: string;
-      workspace_id: string;
-      actor_id: string;
+      action: string;
+      actor: string;
       required_role: Role;
-      action_type: string;
-      payload_hash: string;
       payload: string;
-      status: ApprovalStatus;
-      expires_at: string;
+      payload_hash: string;
       policy_version: string;
-      idempotency_key: string;
+      status: number;
+      expires: number;
       decided_by: string | null;
       decision_reason: string | null;
-      created_at: string;
-      updated_at: string;
-    }>(this.client, `SELECT * FROM approvals WHERE workspace_id = ? AND id = ?`, [
-      workspaceId,
-      id,
-    ]);
+      created: number;
+      updated: number;
+    }>(this.client, `SELECT * FROM approval WHERE id = ? AND deleted_at IS NULL`, [id]);
 
     if (rows.length === 0) return null;
     const r = rows[0];
+    const statusMap: Record<number, ApprovalStatus> = { 1: 'pending', 2: 'approved', 3: 'rejected', 4: 'executed' };
+
     return {
       id: r.id,
-      workspaceId: r.workspace_id,
-      actorId: r.actor_id,
+      workspaceId,
+      actorId: r.actor,
       requiredRole: r.required_role,
-      actionType: r.action_type,
+      actionType: r.action,
       payloadHash: r.payload_hash,
       payload: JSON.parse(r.payload),
-      status: r.status,
-      expiresAt: r.expires_at,
+      status: statusMap[r.status] || 'pending',
+      expiresAt: new Date(r.expires).toISOString(),
       policyVersion: r.policy_version,
-      idempotencyKey: r.idempotency_key,
+      idempotencyKey: `idemp_${r.id}`,
       decidedBy: r.decided_by || undefined,
       decisionReason: r.decision_reason || undefined,
-      createdAt: r.created_at,
-      updatedAt: r.updated_at,
+      createdAt: new Date(r.created).toISOString(),
+      updatedAt: new Date(r.updated).toISOString(),
     };
   }
 
   async listPending(workspaceId: string): Promise<ApprovalRecord[]> {
+    const now = Date.now();
     const rows = await executeQuery<{
       id: string;
-      workspace_id: string;
-      actor_id: string;
+      action: string;
+      actor: string;
       required_role: Role;
-      action_type: string;
-      payload_hash: string;
       payload: string;
-      status: ApprovalStatus;
-      expires_at: string;
+      payload_hash: string;
       policy_version: string;
-      idempotency_key: string;
+      status: number;
+      expires: number;
       decided_by: string | null;
       decision_reason: string | null;
-      created_at: string;
-      updated_at: string;
+      created: number;
+      updated: number;
     }>(
       this.client,
-      `SELECT * FROM approvals
-       WHERE workspace_id = ? AND status = 'pending' AND expires_at > ?
-       ORDER BY created_at DESC`,
-      [workspaceId, new Date().toISOString()]
+      `SELECT * FROM approval
+       WHERE status = 1 AND expires > ? AND deleted_at IS NULL
+       ORDER BY created DESC`,
+      [now]
     );
 
     return rows.map((r) => ({
       id: r.id,
-      workspaceId: r.workspace_id,
-      actorId: r.actor_id,
+      workspaceId,
+      actorId: r.actor,
       requiredRole: r.required_role,
-      actionType: r.action_type,
+      actionType: r.action,
       payloadHash: r.payload_hash,
       payload: JSON.parse(r.payload),
-      status: r.status,
-      expiresAt: r.expires_at,
+      status: 'pending' as ApprovalStatus,
+      expiresAt: new Date(r.expires).toISOString(),
       policyVersion: r.policy_version,
-      idempotencyKey: r.idempotency_key,
+      idempotencyKey: `idemp_${r.id}`,
       decidedBy: r.decided_by || undefined,
       decisionReason: r.decision_reason || undefined,
-      createdAt: r.created_at,
-      updatedAt: r.updated_at,
+      createdAt: new Date(r.created).toISOString(),
+      updatedAt: new Date(r.updated).toISOString(),
     }));
   }
 
@@ -155,25 +151,27 @@ export class ApprovalRepository {
     decidedBy: string,
     reason?: string
   ): Promise<boolean> {
-    const now = new Date().toISOString();
+    const now = Date.now();
+    const statusCode = status === 'approved' ? 2 : 3;
     const result = await this.client.execute({
-      sql: `UPDATE approvals
-            SET status = ?, decided_by = ?, decision_reason = ?, updated_at = ?
-            WHERE workspace_id = ? AND id = ? AND status = 'pending' AND expires_at > ?`,
-      args: [status, decidedBy, reason || null, now, workspaceId, id, now],
+      sql: `UPDATE approval
+            SET status = ?, decided_by = ?, decision_reason = ?, updated = ?
+            WHERE id = ? AND status = 1 AND expires > ? AND deleted_at IS NULL`,
+      args: [statusCode, decidedBy, reason || null, now, id, now],
     });
 
     return result.rowsAffected > 0;
   }
 
   async markExecuted(workspaceId: string, id: string): Promise<boolean> {
-    const now = new Date().toISOString();
+    const now = Date.now();
     const result = await this.client.execute({
-      sql: `UPDATE approvals
-            SET status = 'executed', updated_at = ?
-            WHERE workspace_id = ? AND id = ? AND status = 'approved' AND expires_at > ?`,
-      args: [now, workspaceId, id, now],
+      sql: `UPDATE approval
+            SET status = 4, updated = ?
+            WHERE id = ? AND status = 2 AND expires > ? AND deleted_at IS NULL`,
+      args: [now, id, now],
     });
     return result.rowsAffected > 0;
   }
 }
+

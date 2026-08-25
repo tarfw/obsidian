@@ -10,8 +10,6 @@ import { BlurView } from 'expo-blur';
 
 import { useTheme } from '@/hooks/use-theme';
 import { tar } from '@/lib/tar';
-import { useSite } from '@/hooks/use-site';
-import { generateSiteLayout } from '@/lib/site-ai';
 import { parseDesignTokens } from '@/lib/design-tokens';
 import { buildModuleLayout, parseYamlFrontmatter, parseCanvasMarkdown, type CanvasDocument, type CanvasBlock, type CanvasLifeMode } from '@/lib/layout-engine';
 import { resolveIntent } from '@/lib/intent-resolver';
@@ -199,7 +197,6 @@ export default function WorkspacesScreen() {
   const [inboxTasks, setInboxTasks] = useState<LinearInboxItem[]>([]);
   const [loadingInbox, setLoadingInbox] = useState(false);
   const [allEntities, setAllEntities] = useState<any[]>([]);
-  const [queryResults, setQueryResults] = useState<Record<string, any[]>>({});
 
   const [selectedAction, setSelectedAction] = useState<any | null>(null);
   const [formParams, setFormParams] = useState<Record<string, string>>({});
@@ -324,9 +321,6 @@ export default function WorkspacesScreen() {
     }
   }, [currentWorkspace]);
   
-  // Custom scope resolution to feed into useSite
-  const activeScope = currentWorkspace?.scope ?? undefined;
-  const { draft, publish, saveDraft, refresh: refreshSite } = useSite(activeScope);
 
   // Load workspace index.md and dynamic module files from S3 when workspace changes
   useEffect(() => {
@@ -408,7 +402,7 @@ export default function WorkspacesScreen() {
     }
   }, [currentWorkspace?.scope]);
 
-  // Fetch workspaces list on mount with Google email matching (genuiteam.md §3)
+  // Fetch D1-authorized workspaces on mount (matter.md §11).
   const fetchWorkspacesList = useCallback(async (silent = false): Promise<Workspace[]> => {
     if (!silent) setLoadingWorkspaces(true);
     try {
@@ -806,38 +800,6 @@ export default function WorkspacesScreen() {
     }
   }, [currentWorkspace?.scope]);
 
-  // Execute parametric SQL queries across registered native components via Turso API (genuiteam.md §1, §4)
-  useEffect(() => {
-    if (!currentWorkspace?.scope || !canvasBlocks || canvasBlocks.length === 0) return;
-    const scope = currentWorkspace.scope;
-    const currentRole = currentWorkspace.role || 'staff';
-
-    const runBlockQueries = async () => {
-      const resultsMap: Record<string, any[]> = {};
-      await Promise.all(
-        canvasBlocks.map(async (b, idx) => {
-          if (b.props && typeof b.props.query === 'string' && b.props.query.trim()) {
-            try {
-              let sql = b.props.query;
-              sql = sql.replace(/:current_role/g, `'${currentRole}'`);
-              sql = sql.replace(/:scope/g, `'${scope}'`);
-              sql = sql.replace(/:subdomain/g, `'${currentWorkspace.subdomain}'`);
-              
-              const rows = await tar.db.query(sql, [], scope);
-              const key = b.id || b.title || b.type || `blk_${idx}`;
-              resultsMap[key] = rows || [];
-            } catch (qErr) {
-              console.warn('[workspaces.tsx] Error executing block query:', b.props.query, qErr);
-            }
-          }
-        })
-      );
-      setQueryResults(resultsMap);
-    };
-
-    runBlockQueries();
-  }, [canvasBlocks, currentWorkspace?.scope, currentWorkspace?.role]);
-
   const handleSelectWorkspace = async (item: Workspace) => {
     if (item.state === 'provisioning' || item.state === 'restoring') {
       setAgentFeedback({ text: `${item.name || item.subdomain} is still creating its private database.`, type: 'info' });
@@ -935,15 +897,8 @@ export default function WorkspacesScreen() {
         setAgentFeedback({ text: 'Opened workspace site manager.', type: 'success' });
       }
       else if (/^(make|edit|change|update|design|customize)\s+(site|storefront|web|website)(.+)/i.test(cleanText)) {
-        const match = textToSend.match(/^(make|edit|change|update|design|customize)\s+(site|storefront|web|website)\s+(.+)/i);
-        const instruction = match ? match[3] : textToSend;
-
-        const currentProducts = await tar.tool('read', { table: 'matter', type: 'product', active: 1, scope }).then(r => r.rows || []).catch(() => []);
-        const newLayout = await generateSiteLayout(name, currentProducts, instruction, draft);
-        await saveDraft(newLayout);
-        await refreshSite();
-
-        setAgentFeedback({ text: 'Updated your website theme and draft layout! Click Publish to set it live.', type: 'success' });
+        setShowSiteScreen(true);
+        setAgentFeedback({ text: 'Opened Site Studio. Tarai will generate a verified draft from your instruction.', type: 'success' });
       }
       else if (/^add\s+(.+?)\s+at\s+(\d+)/i.test(cleanText) || /^create\s+product\s+(.+?)\s+(\d+)/i.test(cleanText) || /^add\s+product\s+(.+?)\s+(\d+)/i.test(cleanText)) {
         const addMatch = textToSend.match(/^add\s+(.+?)\s+at\s+(\d+)/i) || 
@@ -974,26 +929,10 @@ export default function WorkspacesScreen() {
           await refreshProducts(scope);
           await refreshOrders(scope);
           await refreshEntities(scope);
-          await refreshSite();
         }
       }
     } catch (e: any) {
       setAgentFeedback({ text: e.message || 'Something went wrong while executing the command.', type: 'error' });
-    } finally {
-      setExecuting(false);
-    }
-  };
-
-  const handlePublishFromCard = async () => {
-    if (!currentWorkspace) return;
-    setExecuting(true);
-    setAgentFeedback(null);
-    try {
-      // Always pass subdomain and workspaceName explicitly so publishToWorker uses the correct URL and site title
-      await publish(currentWorkspace.subdomain, currentWorkspace.name || currentWorkspace.subdomain);
-      setAgentFeedback({ text: `Site published successfully! It is live at: https://${currentWorkspace.subdomain}.tarai.space`, type: 'success' });
-    } catch (e: any) {
-      setAgentFeedback({ text: e.message || 'Failed to publish site.', type: 'error' });
     } finally {
       setExecuting(false);
     }
@@ -1205,7 +1144,7 @@ export default function WorkspacesScreen() {
           });
           await refreshEntities(currentWorkspace.scope);
 
-          // Auto-sync staff roles to team.md (genuiteam.md §3)
+          // Update the portable roster projection; D1 remains access authority (matter.md §11).
           if (currentWorkspace.scope && currentWorkspace.scope !== 'p') {
             const staffRole = (cleanParams.role || '').toLowerCase();
             if (staffRole && !['customer', 'client', 'vendor', 'lead', 'supplier'].includes(staffRole)) {
@@ -1576,11 +1515,13 @@ export default function WorkspacesScreen() {
         };
       });
 
-    // 4. Enrich blocks with live database values and parametric SQL queries (genuiteam.md §1, §4)
+    // 4. Enrich blocks from registered data views (matter.md §9).
     const enrichBlock = (b: CanvasBlock, index: number): CanvasBlock => {
       const type = b.type;
-      const key = b.id || b.title || b.type || `blk_${index}`;
-      const queryRows = queryResults[key];
+      void index;
+      // Canvas definitions bind only registered data views. Legacy raw SQL
+      // fields are intentionally ignored on the client.
+      const queryRows: any[] | undefined = b.props?.data_view ? [] : undefined;
 
       // If parametric query results exist, bind data directly
       if (queryRows && Array.isArray(queryRows) && queryRows.length > 0) {
@@ -1723,7 +1664,7 @@ export default function WorkspacesScreen() {
       lifeModes: [],
     };
 
-    // Role-Based Canvas Resolution & Filtering (genuiteam.md §7)
+    // Role-based canvas presentation; Tarai still enforces authorization (matter.md §9).
     const userRole = (currentWorkspace?.role || 'staff').toLowerCase();
     const isOwner = userRole === 'owner' || userRole === 'admin';
 
@@ -1774,7 +1715,7 @@ export default function WorkspacesScreen() {
       lifeModes: canvasDoc?.lifeModes || [],
       chips: activeChips,
     };
-  }, [canvasDoc, currentWorkspace, orders, products, inboxTasks, allEntities, workspaceName, canvasBlocks, queryResults]);
+  }, [canvasDoc, currentWorkspace, orders, products, inboxTasks, allEntities, workspaceName, canvasBlocks]);
 
   if (loadingWorkspaces) {
     return (
@@ -2258,7 +2199,7 @@ export default function WorkspacesScreen() {
         onClose={() => setShowSiteScreen(false)}
         workspaceName={currentWorkspace?.name || currentWorkspace?.subdomain || ''}
         subdomain={currentWorkspace?.subdomain || ''}
-        scope={activeScope || ''}
+        scope={currentWorkspace?.scope || ''}
         products={products}
       />
 
@@ -2269,7 +2210,7 @@ export default function WorkspacesScreen() {
         workspaces={workspaces}
         workspaceName={currentWorkspace?.name || currentWorkspace?.subdomain || 'Workspace'}
         subdomain={currentWorkspace?.subdomain}
-        scope={activeScope || ''}
+        scope={currentWorkspace?.scope || ''}
         onOpenCanvasCustomizer={() => {
           setShowPlanCanvas(false);
           setShowCanvasCustomizer(true);

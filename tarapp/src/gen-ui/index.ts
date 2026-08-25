@@ -1,5 +1,5 @@
 /**
- * Gen UI module for tarapp — exports all public APIs per genui.md.
+ * GenUI module exports; architecture contract: matter.md §9.
  */
 
 // Types shared with Tarai

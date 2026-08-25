@@ -1,210 +1,198 @@
 /**
- * Local-first POS — offline queue for sales when device is offline.
- * Queued sales are pushed to DO on reconnect with validation.
+ * Device Outbox & Queue State Machine (matter.md §8)
+ * States: pending -> inflight -> accepted | retry_wait | needs_review | rejected_final
  */
 
-import { getUserDb } from './db';
+import { getDeviceDb } from './db';
+import { tar } from './tar';
 
-export interface OfflineSale {
+export type OutboxState = 'pending' | 'inflight' | 'accepted' | 'retry_wait' | 'needs_review' | 'rejected_final';
+
+export interface OutboxItem {
   id: string;
-  type: 'sale' | 'stock_adjust' | 'refund';
-  data: {
-    items: Array<{ productId: string; name: string; qty: number; price: number }>;
-    total: number;
-    paymentMethod: string;
-  };
-  created_at: string;
-  status: 'pending' | 'sent' | 'accepted' | 'rejected';
-  error?: string;
-  retry_count: number;
+  type: string;
+  scope: string;
+  payload: Record<string, unknown>;
+  idem: string;
+  status: OutboxState;
+  attempts: number;
+  next_attempt: number;
+  last_error?: string;
+  created: number;
+  updated: number;
 }
 
-/**
- * Initialize the offline_queue table in local SQLite
- */
 export async function initOfflineQueue(): Promise<void> {
-  const db = getUserDb();
+  const db = getDeviceDb();
   await db.exec(`
     CREATE TABLE IF NOT EXISTS offline_queue (
       id TEXT PRIMARY KEY,
       type TEXT NOT NULL,
-      data TEXT NOT NULL,
-      created_at TEXT NOT NULL,
+      scope TEXT NOT NULL,
+      payload TEXT NOT NULL,
+      idem TEXT NOT NULL UNIQUE,
       status TEXT DEFAULT 'pending',
-      error TEXT,
-      retry_count INTEGER DEFAULT 0
-    )
+      attempts INTEGER DEFAULT 0,
+      next_attempt INTEGER DEFAULT 0,
+      last_error TEXT,
+      created INTEGER NOT NULL,
+      updated INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_offline_queue_status ON offline_queue(status, next_attempt);
   `);
 }
 
 /**
- * Add a sale to the offline queue
+ * Enqueue mutation into device outbox with deterministic idempotency key
  */
-export async function queueOfflineSale(sale: {
-  items: Array<{ productId: string; name: string; qty: number; price: number }>;
-  paymentMethod: string;
-}): Promise<string> {
-  const db = getUserDb();
-  const id = `offline_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-  const total = sale.items.reduce((sum, item) => sum + item.price * item.qty, 0);
+export async function enqueueOutbox(type: string, scope: string, payload: Record<string, unknown>): Promise<string> {
+  const db = getDeviceDb();
+  const now = Date.now();
+  const id = `out_${now}_${Math.random().toString(36).slice(2, 8)}`;
+  const idem = `outidem_${scope}_${type}_${now}_${Math.random().toString(36).slice(2, 8)}`;
 
   await db.run(
-    'INSERT INTO offline_queue (id, type, data, created_at, status, retry_count) VALUES (?, ?, ?, ?, ?, ?)',
-    [id, 'sale', JSON.stringify({ items: sale.items, total, paymentMethod: sale.paymentMethod }), new Date().toISOString(), 'pending', 0]
+    `INSERT INTO offline_queue (id, type, scope, payload, idem, status, attempts, next_attempt, created, updated)
+     VALUES (?, ?, ?, ?, ?, 'pending', 0, ?, ?, ?)`,
+    [id, type, scope, JSON.stringify(payload), idem, now, now, now]
   );
 
   return id;
 }
 
-/**
- * Get all pending offline sales
- */
-export async function getPendingSales(): Promise<OfflineSale[]> {
-  const db = getUserDb();
+export async function getPendingOutboxItems(): Promise<OutboxItem[]> {
+  const db = getDeviceDb();
+  const now = Date.now();
   const rows = await db.all(
-    "SELECT * FROM offline_queue WHERE status = 'pending' ORDER BY created_at ASC"
-  );
+    `SELECT * FROM offline_queue WHERE status IN ('pending', 'retry_wait') AND next_attempt <= ? ORDER BY created ASC`,
+    [now]
+  ).catch(() => []);
+
   return (rows || []).map((r: any) => ({
-    ...r,
-    data: typeof r.data === 'string' ? JSON.parse(r.data) : r.data,
+    id: r.id,
+    type: r.type,
+    scope: r.scope,
+    payload: typeof r.payload === 'string' ? JSON.parse(r.payload) : (r.payload || {}),
+    idem: r.idem,
+    status: r.status as OutboxState,
+    attempts: r.attempts || 0,
+    next_attempt: r.next_attempt || 0,
+    last_error: r.last_error || undefined,
+    created: r.created,
+    updated: r.updated,
   }));
 }
 
 /**
- * Mark a sale as sent
+ * Calculate exponential backoff with jitter (initial 1s, max 60s)
  */
-export async function markSaleSent(id: string): Promise<void> {
-  const db = getUserDb();
-  await db.run(
-    "UPDATE offline_queue SET status = 'sent' WHERE id = ?",
-    [id]
-  );
+function calculateBackoffMs(attempts: number): number {
+  const baseMs = 1000;
+  const maxMs = 60000;
+  const exp = Math.min(attempts, 6);
+  const rawBackoff = baseMs * Math.pow(2, exp);
+  const jitter = Math.floor(Math.random() * 500);
+  return Math.min(rawBackoff + jitter, maxMs);
 }
 
 /**
- * Mark a sale as accepted
+ * Flush outbox items to Tarai gateway with full state transitions
  */
-export async function markSaleAccepted(id: string): Promise<void> {
-  const db = getUserDb();
-  await db.run(
-    "UPDATE offline_queue SET status = 'accepted' WHERE id = ?",
-    [id]
-  );
+export async function flushOutbox(): Promise<{ processed: number; succeeded: number; failed: number }> {
+  const db = getDeviceDb();
+  const items = await getPendingOutboxItems();
+  let succeeded = 0;
+  let failed = 0;
+
+  for (const item of items) {
+    const now = Date.now();
+    // 1. Transition: pending/retry_wait -> inflight
+    await db.run(
+      `UPDATE offline_queue SET status = 'inflight', updated = ? WHERE id = ?`,
+      [now, item.id]
+    );
+
+    try {
+      if (item.type.startsWith('sale') || item.type.startsWith('action_record_sale')) {
+        await tar.writeEvent(item.scope, 'sale', item.payload, item.idem);
+      } else {
+        await tar.tool('create', { ...item.payload, scope: item.scope, idem: item.idem });
+      }
+
+      // 2. Transition: inflight -> accepted
+      const successNow = Date.now();
+      await db.run(
+        `UPDATE offline_queue SET status = 'accepted', updated = ? WHERE id = ?`,
+        [successNow, item.id]
+      );
+      succeeded++;
+    } catch (err: any) {
+      failed++;
+      const nextAttempts = item.attempts + 1;
+      const errorMsg = err?.message || String(err);
+      const isValidationOrFatal = errorMsg.includes('400') || errorMsg.includes('schema') || errorMsg.includes('Validation');
+      const isBusinessConflict = errorMsg.includes('409') || errorMsg.includes('conflict') || errorMsg.includes('stock');
+
+      let nextState: OutboxState = 'retry_wait';
+      if (isValidationOrFatal) {
+        nextState = 'rejected_final';
+      } else if (isBusinessConflict || nextAttempts >= 10) {
+        nextState = 'needs_review';
+      }
+
+      const nextAttemptTime = Date.now() + calculateBackoffMs(nextAttempts);
+      await db.run(
+        `UPDATE offline_queue SET status = ?, attempts = ?, next_attempt = ?, last_error = ?, updated = ? WHERE id = ?`,
+        [nextState, nextAttempts, nextAttemptTime, errorMsg, Date.now(), item.id]
+      );
+    }
+  }
+
+  return { processed: items.length, succeeded, failed };
 }
 
-/**
- * Mark a sale as rejected with error message
- */
-export async function markSaleRejected(id: string, error: string): Promise<void> {
-  const db = getUserDb();
-  await db.run(
-    "UPDATE offline_queue SET status = 'rejected', error = ? WHERE id = ?",
-    [error, id]
-  );
-}
-
-/**
- * Get effective stock for a product (last known minus offline sales)
- */
 export async function getEffectiveStock(productId: string, lastKnownQty: number): Promise<number> {
-  const db = getUserDb();
+  const db = getDeviceDb();
   const rows = await db.all(
-    "SELECT data FROM offline_queue WHERE status = 'pending'"
-  );
+    "SELECT payload FROM offline_queue WHERE status IN ('pending', 'inflight', 'retry_wait')"
+  ).catch(() => []);
 
   let offlineSold = 0;
   for (const row of rows || []) {
-    const data = typeof row.data === 'string' ? JSON.parse(row.data) : row.data;
-    const item = data.items?.find((i: any) => i.productId === productId);
-    if (item) offlineSold += item.qty;
+    const payload = typeof row.payload === 'string' ? JSON.parse(row.payload) : row.payload;
+    const items = payload.items || [];
+    const item = items.find((i: any) => i.productId === productId || i.sku === productId);
+    if (item) offlineSold += (item.qty || item.quantity || 0);
   }
 
-  return lastKnownQty - offlineSold;
+  return Math.max(0, lastKnownQty - offlineSold);
 }
 
-/**
- * Reconnect handler — push pending sales to server via POST /tools/execute
- */
-export async function syncPendingSales(
-  sendToServer: (sale: OfflineSale) => Promise<{ accepted: boolean; error?: string }>
-): Promise<{ accepted: number; rejected: number }> {
-  const pending = await getPendingSales();
-  let accepted = 0;
-  let rejected = 0;
-
-  for (const sale of pending) {
-    try {
-      await markSaleSent(sale.id);
-      const result = await sendToServer(sale);
-      if (result.accepted) {
-        await markSaleAccepted(sale.id);
-        accepted++;
-      } else {
-        await markSaleRejected(sale.id, result.error || 'Rejected by server');
-        rejected++;
-      }
-    } catch (e: any) {
-      await markSaleRejected(sale.id, e.message);
-      rejected++;
-    }
-  }
-
-  return { accepted, rejected };
-}
-
-/**
- * Default sync function using POST /tools/execute
- */
-export async function defaultSyncSale(
-  sale: OfflineSale,
-  scope: string,
-  baseUrl: string
-): Promise<{ accepted: boolean; error?: string }> {
-  try {
-    const res = await fetch(`${baseUrl}/tools/execute`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'action_record_sale',
-        params: {
-          items: sale.data.items,
-          total: sale.data.total,
-          payment_method: sale.data.paymentMethod,
-        },
-        scope,
-      }),
-    });
-    if (!res.ok) {
-      const err = await res.text();
-      return { accepted: false, error: err };
-    }
-    return { accepted: true };
-  } catch (e: any) {
-    return { accepted: false, error: e.message };
-  }
-}
-
-/**
- * Get queue stats
- */
 export async function getQueueStats(): Promise<{
   pending: number;
+  inflight: number;
   accepted: number;
-  rejected: number;
+  retry_wait: number;
+  needs_review: number;
+  rejected_final: number;
 }> {
-  const db = getUserDb();
-  const pending = await db.all(
-    "SELECT COUNT(*) as count FROM offline_queue WHERE status = 'pending'"
-  );
-  const accepted = await db.all(
-    "SELECT COUNT(*) as count FROM offline_queue WHERE status = 'accepted'"
-  );
-  const rejected = await db.all(
-    "SELECT COUNT(*) as count FROM offline_queue WHERE status = 'rejected'"
-  );
+  const db = getDeviceDb();
+  const rows = await db.all(
+    "SELECT status, COUNT(*) as count FROM offline_queue GROUP BY status"
+  ).catch(() => []);
+
+  const counts: Record<string, number> = {};
+  for (const r of (rows as any[]) || []) {
+    const statusKey = String(r.status || '');
+    counts[statusKey] = Number(r.count) || 0;
+  }
+
   return {
-    pending: (pending as any)?.[0]?.count || 0,
-    accepted: (accepted as any)?.[0]?.count || 0,
-    rejected: (rejected as any)?.[0]?.count || 0,
+    pending: counts.pending || 0,
+    inflight: counts.inflight || 0,
+    accepted: counts.accepted || 0,
+    retry_wait: counts.retry_wait || 0,
+    needs_review: counts.needs_review || 0,
+    rejected_final: counts.rejected_final || 0,
   };
 }

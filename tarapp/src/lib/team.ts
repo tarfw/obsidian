@@ -1,5 +1,5 @@
 /**
- * Declarative team.md parser and serializer for React Native client (genuiteam.md §1, §3).
+ * Legacy declarative roster parser; D1 remains access authority (matter.md §11).
  */
 
 export interface TeamMember {

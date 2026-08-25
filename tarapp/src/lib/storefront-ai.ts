@@ -13,12 +13,6 @@
 
 import { TEMPLATES, type StorefrontLayout, type Theme, type Section } from './storefront-schema';
 
-const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions';
-const GROQ_MODEL = 'openai/gpt-oss-120b';
-const GROQ_API_KEY = process.env.EXPO_PUBLIC_GROQ_API_KEY || '';
-if (!GROQ_API_KEY) {
-  console.warn('[StorefrontAI] Missing EXPO_PUBLIC_GROQ_API_KEY');
-}
 
 export interface StorefrontProduct {
   name: string;
@@ -38,39 +32,9 @@ function extractJson(text: string): any {
 }
 
 async function chatCompletion(systemPrompt: string, userPrompt: string): Promise<string> {
-  if (!GROQ_API_KEY) {
-    throw new Error('Missing EXPO_PUBLIC_GROQ_API_KEY');
-  }
-  console.log(`[StorefrontAI] chatCompletion — model: ${GROQ_MODEL}`);
-
-  const res = await fetch(GROQ_ENDPOINT, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${GROQ_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model: GROQ_MODEL,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
-      ],
-      reasoning_effort: 'medium',
-    }),
-  });
-
-  console.log(`[StorefrontAI] HTTP status: ${res.status}`);
-  if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    console.error(`[StorefrontAI] HTTP ${res.status}: ${body.slice(0, 500)}`);
-    throw new Error(`AI request failed (${res.status})`);
-  }
-
-  const json = await res.json();
-  const content: string = json?.choices?.[0]?.message?.content ?? '';
-  console.log(`[StorefrontAI] content length: ${content.length}`);
-  if (!content) throw new Error('Empty AI response');
-  return content;
+  void systemPrompt;
+  void userPrompt;
+  throw new Error('Storefront AI must be executed through Tarai.');
 }
 
 const SYSTEM_PROMPT = `You are a storefront designer. You pick a template and generate a config for an online store.

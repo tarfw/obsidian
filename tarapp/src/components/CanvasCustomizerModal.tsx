@@ -268,70 +268,9 @@ export default function CanvasCustomizerModal({
   const [hasGenerated, setHasGenerated] = useState(false);
 
   // Enrich blocks by querying live workspace SQLite records
-  const enrichBlocksWithLiveDb = useCallback(async (blocksToEnrich: CanvasBlock[]) => {
-    if (!scope || !blocksToEnrich || blocksToEnrich.length === 0) return blocksToEnrich;
-
-    return await Promise.all(
-      blocksToEnrich.map(async (b) => {
-        if (b.props?.query && typeof b.props.query === 'string' && b.props.query.trim()) {
-          try {
-            let sql = b.props.query;
-            sql = sql.replace(/:scope/g, `'${scope}'`);
-            const rows = await tar.db.query(sql, [], scope);
-            if (rows && Array.isArray(rows) && rows.length > 0) {
-              if (b.type === 'metric-card' || b.type === 'stat-counter') {
-                const firstRow = rows[0];
-                const rawVal = firstRow.value !== undefined ? firstRow.value : firstRow.total !== undefined ? firstRow.total : firstRow.amount !== undefined ? firstRow.amount : (firstRow.count ?? 0);
-                const formattedVal = b.props?.valueFormat === 'currency'
-                  ? `$${Number(rawVal).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                  : String(rawVal);
-                return {
-                  ...b,
-                  props: {
-                    ...b.props,
-                    value: formattedVal,
-                    unit: firstRow.count !== undefined ? `${firstRow.count} records` : b.props?.unit,
-                    data: rows,
-                  },
-                };
-              }
-              if (b.type === 'stock-sheet') {
-                const mappedItems = rows.map((r: any) => ({
-                  id: r.id,
-                  name: r.title || r.name || 'Item',
-                  stock: Number(r.qty ?? r.stock ?? 0),
-                  threshold: Number(r.min_qty ?? r.threshold ?? 5),
-                  price: Number(r.price || 0),
-                }));
-                return { ...b, props: { ...b.props, items: mappedItems } };
-              }
-              if (b.type === 'task-inbox') {
-                const mappedTasks = rows.map((r: any) => ({
-                  id: r.id,
-                  title: r.title || r.name || 'Task',
-                  status: r.status || 'pending',
-                  data: r.data,
-                }));
-                return { ...b, props: { ...b.props, tasks: mappedTasks } };
-              }
-              if (b.type === 'contact-card') {
-                return { ...b, props: { ...b.props, contacts: rows, contact: rows[0] } };
-              }
-              if (b.type === 'pipeline-card') {
-                return { ...b, props: { ...b.props, deals: rows } };
-              }
-              if (b.type === 'data-grid' || b.type === 'data-table') {
-                return { ...b, props: { ...b.props, data: rows } };
-              }
-            }
-          } catch (qErr) {
-            console.warn('[CanvasCustomizer] Live query warning:', qErr);
-          }
-        }
-        return b;
-      })
-    );
-  }, [scope]);
+  // Canvas is presentation-only. Tarai resolves registered data views; this
+  // app never evaluates SQL supplied through OKF, AI output, or a channel.
+  const enrichBlocksWithLiveDb = useCallback(async (blocksToEnrich: CanvasBlock[]) => blocksToEnrich, []);
 
   useEffect(() => {
     if (visible && scope) {
@@ -345,7 +284,7 @@ export default function CanvasCustomizerModal({
     }
   }, [visible, scope]);
 
-  // Voice recording with Groq Whisper (<300ms, genuiteam.md §5)
+  // Voice transcription for a reviewed canvas patch (matter.md §9).
   const handleVoiceToggle = async () => {
     if (isRecording) {
       setIsRecording(false);

@@ -84,11 +84,11 @@ export class WhatsAppChannelAdapter {
       const text = msg.text?.body || '';
       const from = msg.from;
 
-      // 2. Check deduplication key in idempotency_records
+      // 2. Check deduplication key in request table
       const idempKey = `wa_msg_${msgId}`;
       const existing = await this.client.execute({
-        sql: `SELECT * FROM idempotency_records WHERE workspace_id = ? AND key = ?`,
-        args: [workspaceId, idempKey],
+        sql: `SELECT * FROM request WHERE idem = ?`,
+        args: [idempKey],
       });
 
       if (existing.rows.length > 0) {
@@ -96,13 +96,13 @@ export class WhatsAppChannelAdapter {
         return { status: 'duplicate_ignored', replies: [] };
       }
 
-      // Record message as processed in idempotency_records
-      const now = new Date().toISOString();
-      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+      // Record message as processed in request table
+      const now = Date.now();
       await this.client.execute({
-        sql: `INSERT INTO idempotency_records (key, workspace_id, action_type, payload_hash, status, response, created_at, expires_at)
-              VALUES (?, ?, 'whatsapp.inbound', ?, 'completed', ?, ?, ?)`,
-        args: [idempKey, workspaceId, msgId, JSON.stringify({ from, text }), now, expiresAt],
+        sql: `INSERT INTO request (idem, actor, action, payload_hash, status, response, created, completed)
+              VALUES (?, ?, 'whatsapp.inbound', ?, 2, ?, ?, ?)
+              ON CONFLICT(idem) DO NOTHING`,
+        args: [idempKey, from, msgId, JSON.stringify({ from, text }), now, now],
       });
 
       // 3. Dispatch based on message content

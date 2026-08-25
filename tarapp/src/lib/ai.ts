@@ -1,22 +1,12 @@
 /**
  * AI helpers for product management.
  *
- * Uses the ASI1-mini model via an OpenAI-compatible chat-completions endpoint.
- *
- * SECURITY: a key bundled in a client app is extractable. For production this
- * call should be proxied through a Cloudflare Worker (see docs/architecture/06-ai.md),
- * which also adds the AI Gateway + semantic cache tiers. The inline fallback key
- * exists only so the prototype runs without extra setup.
+ * Model calls belong to Tarai. This client keeps only deterministic parsing and
+ * UI helpers; it must never embed an AI provider credential.
  */
 
 import { z } from 'zod';
 
-const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions';
-const GROQ_MODEL = 'openai/gpt-oss-120b';
-const GROQ_API_KEY = process.env.EXPO_PUBLIC_GROQ_API_KEY || '';
-if (!GROQ_API_KEY) {
-  console.warn('[AI] Missing EXPO_PUBLIC_GROQ_API_KEY');
-}
 
 export interface ActionDef {
   id: string;
@@ -112,40 +102,9 @@ function extractJson(text: string): any {
 }
 
 export async function chatCompletion(systemPrompt: string, userPrompt: string): Promise<string> {
-  console.log(`[AI] chatCompletion - endpoint: ${GROQ_ENDPOINT}`);
-  console.log(`[AI] chatCompletion - model: ${GROQ_MODEL}`);
-  console.log(`[AI] chatCompletion - userPrompt: ${userPrompt.slice(0, 100)}`);
-
-  const res = await fetch(GROQ_ENDPOINT, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${GROQ_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model: GROQ_MODEL,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
-      ],
-      reasoning_effort: 'medium',
-    }),
-  });
-
-  console.log(`[AI] chatCompletion - HTTP status: ${res.status}`);
-
-  if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    console.error(`[AI] HTTP ${res.status}: ${body.slice(0, 500)}`);
-    throw new Error(`AI request failed (${res.status})`);
-  }
-
-  const json = await res.json();
-  console.log(`[AI] chatCompletion - response keys:`, Object.keys(json));
-  const content: string = json?.choices?.[0]?.message?.content ?? '';
-  console.log(`[AI] chatCompletion - content length: ${content.length}`);
-  if (!content) throw new Error('Empty AI response');
-  return content;
+  void systemPrompt;
+  void userPrompt;
+  throw new Error('AI assistance is not configured in Tarai yet. Provider credentials are never stored in TarApp.');
 }
 
 /**

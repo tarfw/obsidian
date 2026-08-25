@@ -1,49 +1,107 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useDb } from '@/db/provider';
+import { toGraphRelCode, GRAPH_KIND_NAMES } from '@/constants/types-config';
+import { tar } from '@/lib/tar';
 
 export interface GraphRow {
+  id?: string;
+  source: string;
+  target: string;
+  kind: number;
+  kindName?: string;
   src: string;
-  rel: number | string;
   tgt: string;
-  data?: string;
-  scope?: string;
+  rel: number;
+  data?: Record<string, unknown>;
+  version?: number;
+  created?: number;
+  updated?: number;
   created_at?: string;
-  deleted_at?: string;
+  deleted_at?: number | null;
 }
 
-export function useGraph(src?: string, rel?: string | number) {
+function parseGraphRow(row: any): GraphRow {
+  let data: Record<string, unknown> = {};
+  if (typeof row.data === 'string') {
+    try { data = JSON.parse(row.data); } catch { data = {}; }
+  } else if (typeof row.data === 'object' && row.data !== null) {
+    data = row.data;
+  }
+
+  const source = String(row.source || row.src || '');
+  const target = String(row.target || row.tgt || '');
+  const kind = typeof row.kind === 'number' ? row.kind : (typeof row.rel === 'number' ? row.rel : toGraphRelCode(row.kind || row.rel));
+
+  return {
+    id: row.id,
+    source,
+    target,
+    kind,
+    kindName: GRAPH_KIND_NAMES[kind] || String(kind),
+    src: source,
+    tgt: target,
+    rel: kind,
+    data,
+    version: row.version || 1,
+    created: typeof row.created === 'number' ? row.created : undefined,
+    updated: typeof row.updated === 'number' ? row.updated : undefined,
+    created_at: typeof row.created === 'number' ? new Date(row.created).toISOString() : (row.created_at || ''),
+    deleted_at: row.deleted_at || null,
+  };
+}
+
+export function useGraph(sourceId?: string, kindRel?: string | number, scope?: string) {
   const db = useDb();
   const [rows, setRows] = useState<GraphRow[]>([]);
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
-    let query = 'SELECT * FROM graph WHERE deleted_at IS NULL';
-    const params: any[] = [];
-    if (src) { query += ' AND src = ?'; params.push(src); }
-    if (rel !== undefined) { query += ' AND rel = ?'; params.push(rel); }
-    query += ' ORDER BY created_at DESC';
-    setRows(await db.getAllAsync<GraphRow>(query, params).catch(() => []));
-    setLoading(false);
-  }, [db, src, rel]);
+    try {
+      let query = 'SELECT * FROM graph WHERE deleted_at IS NULL';
+      const params: any[] = [];
+      if (sourceId) {
+        query += ' AND (source = ? OR target = ?)';
+        params.push(sourceId, sourceId);
+      }
+      if (kindRel !== undefined) {
+        query += ' AND kind = ?';
+        params.push(typeof kindRel === 'number' ? kindRel : toGraphRelCode(kindRel));
+      }
+      query += ' ORDER BY updated DESC';
+      const rawRows = await db.getAllAsync<any>(query, params).catch(() => []);
+      setRows(rawRows.map(parseGraphRow));
+    } catch (e) {
+      console.warn('[useGraph] query error:', e);
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [db, sourceId, kindRel]);
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { refresh(); }, [refresh]);
 
-  const link = useCallback(async (srcId: string, tgtId: string, linkRel: string | number) => {
-    await db.runAsync(
-      'INSERT OR REPLACE INTO graph (src, rel, tgt, created_at) VALUES (?, ?, ?, ?)',
-      srcId, linkRel, tgtId, new Date().toISOString()
-    );
+  const link = useCallback(async (srcId: string, tgtId: string, linkKind: string | number) => {
+    await tar.tool('create', {
+      table: 'graph',
+      source: srcId,
+      target: tgtId,
+      kind: linkKind,
+      scope: scope || 'p',
+    }).catch((e) => console.warn('[useGraph] link failed:', e));
     await refresh();
-  }, [db, refresh]);
+  }, [refresh, scope]);
 
-  const unlink = useCallback(async (srcId: string, tgtId: string, linkRel: string | number) => {
-    await db.runAsync(
-      'UPDATE graph SET deleted_at = ? WHERE src = ? AND rel = ? AND tgt = ?',
-      new Date().toISOString(), srcId, linkRel, tgtId
-    );
+  const unlink = useCallback(async (srcId: string, tgtId: string, linkKind: string | number) => {
+    await tar.tool('delete', {
+      table: 'graph',
+      source: srcId,
+      target: tgtId,
+      kind: linkKind,
+      scope: scope || 'p',
+    }).catch((e) => console.warn('[useGraph] unlink failed:', e));
     await refresh();
-  }, [db, refresh]);
+  }, [refresh, scope]);
 
   return { rows, loading, refresh, link, unlink };
 }
+

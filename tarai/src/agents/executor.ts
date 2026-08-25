@@ -73,7 +73,17 @@ export async function executeAgent(
   if (action === 'site.generate') {
     const title = text(input.title, 'Workspace');
     const draft = await site.planAndDraft(space, run, title, await factSlices(resources.data));
-    return { action, summary: 'Site draft generated', data: { job: run, render: draft.renderKey, draft: `/workspaces/${space}/site/drafts/${run}.html` } };
+    return {
+      action,
+      summary: 'Site draft generated',
+      data: {
+        job: run,
+        render: draft.renderKey,
+        plan: draft.plan,
+        // Draft artifacts are deliberately private. The mobile app can only
+        // promote a completed job through the authenticated publish action.
+      },
+    };
   }
   if (action === 'site.edit') {
     const job = text(input.job);

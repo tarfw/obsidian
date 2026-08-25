@@ -5,7 +5,9 @@ import type { AuthContext } from './domain/types.ts';
 import { ControlRepository } from './control/control.ts';
 import { ControlError, type AgentRun, type ControlSpace } from './control/types.ts';
 import { createDatabaseClientForHost } from './data/turso.ts';
+import { createReadToken } from './data/platform.ts';
 import { TenantRepository, type TenantTable } from './data/repositories/tenant.ts';
+import { ApprovalRepository } from './data/repositories/approval.ts';
 import { R2StorageService, type R2BucketBinding } from './data/r2.ts';
 import { KVCacheService, type KVNamespaceBinding } from './data/kv.ts';
 import { createRazorpayOrder, verifyRazorpayWebhook } from './payments/razorpay.ts';
@@ -95,14 +97,14 @@ async function enqueueProjection(env: Env, input: ProjectionParams): Promise<voi
   await env.PROJECTION_WORKFLOW.createBatch([{ id: `projection-${input.id}`, params: input }]);
 }
 
-function present(row: { id: string; type: string; data: Record<string, unknown>; state?: string; ref?: string | null; created: number; updated?: number }) {
+function present(row: { id: string; type: string | number; data: Record<string, unknown>; state?: string | number; status?: string | number; ref?: string | null; created?: number; updated?: number; [key: string]: unknown }) {
   return {
     ...row.data,
     id: row.id,
-    type: row.type,
+    type: String(row.type),
     data: row.data,
     state: row.state,
-    status: row.data.status || row.state,
+    status: row.status || (row.data ? (row.data as any).status : undefined) || row.state,
     ref: row.ref,
     created_at: row.created,
     updated_at: row.updated,
@@ -278,7 +280,17 @@ app.use('/api/*', async (c, next) => {
   const token = c.env.TURSO_AUTH_TOKEN;
   const personal = user.host && token ? createDatabaseClientForHost(user.host, token) : undefined;
   c.set('personal', personal);
-  const identityOnly = new Set(['/api/workspaces', '/api/wallet', '/api/ledger', '/api/agents', '/api/packs', '/api/payments/order', '/api/dev/credits']);
+  const identityOnly = new Set([
+    '/api/workspaces',
+    '/api/wallet',
+    '/api/ledger',
+    '/api/agents',
+    '/api/packs',
+    '/api/payments/order',
+    '/api/dev/credits',
+    '/api/sync/token',
+    '/api/sync/bootstrap',
+  ]);
   const restorePath = /^\/api\/workspaces\/[^/]+\/restore$/.test(c.req.path);
   if (identityOnly.has(c.req.path) || restorePath) {
     try { await next(); } finally { personal?.close(); }
@@ -454,48 +466,187 @@ app.post('/api/intent', async (c) => {
   }
 });
 
+app.get('/api/sync/token', async (c) => {
+  const user = await new ControlRepository(c.env.CONTROL).getUser(c.get('identity').userId);
+  if (!user || !user.host || !user.db || user.state !== 'active') {
+    return c.json({ error: 'Personal database is still being provisioned' }, 409);
+  }
+  const token = await createReadToken(c.env, user.db);
+  return c.json({
+    url: `libsql://${user.host}`,
+    token,
+    host: user.host,
+    db: user.db,
+    expiresAt: Date.now() + 3600 * 1000,
+  });
+});
+
+app.get('/api/sync/bootstrap', async (c) => {
+  const user = await new ControlRepository(c.env.CONTROL).getUser(c.get('identity').userId);
+  if (!user || !user.host || !user.db || user.state !== 'active') {
+    return c.json({ error: 'Personal database is still being provisioned' }, 409);
+  }
+  const token = await createReadToken(c.env, user.db);
+  return c.json({
+    url: `libsql://${user.host}`,
+    token,
+    host: user.host,
+    db: user.db,
+    expiresAt: Date.now() + 3600 * 1000,
+  });
+});
+
 app.post('/api/entities/:operation', async (c) => {
   const auth = c.get('auth');
   const operation = c.req.param('operation');
   const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
   const table = (typeof body.table === 'string' ? body.table : 'matter') as TenantTable;
-  if (!['matter', 'motion', 'graph', 'inbox'].includes(table)) return c.json({ error: 'Unsupported collection' }, 400);
+  if (!['matter', 'motion', 'graph', 'inbox', 'projection'].includes(table)) return c.json({ error: 'Unsupported collection' }, 400);
+  const isWorkspace = !auth.workspaceId.startsWith('personal:');
+  const isPrivileged = auth.role === 'owner' || auth.role === 'admin';
   const database = table === 'inbox' ? c.get('personal') : c.get('data');
   if (!database) return c.json({ error: 'Personal database is being prepared' }, 409);
   const repo = new TenantRepository(database);
+
   if (operation === 'read' || operation === 'search') {
+    // Members never receive a direct Workspace DB read. Their results come
+    // from the minimum personal projections created by Tarai policy.
+    if (isWorkspace && !isPrivileged) {
+      if (!c.get('personal') || !['matter', 'motion', 'graph', 'projection'].includes(table)) return c.json({ error: 'This record class is not available in your personal projection' }, 403);
+      const rows = await new TenantRepository(c.get('personal')!).list('projection', {
+        workspace_id: auth.workspaceId,
+        type: body.type !== undefined ? body.type as string | number : undefined,
+      });
+      const filtered = operation === 'search' && typeof body.query === 'string'
+        ? rows.filter((row) => JSON.stringify(row.data).toLowerCase().includes(body.query.toLowerCase()))
+        : rows;
+      return c.json({ rows: filtered });
+    }
     let rows = await repo.list(table, {
       id: typeof body.id === 'string' ? body.id : undefined,
-      type: typeof body.type === 'string' ? body.type : undefined,
+      type: body.type !== undefined ? (body.type as string | number) : undefined,
       ref: typeof body.ref === 'string' ? body.ref : undefined,
       space: auth.workspaceId,
+      workspace_id: auth.workspaceId,
+      user_id: auth.userId,
     });
     if (operation === 'search' && typeof body.query === 'string') {
       const query = body.query.toLowerCase();
       rows = rows.filter((row) => JSON.stringify(row.data).toLowerCase().includes(query));
     }
-    return c.json({ rows: rows.map(present) });
+    return c.json({ rows });
   }
+
+  const idem = c.req.header('Idempotency-Key') || (typeof body.idem === 'string' ? body.idem : '');
+  if (!idem || idem.length > 128) return c.json({ error: 'Idempotency-Key is required' }, 400);
+  if (isWorkspace && !isPrivileged) return c.json({ error: 'Workspace writes require an explicit capability' }, 403);
+
   if (operation === 'create' || operation === 'insert') {
     const data = entityData(body);
-    if (table === 'graph') {
-      if (typeof body.source !== 'string' || typeof body.target !== 'string' || typeof body.kind !== 'string') return c.json({ error: 'Graph source, target and kind are required' }, 400);
-      return c.json({ row: await repo.link({ id: `grf_${crypto.randomUUID()}`, source: body.source, target: body.target, kind: body.kind, data }) }, 201);
+    const result = await repo.executeIdempotentMutation({
+      idem,
+      actor: auth.userId,
+      action: `entity.create.${table}`,
+      payload: { table, data, body },
+      mutate: async (transactionalRepo) => {
+        if (table === 'graph') {
+          const src = typeof body.source === 'string' ? body.source : String(body.src || '');
+          const tgt = typeof body.target === 'string' ? body.target : String(body.tgt || '');
+          const kind = body.kind !== undefined ? (body.kind as string | number) : (body.rel as string | number) || 1;
+          if (!src || !tgt) throw new Error('Graph source and target are required');
+          const id = `grf_${crypto.randomUUID()}`;
+          const row = await transactionalRepo.linkGraph({ id, source: src, target: tgt, kind, data });
+          await transactionalRepo.appendMotion({ id: `mot_${crypto.randomUUID()}`, type: 123, actor: auth.userId, ref: row.id, data: { action: 'graph.link', source: src, target: tgt, kind }, idem: `${idem}:motion` });
+          return row;
+        }
+        if (table === 'inbox') {
+          const id = `ibx_${crypto.randomUUID()}`;
+          const row = await transactionalRepo.createInboxItem({
+            id,
+            userId: auth.userId,
+            workspaceId: auth.workspaceId.startsWith('personal:') ? undefined : auth.workspaceId,
+            type: (body.type as string | number) || 1,
+            title: String(body.title || 'Notification'),
+            ref: typeof body.ref === 'string' ? body.ref : undefined,
+            priority: typeof body.priority === 'number' ? body.priority : 1,
+            data,
+          });
+          await transactionalRepo.appendMotion({ id: `mot_${crypto.randomUUID()}`, type: 123, actor: auth.userId, ref: row.id, data: { action: 'inbox.create' }, idem: `${idem}:motion` });
+          return row;
+        }
+        if (table === 'motion') {
+          const id = `mot_${crypto.randomUUID()}`;
+          return transactionalRepo.appendMotion({
+            id,
+            type: (body.type as string | number) || 101,
+            actor: auth.userId,
+            ref: typeof body.ref === 'string' ? body.ref : undefined,
+            data,
+            idem,
+          });
+        }
+        // Default: matter
+        const id = typeof body.id === 'string' ? body.id : `mat_${crypto.randomUUID()}`;
+        const row = await transactionalRepo.createMatter({
+          id,
+          type: (body.type as string | number) || 1,
+          data,
+          state: typeof body.state === 'number' ? body.state : 1,
+        });
+
+        await transactionalRepo.appendMotion({ id: `mot_${crypto.randomUUID()}`, type: 123, actor: auth.userId, ref: row.id, data: { action: 'matter.create', type: row.type }, idem: `${idem}:motion` });
+
+        return row;
+      },
+    });
+
+    if (!auth.workspaceId.startsWith('personal:') && table === 'matter' && result.response) {
+      const row = result.response as any;
+      await enqueueProjection(c.env, { id: row.id, space: auth.workspaceId, type: `matter.${row.typeName || row.type}`, ref: row.id, data: row, sourceVersion: row.version });
     }
-    const id = `${table.slice(0, 3)}_${crypto.randomUUID()}`;
-    const row = await repo.create(table, { id, type: String(body.type || table), data, actor: auth.userId, ref: typeof body.ref === 'string' ? body.ref : undefined, space: auth.workspaceId });
-    if (table !== 'inbox') await enqueueProjection(c.env, { id, space: auth.workspaceId, type: table === 'motion' ? row.type : `matter.${row.type}`, ref: id, data: present(row) });
-    return c.json({ id, row: present(row) }, 201);
+
+    return c.json({ id: (result.response as any)?.id, row: result.response }, 201);
   }
+
   if (operation === 'update' || operation === 'delete') {
     if (table !== 'matter' && table !== 'inbox') return c.json({ error: `${table} records are immutable` }, 400);
     if (typeof body.id !== 'string') return c.json({ error: 'Record id is required' }, 400);
-    const patch = operation === 'delete' ? { state: 'deleted' } : (typeof body.patch === 'object' && body.patch ? body.patch as Record<string, unknown> : {});
-    const row = await repo.update(table, body.id, patch);
-    if (!row) return c.json({ error: 'Record not found' }, 404);
-    if (table === 'matter') await enqueueProjection(c.env, { id: `update-${body.id}-${row.updated}`, space: auth.workspaceId, type: `matter.${row.type}`, ref: row.id, data: present(row) });
-    return c.json({ row: present(row) });
+
+    const result = await repo.executeIdempotentMutation({
+      idem,
+      actor: auth.userId,
+      action: `entity.${operation}.${table}`,
+      payload: { id: body.id, operation, patch: body.patch, body },
+      mutate: async (transactionalRepo) => {
+        if (operation === 'delete') {
+          if (table === 'inbox') throw new Error('Inbox items cannot be deleted through this endpoint');
+          const deleted = await transactionalRepo.softDeleteMatter(body.id as string);
+          if (!deleted) throw new Error('Record not found');
+          await transactionalRepo.appendMotion({ id: `mot_${crypto.randomUUID()}`, type: 123, actor: auth.userId, ref: body.id as string, data: { action: 'matter.delete' }, idem: `${idem}:motion` });
+          return { id: body.id, deleted: true };
+        }
+
+        const patch = typeof body.patch === 'object' && body.patch ? body.patch as Record<string, unknown> : body;
+        const row = table === 'inbox'
+          ? await transactionalRepo.updateInboxItem(body.id as string, { status: typeof patch.status === 'number' ? patch.status : undefined, expectedVersion: typeof body.expectedVersion === 'number' ? body.expectedVersion : undefined })
+          : await transactionalRepo.updateMatter(body.id as string, { data: patch, state: patch.state as number | string | undefined, expectedVersion: typeof body.expectedVersion === 'number' ? body.expectedVersion : undefined });
+        if (!row) throw new Error('Record not found');
+        await transactionalRepo.appendMotion({ id: `mot_${crypto.randomUUID()}`, type: 123, actor: auth.userId, ref: row.id, data: { action: `${table}.update` }, idem: `${idem}:motion` });
+        return row;
+      },
+    });
+
+    if (!auth.workspaceId.startsWith('personal:') && table === 'matter') {
+      if (operation === 'delete') await enqueueProjection(c.env, { id: body.id as string, space: auth.workspaceId, type: 'matter.deleted', data: { id: body.id }, isDeleted: true });
+      else if (result.response) {
+        const row = result.response as any;
+        await enqueueProjection(c.env, { id: row.id, space: auth.workspaceId, type: `matter.${row.typeName || row.type}`, ref: row.id, data: row, sourceVersion: row.version });
+      }
+    }
+
+    return c.json({ row: result.response });
   }
+
   return c.json({ error: 'Unsupported operation' }, 400);
 });
 
@@ -507,6 +658,9 @@ app.get('/api/metrics', async (c) => {
 });
 
 app.post('/api/tools/:name', async (c) => {
+  if (!c.get('auth').workspaceId.startsWith('personal:') && c.get('auth').role !== 'owner' && c.get('auth').role !== 'admin') {
+    return c.json({ error: 'Workspace tool requires an explicit capability' }, 403);
+  }
   const name = c.req.param('name');
   const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
   const repo = new TenantRepository(c.get('data'));
@@ -517,23 +671,22 @@ app.post('/api/tools/:name', async (c) => {
     return c.json({ success: true, data: { total: rows.length } });
   }
   if (name === 'task.create') {
-    const row = await repo.create('matter', { id: `mat_${crypto.randomUUID()}`, type: 'task', data: body, actor: c.get('auth').userId });
-    await enqueueProjection(c.env, { id: row.id, space: c.get('auth').workspaceId, type: 'matter.task', ref: row.id, data: present(row) });
+    const row = await repo.createMatter({ id: `mat_${crypto.randomUUID()}`, type: 'task', data: body });
+    await enqueueProjection(c.env, { id: row.id, space: c.get('auth').workspaceId, type: 'matter.task', ref: row.id, data: present(row), sourceVersion: row.version });
     return c.json({ success: true, data: present(row) }, 201);
   }
   if (name === 'task.update' || name === 'task.archive' || name === 'inventory.correct') {
     if (typeof body.id !== 'string') return c.json({ error: 'Record id is required' }, 400);
     if (name === 'task.archive' && c.get('auth').role !== 'owner' && c.get('auth').role !== 'admin') {
-      const approval = await repo.create('matter', {
+      const approval = await repo.createMatter({
         id: `apr_${crypto.randomUUID()}`,
         type: 'approval',
         data: { status: 'pending', action: name, target: body.id, payload: body, requestedBy: c.get('auth').userId },
-        actor: c.get('auth').userId,
       });
       return c.json({ success: true, status: 'staged_for_approval', approval: present(approval) }, 202);
     }
     const patch = name === 'task.archive' ? { state: 'archived' } : (typeof body.patch === 'object' && body.patch ? body.patch as Record<string, unknown> : body);
-    const row = await repo.update('matter', body.id, patch);
+    const row = await repo.updateMatter(body.id, { data: patch, state: patch.state as number | string | undefined });
     if (!row) return c.json({ error: 'Record not found' }, 404);
     return c.json({ success: true, data: present(row) });
   }
@@ -541,8 +694,8 @@ app.post('/api/tools/:name', async (c) => {
 });
 
 app.get('/api/approvals', async (c) => {
-  const rows = await new TenantRepository(c.get('data')).list('matter', { type: 'approval' });
-  return c.json(rows.filter((row) => row.state === 'pending' || row.data.status === 'pending').map(present));
+  if (c.get('auth').workspaceId.startsWith('personal:')) return c.json([]);
+  return c.json(await new ApprovalRepository(c.get('data')).listPending(c.get('auth').workspaceId));
 });
 
 app.post('/api/approvals/:id/decide', async (c) => {
@@ -550,19 +703,13 @@ app.post('/api/approvals/:id/decide', async (c) => {
   if (auth.role !== 'owner' && auth.role !== 'admin') return c.json({ error: 'Only owners and admins can decide approvals' }, 403);
   const body = await c.req.json().catch(() => ({}));
   if (body.decision !== 'approved' && body.decision !== 'rejected') return c.json({ error: 'Decision must be approved or rejected' }, 400);
-  const repo = new TenantRepository(c.get('data'));
-  const [pending] = await repo.list('matter', { id: c.req.param('id'), type: 'approval' });
+  const approvals = new ApprovalRepository(c.get('data'));
+  const pending = await approvals.findById(auth.workspaceId, c.req.param('id'));
   if (!pending) return c.json({ error: 'Approval not found' }, 404);
-  if (pending.data.status !== 'pending') return c.json({ error: 'Approval has already been decided' }, 409);
-  let effect: Record<string, unknown> | null = null;
-  if (body.decision === 'approved' && pending.data.action === 'task.archive' && typeof pending.data.target === 'string') {
-    const target = await repo.update('matter', pending.data.target, { state: 'archived' });
-    if (!target) return c.json({ error: 'Approval target no longer exists' }, 409);
-    effect = present(target);
-  }
-  const row = await repo.update('matter', pending.id, { status: body.decision, state: body.decision, reason: body.reason || '', decidedBy: auth.userId });
-  await repo.create('motion', { id: `mot_${crypto.randomUUID()}`, type: 'approval.decided', data: { decision: body.decision, reason: body.reason || '', effect }, actor: auth.userId, ref: pending.id });
-  return c.json({ updated: true, approval: present(row!), effect });
+  if (pending.status !== 'pending') return c.json({ error: 'Approval has already been decided' }, 409);
+  const decided = await approvals.decide(auth.workspaceId, pending.id, body.decision, auth.userId, typeof body.reason === 'string' ? body.reason : undefined);
+  if (!decided) return c.json({ error: 'Approval could not be decided' }, 409);
+  return c.json({ updated: true, approval: await approvals.findById(auth.workspaceId, pending.id) });
 });
 
 app.post('/api/sales/query', async (c) => {

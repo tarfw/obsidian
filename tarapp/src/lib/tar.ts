@@ -13,6 +13,37 @@ export interface WorkspaceSummary {
   state: 'provisioning' | 'active' | 'grace' | 'readonly' | 'archived' | 'cold' | 'restoring' | 'error';
 }
 
+export interface WorkspaceOnboardingOption {
+  id: string;
+  label: string;
+  icon: string;
+}
+
+export interface WorkspaceCategory extends WorkspaceOnboardingOption {
+  keywords: string[];
+  suggestedName: string;
+  activities: string[];
+  priorities: string[];
+  actions: string[];
+}
+
+export interface WorkspaceBlueprintCatalog {
+  version: number;
+  categories: WorkspaceCategory[];
+  activities: WorkspaceOnboardingOption[];
+  priorities: WorkspaceOnboardingOption[];
+  actions: Array<WorkspaceOnboardingOption & { target?: string }>;
+}
+
+export interface WorkspaceOnboardingInput {
+  category: string;
+  activities: string[];
+  priorities: string[];
+  actions: string[];
+  audience: 'solo' | 'team';
+  note?: string;
+}
+
 export interface CreditWallet { id: string; user: string; balance: number; }
 export interface CreditPack { id: string; credits: number; price: number; currency: string; }
 export interface AgentRate { id: string; name: string; action: string; credits: number; version: number; }
@@ -84,7 +115,7 @@ function knowledgePath(path: string): string {
   return path.split('/').filter(Boolean).map(encodeURIComponent).join('/');
 }
 
-async function createWorkspace(data: { name: string; subdomain: string; description?: string; message?: string; modules?: string[]; type?: string }) {
+async function createWorkspace(data: { name: string; subdomain: string; onboarding?: WorkspaceOnboardingInput; description?: string; message?: string; modules?: string[]; type?: string }) {
   const created = await request<{ workspace: WorkspaceSummary }>('/api/workspaces', {
     method: 'POST',
     body: data,
@@ -127,6 +158,8 @@ export const tar = {
   search: (query: string, scope = 'p') => entityOperation('search', { table: 'matter', query, scope }),
   listTeams: () => Promise.resolve([]),
   createWorkspace,
+  workspaceBlueprints: () => request<WorkspaceBlueprintCatalog>('/api/workspace-blueprints'),
+  suggestWorkspace: (query: string) => request<{ category: string; activities: string[]; source: 'catalog' | 'ai' | 'fallback' }>('/api/workspace-blueprints/suggest', { method: 'POST', body: { query } }),
   listWorkspaces: (_email?: string) => request<{ workspaces: WorkspaceSummary[] }>('/api/workspaces'),
   wallet: () => request<{ wallet: CreditWallet | null }>('/api/wallet'),
   ledger: () => request<{ ledger: CreditLedgerEntry[] }>('/api/ledger'),
@@ -153,6 +186,7 @@ export const tar = {
   getInbox: (scope: string) => entityOperation('read', { table: 'inbox', scope }),
   markTaskDone: (taskId: string, scope: string) => entityOperation('update', { table: 'inbox', id: taskId, patch: { status: 2 }, scope }),
   getSyncBootstrap: () => request<{ url: string; token: string; host: string; db: string; expiresAt: number }>('/api/sync/bootstrap'),
+  metrics: (scope: string) => request<{ view: string; rows: Array<{ value: number; count: number }> }>(`/api/data-views/metrics.get`, { scope }),
   timeline: (_opts?: { limit?: number; since?: string }) => Promise.resolve([]),
   okf: {
     read: (scope: string, path: string) => request<{ path: string; content: string }>(`/api/knowledge/${knowledgePath(path)}`, { scope }),
@@ -177,6 +211,10 @@ export const tar = {
       const next = { ...canvas, blocks: (canvas.blocks || []).filter((block: any) => block.id !== module && block.type !== module) };
       return request('/api/canvas', { method: 'POST', scope, body: next });
     },
+  },
+  dataView: (scope: string, view: string, params: { limit?: number } = {}) => {
+    const query = params.limit ? `?limit=${encodeURIComponent(String(params.limit))}` : '';
+    return request<{ view: string; version: number; rows: Record<string, unknown>[]; generatedAt: number }>(`/api/data-views/${encodeURIComponent(view)}${query}`, { scope });
   },
   ai: {
     transcribe: async (_audioBase64: string, _mimeType = 'audio/m4a') => ({ text: '' }),

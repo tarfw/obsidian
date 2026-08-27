@@ -21,7 +21,7 @@ import './registry/builtins';
 import { CanvasLifeMode, CanvasBlock, CanvasDocument } from '@/lib/layout-engine';
 import { resolveIntent } from '@/lib/intent-resolver';
 import { tar } from '@/lib/tar';
-import AdBanner from '@/components/AdBanner';
+import { WorkspaceHeader, EmptyState, ContentCard, FirstAction, tokens } from '@/components/ds';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -45,11 +45,17 @@ export interface GenUIScreenProps {
     name?: string;
     role?: string;
     type?: string;
+    state?: 'provisioning' | 'active' | 'grace' | 'readonly' | 'archived' | 'cold' | 'restoring' | 'error';
   } | null;
   onSelectWorkspace?: (workspace: any) => void;
   onCreateWorkspace?: () => void;
   onOpenSwitcher?: () => void;
   onOpenCanvasCustomizer?: () => void;
+  onRenameWorkspace?: () => void;
+  assistantReply?: string | null;
+  isThinking?: boolean;
+  justCreated?: boolean;
+  welcomeActions?: Array<{ label: string; onPress: () => void; icon?: keyof typeof Ionicons.glyphMap }>;
 }
 
 const DEFAULT_LIFE_MODES: CanvasLifeMode[] = [];
@@ -89,7 +95,7 @@ function getAutoRoutineMode(modes: CanvasLifeMode[]): string {
 
 function getChipIcon(label: string): any {
   const l = (label || '').toLowerCase();
-  if (l.includes('agent') || l.includes('plan')) return 'sparkles-outline';
+  if (l.includes('agent') || l.includes('plan')) return 'extension-puzzle-outline';
   if (l.includes('customize') || l.includes('canvas')) return 'color-palette-outline';
   if (l.includes('call') || l.includes('phone')) return 'call-outline';
   if (l.includes('note') || l.includes('memo')) return 'document-text-outline';
@@ -99,7 +105,7 @@ function getChipIcon(label: string): any {
   if (l.includes('contact') || l.includes('customer') || l.includes('supplier')) return 'person-outline';
   if (l.includes('order') || l.includes('product')) return 'cart-outline';
   if (l.includes('deal') || l.includes('pipeline')) return 'git-network-outline';
-  return 'sparkles-outline';
+  return 'flash-outline';
 }
 
 export default function GenUIScreen({
@@ -107,7 +113,7 @@ export default function GenUIScreen({
   onExecuteAction,
   theme = {},
   designTokens = {},
-  infoBarText = '★ Partner Offer: 0% POS processing fees today · Tap for details',
+  infoBarText,
   onVoiceRecord,
   workspaces,
   currentWorkspace,
@@ -115,6 +121,11 @@ export default function GenUIScreen({
   onCreateWorkspace,
   onOpenSwitcher,
   onOpenCanvasCustomizer,
+  onRenameWorkspace,
+  assistantReply,
+  isThinking = false,
+  justCreated = false,
+  welcomeActions = [],
 }: GenUIScreenProps) {
   const insets = useSafeAreaInsets();
 
@@ -144,6 +155,7 @@ export default function GenUIScreen({
 
   // Slide-Up Card state
   const [slideCardVisible, setSlideCardVisible] = useState(false);
+  const [actionMenuVisible, setActionMenuVisible] = useState(false);
   const [slideCardComponent, setSlideCardComponent] = useState<{
     type: string;
     props?: Record<string, any>;
@@ -172,58 +184,48 @@ export default function GenUIScreen({
   const liveMatches = useMemo(() => {
     if (!inputText.trim()) return [];
     const q = inputText.toLowerCase();
+    const source = canvasDoc?.chips?.length ? canvasDoc.chips : [];
+    return source
+      .filter((chip: any) => chip?.label && String(chip.label).toLowerCase().includes(q))
+      .slice(0, 5);
+  }, [inputText, canvasDoc]);
 
-    const dictionary = [
-      { label: 'Check Stock', target: 'stock-sheet' },
-      { label: 'Quick POS Register', target: 'quick-pos' },
-      { label: 'View Pipeline Deals', target: 'pipeline-card' },
-      { label: 'Call Supplier', target: 'contact-card' },
-      { label: 'View Today Transactions', target: 'data-grid' },
-    ];
-
-    return dictionary.filter((d) => d.label.toLowerCase().includes(q));
-  }, [inputText]);
-
-  // Contextual Chips for active mode in idle state
+  // Contextual Chips for active mode in idle state — sourced only from the workspace profile.
   const idleChips = useMemo(() => {
-    const isOwnerOrManager = currentWorkspace?.role === 'owner' || currentWorkspace?.role === 'admin' || currentWorkspace?.role === 'manager';
-    let baseChips: any[] = [];
     if (canvasDoc?.chips && canvasDoc.chips.length > 0) {
-      baseChips = [...canvasDoc.chips];
-    } else if (currentMode?.chips && currentMode.chips.length > 0) {
-      baseChips = [...currentMode.chips];
-    } else {
-      baseChips = [
-        { label: 'New Sale', target: 'quick-pos' },
-        { label: 'Check Stock', target: 'stock-sheet' },
-        { label: 'Contacts', target: 'contact-card' },
-      ];
+      return [...canvasDoc.chips];
     }
-
-    return baseChips;
-  }, [canvasDoc, currentMode, currentWorkspace?.role, currentWorkspace?.subdomain]);
+    if (currentMode?.chips && currentMode.chips.length > 0) {
+      return [...currentMode.chips];
+    }
+    return [];
+  }, [canvasDoc, currentMode]);
 
   const handleChipPress = (chip: any) => {
-    if (chip.action === 'customize_canvas' || chip.label?.toLowerCase().includes('customize canvas')) {
+    if (chip?.action === 'customize_canvas' || String(chip?.label || '').toLowerCase().includes('customize canvas')) {
       if (onOpenCanvasCustomizer) {
         onOpenCanvasCustomizer();
         return;
       }
     }
-    if (chip.target) {
+    if (chip?.target) {
       openSlideCard(chip.target, chip.props || {}, chip.label);
-    } else if (chip.action === 'quick_pos') {
-      openSlideCard('quick-pos', {}, 'POS Register');
-    } else if (chip.label.toLowerCase().includes('stock')) {
-      openSlideCard('stock-sheet', {}, 'Stock Sheet');
-    } else if (chip.label.toLowerCase().includes('supplier') || chip.label.toLowerCase().includes('contact')) {
-      openSlideCard('contact-card', {}, 'Supplier Contact');
-    } else if (chip.label.toLowerCase().includes('order') || chip.label.toLowerCase().includes('trip')) {
-      openSlideCard('action-confirm', {}, 'Confirmation Review');
-    } else {
+      return;
+    }
+    if (chip?.action && onExecuteAction) {
+      onExecuteAction(chip.action, chip.props || {}).catch((error) => console.warn('[GenUI] Action failed:', error));
+      return;
+    }
+    if (chip?.label) {
+      console.warn('[GenUI] Chip has no target or registered action, opening as data-grid fallback', chip);
       openSlideCard('data-grid', { type: 'item' }, chip.label);
     }
   };
+
+  const availableActions = useMemo(() => {
+    const actions = canvasDoc?.actions?.length ? canvasDoc.actions : idleChips;
+    return actions.filter((item: any, index: number, list: any[]) => item?.label && list.findIndex((candidate) => candidate?.action === item?.action && candidate?.label === item?.label) === index);
+  }, [canvasDoc, idleChips]);
 
   const handleVoicePress = async () => {
     if (onVoiceRecord) {
@@ -291,6 +293,14 @@ export default function GenUIScreen({
     // Extract amount if present (e.g. "$45" or "45")
     const priceMatch = sentence.match(/\$?(\d+(?:\.\d{1,2})?)/);
     const parsedAmount = priceMatch ? parseFloat(priceMatch[1]) : 0;
+    const needsConfirmation = parsedAmount > 0 || /\b(record|log|charge|sell|pay|send|delete|remove|publish)\b/i.test(sentence);
+
+    // Questions and planning requests should go to Tar directly. They are not
+    // external actions and must not be presented as a safety review.
+    if (!needsConfirmation && onExecuteAction) {
+      onExecuteAction('chat', { message: sentence }).catch((error) => console.warn('[GenUI] Chat failed:', error));
+      return;
+    }
 
     // Open confirmation review sheet
     openSlideCard('action-confirm', {
@@ -315,6 +325,11 @@ export default function GenUIScreen({
     return rawBlocks.slice(0, 3);
   }, [currentMode, canvasDoc]);
 
+  const showStarterWelcome = useMemo(() => streamBlocks.length > 0 && streamBlocks.every((block) => {
+    const items = block.props?.tasks ?? block.props?.contacts;
+    return Array.isArray(items) && items.length === 0;
+  }), [streamBlocks]);
+
   // Registry tokens
   const tokenProps = {
     colors: designTokens?.colors || {},
@@ -332,26 +347,26 @@ export default function GenUIScreen({
       keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
       style={[styles.container, { paddingTop: insets.top }]}
     >
-      {/* ── ZONE 1: PURE MINIMAL DROPDOWN HEADER ──────────────────────── */}
-      <TouchableOpacity
-        activeOpacity={0.75}
-        onPress={() => onOpenSwitcher && onOpenSwitcher()}
-        style={styles.zone1}
-      >
-        <View style={styles.headerTopRow}>
-          <View style={styles.headerTitleCol}>
-            <Text style={styles.workspaceMainTitle} numberOfLines={2}>
-              {currentWorkspace?.name || 'Personal Workspace'}
-            </Text>
-          </View>
-          <View style={styles.dropdownCaretBtn}>
-            <Ionicons name="chevron-down" size={20} color="#0f172a" />
-          </View>
-        </View>
-      </TouchableOpacity>
-
-      {/* ── TOP AD / ECOSYSTEM SPONSOR BANNER ───────────────────────── */}
-      <AdBanner />
+      {/* ── ZONE 1: WORKSPACE HEADER (design-system component) ─────── */}
+      <WorkspaceHeader
+        title={currentWorkspace?.name || 'Personal Workspace'}
+        subtitle={
+          currentWorkspace?.state === 'provisioning' || currentWorkspace?.state === 'restoring'
+            ? 'Preparing…'
+            : currentWorkspace?.state === 'error'
+              ? 'Database setup failed'
+              : currentWorkspace?.role
+                ? currentWorkspace.role === 'owner'
+                  ? 'Owner'
+                  : currentWorkspace.role === 'admin'
+                    ? 'Admin'
+                    : 'Member'
+                : undefined
+        }
+        onOpenSwitcher={onOpenSwitcher}
+        onRename={onRenameWorkspace}
+        busy={currentWorkspace?.state === 'provisioning' || currentWorkspace?.state === 'restoring'}
+      />
 
       {/* ── ZONE 2: LIVE ACTION STREAM (Max 3 Cards) ──────────────────── */}
       <ScrollView
@@ -361,7 +376,41 @@ export default function GenUIScreen({
         keyboardDismissMode="on-drag"
         showsVerticalScrollIndicator={false}
       >
-        {streamBlocks.map((block: CanvasBlock, index: number) => {
+        {(isThinking || assistantReply) && (
+          <View style={styles.assistantCard}>
+            <View style={styles.assistantIcon}><Ionicons name="chatbox-ellipses" size={17} color={tokens.color.ink} /></View>
+            <View style={styles.assistantContent}>
+              <Text style={styles.assistantLabel}>Tar</Text>
+              {isThinking ? <View style={styles.thinkingRow}><ActivityIndicator size="small" color={tokens.color.ink} /><Text style={styles.thinkingText}>Working…</Text></View> : <Text style={styles.assistantReply}>{assistantReply}</Text>}
+            </View>
+          </View>
+        )}
+        {justCreated && welcomeActions.length > 0 ? (
+          <ContentCard
+            title={`Welcome to ${currentWorkspace?.name || 'your space'}`}
+            subtitle="This is a calm place for your everyday work. Tar will help you add what you need as you go."
+            style={styles.welcomeCard}
+          >
+            <View style={styles.welcomeActions}>
+              {welcomeActions.slice(0, 3).map((action) => (
+                <FirstAction
+                  key={action.label}
+                  icon={action.icon || 'add-circle-outline'}
+                  title={action.label}
+                  onPress={action.onPress}
+                />
+              ))}
+            </View>
+          </ContentCard>
+        ) : null}
+        {(streamBlocks.length === 0 || showStarterWelcome) && !justCreated ? (
+          <EmptyState
+            iconName="apps-outline"
+            title="No active cards yet"
+            body="Ask Tar to add tasks, products, contacts, or anything else you want to track here."
+          />
+        ) : null}
+        {!showStarterWelcome && streamBlocks.map((block: CanvasBlock, index: number) => {
           if (!hasComponent(block.type)) {
             console.warn(`[GenUI] Unknown component type: ${block.type}`);
             return null;
@@ -447,11 +496,7 @@ export default function GenUIScreen({
           {/* Plus Add Button */}
           <TouchableOpacity
             activeOpacity={0.7}
-            onPress={() => {
-              if (idleChips.length > 0) {
-                handleChipPress(idleChips[0]);
-              }
-            }}
+            onPress={() => setActionMenuVisible(true)}
             style={styles.plusBtn}
             hitSlop={6}
           >
@@ -500,6 +545,26 @@ export default function GenUIScreen({
           )}
         </View>
       </View>
+
+      <Modal visible={actionMenuVisible} transparent animationType="fade" onRequestClose={() => setActionMenuVisible(false)}>
+        <View style={styles.actionMenuBackdrop}>
+          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setActionMenuVisible(false)} />
+          <View style={[styles.actionMenu, { paddingBottom: Math.max(insets.bottom, 14) }]}>
+            <View style={styles.actionMenuHandle} />
+            <Text style={styles.actionMenuTitle}>What would you like to do?</Text>
+            <Text style={styles.actionMenuSubtitle}>Actions available in this workspace</Text>
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.actionMenuList}>
+              {availableActions.map((action, index) => (
+                <TouchableOpacity key={`${action.action || action.target || action.label}_${index}`} style={styles.actionMenuRow} onPress={() => { setActionMenuVisible(false); handleChipPress(action); }}>
+                  <View style={styles.actionMenuIcon}><Ionicons name={getChipIcon(action.label)} size={19} color="#18181b" /></View>
+                  <Text style={styles.actionMenuLabel}>{action.label}</Text>
+                  <Ionicons name="chevron-forward" size={18} color="#a1a1aa" />
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
 
       {/* ── EPHEMERAL SLIDE-UP CARD MODAL ─────────────────────────────── */}
       <Modal
@@ -569,56 +634,48 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#ffffff',
   },
-  // Zone 1: Glance Bar
-  zone1: {
-    backgroundColor: '#ffffff',
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f1f5f9',
-  },
-  headerTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    minHeight: 46,
-  },
-  headerTitleCol: {
-    flex: 1,
-    marginRight: 12,
-  },
-  workspaceMainTitle: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: '#0f172a',
-    letterSpacing: -0.4,
-    lineHeight: 28,
-  },
-  dropdownCaretBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#f8fafc',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   // Zone 2: Live Action Stream
   zone2: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: tokens.color.surface,
   },
   streamContent: {
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 36,
-    backgroundColor: '#ffffff',
+    paddingHorizontal: tokens.spacing.lg,
+    paddingTop: tokens.spacing.md,
+    paddingBottom: tokens.spacing.xl,
+    backgroundColor: tokens.color.surface,
   },
   cardWrapper: {
     marginBottom: 10,
   },
+  assistantCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 11,
+    padding: 15,
+    marginBottom: 14,
+    borderRadius: 18,
+    backgroundColor: tokens.color.surfaceSunk,
+    borderWidth: 1,
+    borderColor: tokens.color.borderSoft,
+  },
+  assistantIcon: {
+    width: 31,
+    height: 31,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 11,
+    backgroundColor: tokens.color.surface,
+    borderWidth: 1,
+    borderColor: tokens.color.borderSoft,
+  },
+  assistantContent: { flex: 1 },
+  assistantLabel: { ...tokens.type.label, color: tokens.color.inkMuted, textTransform: 'uppercase' },
+  assistantReply: { ...tokens.type.body, color: tokens.color.ink, marginTop: 4 },
+  thinkingRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 },
+  thinkingText: { color: tokens.color.ink, fontSize: 14, fontWeight: '600' },
+  welcomeCard: { marginBottom: 12 },
+  welcomeActions: { gap: 8 },
   // Zone 3: Bottom Action Dock
   zone3: {
     backgroundColor: '#ffffff',
@@ -727,6 +784,58 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  actionMenuBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.34)',
+    justifyContent: 'flex-end',
+  },
+  actionMenu: {
+    maxHeight: SCREEN_HEIGHT * 0.72,
+    backgroundColor: '#ffffff',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 18,
+    paddingTop: 10,
+  },
+  actionMenuHandle: {
+    width: 38,
+    height: 4,
+    borderRadius: 4,
+    backgroundColor: '#d4d4d8',
+    alignSelf: 'center',
+    marginBottom: 18,
+  },
+  actionMenuTitle: {
+    color: '#18181b',
+    fontSize: 20,
+    lineHeight: 26,
+    fontWeight: '800',
+    letterSpacing: -0.35,
+  },
+  actionMenuSubtitle: {
+    color: '#71717a',
+    fontSize: 13,
+    marginTop: 4,
+    marginBottom: 14,
+  },
+  actionMenuList: { paddingBottom: 10 },
+  actionMenuRow: {
+    minHeight: 58,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#e4e4e7',
+  },
+  actionMenuIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: '#f4f4f5',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionMenuLabel: { flex: 1, color: '#18181b', fontSize: 15, fontWeight: '600' },
   // Ephemeral Slide-Up Card
   modalBackdrop: {
     flex: 1,

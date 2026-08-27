@@ -1,68 +1,86 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import type { SectionProps } from '../ComponentRegistry';
 
-export interface MetricCardProps {
-  props?: {
-    title?: string;
-    subtitle?: string;
-    value?: string | number;
-    unit?: string;
-    trend?: string;
-    trendPositive?: boolean;
-    data?: number[];
-  };
-  designTokens?: any;
-}
+export default function MetricCard({ props, data = [], designTokens }: SectionProps) {
+  const rounded = designTokens?.rounded || {};
 
-export default function MetricCard({ props }: MetricCardProps) {
-  const title = props?.title || "Today's Revenue";
-  const subtitle = props?.subtitle || 'Live Operations';
-  const value = props?.value ?? '$0.00';
-  const unit = props?.unit || '0 Orders Today';
-  const trend = props?.trend;
-  const trendPositive = props?.trendPositive !== false;
+  const metric = useMemo(() => {
+    // 1. If data array is provided from data_view (e.g. sales.today rows)
+    if (Array.isArray(data) && data.length > 0) {
+      const first = data[0];
+      let totalVal = 0;
+      const historyPoints: number[] = [];
 
-  const dataPoints = Array.isArray(props?.data) ? props.data : [];
-  const maxVal = dataPoints.length > 0 ? Math.max(...dataPoints, 1) : 1;
+      data.forEach((r: any) => {
+        const val = typeof r.value === 'number' ? r.value : (Number(r.amount) || Number(r.total) || 0);
+        totalVal += val;
+        historyPoints.push(val);
+      });
+
+      return {
+        title: props?.title || first.title || "Today's Pulse",
+        subtitle: props?.subtitle || `${data.length} records today`,
+        value: typeof first.displayValue === 'string' ? first.displayValue : `₹${totalVal.toLocaleString()}`,
+        unit: props?.unit || `${data.length} activities`,
+        trend: first.trend || undefined,
+        trendPositive: first.trendPositive !== false,
+        dataPoints: historyPoints.slice(-7),
+      };
+    }
+
+    // 2. Props fallback
+    return {
+      title: props?.title || "Today's Metric",
+      subtitle: props?.subtitle || 'Live Operations',
+      value: props?.value ?? '—',
+      unit: props?.unit || 'No live data',
+      trend: props?.trend,
+      trendPositive: props?.trendPositive !== false,
+      dataPoints: Array.isArray(props?.data) ? props.data : [],
+    };
+  }, [data, props]);
+
+  const maxVal = metric.dataPoints.length > 0 ? Math.max(...metric.dataPoints, 1) : 1;
 
   return (
-    <View style={styles.card}>
-      {/* Top Header */}
+    <View style={[styles.card, { borderRadius: rounded.lg || 16 }]}>
+      {/* Header */}
       <View style={styles.headerRow}>
         <View style={styles.titleGroup}>
-          <Text style={styles.titleText}>{title.toUpperCase()}</Text>
-          <Text style={styles.subtitleText}>{subtitle}</Text>
+          <Text style={styles.titleText}>{metric.title.toUpperCase()}</Text>
+          <Text style={styles.subtitleText}>{metric.subtitle}</Text>
         </View>
-        {trend ? (
-          <View style={[styles.trendBadge, trendPositive ? styles.trendPos : styles.trendNeg]}>
+        {metric.trend ? (
+          <View style={[styles.trendBadge, metric.trendPositive ? styles.trendPos : styles.trendNeg]}>
             <Ionicons
-              name={trendPositive ? 'trending-up' : 'trending-down'}
+              name={metric.trendPositive ? 'trending-up' : 'trending-down'}
               size={12}
-              color={trendPositive ? '#059669' : '#dc2626'}
+              color={metric.trendPositive ? '#059669' : '#dc2626'}
             />
-            <Text style={[styles.trendText, trendPositive ? styles.trendTextPos : styles.trendTextNeg]}>
-              {trend}
+            <Text style={[styles.trendText, metric.trendPositive ? styles.trendTextPos : styles.trendTextNeg]}>
+              {metric.trend}
             </Text>
           </View>
         ) : null}
       </View>
 
-      {/* Main Metric Value & Trend/Unit */}
+      {/* Main Metric Value */}
       <View style={styles.metricRow}>
         <View style={{ flex: 1 }}>
           <Text style={styles.valueText} numberOfLines={1}>
-            {value}
+            {metric.value}
           </Text>
-          <Text style={styles.unitText}>{unit}</Text>
+          <Text style={styles.unitText}>{metric.unit}</Text>
         </View>
 
-        {/* Compact Clean Sparkline (only rendered if real data is provided) */}
-        {dataPoints.length > 0 ? (
+        {/* Sparkline */}
+        {metric.dataPoints.length > 0 ? (
           <View style={styles.sparklineContainer}>
-            {dataPoints.map((val, idx) => {
+            {metric.dataPoints.map((val, idx) => {
               const heightPct = Math.max(18, (val / maxVal) * 100);
-              const isLast = idx === dataPoints.length - 1;
+              const isLast = idx === metric.dataPoints.length - 1;
               return (
                 <View key={idx} style={styles.sparkCol}>
                   <View style={[styles.sparkBar, { height: `${heightPct}%` }, isLast && styles.sparkBarActive]} />
@@ -79,7 +97,6 @@ export default function MetricCard({ props }: MetricCardProps) {
 const styles = StyleSheet.create({
   card: {
     backgroundColor: '#ffffff',
-    borderRadius: 16,
     padding: 16,
     borderWidth: 1,
     borderColor: '#e2e8f0',
@@ -89,7 +106,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
-    marginBottom: 10,
+    marginBottom: 8,
   },
   titleGroup: {
     flex: 1,
@@ -99,20 +116,20 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     color: '#64748b',
-    letterSpacing: 0.8,
+    letterSpacing: 0.5,
   },
   subtitleText: {
     fontSize: 12,
     color: '#94a3b8',
-    marginTop: 1,
+    marginTop: 2,
   },
   trendBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 8,
+    gap: 4,
   },
   trendPos: {
     backgroundColor: '#ecfdf5',
@@ -134,6 +151,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     justifyContent: 'space-between',
+    marginTop: 4,
   },
   valueText: {
     fontSize: 26,
@@ -142,28 +160,28 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
   },
   unitText: {
-    fontSize: 12.5,
-    color: '#64748b',
+    fontSize: 12,
     fontWeight: '500',
+    color: '#64748b',
     marginTop: 2,
   },
   sparklineContainer: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    height: 32,
-    width: 64,
+    height: 38,
     gap: 4,
-    paddingBottom: 2,
+    paddingLeft: 12,
   },
   sparkCol: {
-    flex: 1,
-    height: '100%',
+    width: 6,
+    height: 38,
+    alignItems: 'center',
     justifyContent: 'flex-end',
   },
   sparkBar: {
-    width: '100%',
-    backgroundColor: '#e2e8f0',
+    width: 6,
     borderRadius: 3,
+    backgroundColor: '#cbd5e1',
   },
   sparkBarActive: {
     backgroundColor: '#0f172a',

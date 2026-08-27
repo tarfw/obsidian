@@ -1,52 +1,41 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import Ionicons from '@expo/vector-icons/Ionicons';
 import type { SectionProps } from '../ComponentRegistry';
 
 export default function TimelineFeed({ props, designTokens, data = [] }: SectionProps) {
-  const { title, maxItems = 10 } = props;
-  const { colors, rounded, spacing } = designTokens;
-  const items = data.slice(0, maxItems);
+  const title = props?.title || 'Timeline Feed';
+  const colors = designTokens?.colors || {};
+  const rounded = designTokens?.rounded || {};
+  const spacing = designTokens?.spacing || {};
 
   return (
-    <View style={[styles.container, { marginBottom: spacing.lg }]}>
-      {title && (
-        <Text style={[styles.title, { color: colors.primary, marginBottom: spacing.sm }]}>
-          {title}
-        </Text>
-      )}
-      {items.length === 0 ? (
-        <Text style={[styles.empty, { color: '#94a3b8' }]}>No recent activity</Text>
+    <View style={[styles.container, { marginBottom: spacing.lg || 16 }]}>
+      <Text style={[styles.title, { color: colors.primary || '#0f172a', marginBottom: spacing.sm || 8 }]}>
+        {title}
+      </Text>
+      {data.length === 0 ? (
+        <Text style={[styles.empty, { color: '#94a3b8' }]}>No timeline activity</Text>
       ) : (
-        items.map((item: any, idx: number) => (
-          <View
-            key={item.id || idx}
-            style={[
-              styles.entry,
-              {
-                borderBottomWidth: idx < items.length - 1 ? StyleSheet.hairlineWidth : 0,
-                borderBottomColor: 'rgba(0,0,0,0.05)',
-                paddingVertical: 8,
-                paddingHorizontal: 4,
-              },
-            ]}
-          >
+        <View style={styles.list}>
+          {data.map((item: any, idx: number) => (
             <View
+              key={item.id || idx}
               style={[
-                styles.dot,
-                { backgroundColor: colors.tertiary || colors.primary },
+                styles.row,
+                {
+                  backgroundColor: '#fff',
+                  borderRadius: rounded.sm || 8,
+                  borderWidth: 1,
+                  borderColor: '#e2e8f0',
+                  padding: spacing.sm || 10,
+                },
               ]}
-            />
-            <View style={styles.content}>
-              <Text style={[styles.entryTitle, { color: '#111' }]} numberOfLines={1}>
-                {item.title || item.action || 'Activity'}
-              </Text>
-              <Text style={[styles.entryTime, { color: '#94a3b8' }]} numberOfLines={1}>
-                {item.createdAt || item.time || ''}
-              </Text>
+            >
+              <Text style={styles.rowTitle}>{item.title || item.name || 'Activity'}</Text>
+              {item.subtitle && <Text style={styles.rowSub}>{item.subtitle}</Text>}
             </View>
-          </View>
-        ))
+          ))}
+        </View>
       )}
     </View>
   );
@@ -55,10 +44,9 @@ export default function TimelineFeed({ props, designTokens, data = [] }: Section
 const styles = StyleSheet.create({
   container: {},
   title: { fontSize: 13, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
-  empty: { fontSize: 13, padding: 12, textAlign: 'center' },
-  entry: { flexDirection: 'row', alignItems: 'center' },
-  dot: { width: 8, height: 8, borderRadius: 4, marginRight: 10 },
-  content: { flex: 1 },
-  entryTitle: { fontSize: 13, fontWeight: '500' },
-  entryTime: { fontSize: 11, marginTop: 1 },
+  empty: { fontSize: 12, padding: 8, color: '#94a3b8' },
+  list: { gap: 6 },
+  row: {},
+  rowTitle: { fontSize: 13, fontWeight: '600', color: '#0f172a' },
+  rowSub: { fontSize: 11, color: '#64748b', marginTop: 2 },
 });

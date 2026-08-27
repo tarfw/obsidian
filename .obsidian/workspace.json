@@ -11,14 +11,10 @@
             "id": "c5e18b854fc94cae",
             "type": "leaf",
             "state": {
-              "type": "markdown",
-              "state": {
-                "file": "revenue.md",
-                "mode": "source",
-                "source": false
-              },
+              "type": "empty",
+              "state": {},
               "icon": "lucide-file",
-              "title": "revenue"
+              "title": "New tab"
             }
           }
         ]
@@ -83,8 +79,7 @@
       }
     ],
     "direction": "horizontal",
-    "width": 300,
-    "collapsed": true
+    "width": 300
   },
   "right": {
     "id": "10dfbf46ea29c050",

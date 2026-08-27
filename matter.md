@@ -881,127 +881,152 @@ Commands such as role changes, stock corrections, refunds, publishing, or shift 
 
 ## 12. Pipeline & Business Invariants
 
-Pipeline definitions are versioned matter records. Each transition declares source stages, target stage, required role, validations, automation hooks, approval policy, timeout, and compensation behavior. An active flow pins its definition version so later edits do not change historical behavior.
+**Definition contract**
 
-### Routines and chores
+| Element | Contract |
+|---|---|
+| Pipeline definitions | Versioned matter records |
+| Each transition declares | Source stages, target stage, required role, validations, automation hooks, approval policy, timeout, compensation behavior |
+| Historical stability | An active flow pins its definition version, so later edits never change historical behavior |
 
-Cron performs only a bounded due-row scan and housekeeping. It atomically claims each due routine by creating a deterministic job, advances `next_run` exactly once, and starts the corresponding Workflow. The Workflow uses leases, bounded attempts, exponential backoff, checkpoints, and a dead-letter/reconciliation state. Each attempt emits telemetry; each business outcome emits Motion. Deploys or overlapping cron invocations cannot create a second logical job for the same routine occurrence.
+**Routine spec**
 
-A routine specifies tenant, action, schedule, timezone/DST behavior, typed configuration, policy version, capability, budget/spend cap, audience, start/end dates, and pause/disable state. Automatic execution is allowed only for actions and limits explicitly approved by policy; otherwise the routine creates an approval.
+| Element | Contract |
+|---|---|
+| A routine specifies | Tenant, action, schedule, timezone/DST behavior, typed configuration, policy version, capability, budget/spend cap, audience, start/end dates, pause/disable state |
+| Automation rule | Automatic execution only for actions and limits explicitly approved by policy; otherwise the routine creates an approval |
 
-Notifications additionally evaluate recipient, channel consent, template version, sensitivity, locale, quiet hours, frequency cap, and escalation path before creating an outbox effect.
-
-### Sales and CPQ
-
-Proposal stage -> snapshot catalog and pricing -> draft quote -> approval when required -> outbox delivery -> open/sign/payment motions. Quote and invoice totals use integer minor units and retain currency, tax, discount, and template versions.
-
-### POS and stock
-
-Accepted payment/order -> atomic stock condition check -> order state -> sale and stock motions -> receipt outbox -> low-stock evaluation. Refund and cancellation define payment reversal, stock restoration, and audit motion in one idempotent operation.
-
-### Restaurant service
-
-Order ready -> resolve active assignment/responsibility -> project minimal alert to responsible staff -> acknowledge/serve -> append motion. Reassignment emits a tombstone for the old recipient and a projection for the new recipient.
-
-### Support and SLA
-
-Inbound message -> ticket matter -> SLA deadline -> authorized knowledge retrieval -> draft response -> approval policy -> outbox send -> delivery motion -> resolution. SLA timers are durable workflows, not in-memory timers.
-
-### Reorder
-
-Stock crosses threshold -> `low_stock_detected` motion -> `supplied_by` resolution -> PO draft using current supplier terms -> approval -> outbox delivery. Repeated stock updates deduplicate against the active reorder window.
+| Flow | Sequence | Invariants |
+|---|---|---|
+| **Routines & chores** | Bounded cron due-row scan<br>→ atomically claim routine as a deterministic job<br>→ advance `next_run` exactly once<br>→ start Workflow | Cron only scans due rows + housekeeping<br>Leases, bounded attempts, backoff, checkpoints, dead-letter/reconciliation<br>Telemetry per attempt; Motion per outcome<br>Deploys/overlapping cron never create a second job per occurrence |
+| **Notifications** | Evaluate recipient + policy checks<br>→ create outbox effect | Recipient, consent, template version, sensitivity, locale, quiet hours, frequency cap, escalation path all checked first |
+| **Sales & CPQ** | Proposal<br>→ snapshot catalog + pricing<br>→ draft quote<br>→ approval when required<br>→ outbox delivery<br>→ open/sign/payment motions | Totals in integer minor units<br>Currency, tax, discount, template versions retained |
+| **POS & stock** | Accepted payment/order<br>→ atomic stock condition check<br>→ order state<br>→ sale + stock motions<br>→ receipt outbox<br>→ low-stock evaluation | Refund/cancellation = payment reversal + stock restoration + audit motion in one idempotent operation |
+| **Restaurant service** | Order ready<br>→ resolve active assignment<br>→ project minimal alert to responsible staff<br>→ acknowledge/serve<br>→ append motion | Reassignment: tombstone old recipient, project to new |
+| **Support & SLA** | Inbound message<br>→ ticket matter<br>→ SLA deadline<br>→ authorized knowledge retrieval<br>→ draft response<br>→ approval policy<br>→ outbox send<br>→ delivery motion<br>→ resolution | SLA timers are durable workflows, never in-memory |
+| **Reorder** | Stock crosses threshold<br>→ `low_stock_detected` motion<br>→ `supplied_by` resolution<br>→ PO draft on current supplier terms<br>→ approval<br>→ outbox delivery | Repeated stock updates dedupe against the active reorder window |
 
 ---
 
 ## 13. Retention, Archive & Recovery
 
-Retention is policy-driven by workspace, record class, region, and legal hold. Ninety days is a hot-storage target, not a universal deletion rule.
+Retention is policy-driven per workspace, record class, region, and legal hold; 90 days is a hot-storage target, never a universal deletion rule.
 
-- Pending inbox items remain until completed, dismissed, cancelled, or policy-resolved.
-- Completed/dismissed inbox items tombstone after 30 days and hard-delete after a further 7-day recovery window.
-- Workspace projections expire by policy, commonly 7-90 days; access revocation creates immediate tombstones.
-- Motion may move from hot storage after 90 days when allowed; financial, tax, security, healthcare, and legal records follow longer required retention.
-- Matter tombstones on delete and hard-deletes only after dependency checks, archive verification, recovery window, and legal-hold evaluation.
-- Idempotency survives the longest retry/offline horizon; financial and external-effect keys remain with their audit record.
+| Record class | Retention |
+|---|---|
+| Pending inbox items | Until completed, dismissed, cancelled, or policy-resolved |
+| Completed/dismissed inbox | Tombstone at 30 days; hard-delete after a further 7-day recovery window |
+| Workspace projections | Expire by policy, commonly 7–90 days; revocation creates immediate tombstones |
+| Motion | Leaves hot storage after 90 days when allowed; financial, tax, security, healthcare, and legal records follow longer required retention |
+| Matter | Tombstones on delete; hard-delete only after dependency checks, archive verification, recovery window, and legal-hold evaluation |
+| Idempotency keys | Survive the longest retry/offline horizon; financial and external-effect keys stay with their audit record |
 
-Archival procedure:
+```text
+ARCHIVAL PROCEDURE
 
-1. Freeze a consistent cursor or snapshot boundary.
-2. Export versioned, compressed chunks with row counts and checksums.
-3. Write and verify an R2 manifest.
-4. Test restoration of representative chunks.
-5. Hard-delete verified hot rows in bounded batches.
-6. Compact according to Turso operational guidance; soft deletion alone does not reclaim storage.
-7. Record archive and deletion motions without exposing sensitive payloads.
+1 FREEZE    consistent cursor / snapshot boundary
+2 EXPORT    versioned, compressed chunks with row counts + checksums
+3 VERIFY    R2 manifest written and verified
+4 RESTORE   test restoration of representative chunks
+5 DELETE    hard-delete verified hot rows in bounded batches
+6 COMPACT   per Turso guidance; soft deletion alone reclaims no storage
+7 RECORD    archive + deletion motions, no sensitive payloads exposed
+```
 
-D1 and every tenant database require documented point-in-time recovery, periodic restore tests, regional placement, schema-version compatibility, and recovery-time/recovery-point objectives.
+**Recovery readiness** — every D1 + tenant database requires: documented point-in-time recovery · periodic restore tests · regional placement · schema-version compatibility · recovery-time/recovery-point objectives.
 
 ---
 
 ## 14. Security, Privacy & Operations
 
-### Security
+**Hard rules**
 
-- No AI provider, Turso platform, database write, payment, messaging, or R2 secret is compiled into TarApp or stored in an `EXPO_PUBLIC_*` variable.
-- Personal sync tokens are read-only, database-scoped, and short-lived. Tarai can revoke further issuance immediately; already issued tokens expire quickly.
-- Sensitive local files are encrypted and keys live in platform secure storage.
-- All external input is size-limited, schema-validated, rate-limited, and treated as untrusted—including AI output and OKF content.
-- Logs redact tokens, message bodies, health data, payment data, and compact JSON payloads by default.
-- Regulated modules require consent, purpose limitation, regional controls, access auditing, export/deletion workflows, and compliance review before activation.
+| Area | Rule |
+|---|---|
+| Secrets | No AI, Turso, database-write, payment, messaging, or R2 secret compiled into TarApp or stored in `EXPO_PUBLIC_*` |
+| Sync tokens | Read-only, database-scoped, short-lived; further issuance revoked immediately; issued tokens expire quickly |
+| Device storage | Sensitive local files encrypted at rest; keys in platform secure storage |
+| External input | Always size-limited, schema-validated, rate-limited, and untrusted—including AI output and OKF content |
+| Logging | Redact tokens, message bodies, health data, payment data, and compact JSON payloads by default |
+| Regulated modules | Consent, purpose limitation, regional controls, access auditing, export/deletion workflows, and compliance review before activation |
 
-### Sandbox boundary
+**Sandbox boundary** — none in v1. If a later OCR/import/document/report/code task needs one: isolated, short-lived, no production credentials, egress allowlist, immutable input mounts, CPU/memory/time/output budgets, malware/content checks, tenant-scoped R2 artifacts, automatic destruction. Results promote only through a typed Tarai action + normal approval.
 
-No general code sandbox is required for v1. If an approved OCR, import, document, report, or code task later needs one, it is isolated and short-lived, receives no production credentials, uses an egress allowlist, immutable input mounts, CPU/memory/time/output budgets, malware/content checks, and tenant-scoped R2 artifacts. Destruction is automatic; promotion of any result still goes through a typed Tarai action and normal approval policy.
+**Cost & model control** — per tenant/action budgets (token, model, Workflow, storage, notification, sandbox) with hard caps; model aliases, fallbacks, prompt versions, and flags live in versioned configuration, never prompts or mobile code; new models, channels, modules, components, or autonomous policies launch behind a feature flag + tenant allowlist with evaluation/rollback criteria.
 
-### Cost and model control
+**Observability**
 
-Each tenant and action has token, model, Workflow, storage, notification, and sandbox budgets with hard caps. Model aliases, fallbacks, prompt versions, and feature availability live in versioned configuration—not prompts or mobile code. New models, channels, modules, components, or autonomous policies launch behind a feature flag and tenant allowlist with evaluation and rollback criteria.
+| Domain | Signals |
+|---|---|
+| Requests | Latency, errors, correlation IDs, deduplication, conflicts |
+| Workflows/outbox | Age, retries, dead letters, leases, outbox latency |
+| Projections/sync | Lag, recipient counts, redaction failures, pull health, bytes |
+| Storage | Database size, archives, restores, migrations |
+| AI | Cost, model/prompt/tool versions, grounded-source coverage, policy decisions, approval outcomes |
 
-### Observability
+```text
+ALERT ON   stuck outbox rows · projection lag · repeated authorization failures
+           webhook signature failures · payment reconciliation differences
+           archive verification failures · capacity thresholds
+```
 
-Measure request latency, errors, correlation IDs, deduplication and conflicts; workflow age, retries, dead letters, leases, and outbox latency; projection lag, recipient counts, redaction failures, pull health and bytes; database size, archives, restores, and migrations; AI cost, model/prompt/tool versions, grounded-source coverage, policy decisions, and approval outcomes.
+**Release gates** — all must pass:
 
-Alert on stuck outbox rows, projection lag, repeated authorization failures, webhook signature failures, payment reconciliation differences, archive verification failures, and capacity thresholds.
-
-### Release gates
-
-1. Worker tests, typecheck, build, dry-run deploy, and migration tests pass.
-2. TarApp typecheck, lint, production bundle, offline queue, token refresh, logout wipe, and upgrade migration tests pass.
-3. Tenant-isolation, field-redaction, assignment-routing, replay, idempotency, concurrency, oversell, approval-race, and revocation tests pass.
-4. Canvas schema/limits, data-view authorization, component compatibility, mode stability, and accessibility tests pass.
-5. Site fact-grounding, sanitizer, design constraints, responsive/accessibility, CSP, asset-budget, cache invalidation, resumability, publish, and rollback tests pass.
-6. Routine overlap, lease expiry, retry/dead-letter, quiet-hours, budget exhaustion, and duplicate-schedule tests pass.
-7. Backup restore, workflow retry, channel replay, provider outage, and partial-deployment rollback drills pass.
-8. Schema, type registry, API contract, OKF paths, canvas/data-view registry, and app versions are mutually compatible.
+| Gate | Coverage |
+|---|---|
+| 1 Worker CI | Tests, typecheck, build, dry-run deploy, migration tests |
+| 2 TarApp CI | Typecheck, lint, production bundle, offline queue, token refresh, logout wipe, upgrade migrations |
+| 3 Tenant safety | Isolation, field redaction, assignment routing, replay, idempotency, concurrency, oversell, approval race, revocation |
+| 4 Canvas/GenUI | Schema limits, data-view authorization, component compatibility, mode stability, accessibility |
+| 5 Site Builder | Fact grounding, sanitizer, design constraints, responsive/accessibility, CSP, asset budget, cache invalidation, resumability, publish, rollback |
+| 6 Routines | Overlap, lease expiry, retry/dead-letter, quiet hours, budget exhaustion, duplicate schedules |
+| 7 Recovery drills | Backup restore, workflow retry, channel replay, provider outage, partial-deployment rollback |
+| 8 Compatibility | Schema, type registry, API contract, OKF paths, canvas/data-view registry, app versions mutually compatible |
 
 ---
 
 ## 15. Delivery Order
 
-```text
-Phase 1  Canonical schema and migrations
-Phase 2  Tarai-only mutations and durable idempotency
-Phase 3  Personal read-only sync bootstrap, token refresh, pull lifecycle, encryption
-Phase 4  Authorized projection policies, tombstones, reconciliation, unified inbox
-Phase 5  Reliable device outbox and offline POS conflict handling
-Phase 6  D1 team lifecycle, role capabilities, authorization cache, channel identities
-Phase 7  Approvals, transactional outbox, channels, and external delivery
-Phase 8  Versioned OKF, data-view registry, native GenUI, canvas preview and rollback
-Phase 9  Grounded Site Builder, design compiler, verification, draft/live publishing
-Phase 10 Retention, archive verification, restore drills, observability, regulated modules
-Phase 11 Optional conversation and constrained extensions only after measured demand
-```
+| Phase | Delivers |
+|---|---|
+| 1 | Canonical schema and migrations |
+| 2 | Tarai-only mutations and durable idempotency |
+| 3 | Personal read-only sync bootstrap, token refresh, pull lifecycle, encryption |
+| 4 | Authorized projection policies, tombstones, reconciliation, unified inbox |
+| 5 | Reliable device outbox and offline POS conflict handling |
+| 6 | D1 team lifecycle, role capabilities, authorization cache, channel identities |
+| 7 | Approvals, transactional outbox, channels, and external delivery |
+| 8 | Versioned OKF, data-view registry, native GenUI, canvas preview and rollback |
+| 9 | Grounded Site Builder, design compiler, verification, draft/live publishing |
+| 10 | Retention, archive verification, restore drills, observability, regulated modules |
+| 11 | Optional conversation and constrained extensions, only after measured demand |
 
-Each phase requires its end-to-end path, failure tests, observability, and rollback to pass before the next begins. The system expands into additional industries only after Phases 1-5 are proven under concurrency, offline recovery, revocation, and tenant-isolation tests.
+```text
+PHASE GATE       end-to-end path + failure tests + observability + rollback must pass
+                 before the next phase begins
+EXPANSION RULE   additional industries only after Phases 1-5 are proven under
+                 concurrency, offline recovery, revocation, and tenant-isolation tests
+```
 
 ### v1 boundaries
 
-- No arbitrary SQL, arbitrary mobile widgets, generated executable code, or remote HTML/JavaScript inside TarApp.
-- No direct Workspace DB credential in TarApp and no authoritative business write outside Tarai.
-- No autonomous payment capture, booking, refund, purchase, credential change, member removal, destructive deletion, external outreach, or live publishing.
-- No standalone Site Agent service and no duplicated business-fact authority.
-- No application Durable Object or persistent conversation until measured product need justifies it.
-- No sandbox with production credentials or unrestricted network/filesystem access.
-- No untested promise of exact latency, throughput, availability, or cost; targets become commitments only after load and recovery testing.
+| Boundary | v1 excludes |
+|---|---|
+| Client execution | Arbitrary SQL, arbitrary mobile widgets, generated executable code, remote HTML/JavaScript in TarApp |
+| Write authority | Direct Workspace DB credential in TarApp; any authoritative business write outside Tarai |
+| Autonomy | Payment capture, booking, refund, purchase, credential change, member removal, destructive deletion, external outreach, live publishing |
+| Services | Standalone Site Agent service; duplicated business-fact authority |
+| Runtime state | Application Durable Object or persistent conversation without measured product need |
+| Sandbox | Any sandbox with production credentials or unrestricted network/filesystem access |
+| Claims | Untested latency/throughput/availability/cost promises; commitments come only after load and recovery testing |
 
-Definition of done: an owner, member, customer, and system routine can each complete only their permitted path; an interrupted job resumes safely; duplicate requests/webhooks/schedules cannot duplicate an effect; revocation blocks new access immediately; and every published fact, outbound action, model/tool decision, and data mutation is attributable, within budget, and reversible or compensatable where the domain permits.
+**Definition of done**
+
+| # | Check | Passes when |
+|---|---|---|
+| 1 | Least privilege | Owner, member, customer, and system routine each complete only their permitted path |
+| 2 | Safe resume | An interrupted job resumes safely |
+| 3 | No double effects | Duplicate requests, webhooks, and schedules cannot duplicate an effect |
+| 4 | Instant revocation | Revocation blocks new access immediately |
+| 5 | Accountable | Every published fact, outbound action, model/tool decision, and data mutation is attributable and within budget |
+| 6 | Reversible | Each of those is reversible or compensatable where the domain permits |

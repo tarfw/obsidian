@@ -1,27 +1,39 @@
 /**
- * Client-Side Personal Inbox (matter.md §6, §9, §11)
+ * Client-Side Personal Inbox (matter.md §5, §6, §9, §11)
  *
- * Reads directly from local SQLite replica of Personal DB (0ms read latency).
- * Unified tasks and notifications across personal and all joined workspaces.
+ * Contracts:
+ * 1. Digest — concise summary of completed background activity.
+ * 2. Approvals — immutable proposals waiting for an authorized decision.
+ * 3. Signals — assigned work, deadlines, anomalies, and urgent changes.
+ *
+ * Rules:
+ * - Personal DB inbox is durable truth (0ms read latency from local SQLite replica).
+ * - Push notifications are hints; pending tasks are NOT removed merely due to age.
+ * - Completion (status=2) and dismissal (status=0) mutate local SQLite with optimistic update
+ *   and execute through authoritative Tarai gateway.
  */
 
-import { getUserDb } from './db';
+import { getUserDb, scheduleSyncPush } from './db';
 import { tar } from './tar';
-import { INBOX_TYPE_NAMES, INBOX_TYPES } from '../constants/types-config';
+import { INBOX_TYPE_NAMES, INBOX_TYPES, INBOX_STATUS, APPROVAL_STATUS } from '../constants/types-config';
 
-export interface InboxItem {
+export type InboxContractKind = 'digest' | 'approval' | 'signal';
+
+export interface InboxItem<T = any> {
   id: string;
   user_id: string;
   workspace_id?: string | null;
   workspace_name?: string | null;
   type: number;
-  typeName?: string;
+  typeName: string;
+  contract: InboxContractKind;
   title: string;
   ref?: string | null;
   priority: number;
+  status: number; // 0=dismissed, 1=pending, 2=done
   due?: number | null;
-  status: number; // 1=pending, 2=done, 3=dismissed
-  data?: any;
+  data: T;
+  version: number;
   created: number;
   created_at: string;
   updated: number;
@@ -34,62 +46,99 @@ export function setInboxUserId(id: string) {
   _userId = id;
 }
 
+export function resolveInboxContract(type: number): InboxContractKind {
+  if (type === INBOX_TYPES.approval) {
+    return 'approval';
+  }
+  if (type === INBOX_TYPES.notification || type === INBOX_TYPES.suggestion) {
+    return 'digest';
+  }
+  // task, alert, reminder, etc.
+  return 'signal';
+}
+
 /**
  * Fetch unified inbox items from local SQLite Personal DB replica (0ms read latency).
  */
-export async function getLocalInboxItems(
-  status: number = 1,
-  limit: number = 50
+export async function getLocalInbox(
+  scopeOrOptions?: string | {
+    userId?: string;
+    workspaceId?: string | null;
+    contract?: InboxContractKind;
+    status?: number; // default: 1 (pending)
+    limit?: number;
+  }
 ): Promise<InboxItem[]> {
   try {
     const db = getUserDb();
     if (!db) return [];
 
-    const sql = `
+    const options = typeof scopeOrOptions === 'string' ? { workspaceId: scopeOrOptions } : (scopeOrOptions || {});
+    const activeUser = options.userId || _userId;
+    const status = options.status !== undefined ? options.status : INBOX_STATUS.pending;
+    const limit = options.limit || 100;
+
+    let sql = `
       SELECT id, user_id, workspace_id, type, title, ref, priority, status, data, version, created, updated
       FROM inbox
       WHERE (user_id = ? OR user_id = 'guest' OR user_id = 'all')
         AND status = ?
         AND deleted_at IS NULL
-      ORDER BY priority DESC, created DESC
-      LIMIT ?
     `;
+    const params: any[] = [activeUser, status];
 
-    const rows = await db.all(sql, [_userId, status, limit]).catch(() => []);
+    if (options.workspaceId) {
+      sql += ` AND (workspace_id = ? OR workspace_id IS NULL)`;
+      params.push(options.workspaceId.replace(/^w:/, ''));
+    }
+
+    sql += ` ORDER BY priority DESC, created DESC LIMIT ?`;
+    params.push(limit);
+
+    const rows = await db.all(sql, params).catch(() => []);
+
     return (rows || []).map((r: any) => {
       const parsedData = typeof r.data === 'string' ? JSON.parse(r.data || '{}') : (r.data || {});
       const createdMs = typeof r.created === 'number' ? r.created : Date.now();
       const updatedMs = typeof r.updated === 'number' ? r.updated : createdMs;
+      const numType = typeof r.type === 'number' ? r.type : INBOX_TYPES.task;
+      const contract = resolveInboxContract(numType);
+
       return {
         id: r.id,
         user_id: r.user_id,
         workspace_id: r.workspace_id,
-        workspace_name: r.workspace_id ? r.workspace_id.replace(/^ws_/, '') : undefined,
-        type: typeof r.type === 'number' ? r.type : INBOX_TYPES.task,
-        typeName: INBOX_TYPE_NAMES[r.type] || 'task',
+        workspace_name: r.workspace_id ? r.workspace_id.replace(/^ws_/, '') : 'Personal',
+        type: numType,
+        typeName: INBOX_TYPE_NAMES[numType] || 'task',
+        contract,
         title: r.title,
         ref: r.ref,
         priority: r.priority || 1,
-        due: parsedData.due || parsedData.dueDate || null,
         status: r.status,
+        due: parsedData.due || parsedData.dueDate || null,
         data: parsedData,
+        version: r.version || 1,
         created: createdMs,
         created_at: new Date(createdMs).toISOString(),
         updated: updatedMs,
         updated_at: new Date(updatedMs).toISOString(),
       };
+    }).filter((item) => {
+      if (options.contract && item.contract !== options.contract) return false;
+      return true;
     });
   } catch (err) {
-    console.warn('[inbox] Local DB query failed:', err);
+    console.warn('[Inbox] Local query failed:', err);
     return [];
   }
 }
 
 /**
- * Mark a task as done (local DB update + remote sync).
+ * Mark an inbox task or signal as completed (status = 2).
  */
-export async function markTaskDone(
-  taskId: string,
+export async function markInboxDone(
+  itemId: string,
   workspaceScope?: string
 ): Promise<boolean> {
   try {
@@ -97,59 +146,142 @@ export async function markTaskDone(
     const now = Date.now();
     if (db) {
       await db.run(
-        `UPDATE inbox SET status = 2, updated = ? WHERE id = ? AND deleted_at IS NULL`,
-        [now, taskId]
+        `UPDATE inbox SET status = ?, updated = ?, version = version + 1 WHERE id = ? AND deleted_at IS NULL`,
+        [INBOX_STATUS.done, now, itemId]
       ).catch(() => {});
+      scheduleSyncPush();
     }
 
-    if (workspaceScope) {
-      await tar.markTaskDone(taskId, workspaceScope).catch(() => {});
+    if (workspaceScope && workspaceScope !== 'p') {
+      await tar.markTaskDone(itemId, workspaceScope).catch(() => {});
     }
 
     return true;
   } catch (err) {
-    console.warn('[inbox] Failed to mark done:', err);
+    console.warn('[Inbox] Failed to mark done:', err);
     return false;
   }
 }
 
 /**
- * Fetch inbox from remote worker if local replica is pending sync.
+ * Dismiss an inbox item (status = 0).
  */
-export async function fetchRemoteInbox(
-  scope: string,
-  limit: number = 50
-): Promise<InboxItem[]> {
+export async function dismissInboxItem(
+  itemId: string,
+  _workspaceScope?: string
+): Promise<boolean> {
   try {
-    const data = await tar.getInbox(scope);
-    return (data.rows || []).slice(0, limit).map((r: any) => {
-      const createdMs = typeof r.created === 'number' ? r.created : Date.now();
-      const updatedMs = typeof r.updated === 'number' ? r.updated : createdMs;
-      return {
-        id: r.id,
-        user_id: r.user_id || _userId,
-        workspace_id: r.workspace_id || scope,
-        workspace_name: r.workspace_id || scope,
-        type: typeof r.type === 'number' ? r.type : INBOX_TYPES.task,
-        typeName: typeof r.type === 'number' ? INBOX_TYPE_NAMES[r.type] : r.type,
-        title: r.title || String(r.data?.title || 'Inbox Item'),
-        ref: r.ref,
-        priority: r.priority || 1,
-        due: r.due,
-        status: r.status === 'done' || r.status === 2 ? 2 : 1,
-        data: r.data,
-        created: createdMs,
-        created_at: new Date(createdMs).toISOString(),
-        updated: updatedMs,
-        updated_at: new Date(updatedMs).toISOString(),
-      };
-    });
+    const db = getUserDb();
+    const now = Date.now();
+    if (db) {
+      await db.run(
+        `UPDATE inbox SET status = ?, updated = ?, version = version + 1 WHERE id = ? AND deleted_at IS NULL`,
+        [INBOX_STATUS.dismissed, now, itemId]
+      ).catch(() => {});
+      scheduleSyncPush();
+    }
+    return true;
   } catch (err) {
-    console.warn('[inbox] Failed to fetch remote inbox:', err);
-    return [];
+    console.warn('[Inbox] Failed to dismiss item:', err);
+    return false;
   }
 }
 
-export const fetchInbox = fetchRemoteInbox;
-export type InboxTask = InboxItem;
+/**
+ * Decide an approval item (matter.md §9 Approvals contract).
+ * Submits decision (approved / rejected) to Tarai and marks local approval state.
+ */
+export async function decideInboxApproval(
+  approvalId: string,
+  decision: 'approved' | 'rejected',
+  workspaceScope: string,
+  reason = ''
+): Promise<boolean> {
+  try {
+    const db = getUserDb();
+    const now = Date.now();
 
+    // 1. Optimistic local update
+    if (db) {
+      await db.run(
+        `UPDATE inbox SET status = ?, updated = ?, version = version + 1 WHERE id = ? AND deleted_at IS NULL`,
+        [decision === 'approved' ? INBOX_STATUS.done : INBOX_STATUS.dismissed, now, approvalId]
+      ).catch(() => {});
+      scheduleSyncPush();
+    }
+
+    // 2. Authoritative Tarai decision dispatch
+    await tar.decideApproval(approvalId, decision, workspaceScope, reason);
+    return true;
+  } catch (err) {
+    console.warn('[Inbox] Failed to decide approval:', err);
+    return false;
+  }
+}
+
+/**
+ * Upsert an inbox item into Personal DB (e.g. from local signal or remote push).
+ */
+export async function upsertInboxItem(item: {
+  id?: string;
+  user_id?: string;
+  workspace_id?: string | null;
+  type: number | string;
+  title: string;
+  ref?: string | null;
+  priority?: number;
+  status?: number;
+  data?: any;
+  version?: number;
+}): Promise<boolean> {
+  try {
+    const db = getUserDb();
+    if (!db) return false;
+
+    const numType = typeof item.type === 'number' ? item.type : (INBOX_TYPES as any)[item.type] || INBOX_TYPES.task;
+    const deterministicId = item.id || `ibx_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const now = Date.now();
+    const dataJson = typeof item.data === 'string' ? item.data : JSON.stringify(item.data || {});
+    const userId = item.user_id || _userId;
+
+    await db.run(
+      `INSERT INTO inbox (id, user_id, workspace_id, type, title, ref, priority, status, data, version, created, updated, deleted_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+       ON CONFLICT(id) DO UPDATE SET
+         type = excluded.type,
+         title = excluded.title,
+         ref = excluded.ref,
+         priority = excluded.priority,
+         status = excluded.status,
+         data = excluded.data,
+         version = excluded.version,
+         updated = excluded.updated
+       WHERE excluded.version >= inbox.version`,
+      [
+        deterministicId,
+        userId,
+        item.workspace_id || null,
+        numType,
+        item.title,
+        item.ref || null,
+        item.priority ?? 1,
+        item.status ?? INBOX_STATUS.pending,
+        dataJson,
+        item.version ?? 1,
+        now,
+        now,
+      ]
+    );
+
+    scheduleSyncPush();
+    return true;
+  } catch (err) {
+    console.warn('[Inbox] Upsert failed:', err);
+    return false;
+  }
+}
+
+// Backwards compatibility alias
+export const markTaskDone = markInboxDone;
+export const fetchInbox = getLocalInbox;
+export const getLocalInboxItems = getLocalInbox;

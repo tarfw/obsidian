@@ -3,20 +3,23 @@ import { View, Text, StyleSheet } from 'react-native';
 import type { SectionProps } from '../ComponentRegistry';
 
 export default function BookingGrid({ props, designTokens, data = [] }: SectionProps) {
-  const { title, slotsPerRow = 3 } = props;
-  const { colors, rounded, spacing } = designTokens;
+  const title = props?.title;
+  const slotsPerRow = props?.slotsPerRow || 3;
+  const colors = designTokens?.colors || {};
+  const rounded = designTokens?.rounded || {};
+  const spacing = designTokens?.spacing || {};
 
   return (
-    <View style={[styles.container, { marginBottom: spacing.lg }]}>
+    <View style={[styles.container, { marginBottom: spacing.lg || 16 }]}>
       {title && (
-        <Text style={[styles.title, { color: colors.primary, marginBottom: spacing.sm }]}>
+        <Text style={[styles.title, { color: colors.primary || '#0f172a', marginBottom: spacing.sm || 8 }]}>
           {title}
         </Text>
       )}
       {data.length === 0 ? (
         <Text style={[styles.empty, { color: '#94a3b8' }]}>No bookings today</Text>
       ) : (
-        <View style={[styles.grid, { gap: spacing.sm }]}>
+        <View style={[styles.grid, { gap: spacing.sm || 8 }]}>
           {data.map((booking: any, idx: number) => (
             <View
               key={booking.id || idx}
@@ -25,14 +28,14 @@ export default function BookingGrid({ props, designTokens, data = [] }: SectionP
                 {
                   flex: 1 / slotsPerRow,
                   backgroundColor: '#fff',
-                  borderRadius: rounded.sm,
+                  borderRadius: rounded.sm || 8,
                   borderWidth: 1,
                   borderColor: 'rgba(0,0,0,0.05)',
-                  padding: spacing.sm,
+                  padding: spacing.sm || 8,
                 },
               ]}
             >
-              <Text style={[styles.slotTime, { color: colors.primary }]} numberOfLines={1}>
+              <Text style={[styles.slotTime, { color: colors.primary || '#0f172a' }]} numberOfLines={1}>
                 {booking.data?.slot || booking.data?.time || '--:--'}
               </Text>
               <Text style={[styles.slotName, { color: '#111' }]} numberOfLines={1}>

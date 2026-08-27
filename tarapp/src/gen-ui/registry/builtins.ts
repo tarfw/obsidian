@@ -1,11 +1,11 @@
 /**
- * Pure Native Component Catalog Builtins for GenUI (matter.md §9).
- * Registers all 8 native crash-proof components and standard aliases.
+ * Native Component Catalog Builtins for GenUI (matter.md §9).
+ * Registers the 8 native crash-proof components and standard aliases.
  */
 
 import { registerComponent } from './ComponentRegistry';
 
-// Core 8 GenUI Components
+// Core 8 GenUI Primitives (matter.md §9)
 import TaskInbox from './sections/TaskInbox';
 import MetricCard from './sections/MetricCard';
 import QuickPos from './sections/QuickPos';
@@ -15,88 +15,73 @@ import ContactCard from './sections/ContactCard';
 import ActionConfirm from './sections/ActionConfirm';
 import DataTable from './sections/DataTable';
 
-// ── 1. Main Screen Components ──────────────────────────────────────────
+// ── 1. The 8 Native Primitives ──────────────────────────────────────
 
-// Task Inbox (Action Inbox urgent approvals)
+// 1. Task Inbox (Assigned tasks, approvals, and signals)
 registerComponent('task-inbox', {
   component: TaskInbox,
-  label: 'Action Inbox',
+  label: 'Task Inbox',
   icon: 'mail-unread-outline',
-  description: 'Shows urgent tasks and approvals requiring immediate action',
+  description: 'Assigned tasks, approvals, and urgent signals from Personal DB',
 });
 
-// Stat Counter / Metric Card (Signature Mint-Cyan Metric Card)
-registerComponent('stat-counter', {
-  component: MetricCard,
-  label: 'Stat Counter',
-  icon: 'trending-up-outline',
-  description: "Shows key daily numbers (Today's Sales, Daily Steps, Gig Earnings)",
-});
-
+// 2. Metric Card (Bounded metric and comparison)
 registerComponent('metric-card', {
   component: MetricCard,
   label: 'Metric Card',
   icon: 'trending-up-outline',
-  description: 'Displays a single stat or metric with smooth wave line graph',
+  description: 'Bounded metric, revenue count, and live pulse sparklines',
 });
 
-// Quick POS (Table floor grid & quick billing)
+// 3. Quick POS (Catalog, cart, and checkout entry)
 registerComponent('quick-pos', {
   component: QuickPos,
   label: 'Quick POS',
   icon: 'receipt-outline',
-  description: 'Fast 1-tap table billing and checkout register',
+  description: 'Point of sale, floor tables, and fast checkout register',
 });
 
-registerComponent('pos-sale', {
-  component: QuickPos,
-  label: 'POS Register',
-  icon: 'card-outline',
-  description: 'Point of sale billing register',
-});
-
-// ── 2. Ephemeral Slide-Up Card Components (Deep Tools) ──────────────────
-
-// Stock Sheet (Rapid stock adjustments with steppers)
+// 4. Stock Sheet (Count, receive, transfer, and correct stock)
 registerComponent('stock-sheet', {
   component: StockSheet,
   label: 'Stock Sheet',
   icon: 'cube-outline',
-  description: 'Rapid item stock counter with [-] and [+] steppers',
+  description: 'Live item count with steppers and purchase order reorders',
 });
 
-// Pipeline Card (Deal progression & stage advancement)
+// 5. Pipeline Card (Stage work and allowed transitions)
 registerComponent('pipeline-card', {
   component: PipelineCard,
   label: 'Pipeline Card',
   icon: 'git-network-outline',
-  description: 'Customer deal stages with 1-tap stage advancement',
+  description: 'Deal and client flow progression with 1-tap stage advancement',
 });
 
-// Contact Card (1-tap Call and WhatsApp dispatch)
+// 6. Contact Card (Authorized contact actions)
 registerComponent('contact-card', {
   component: ContactCard,
   label: 'Contact Card',
   icon: 'person-outline',
-  description: 'Customer or supplier details with 1-tap Call and WhatsApp buttons',
+  description: 'Customer or supplier details with 1-tap Call and WhatsApp dispatch',
 });
 
-// Action Confirm (Safety review & 1-tap confirmation)
+// 7. Action Confirm (Review and confirm a typed action)
 registerComponent('action-confirm', {
   component: ActionConfirm,
   label: 'Action Confirm',
   icon: 'shield-checkmark-outline',
-  description: 'Review and 1-tap confirmation card for orders, deliveries, and bookings',
+  description: 'Safeguard review and 1-tap confirmation card for high-impact actions',
 });
 
-// Data Grid / Data Table (Universal parametric table)
+// 8. Data Grid / Data Table (Bounded typed rows and columns)
 registerComponent('data-grid', {
   component: DataTable,
   label: 'Data Grid',
   icon: 'grid-outline',
-  description: 'Dynamic native table or card list adaptable to any database entity',
+  description: 'Bounded typed rows and columns for entity records and catalogs',
 });
 
+// ── 2. Standard Aliases ──────────────────────────────────────────────
 registerComponent('data-table', {
   component: DataTable,
   label: 'Data Table',
@@ -104,74 +89,16 @@ registerComponent('data-table', {
   description: 'Lists records in a scrollable parametric table',
 });
 
-// ── 3. Backwards-Compatible Aliases ───────────────────────────────────
-
-registerComponent('catalog-grid', {
-  component: DataTable,
-  label: 'Product Catalog',
-  icon: 'grid-outline',
-  description: 'Grid of product or item cards',
-});
-
-registerComponent('booking-grid', {
-  component: DataTable,
-  label: 'Booking Slots',
-  icon: 'calendar-outline',
-  description: 'Appointment time slot picker',
-});
-
-registerComponent('timeline-feed', {
-  component: TaskInbox,
-  label: 'Activity Feed',
-  icon: 'time-outline',
-  description: 'Chronological activity feed',
-});
-
-registerComponent('cash_sales_counter', {
+registerComponent('stat-counter', {
   component: MetricCard,
-  label: "Today's Sales",
+  label: 'Stat Counter',
   icon: 'trending-up-outline',
-  description: "Today's cash and digital sales counter",
+  description: 'Shows key metrics counter',
 });
 
-registerComponent('gig_earnings_counter', {
-  component: MetricCard,
-  label: 'Gig Earnings',
-  icon: 'trending-up-outline',
-  description: 'Earnings counter for delivery shift',
-});
-
-registerComponent('health_step_counter', {
-  component: MetricCard,
-  label: 'Step Counter',
-  icon: 'walk-outline',
-  description: 'Daily morning step counter',
-});
-
-registerComponent('daily_budget_card', {
-  component: MetricCard,
-  label: 'Daily Budget',
-  icon: 'wallet-outline',
-  description: 'Daily budget snapshot',
-});
-
-registerComponent('table_grid_pos', {
+registerComponent('pos-sale', {
   component: QuickPos,
-  label: 'Table Floor POS',
-  icon: 'receipt-outline',
-  description: 'Floor plan table billing grid',
-});
-
-registerComponent('live_orders_feed', {
-  component: TaskInbox,
-  label: 'Live Orders Feed',
-  icon: 'mail-unread-outline',
-  description: 'Live orders and urgent approvals feed',
-});
-
-registerComponent('active_trip_map', {
-  component: ActionConfirm,
-  label: 'Active Trip',
-  icon: 'navigate-outline',
-  description: 'Active delivery route and trip tracker',
+  label: 'POS Register',
+  icon: 'card-outline',
+  description: 'Point of sale register',
 });

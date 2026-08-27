@@ -13,9 +13,9 @@ export interface StockItem {
   category?: string;
 }
 
-export default function StockSheet({ props, designTokens, data = [], onExecuteAction }: SectionProps) {
-  const title = props?.title || 'Stock Inventory';
-  const subtitle = props?.subtitle || 'Tap - / + to adjust quantity';
+export default function StockSheet({ props, designTokens, data = [], onExecuteAction, onOpenScreen }: SectionProps) {
+  const title = props?.title || 'Stock & Inventory';
+  const subtitle = props?.subtitle || 'Tap - / + to adjust count';
   const rounded = designTokens?.rounded || {};
 
   const itemsProp = props?.items;
@@ -26,17 +26,16 @@ export default function StockSheet({ props, designTokens, data = [], onExecuteAc
 
     return sourceItems.map((it: any) => ({
       id: it.id || it.name || 'item',
-      name: it.title || it.name || 'Item',
-      unit: it.unit || 'units',
-      stock: typeof it.stock === 'number' ? it.stock : (typeof it.value === 'number' ? it.value : 0),
-      threshold: it.threshold || 5,
+      name: it.title || it.name || it.data?.title || 'Item',
+      unit: it.unit || it.data?.unit || 'units',
+      stock: typeof it.stock === 'number' ? it.stock : (typeof it.value === 'number' ? it.value : (it.data?.qty || 0)),
+      threshold: it.threshold || it.data?.threshold || 5,
       reorderPrice: it.reorderPrice || (it.price ? it.price * 5 : 25),
-      category: it.category || 'Stock',
+      category: it.category || it.data?.category || 'Stock',
     }));
   }, [data, itemsProp]);
 
   const [qtyDeltas, setQtyDeltas] = useState<Record<string, number>>({});
-  const [busyItem, setBusyItem] = useState<string | null>(null);
 
   const items = useMemo(() => {
     return initialItems.map((item) => {
@@ -47,16 +46,20 @@ export default function StockSheet({ props, designTokens, data = [], onExecuteAc
 
   if (items.length === 0) {
     return (
-      <View style={styles.cardContainer}>
+      <View style={[styles.cardContainer, { borderRadius: rounded.lg || 16 }]}>
         <View style={styles.header}>
-          <View>
-            <Text style={styles.title}>{title}</Text>
-            <Text style={styles.subtitle}>{subtitle}</Text>
-          </View>
+          <Text style={styles.title}>{title}</Text>
+          <TouchableOpacity
+            style={styles.adjustBtn}
+            onPress={() => onOpenScreen ? onOpenScreen('stock-adjust') : onExecuteAction?.('inventory.adjust', {})}
+          >
+            <Ionicons name="add-outline" size={14} color="#ffffff" />
+            <Text style={styles.adjustBtnText}>Adjust Stock</Text>
+          </TouchableOpacity>
         </View>
         <View style={styles.emptyState}>
           <Ionicons name="cube-outline" size={24} color="#94a3b8" />
-          <Text style={styles.emptyStateText}>No low stock items found in database.</Text>
+          <Text style={styles.emptyStateText}>All stock levels normal · No low stock alerts</Text>
         </View>
       </View>
     );
@@ -72,7 +75,7 @@ export default function StockSheet({ props, designTokens, data = [], onExecuteAc
       if (onExecuteAction) {
         const item = items.find((i) => i.id === itemId);
         const newQty = Math.max(0, (item?.stock || 0) + delta);
-        await onExecuteAction('adjust_stock', {
+        await onExecuteAction('inventory.adjust', {
           itemId,
           name: item?.name,
           quantity: newQty,
@@ -84,115 +87,67 @@ export default function StockSheet({ props, designTokens, data = [], onExecuteAc
     }
   };
 
-  const handleOrderSupplier = async (item?: StockItem) => {
-    setBusyItem(item ? item.id : 'all');
-    try {
-      if (onExecuteAction) {
-        await onExecuteAction('create_po', {
-          supplier: 'Dairy Direct',
-          items: item ? [item] : items.filter((i) => i.stock <= (i.threshold || 5)),
-          total: item ? item.reorderPrice : 32.00,
-        });
-      }
-    } catch (e) {
-      console.warn('[StockSheet] order error:', e);
-    } finally {
-      setBusyItem(null);
-    }
-  };
-
-  const lowStockCount = items.filter((i) => i.stock <= (i.threshold || 5)).length;
-
   return (
-    <View style={styles.container}>
-      {/* Title Header */}
+    <View style={[styles.cardContainer, { borderRadius: rounded.lg || 16 }]}>
       <View style={styles.header}>
         <View>
           <Text style={styles.title}>{title}</Text>
           <Text style={styles.subtitle}>{subtitle}</Text>
         </View>
-        {lowStockCount > 0 && (
-          <View style={styles.lowBadge}>
-            <Ionicons name="warning-outline" size={12} color="#b45309" />
-            <Text style={styles.lowBadgeText}>{lowStockCount} Low</Text>
-          </View>
-        )}
+        <TouchableOpacity
+          style={styles.adjustBtn}
+          onPress={() => onOpenScreen ? onOpenScreen('stock-adjust') : onExecuteAction?.('inventory.adjust', {})}
+        >
+          <Ionicons name="options-outline" size={13} color="#ffffff" />
+          <Text style={styles.adjustBtnText}>Manage</Text>
+        </TouchableOpacity>
       </View>
 
-      {/* Stock Items List */}
       <View style={styles.itemList}>
-        {items.map((item) => {
+        {items.slice(0, 4).map((item) => {
           const isLow = item.stock <= (item.threshold || 5);
-
           return (
-            <View
-              key={item.id}
-              style={[
-                styles.itemCard,
-                { borderRadius: rounded.md || 16 },
-                isLow && styles.itemCardLow,
-              ]}
-            >
-              <View style={styles.itemInfo}>
-                <Text style={styles.itemName}>{item.name}</Text>
-                <Text style={styles.itemCategory}>
-                  {item.category} · Threshold: {item.threshold} {item.unit}
-                </Text>
+            <View key={item.id} style={styles.itemRow}>
+              <View style={{ flex: 1 }}>
+                <View style={styles.nameRow}>
+                  <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
+                  {isLow && (
+                    <View style={styles.lowBadge}>
+                      <Text style={styles.lowBadgeText}>Low</Text>
+                    </View>
+                  )}
+                </View>
+                <Text style={styles.itemCategory}>{item.category}</Text>
               </View>
 
-              {/* Stepper */}
               <View style={styles.stepperContainer}>
                 <TouchableOpacity
-                  activeOpacity={0.6}
+                  style={styles.stepperBtn}
                   onPress={() => updateQuantity(item.id, -1)}
-                  style={styles.stepperBtn}
+                  activeOpacity={0.7}
                 >
-                  <Text style={styles.stepperBtnText}>−</Text>
+                  <Ionicons name="remove" size={16} color="#0f172a" />
                 </TouchableOpacity>
-
-                <View style={styles.qtyContainer}>
-                  <Text style={[styles.qtyText, isLow && styles.qtyTextLow]}>
-                    {item.stock}
-                  </Text>
-                  <Text style={styles.unitText}>{item.unit}</Text>
-                </View>
-
+                <Text style={styles.stockValue}>{item.stock}</Text>
                 <TouchableOpacity
-                  activeOpacity={0.6}
-                  onPress={() => updateQuantity(item.id, 1)}
                   style={styles.stepperBtn}
+                  onPress={() => updateQuantity(item.id, 1)}
+                  activeOpacity={0.7}
                 >
-                  <Text style={styles.stepperBtnText}>+</Text>
+                  <Ionicons name="add" size={16} color="#0f172a" />
                 </TouchableOpacity>
               </View>
             </View>
           );
         })}
       </View>
-
-      {/* Supplier Order CTA */}
-      <TouchableOpacity
-        activeOpacity={0.8}
-        disabled={busyItem !== null}
-        onPress={() => handleOrderSupplier()}
-        style={[styles.orderBtn, { borderRadius: rounded.md || 14 }]}
-      >
-        <Ionicons name="cart-outline" size={18} color="#ffffff" />
-        <Text style={styles.orderBtnText}>
-          {busyItem !== null ? 'Ordering...' : 'Order Low Stock from Supplier ($32)'}
-        </Text>
-      </TouchableOpacity>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    paddingVertical: 4,
-  },
   cardContainer: {
     backgroundColor: '#ffffff',
-    borderRadius: 16,
     padding: 16,
     borderWidth: 1,
     borderColor: '#e2e8f0',
@@ -202,127 +157,100 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 14,
+    marginBottom: 12,
   },
   title: {
-    fontSize: 18,
-    fontWeight: '800',
+    fontSize: 13,
+    fontWeight: '700',
     color: '#0f172a',
-    letterSpacing: -0.3,
   },
   subtitle: {
-    fontSize: 12,
-    color: '#64748b',
-    marginTop: 2,
+    fontSize: 11,
+    color: '#94a3b8',
+    marginTop: 1,
   },
-  lowBadge: {
+  adjustBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#fef3c7',
+    backgroundColor: '#0f172a',
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 8,
+    borderRadius: 6,
+    gap: 4,
   },
-  lowBadgeText: {
+  adjustBtnText: {
     fontSize: 11,
-    fontWeight: '700',
-    color: '#b45309',
+    fontWeight: '600',
+    color: '#ffffff',
+  },
+  emptyState: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 12,
+  },
+  emptyStateText: {
+    fontSize: 13,
+    color: '#64748b',
+    fontWeight: '500',
   },
   itemList: {
     gap: 8,
-    marginBottom: 16,
   },
-  itemCard: {
-    backgroundColor: '#ffffff',
-    padding: 12,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
+  itemRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f8fafc',
   },
-  itemCardLow: {
-    borderColor: '#fde68a',
-    backgroundColor: '#fffdf5',
-  },
-  itemInfo: {
-    flex: 1,
-    marginRight: 12,
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   itemName: {
-    fontSize: 14,
-    fontWeight: '700',
+    fontSize: 13,
+    fontWeight: '600',
     color: '#0f172a',
+  },
+  lowBadge: {
+    backgroundColor: '#fee2e2',
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 4,
+  },
+  lowBadgeText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#dc2626',
   },
   itemCategory: {
     fontSize: 11,
-    color: '#64748b',
-    marginTop: 2,
+    color: '#94a3b8',
+    marginTop: 1,
   },
   stepperContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#f1f5f9',
-    borderRadius: 10,
+    borderRadius: 8,
     padding: 2,
+    gap: 6,
   },
   stepperBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 8,
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: '#ffffff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderRadius: 6,
   },
-  stepperBtnText: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#0f172a',
-  },
-  qtyContainer: {
-    paddingHorizontal: 12,
-    alignItems: 'center',
-    minWidth: 46,
-  },
-  qtyText: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#0f172a',
-  },
-  qtyTextLow: {
-    color: '#dc2626',
-  },
-  unitText: {
-    fontSize: 9,
-    color: '#64748b',
-    marginTop: -2,
-  },
-  orderBtn: {
-    backgroundColor: '#0f172a',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 14,
-    gap: 8,
-  },
-  orderBtnText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#ffffff',
-  },
-  emptyState: {
-    paddingVertical: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  emptyStateText: {
+  stockValue: {
     fontSize: 13,
-    color: '#94a3b8',
-    fontWeight: '500',
+    fontWeight: '700',
+    color: '#0f172a',
+    minWidth: 20,
     textAlign: 'center',
   },
 });

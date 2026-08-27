@@ -1,5 +1,6 @@
 import { ReactNode, useMemo, useState, useEffect, createContext, useContext } from 'react';
-import { getUserDb, subscribeDb } from '@/lib/db';
+import { AppState } from 'react-native';
+import { getUserDb, subscribeDb, syncPull } from '@/lib/db';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { Database } from '@tursodatabase/sync-react-native';
 
@@ -17,6 +18,25 @@ export function DbProvider({ children }: { children: ReactNode }) {
 
     return () => {
       unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    let isActive = AppState.currentState === 'active';
+    const synchronize = () => {
+      if (isActive) void syncPull();
+    };
+
+    synchronize();
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      isActive = nextState === 'active';
+      synchronize();
+    });
+    const interval = setInterval(synchronize, 30_000);
+
+    return () => {
+      subscription.remove();
+      clearInterval(interval);
     };
   }, []);
 

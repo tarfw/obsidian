@@ -13,8 +13,8 @@ export interface PipelineDeal {
   stages: string[];
 }
 
-export default function PipelineCard({ props, designTokens, data = [], onExecuteAction }: SectionProps) {
-  const title = props?.title || 'Deal Pipeline';
+export default function PipelineCard({ props, designTokens, data = [], onExecuteAction, onOpenScreen }: SectionProps) {
+  const title = props?.title || 'Pipeline Deals';
   const rounded = designTokens?.rounded || {};
 
   const defaultStages = useMemo(() => ['Lead', 'Contacted', 'Proposal', 'Won'], []);
@@ -26,11 +26,11 @@ export default function PipelineCard({ props, designTokens, data = [], onExecute
       : (Array.isArray(dealsProp) ? dealsProp : []);
 
     return sourceDeals.map((d: any) => ({
-      id: d.id || 'deal-1',
-      title: d.title || d.name || 'Sales Deal',
-      contactName: d.contactName || d.contact || 'Client Contact',
-      company: d.company || '',
-      value: typeof d.value === 'number' ? d.value : (Number(d.amount) || 1000),
+      id: d.id || `deal_${Math.random()}`,
+      title: d.title || d.name || d.data?.name || 'Client Flow',
+      contactName: d.contactName || d.contact || d.data?.customer || 'Client',
+      company: d.company || d.data?.company || '',
+      value: typeof d.value === 'number' ? d.value : (Number(d.amount) || 0),
       stageIndex: typeof d.stageIndex === 'number' ? d.stageIndex : (d.stage === 'Won' ? 3 : d.stage === 'Proposal' ? 2 : d.stage === 'Contacted' ? 1 : 0),
       stages: Array.isArray(d.stages) ? d.stages : defaultStages,
     }));
@@ -46,21 +46,6 @@ export default function PipelineCard({ props, designTokens, data = [], onExecute
     });
   }, [baseDeals, stageOverrides]);
 
-  if (activeDeals.length === 0) {
-    return (
-      <View style={styles.cardContainer}>
-        <View style={styles.header}>
-          <Text style={styles.title}>{title}</Text>
-          <Text style={styles.dealCount}>0 deals</Text>
-        </View>
-        <View style={styles.emptyState}>
-          <Ionicons name="git-network-outline" size={24} color="#94a3b8" />
-          <Text style={styles.emptyStateText}>No active pipeline deals found.</Text>
-        </View>
-      </View>
-    );
-  }
-
   const handleAdvanceStage = async (deal: PipelineDeal) => {
     if (deal.stageIndex >= deal.stages.length - 1) return;
     const nextIndex = deal.stageIndex + 1;
@@ -71,8 +56,8 @@ export default function PipelineCard({ props, designTokens, data = [], onExecute
 
     try {
       if (onExecuteAction) {
-        await onExecuteAction('update_stage', {
-          dealId: deal.id,
+        await onExecuteAction('flow.advance', {
+          flowId: deal.id,
           stage: nextStage,
           stageIndex: nextIndex,
         });
@@ -84,93 +69,73 @@ export default function PipelineCard({ props, designTokens, data = [], onExecute
     }
   };
 
+  if (activeDeals.length === 0) {
+    return (
+      <View style={[styles.cardContainer, { borderRadius: rounded.lg || 16 }]}>
+        <View style={styles.header}>
+          <Text style={styles.title}>{title}</Text>
+          <TouchableOpacity
+            style={styles.newDealBtn}
+            onPress={() => onOpenScreen ? onOpenScreen('deal-pipeline') : onExecuteAction?.('deal.create', {})}
+          >
+            <Ionicons name="add-outline" size={13} color="#ffffff" />
+            <Text style={styles.newDealBtnText}>Start Flow</Text>
+          </TouchableOpacity>
+        </View>
+        <View style={styles.emptyState}>
+          <Ionicons name="git-network-outline" size={24} color="#94a3b8" />
+          <Text style={styles.emptyStateText}>No active pipeline flows · Tap Start Flow to begin</Text>
+        </View>
+      </View>
+    );
+  }
+
   return (
-    <View style={styles.container}>
+    <View style={[styles.cardContainer, { borderRadius: rounded.lg || 16 }]}>
       <View style={styles.header}>
-        <Text style={styles.title}>{title}</Text>
-        <Text style={styles.dealCount}>{activeDeals.length} active deals</Text>
+        <View>
+          <Text style={styles.title}>{title}</Text>
+          <Text style={styles.dealCount}>{activeDeals.length} active deals</Text>
+        </View>
+        <TouchableOpacity
+          style={styles.newDealBtn}
+          onPress={() => onOpenScreen ? onOpenScreen('deal-pipeline') : onExecuteAction?.('deal.create', {})}
+        >
+          <Ionicons name="add-outline" size={13} color="#ffffff" />
+          <Text style={styles.newDealBtnText}>New Flow</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.dealList}>
-        {activeDeals.map((deal) => {
+        {activeDeals.slice(0, 3).map((deal) => {
           const currentStage = deal.stages[deal.stageIndex] || 'Lead';
           const isWon = deal.stageIndex === deal.stages.length - 1;
           const isBusy = advancingId === deal.id;
 
           return (
-            <View
-              key={deal.id}
-              style={[
-                styles.dealCard,
-                { borderRadius: rounded.lg || 18 },
-                isWon && styles.dealCardWon,
-              ]}
-            >
-              {/* Deal Header */}
+            <View key={deal.id} style={styles.dealCard}>
               <View style={styles.dealHeader}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.dealTitle} numberOfLines={1}>
-                    {deal.title}
-                  </Text>
-                  <Text style={styles.dealClient}>
-                    {deal.contactName} {deal.company ? `· ${deal.company}` : ''}
-                  </Text>
+                  <Text style={styles.dealTitle} numberOfLines={1}>{deal.title}</Text>
+                  <Text style={styles.dealContact}>{deal.contactName}{deal.company ? ` · ${deal.company}` : ''}</Text>
                 </View>
-                <Text style={styles.dealValue}>${deal.value.toLocaleString()}</Text>
+                {deal.value > 0 && (
+                  <Text style={styles.dealValue}>₹{deal.value.toLocaleString()}</Text>
+                )}
               </View>
 
-              {/* Visual Pipeline Stages */}
-              <View style={styles.stagesBar}>
-                {deal.stages.map((stg, sIdx) => {
-                  const isCompleted = sIdx < deal.stageIndex;
-                  const isCurrent = sIdx === deal.stageIndex;
-
-                  return (
-                    <View key={stg} style={styles.stageStep}>
-                      <View
-                        style={[
-                          styles.stagePill,
-                          isCompleted && styles.stagePillCompleted,
-                          isCurrent && styles.stagePillCurrent,
-                        ]}
-                      />
-                      <Text
-                        style={[
-                          styles.stageLabel,
-                          isCurrent && styles.stageLabelCurrent,
-                          isCompleted && styles.stageLabelCompleted,
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {stg}
-                      </Text>
-                    </View>
-                  );
-                })}
-              </View>
-
-              {/* Bottom Action */}
-              <View style={styles.dealFooter}>
-                <View style={styles.currentStageTag}>
-                  <Text style={styles.currentStageText}>Stage: {currentStage}</Text>
+              <View style={styles.stageRow}>
+                <View style={styles.stageBadge}>
+                  <Text style={styles.stageBadgeText}>{currentStage}</Text>
                 </View>
-
-                {!isWon ? (
+                {!isWon && (
                   <TouchableOpacity
-                    activeOpacity={0.7}
-                    disabled={isBusy}
+                    style={[styles.advanceBtn, isBusy && { opacity: 0.6 }]}
                     onPress={() => handleAdvanceStage(deal)}
-                    style={styles.advanceBtn}
+                    disabled={isBusy}
                   >
-                    <Text style={styles.advanceBtnText}>
-                      {isBusy ? 'Advancing...' : `Advance → ${deal.stages[deal.stageIndex + 1]}`}
-                    </Text>
+                    <Text style={styles.advanceBtnText}>{isBusy ? '...' : `Advance → ${deal.stages[deal.stageIndex + 1] || 'Next'}`}</Text>
                   </TouchableOpacity>
-                ) : (
-                  <View style={styles.wonBadge}>
-                    <Ionicons name="checkmark-done" size={14} color="#059669" />
-                    <Text style={styles.wonBadgeText}>Deal Closed & Won</Text>
-                  </View>
                 )}
               </View>
             </View>
@@ -182,12 +147,8 @@ export default function PipelineCard({ props, designTokens, data = [], onExecute
 }
 
 const styles = StyleSheet.create({
-  container: {
-    paddingVertical: 4,
-  },
   cardContainer: {
     backgroundColor: '#ffffff',
-    borderRadius: 16,
     padding: 16,
     borderWidth: 1,
     borderColor: '#e2e8f0',
@@ -200,137 +161,95 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   title: {
-    fontSize: 18,
-    fontWeight: '800',
+    fontSize: 13,
+    fontWeight: '700',
     color: '#0f172a',
   },
   dealCount: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#64748b',
-  },
-  dealList: {
-    gap: 12,
-  },
-  dealCard: {
-    backgroundColor: '#ffffff',
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-  },
-  dealCardWon: {
-    borderColor: '#e2e8f0',
-    backgroundColor: '#ffffff',
-  },
-  dealHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 12,
-  },
-  dealTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#0f172a',
-    marginBottom: 2,
-  },
-  dealClient: {
-    fontSize: 12,
-    color: '#64748b',
-  },
-  dealValue: {
-    fontSize: 17,
-    fontWeight: '800',
-    color: '#0f172a',
-    marginLeft: 8,
-  },
-  stagesBar: {
-    flexDirection: 'row',
-    gap: 4,
-    marginVertical: 10,
-  },
-  stageStep: {
-    flex: 1,
-  },
-  stagePill: {
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: '#e2e8f0',
-    marginBottom: 4,
-  },
-  stagePillCompleted: {
-    backgroundColor: '#10b981',
-  },
-  stagePillCurrent: {
-    backgroundColor: '#3b82f6',
-  },
-  stageLabel: {
-    fontSize: 10,
+    fontSize: 11,
     color: '#94a3b8',
-    textAlign: 'center',
+    marginTop: 1,
   },
-  stageLabelCurrent: {
-    color: '#3b82f6',
-    fontWeight: '700',
-  },
-  stageLabelCompleted: {
-    color: '#10b981',
-  },
-  dealFooter: {
+  newDealBtn: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 8,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: '#f1f5f9',
-  },
-  currentStageTag: {
-    backgroundColor: '#f8fafc',
+    backgroundColor: '#0f172a',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
+    gap: 4,
   },
-  currentStageText: {
+  newDealBtnText: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#475569',
-  },
-  advanceBtn: {
-    backgroundColor: '#0f172a',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  advanceBtnText: {
     color: '#ffffff',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  wonBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#d1fae5',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  wonBadgeText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#059669',
   },
   emptyState: {
-    paddingVertical: 24,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
     gap: 8,
+    paddingVertical: 12,
   },
   emptyStateText: {
     fontSize: 13,
-    color: '#94a3b8',
+    color: '#64748b',
     fontWeight: '500',
-    textAlign: 'center',
+  },
+  dealList: {
+    gap: 8,
+  },
+  dealCard: {
+    backgroundColor: '#f8fafc',
+    borderRadius: 10,
+    padding: 12,
+  },
+  dealHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  dealTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#0f172a',
+  },
+  dealContact: {
+    fontSize: 11,
+    color: '#64748b',
+    marginTop: 2,
+  },
+  dealValue: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  stageRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 4,
+  },
+  stageBadge: {
+    backgroundColor: '#e2e8f0',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  stageBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#334155',
+  },
+  advanceBtn: {
+    backgroundColor: '#0f172a',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  advanceBtnText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#ffffff',
   },
 });

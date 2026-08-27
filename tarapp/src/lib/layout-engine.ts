@@ -252,6 +252,7 @@ export interface CanvasDocument {
   title: string;
   type?: string;
   chips?: CanvasChip[];
+  actions?: CanvasChip[];
   lifeModes: CanvasLifeMode[];
   blocks: CanvasBlock[];
   activeModeId?: string;
@@ -278,11 +279,13 @@ export function parseCanvasMarkdown(content: string): CanvasDocument {
   let inLifeModes = false;
   let inBlocks = false;
   let inChips = false;
+  let inActions = false;
   let currentMode: CanvasLifeMode | null = null;
   let currentBlock: any = null;
   let inBlockProps = false;
   let inBlockRoles = false;
   let rootChips: CanvasChip[] = [];
+  let rootActions: CanvasChip[] = [];
 
   for (let i = 0; i < lines.length; i++) {
     const rawLine = lines[i];
@@ -295,6 +298,7 @@ export function parseCanvasMarkdown(content: string): CanvasDocument {
         inChips = true;
         inLifeModes = false;
         inBlocks = false;
+        inActions = false;
         const inlineChipsMatch = trimmed.match(/chips\s*:\s*\[(.*)\]/);
         if (inlineChipsMatch) {
           rootChips = inlineChipsMatch[1]
@@ -305,22 +309,32 @@ export function parseCanvasMarkdown(content: string): CanvasDocument {
         }
         continue;
       }
+      if (trimmed.startsWith('actions:')) {
+        inActions = true;
+        inChips = false;
+        inLifeModes = false;
+        inBlocks = false;
+        continue;
+      }
       if (trimmed.startsWith('life_modes:')) {
         inLifeModes = true;
         inBlocks = false;
         inChips = false;
+        inActions = false;
         continue;
       }
       if (trimmed.startsWith('blocks:')) {
         inBlocks = true;
         inLifeModes = false;
         inChips = false;
+        inActions = false;
         continue;
       }
       if (!trimmed.startsWith('-')) {
         inLifeModes = false;
         inBlocks = false;
         inChips = false;
+        inActions = false;
       }
     }
 
@@ -335,11 +349,26 @@ export function parseCanvasMarkdown(content: string): CanvasDocument {
           if (rootChips.length > 0) {
             rootChips[rootChips.length - 1].target = cleanTrimmed.replace('target:', '').trim().replace(/^['"]|['"]$/g, '');
           }
+        } else if (cleanTrimmed.startsWith('action:') && rootChips.length > 0) {
+          rootChips[rootChips.length - 1].action = cleanTrimmed.replace('action:', '').trim().replace(/^['"]|['"]$/g, '');
         } else {
           rootChips.push({ label: cleanTrimmed.replace(/^['"]|['"]$/g, '') });
         }
       } else if (trimmed.startsWith('target:') && rootChips.length > 0) {
         rootChips[rootChips.length - 1].target = trimmed.replace('target:', '').trim().replace(/^['"]|['"]$/g, '');
+      } else if (trimmed.startsWith('action:') && rootChips.length > 0) {
+        rootChips[rootChips.length - 1].action = trimmed.replace('action:', '').trim().replace(/^['"]|['"]$/g, '');
+      }
+    }
+
+    if (inActions) {
+      if (trimmed.startsWith('-')) {
+        const clean = trimmed.replace(/^-\s*/, '');
+        if (clean.startsWith('label:')) rootActions.push({ label: clean.replace('label:', '').trim().replace(/^['"]|['"]$/g, '') });
+      } else if (rootActions.length > 0 && trimmed.startsWith('action:')) {
+        rootActions[rootActions.length - 1].action = trimmed.replace('action:', '').trim().replace(/^['"]|['"]$/g, '');
+      } else if (rootActions.length > 0 && trimmed.startsWith('target:')) {
+        rootActions[rootActions.length - 1].target = trimmed.replace('target:', '').trim().replace(/^['"]|['"]$/g, '');
       }
     }
 
@@ -425,7 +454,6 @@ export function parseCanvasMarkdown(content: string): CanvasDocument {
   }
 
   const finalBlocks = blocks.length > 0 ? blocks : (lifeModes.length > 0 ? lifeModes[0].blocks : []);
-  return { title, lifeModes, blocks: finalBlocks, chips: rootChips };
+  return { title, lifeModes, blocks: finalBlocks, chips: rootChips, actions: rootActions };
 }
-
 

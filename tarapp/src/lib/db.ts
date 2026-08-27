@@ -4,6 +4,7 @@ import { getCurrentUser } from "./auth";
 import { tar } from "./tar";
 
 const dbConnections: Record<string, Database> = {};
+const syncEndpoints: Record<string, { url: string | null }> = {};
 export let cachedSelfId: string | null = null;
 let activeSyncPullPromise: Promise<void> | null = null;
 
@@ -55,7 +56,7 @@ export function getLocalPrivateDb(userId: string): Database {
   return createLocalDbConnection(userId, `${userId}.db`);
 }
 
-/** Local-only mutable state: request outbox, drafts, preferences and metadata. */
+/** Local-only mutable state: drafts, preferences, and metadata. */
 export function getDeviceDb(userId = cachedSelfId || 'guest'): Database {
   return createLocalDbConnection(`device:${userId}`, `${userId}_device.db`);
 }
@@ -138,18 +139,28 @@ async function migrateLegacyTables(db: Database) {
   } catch (_) {}
 }
 
-/**
- * Trigger read-only pull from Personal Sync DB (matter.md §4)
- */
+async function refreshSyncEndpoint(userId: string): Promise<boolean> {
+  try {
+    const syncInfo = await tar.getSyncBootstrap();
+    if (!syncInfo?.url) return false;
+    syncEndpoints[userId] = { url: syncInfo.url };
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Pull the current user's Personal Sync DB into its local-first SQLite file. */
 export async function syncPull(): Promise<void> {
   if (activeSyncPullPromise) return activeSyncPullPromise;
 
   activeSyncPullPromise = (async () => {
     try {
+      const userId = cachedSelfId;
+      if (userId) await refreshSyncEndpoint(userId);
       const db = getUserDb();
-      if ((db as any).pull && typeof (db as any).pull === 'function') {
-        await (db as any).pull();
-      }
+      if (!(db as any).isSync) return;
+      await db.pull();
     } catch (err) {
       console.warn('[Sync] Pull failed:', err);
     } finally {
@@ -160,28 +171,36 @@ export async function syncPull(): Promise<void> {
   return activeSyncPullPromise;
 }
 
+/**
+ * Compatibility hook for optimistic UI helpers. Personal Sync is read-only for
+ * workspace projections, so authoritative writes continue through Tarai.
+ */
+export function scheduleSyncPush(): void {}
+
 export async function switchUser(userId: string): Promise<Database> {
   console.log(`[DB] switchUser: session for user = ${userId}`);
   cachedSelfId = userId;
 
   let db: Database;
   try {
-    // Attempt to bootstrap remote read-only sync
-    const syncInfo = await tar.getSyncBootstrap().catch(() => null);
-    if (syncInfo && syncInfo.url && syncInfo.token) {
-      db = new Database({
-        path: getDbPath(`${userId}_sync.db`),
-        url: syncInfo.url,
-        // The native SDK invokes this provider for every sync request, so the
-        // client never stores a long-lived database credential.
-        authToken: async () => (await tar.getSyncBootstrap()).token,
-      });
-      (db as any).isSync = true;
-      dbConnections[userId] = db;
-      notifyDbChange(db);
-    } else {
-      db = getLocalPrivateDb(userId);
-    }
+    syncEndpoints[userId] = { url: null };
+    await refreshSyncEndpoint(userId);
+    db = new Database({
+      path: getDbPath(`${userId}_sync.db`),
+      // Returning null keeps an existing local database available offline.
+      url: () => syncEndpoints[userId]?.url ?? null,
+      // The native SDK invokes this provider per sync request, so the client
+      // does not persist a long-lived database credential.
+      authToken: async () => {
+        const syncInfo = await tar.getSyncBootstrap();
+        if (!syncInfo?.token) throw new Error('Personal Sync token unavailable');
+        syncEndpoints[userId] = { url: syncInfo.url };
+        return syncInfo.token;
+      },
+    });
+    (db as any).isSync = true;
+    dbConnections[userId] = db;
+    notifyDbChange(db);
   } catch {
     db = getLocalPrivateDb(userId);
   }
@@ -194,7 +213,7 @@ export async function switchUser(userId: string): Promise<Database> {
         try { await db.exec(sql); } catch (_) {}
       }
     }
-    // Perform initial pull if sync is enabled
+    // Refresh the selected local operational projections.
     syncPull().catch(() => {});
   } catch (e) {
     console.error(`[DB] switchUser DB init failed:`, e);
@@ -209,6 +228,7 @@ export async function closeConnection(key: string): Promise<void> {
     try {
       dbConnections[key].close();
       delete dbConnections[key];
+      delete syncEndpoints[key];
       await new Promise(resolve => setTimeout(resolve, 150));
     } catch (e) {
       console.warn(`[DB] failed to close connection for key: ${key}`, e);

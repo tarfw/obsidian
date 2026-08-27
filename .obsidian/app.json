@@ -1,3 +1,8 @@
 {
-  "promptDelete": false
+  "promptDelete": false,
+  "userIgnoreFilters": [
+    "node_modules/",
+    "*/node_modules/",
+    "**/node_modules/**"
+  ]
 }

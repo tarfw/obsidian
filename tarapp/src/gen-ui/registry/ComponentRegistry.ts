@@ -1,5 +1,5 @@
 /**
- * Native ComponentRegistry — Map<type, component> for React Native.
+ * Native ComponentRegistry — Map<type, component> for React Native (matter.md §9).
  * One registry per target (native).
  */
 
@@ -9,15 +9,17 @@ import { type ComponentType } from 'react';
 
 export interface SectionProps {
   type: string;
-  props: Record<string, any>;
-  designTokens: {
-    colors: Record<string, string>;
-    rounded: Record<string, number>;
-    spacing: Record<string, number>;
-    typography: Record<string, any>;
+  props?: Record<string, any>;
+  designTokens?: {
+    colors?: Record<string, string>;
+    rounded?: Record<string, number>;
+    spacing?: Record<string, number>;
+    typography?: Record<string, any>;
   };
   data?: any[];
+  workspaceScope?: string;
   onExecuteAction?: (actionName: string, params: Record<string, any>) => Promise<any>;
+  onOpenScreen?: (screen: string, initialParams?: Record<string, any>) => void;
 }
 
 export interface ComponentEntry {

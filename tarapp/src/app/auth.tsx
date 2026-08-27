@@ -41,10 +41,9 @@ export default function AuthScreen() {
         if (user) {
           setUserId(user.id);
           try {
-            const data = await tar.listWorkspaces();
-            const hasWorkspaces = (data.workspaces || []).length > 0;
-            console.log(`[AUTH] ${ms()} — has workspaces: ${hasWorkspaces}`);
-            router.replace(hasWorkspaces ? '/(tabs)/workspaces' : '/(tabs)/workspaces?action=new');
+            await tar.listWorkspaces();
+            console.log(`[AUTH] ${ms()} — personal workspace checked`);
+            router.replace('/(tabs)/workspaces');
           } catch {
             router.replace('/(tabs)/workspaces');
           }
@@ -57,9 +56,8 @@ export default function AuthScreen() {
         if (silent) {
           setUserId(silent.id);
           try {
-            const data = await tar.listWorkspaces();
-            const hasWorkspaces = (data.workspaces || []).length > 0;
-            router.replace(hasWorkspaces ? '/(tabs)/workspaces' : '/(tabs)/workspaces?action=new');
+            await tar.listWorkspaces();
+            router.replace('/(tabs)/workspaces');
           } catch {
             router.replace('/(tabs)/workspaces');
           }
@@ -79,9 +77,8 @@ export default function AuthScreen() {
       const user = await signInWithGoogle();
       setUserId(user.id);
       try {
-        const data = await tar.listWorkspaces();
-        const hasWorkspaces = (data.workspaces || []).length > 0;
-        router.replace(hasWorkspaces ? '/(tabs)/workspaces' : '/(tabs)/workspaces?action=new');
+        await tar.listWorkspaces();
+        router.replace('/(tabs)/workspaces');
       } catch {
         router.replace('/(tabs)/workspaces');
       }

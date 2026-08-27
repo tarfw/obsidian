@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+﻿import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { StyleSheet, View, Text, Pressable, ScrollView, TextInput, Modal, Platform, TouchableOpacity, Keyboard } from 'react-native';
 import { KeyboardAwareScrollView, KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -402,7 +402,7 @@ export default function WorkspacesScreen() {
     }
   }, [currentWorkspace?.scope]);
 
-  // Fetch D1-authorized workspaces on mount (matter.md §11).
+  // Fetch D1-authorized workspaces on mount (matter.md ┬º11).
   const fetchWorkspacesList = useCallback(async (silent = false): Promise<Workspace[]> => {
     if (!silent) setLoadingWorkspaces(true);
     try {
@@ -695,7 +695,7 @@ export default function WorkspacesScreen() {
         synthesized.push({
           id: o.id || `ibx_ord_${i}`,
           type: 'order',
-          title: `Order #${o.id?.slice(-4) || i + 1} — ${o.title || o.name || 'Items'}`,
+          title: `Order #${o.id?.slice(-4) || i + 1} ΓÇö ${o.title || o.name || 'Items'}`,
           status: o.status || 'open',
           created_at: o.created_at,
         });
@@ -917,7 +917,7 @@ export default function WorkspacesScreen() {
             data: { category: 'General' }
           });
           await refreshProducts(scope);
-          setAgentFeedback({ text: `Successfully added "${title}" at ₹${val} to your inventory.`, type: 'success' });
+          setAgentFeedback({ text: `Successfully added "${title}" at Γé╣${val} to your inventory.`, type: 'success' });
         }
       }
       else {
@@ -1014,7 +1014,7 @@ export default function WorkspacesScreen() {
         cleanParams.description = activeParams.notes;
       }
 
-      console.log(`[Workspace] ⚡ handleActionFormSubmit — action: "${selectedAction.name}", scope: "${currentWorkspace?.scope}", params:`, cleanParams);
+      console.log(`[Workspace] ΓÜí handleActionFormSubmit ΓÇö action: "${selectedAction.name}", scope: "${currentWorkspace?.scope}", params:`, cleanParams);
 
       if (
         selectedAction.name === 'action_add_flow' ||
@@ -1144,7 +1144,7 @@ export default function WorkspacesScreen() {
           });
           await refreshEntities(currentWorkspace.scope);
 
-          // Update the portable roster projection; D1 remains access authority (matter.md §11).
+          // Update the portable roster projection; D1 remains access authority (matter.md ┬º11).
           if (currentWorkspace.scope && currentWorkspace.scope !== 'p') {
             const staffRole = (cleanParams.role || '').toLowerCase();
             if (staffRole && !['customer', 'client', 'vendor', 'lead', 'supplier'].includes(staffRole)) {
@@ -1336,7 +1336,7 @@ export default function WorkspacesScreen() {
         }
       }
 
-      console.log(`[Workspace] ⚡ Action "${selectedAction.name}" submit completed deterministically — 0 LLM network calls.`);
+      console.log(`[Workspace] ΓÜí Action "${selectedAction.name}" submit completed deterministically ΓÇö 0 LLM network calls.`);
 
       // Auto-complete resolved Inbox Task if triggered from Inbox row
       if (resolvingTaskId) {
@@ -1374,7 +1374,7 @@ export default function WorkspacesScreen() {
   const getFilteredActions = () => {
     return [
 {
-        label: '🎨 Canvas Studio / AI Customizer',
+        label: '≡ƒÄ¿ Canvas Studio / AI Customizer',
         subtitle: 'Configure tools, modules, and role layout with AI',
         icon: 'sparkles',
         openModal: 'canvas_customizer' as const,
@@ -1468,7 +1468,7 @@ export default function WorkspacesScreen() {
         category: p.category || 'Stock',
       }));
 
-    // 3. Contacts for contact card — robust extraction from root and nested .data fields
+    // 3. Contacts for contact card ΓÇö robust extraction from root and nested .data fields
     const liveContacts = (allEntities || [])
       .filter((e: any) => {
         if (!e) return false;
@@ -1515,7 +1515,7 @@ export default function WorkspacesScreen() {
         };
       });
 
-    // 4. Enrich blocks from registered data views (matter.md §9).
+    // 4. Enrich blocks from registered data views (matter.md ┬º9).
     const enrichBlock = (b: CanvasBlock, index: number): CanvasBlock => {
       const type = b.type;
       void index;
@@ -1664,7 +1664,7 @@ export default function WorkspacesScreen() {
       lifeModes: [],
     };
 
-    // Role-based canvas presentation; Tarai still enforces authorization (matter.md §9).
+    // Role-based canvas presentation; Tarai still enforces authorization (matter.md ┬º9).
     const userRole = (currentWorkspace?.role || 'staff').toLowerCase();
     const isOwner = userRole === 'owner' || userRole === 'admin';
 
@@ -1737,8 +1737,8 @@ export default function WorkspacesScreen() {
         designTokens={designTokens}
         infoBarText={
           currentWorkspace?.name
-            ? `★ ${currentWorkspace.name} · ${currentWorkspace.role === 'owner' ? 'Owner Mode' : currentWorkspace.scope === 'p' ? 'Personal Mode' : 'Staff Mode'} · Tap to switch`
-            : '★ Partner Offer: 0% POS processing fees today · Tap for details'
+            ? `Γÿà ${currentWorkspace.name} ┬╖ ${currentWorkspace.role === 'owner' ? 'Owner Mode' : currentWorkspace.scope === 'p' ? 'Personal Mode' : 'Staff Mode'} ┬╖ Tap to switch`
+            : 'Γÿà Partner Offer: 0% POS processing fees today ┬╖ Tap for details'
         }
         workspaces={workspaces}
         currentWorkspace={currentWorkspace}
@@ -1786,9 +1786,9 @@ export default function WorkspacesScreen() {
               const roleLabel = isPersonal
                 ? 'Personal'
                 : w.state === 'provisioning'
-                  ? 'Creating private database…'
+                  ? 'Creating private databaseΓÇª'
                   : w.state === 'restoring'
-                    ? 'Restoring private database…'
+                    ? 'Restoring private databaseΓÇª'
                     : w.state === 'error'
                       ? 'Database setup failed'
                       : w.role === 'owner' ? 'Owner' : 'Collaborator';
@@ -1841,7 +1841,7 @@ export default function WorkspacesScreen() {
               <View>
                 <Text style={styles.switcherAccountTitle}>Credits & Agents</Text>
                 <Text style={styles.creditBalanceLabel}>
-                  {creditBalance === null ? '—' : creditBalance.toLocaleString('en-IN')} available
+                  {creditBalance === null ? 'ΓÇö' : creditBalance.toLocaleString('en-IN')} available
                 </Text>
               </View>
               <Ionicons name="chevron-forward" size={19} color="#64748b" />
@@ -2217,7 +2217,7 @@ export default function WorkspacesScreen() {
         }}
       />
 
-      {/* Overlay Panels — Bottom Bar triggers */}
+      {/* Overlay Panels ΓÇö Bottom Bar triggers */}
       <ExploreOverlay
         visible={showExploreOverlay}
         onClose={() => setShowExploreOverlay(false)}
@@ -2865,7 +2865,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: 8,
   },
-  // ── Action Modal — GitHub notification style ────────────────────
+  // ΓöÇΓöÇ Action Modal ΓÇö GitHub notification style ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   githubModalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
@@ -2929,7 +2929,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 24,
     borderRadius: 10,
   },
-  // ── Welcome Placeholder Card ─────────────────────────────────────
+  // ΓöÇΓöÇ Welcome Placeholder Card ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   welcomeCard: {
     padding: 24,
     borderRadius: 16,
@@ -2966,7 +2966,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '800',
   },
-  // ── Full-Screen Top-Down Workspace Switcher ──────────────────────
+  // ΓöÇΓöÇ Full-Screen Top-Down Workspace Switcher ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   switcherContainer: {
     flex: 1,
     backgroundColor: '#ffffff',

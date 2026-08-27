@@ -1,357 +1,195 @@
-import React, { useState } from 'react';
-import {
-  StyleSheet,
-  View,
-  Text,
-  TextInput,
-  Pressable,
-  ScrollView,
-  Modal,
-  KeyboardAvoidingView,
-  Platform,
-} from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import React, { useEffect, useMemo, useState } from 'react';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { TarLogoLoader } from '@/components/TarLogoLoader';
-import { tar } from '@/lib/tar';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as SecureStore from 'expo-secure-store';
 
-interface CreateWorkspaceProps {
+import { ContentCard, PrimaryButton, SecondaryTextAction, tokens } from '@/components/ds';
+import { tar, type WorkspaceBlueprintCatalog, type WorkspaceCategory, type WorkspaceOnboardingInput } from '@/lib/tar';
+
+interface Props {
   visible: boolean;
   onClose: () => void;
-  onSuccess: (subdomain: string) => Promise<void>;
+  onSuccess: (subdomain: string, name: string) => Promise<void>;
   canClose: boolean;
   existingSubdomains?: string[];
   onOpenCredits?: () => void;
 }
 
-export default function CreateWorkspace({
-  visible,
-  onClose,
-  onSuccess,
-  canClose,
-  existingSubdomains = [],
-  onOpenCredits,
-}: CreateWorkspaceProps) {
+type StartingPoint = 'organise' | 'retail' | 'services' | 'project' | 'other';
+type CategoryId = 'general' | 'retail' | 'services' | 'project' | 'personal';
+
+const STARTING_POINTS: { id: StartingPoint; label: string; detail: string; icon: keyof typeof Ionicons.glyphMap }[] = [
+  { id: 'organise', label: 'Keep work organised', detail: 'Tasks, notes and customers', icon: 'checkbox-outline' },
+  { id: 'retail', label: 'Sell things', detail: 'Sales, orders and stock', icon: 'storefront-outline' },
+  { id: 'services', label: 'Manage customers', detail: 'Bookings, customers and tasks', icon: 'people-outline' },
+  { id: 'project', label: 'Plan a project', detail: 'Tasks and shared work', icon: 'git-network-outline' },
+  { id: 'other', label: 'Something else', detail: 'A simple, flexible space', icon: 'grid-outline' },
+];
+
+const STARTER_CATEGORY: Record<StartingPoint, CategoryId> = {
+  organise: 'general', retail: 'retail', services: 'services', project: 'project', other: 'general',
+};
+
+const FALLBACK_CATEGORIES: Record<CategoryId, WorkspaceCategory> = {
+  general: { id: 'general', label: 'General workspace', icon: 'grid-outline', keywords: [], suggestedName: 'My Space', activities: ['tasks', 'customers', 'notes'], priorities: ['tasks.urgent', 'contacts.recent'], actions: ['task.create', 'contact.create', 'pipeline.create'] },
+  retail: { id: 'retail', label: 'Shop or retail store', icon: 'storefront-outline', keywords: [], suggestedName: 'My Store', activities: ['sales', 'orders', 'inventory', 'customers'], priorities: ['sales.today', 'inventory.low', 'orders.upcoming'], actions: ['sale.create', 'product.create', 'inventory.view_low'] },
+  services: { id: 'services', label: 'Service business', icon: 'briefcase-outline', keywords: [], suggestedName: 'My Business', activities: ['customers', 'bookings', 'tasks', 'projects'], priorities: ['tasks.urgent', 'bookings.upcoming', 'pipeline.active'], actions: ['task.create', 'contact.create', 'booking.create'] },
+  project: { id: 'project', label: 'Project or team', icon: 'git-network-outline', keywords: [], suggestedName: 'My Project', activities: ['tasks', 'projects', 'team', 'notes'], priorities: ['tasks.urgent', 'pipeline.active', 'contacts.recent'], actions: ['task.create', 'pipeline.create', 'contact.create'] },
+  personal: { id: 'personal', label: 'Something else', icon: 'grid-outline', keywords: [], suggestedName: 'My Space', activities: ['tasks', 'notes'], priorities: ['tasks.urgent'], actions: ['task.create', 'contact.create'] },
+};
+
+function slugify(input: string): string {
+  return input.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+}
+
+export default function CreateWorkspace({ visible, onClose, onSuccess, canClose, existingSubdomains = [], onOpenCredits }: Props) {
   const insets = useSafeAreaInsets();
-
-  const [workspaceName, setWorkspaceName] = useState('');
-  const [description, setDescription] = useState('');
-
-  const [isSynthesizing, setIsSynthesizing] = useState(false);
-  const [currentStep, setCurrentStep] = useState(0);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [catalog, setCatalog] = useState<WorkspaceBlueprintCatalog | null>(null);
+  const [startingPoint, setStartingPoint] = useState<StartingPoint>('organise');
+  const [name, setName] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [needsCredits, setNeedsCredits] = useState(false);
 
-  // Subdomain / Scope Calculation
-  const rawName = workspaceName.trim() || 'workspace';
-  let baseSlug = rawName
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '')
-    .slice(0, 24) || 'workspace';
+  useEffect(() => {
+    if (!visible) return;
+    let cancelled = false;
+    tar.workspaceBlueprints().then((data) => {
+      if (!cancelled) setCatalog(data);
+    }).catch(() => {
+      // The general starter keeps creation available during a catalogue outage.
+    });
+    return () => { cancelled = true; };
+  }, [visible]);
 
-  let resolvedSlug = baseSlug;
-  if (existingSubdomains.includes(resolvedSlug)) {
-    let counter = 2;
-    while (existingSubdomains.includes(`${baseSlug}-${counter}`)) {
-      counter++;
-    }
-    resolvedSlug = `${baseSlug}-${counter}`;
-  }
+  const category = useMemo(() => {
+    const categoryId = STARTER_CATEGORY[startingPoint];
+    return catalog?.categories.find((item) => item.id === categoryId) || FALLBACK_CATEGORIES[categoryId];
+  }, [catalog, startingPoint]);
+  const workspaceName = name.trim() || 'My Space';
+  const slug = useMemo(() => {
+    const base = slugify(workspaceName) || 'my-space';
+    if (!existingSubdomains.includes(base)) return base;
+    let suffix = 2;
+    while (existingSubdomains.includes(`${base}-${suffix}`)) suffix += 1;
+    return `${base}-${suffix}`;
+  }, [workspaceName, existingSubdomains]);
 
-  const handleCreate = async () => {
-    if (isSynthesizing || !workspaceName.trim()) return;
-
-    const finalName = workspaceName.trim();
-    const finalDesc = description.trim();
-    setIsSynthesizing(true);
-    setErrorMessage(null);
+  const close = () => {
+    if (submitting || !canClose) return;
+    setStartingPoint('organise');
+    setName('');
+    setSubmitError(null);
     setNeedsCredits(false);
-    setCurrentStep(1);
+    onClose();
+  };
 
+  const submit = async () => {
+    if (submitting) return;
+    setSubmitting(true);
+    setSubmitError(null);
+    setNeedsCredits(false);
     try {
-      await new Promise((res) => setTimeout(res, 150));
-      setCurrentStep(2);
-
-      let finalSlug = resolvedSlug;
-      try {
-        await tar.createWorkspace({
-          name: finalName,
-          subdomain: finalSlug,
-          description: finalDesc || undefined,
-          message: finalDesc ? `${finalName}: ${finalDesc}` : finalName,
-        });
-      } catch (createErr: any) {
-        if (createErr?.message?.includes('already exists') || createErr?.message?.includes('duplicate')) {
-          finalSlug = `${baseSlug}-${Math.floor(100 + Math.random() * 900)}`;
-          await tar.createWorkspace({
-            name: finalName,
-            subdomain: finalSlug,
-            description: finalDesc || undefined,
-            message: finalDesc ? `${finalName}: ${finalDesc}` : finalName,
-          });
-        } else {
-          throw createErr;
-        }
-      }
-
-      await SecureStore.setItemAsync('active_workspace_subdomain', finalSlug).catch(() => null);
-
-      setCurrentStep(3);
-      await new Promise((res) => setTimeout(res, 150));
-
-      setIsSynthesizing(false);
-      setCurrentStep(0);
-      setWorkspaceName('');
-      setDescription('');
-      await onSuccess(finalSlug);
-    } catch (err: any) {
-      console.error('[CreateWorkspace] Creation error:', err);
-      const insufficientCredits = err?.status === 402 || /not enough credits/i.test(err?.message || '');
-      setNeedsCredits(insufficientCredits);
-      setErrorMessage(insufficientCredits ? 'You need 100 credits to start an owned workspace.' : (err?.message || 'Failed to create workspace. Please try again.'));
-      setIsSynthesizing(false);
-      setCurrentStep(0);
+      const onboarding: WorkspaceOnboardingInput = {
+        category: category.id,
+        activities: category.activities,
+        priorities: category.priorities.slice(0, 3),
+        actions: category.actions.slice(0, 3),
+        audience: STARTER_CATEGORY[startingPoint] === 'project' ? 'team' : 'solo',
+      };
+      await tar.createWorkspace({ name: workspaceName, subdomain: slug, onboarding });
+      await SecureStore.setItemAsync('active_workspace_subdomain', slug).catch(() => null);
+      await onSuccess(slug, workspaceName);
+      setStartingPoint('organise');
+      setName('');
+    } catch (cause: any) {
+      const credits = cause?.status === 402 || /not enough credits/i.test(cause?.message || '');
+      setNeedsCredits(credits);
+      setSubmitError(credits ? 'You need 100 credits to create a new space.' : cause?.message || 'Your space could not be created. Try again.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
-  const stepLabels = [
-    'Setting up workspace...',
-    'Creating database & tools...',
-    'Finalizing...',
-    'Ready!',
-  ];
-
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      presentationStyle="pageSheet"
-      statusBarTranslucent
-      onRequestClose={() => {
-        if (canClose && !isSynthesizing) {
-          setWorkspaceName('');
-          setDescription('');
-          onClose();
-        }
-      }}
-    >
-      <View style={styles.container}>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={{ flex: 1 }}
-        >
-          {/* Header Bar */}
-          <View
-            style={[
-              styles.headerBar,
-              {
-                paddingTop: Math.max(insets.top, Platform.OS === 'android' ? 16 : 12) + 12,
-              },
-            ]}
-          >
-            <Text style={styles.headerTitle}>New Workspace</Text>
-            {canClose && !isSynthesizing && (
-              <Pressable
-                onPress={() => {
-                  setWorkspaceName('');
-                  setDescription('');
-                  onClose();
-                }}
-                style={styles.closeBtn}
-                hitSlop={8}
-              >
-                <Ionicons name="close" size={20} color="#64748b" />
-              </Pressable>
-            )}
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" statusBarTranslucent onRequestClose={close}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.container}>
+        <View style={[styles.header, { paddingTop: Math.max(insets.top, 14) + 8 }]}>
+          <Pressable onPress={close} disabled={submitting || !canClose} style={styles.closeButton} accessibilityRole="button" accessibilityLabel="Close create space">
+            <Ionicons name="arrow-back" size={20} color={tokens.color.ink} />
+          </Pressable>
+          <Text style={styles.headerTitle}>New space</Text>
+          <View style={styles.closeButton} />
+        </View>
+
+        <ScrollView contentContainerStyle={[styles.content, { paddingBottom: Math.max(insets.bottom, 24) + 24 }]} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+          <Text style={styles.title}>Start with a simple space</Text>
+          <Text style={styles.subtitle}>Choose a starting point if it helps. You can change everything later.</Text>
+
+          <ContentCard>
+            <Text style={styles.fieldLabel}>Name your space <Text style={styles.optional}>optional</Text></Text>
+            <TextInput value={name} onChangeText={setName} placeholder="My Space" placeholderTextColor={tokens.color.inkFaint} style={styles.nameInput} maxLength={48} returnKeyType="done" accessibilityLabel="Space name" />
+            <Text style={styles.fieldMeta}>Its address will be {slug}.</Text>
+          </ContentCard>
+
+          <View style={styles.section}>
+            <Text style={styles.fieldLabel}>What are you starting with?</Text>
+            <Text style={styles.fieldMeta}>Pick one, or keep the general space selected.</Text>
+            <View style={styles.optionsList}>
+              {STARTING_POINTS.map((option) => {
+                const selected = startingPoint === option.id;
+                return (
+                  <Pressable key={option.id} onPress={() => setStartingPoint(option.id)} style={({ pressed }) => [styles.optionRow, selected && styles.optionRowSelected, pressed && styles.pressed]} accessibilityRole="radio" accessibilityState={{ selected }}>
+                    <View style={[styles.optionIcon, selected && styles.optionIconSelected]}><Ionicons name={option.icon} size={18} color={selected ? tokens.color.accentInk : tokens.color.inkSoft} /></View>
+                    <View style={styles.optionText}><Text style={styles.optionLabel}>{option.label}</Text><Text style={styles.optionDetail}>{option.detail}</Text></View>
+                    <Ionicons name={selected ? 'radio-button-on' : 'radio-button-off'} size={20} color={selected ? tokens.color.ink : tokens.color.inkFaint} />
+                  </Pressable>
+                );
+              })}
+            </View>
           </View>
 
-          {isSynthesizing ? (
-            /* Synthesizing Progress State */
-            <View style={styles.loaderContainer}>
-              <TarLogoLoader size={34} color="#0f172a" style={{ marginBottom: 14 }} />
-              <Text style={styles.loaderStatus}>
-                {stepLabels[Math.min(currentStep - 1, stepLabels.length - 1)] || 'Creating Workspace...'}
-              </Text>
-            </View>
-          ) : (
-            /* Clean Minimal Form */
-            <ScrollView
-              contentContainerStyle={[
-                styles.scrollContent,
-                {
-                  paddingBottom: Math.max(insets.bottom, Platform.OS === 'android' ? 24 : 16) + 20,
-                },
-              ]}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-            >
-              {errorMessage && (
-                <View style={styles.errorBanner}>
-                  <Ionicons name="alert-circle-outline" size={16} color="#dc2626" style={{ marginRight: 6 }} />
-                  <Text style={styles.errorText}>{errorMessage}</Text>
-                  {needsCredits && onOpenCredits && (
-                    <Pressable onPress={onOpenCredits} style={styles.creditsButton}>
-                      <Text style={styles.creditsButtonText}>Add credits</Text>
-                    </Pressable>
-                  )}
-                </View>
-              )}
+          {submitError ? <View style={styles.error}>
+            <Ionicons name="alert-circle-outline" size={18} color={tokens.color.danger} />
+            <Text style={styles.errorText}>{submitError}</Text>
+            {needsCredits && onOpenCredits ? <Pressable onPress={onOpenCredits}><Text style={styles.creditsLink}>Add credits</Text></Pressable> : null}
+          </View> : null}
+        </ScrollView>
 
-              {/* WORKSPACE NAME */}
-              <View style={styles.sectionBlock}>
-                <Text style={styles.sectionTitle}>Name</Text>
-                <TextInput
-                  style={styles.inputField}
-                  value={workspaceName}
-                  onChangeText={setWorkspaceName}
-                  placeholder="Workspace name"
-                  placeholderTextColor="#94a3b8"
-                  autoFocus
-                />
-              </View>
-
-              {/* OPTIONAL DESCRIPTION */}
-              <View style={styles.sectionBlock}>
-                <Text style={styles.sectionTitle}>Description (Optional)</Text>
-                <TextInput
-                  style={[styles.inputField, styles.descField]}
-                  value={description}
-                  onChangeText={setDescription}
-                  placeholder="What is this workspace used for?"
-                  placeholderTextColor="#94a3b8"
-                  multiline
-                  numberOfLines={3}
-                />
-              </View>
-
-              {/* Create Button */}
-              <Pressable
-                onPress={handleCreate}
-                disabled={!workspaceName.trim()}
-                style={({ pressed }) => [
-                  styles.launchBtn,
-                  {
-                    opacity: !workspaceName.trim() ? 0.35 : pressed ? 0.85 : 1,
-                  },
-                ]}
-              >
-                <Text style={styles.launchBtnText}>Create Workspace</Text>
-              </Pressable>
-            </ScrollView>
-          )}
-        </KeyboardAvoidingView>
-      </View>
+        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 20) }]}>
+          <PrimaryButton label="Create space" onPress={submit} busy={submitting} />
+          <SecondaryTextAction label="Cancel" onPress={close} disabled={submitting} />
+        </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#ffffff',
-  },
-  headerBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingBottom: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f1f5f9',
-    backgroundColor: '#ffffff',
-  },
-  headerTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: '#0f172a',
-    letterSpacing: -0.2,
-  },
-  closeBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#f8fafc',
-  },
-  scrollContent: {
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    gap: 18,
-  },
-  sectionBlock: {
-    gap: 7,
-  },
-  sectionTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#334155',
-  },
-  inputField: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#0f172a',
-    backgroundColor: '#f8fafc',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-  },
-  descField: {
-    textAlignVertical: 'top',
-    height: 80,
-    lineHeight: 20,
-  },
-  launchBtn: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 13,
-    borderRadius: 12,
-    backgroundColor: '#0f172a',
-    marginTop: 6,
-  },
-  launchBtnText: {
-    color: '#ffffff',
-    fontSize: 14.5,
-    fontWeight: '600',
-  },
-  loaderContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingBottom: 40,
-    backgroundColor: '#ffffff',
-  },
-  loaderStatus: {
-    fontSize: 14.5,
-    fontWeight: '600',
-    color: '#0f172a',
-  },
-  errorBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fef2f2',
-    borderColor: '#fecaca',
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-  },
-  creditsButton: {
-    marginLeft: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: 8,
-    backgroundColor: '#0f172a',
-  },
-  creditsButtonText: { color: '#ffffff', fontSize: 12, fontWeight: '700' },
-  errorText: {
-    flex: 1,
-    color: '#dc2626',
-    fontSize: 12.5,
-    fontWeight: '500',
-  },
+  container: { flex: 1, backgroundColor: tokens.color.surfaceSunk },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: tokens.spacing.lg, paddingBottom: tokens.spacing.sm },
+  closeButton: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center', backgroundColor: tokens.color.surface, borderWidth: 1, borderColor: tokens.color.borderSoft },
+  headerTitle: { ...tokens.type.bodyStrong, color: tokens.color.ink },
+  content: { padding: tokens.spacing.lg, gap: tokens.spacing.lg },
+  title: { ...tokens.type.headingXl, color: tokens.color.ink },
+  subtitle: { ...tokens.type.body, color: tokens.color.inkMuted },
+  section: { gap: tokens.spacing.sm },
+  fieldLabel: { ...tokens.type.label, color: tokens.color.inkMuted, textTransform: 'uppercase' },
+  optional: { color: tokens.color.inkFaint, fontWeight: '500' },
+  fieldMeta: { ...tokens.type.bodySm, color: tokens.color.inkMuted },
+  nameInput: { ...tokens.type.headingLg, color: tokens.color.ink, paddingVertical: tokens.spacing.sm },
+  optionsList: { gap: tokens.spacing.sm },
+  optionRow: { flexDirection: 'row', alignItems: 'center', gap: tokens.spacing.md, padding: tokens.spacing.md, backgroundColor: tokens.color.surface, borderRadius: tokens.radius.md, borderWidth: 1, borderColor: tokens.color.borderSoft },
+  optionRowSelected: { borderColor: tokens.color.ink, backgroundColor: tokens.color.surfaceSunken },
+  optionIcon: { width: 36, height: 36, borderRadius: tokens.radius.md, backgroundColor: tokens.color.surfaceSunken, alignItems: 'center', justifyContent: 'center' },
+  optionIconSelected: { backgroundColor: tokens.color.ink },
+  optionText: { flex: 1, gap: 1 },
+  optionLabel: { ...tokens.type.bodyStrong, color: tokens.color.ink },
+  optionDetail: { ...tokens.type.bodySm, color: tokens.color.inkMuted },
+  pressed: { opacity: 0.82 },
+  footer: { borderTopWidth: 1, borderTopColor: tokens.color.borderSoft, paddingHorizontal: tokens.spacing.lg, paddingTop: tokens.spacing.md, backgroundColor: tokens.color.surface, gap: tokens.spacing.sm },
+  error: { flexDirection: 'row', alignItems: 'center', gap: tokens.spacing.sm, backgroundColor: tokens.color.dangerBg, borderRadius: tokens.radius.md, padding: tokens.spacing.md },
+  errorText: { ...tokens.type.bodySm, color: tokens.color.danger, flex: 1 },
+  creditsLink: { ...tokens.type.label, color: tokens.color.ink, textDecorationLine: 'underline' },
 });

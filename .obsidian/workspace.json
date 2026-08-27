@@ -4,17 +4,21 @@
     "type": "split",
     "children": [
       {
-        "id": "ab39be455b58b441",
+        "id": "6ed61bf099f1482d",
         "type": "tabs",
         "children": [
           {
-            "id": "c5e18b854fc94cae",
+            "id": "f0c60f946d8e8b1e",
             "type": "leaf",
             "state": {
-              "type": "empty",
-              "state": {},
+              "type": "markdown",
+              "state": {
+                "file": "matter.md",
+                "mode": "source",
+                "source": false
+              },
               "icon": "lucide-file",
-              "title": "New tab"
+              "title": "matter"
             }
           }
         ]
@@ -79,7 +83,8 @@
       }
     ],
     "direction": "horizontal",
-    "width": 300
+    "width": 300,
+    "collapsed": true
   },
   "right": {
     "id": "10dfbf46ea29c050",
@@ -95,7 +100,7 @@
             "state": {
               "type": "backlink",
               "state": {
-                "file": "plan6.md",
+                "file": "matter.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -185,19 +190,19 @@
       "github-sync:Sync with Remote": false
     }
   },
-  "active": "c5e18b854fc94cae",
+  "active": "f0c60f946d8e8b1e",
   "lastOpenFiles": [
-    "eathungry/astro-hungrytiger/node_modules/load-yaml-file/node_modules/js-yaml/bin/js-yaml.js",
-    "eathungry/astro-hungrytiger/node_modules/load-yaml-file/node_modules/js-yaml/bin",
-    "eathungry/astro-hungrytiger/node_modules/jsesc/man/jsesc.1",
-    "eathungry/astro-hungrytiger/node_modules/jsesc/man",
-    "eathungry/astro-hungrytiger/node_modules/@jridgewell/trace-mapping/src/types.ts",
-    "eathungry/astro-hungrytiger/node_modules/@jridgewell/trace-mapping/src/strip-filename.ts",
-    "eathungry/astro-hungrytiger/node_modules/@jridgewell/trace-mapping/src/trace-mapping.ts",
-    "eathungry/astro-hungrytiger/node_modules/@jridgewell/trace-mapping/src/sort.ts",
-    "eathungry/astro-hungrytiger/node_modules/@jridgewell/trace-mapping/src/sourcemap-segment.ts",
-    "eathungry/astro-hungrytiger/node_modules/@jridgewell/trace-mapping/src/resolve.ts",
-    "eathungry/astro-hungrytiger/node_modules/@jridgewell/trace-mapping/src/flatten-map.ts",
+    "matter.md",
+    "matter.md.tmp.13392.93d017267c34",
+    "matter.md.tmp.13392.e94d6710a307",
+    "matter.md.tmp.13392.7c9aa9849c9d",
+    "matter.md.tmp.13392.732efb26d1d6",
+    "matter.md.tmp.13392.8438fdbbc4cc",
+    "matter.md.tmp.13392.2fb2924dd7a9",
+    "matter.md.tmp.13392.c7e8d08eb6e7",
+    "matter.md.tmp.13392.49385120610d",
+    "matter.md.tmp.13392.7e522318c0ba",
+    "matter.md.tmp.13392.afdc65dafaba",
     "eathungry/astro-hungrytiger/node_modules/@babel/helper-plugin-utils/README.md",
     "eathungry/astro-hungrytiger/node_modules/@babel/helper-annotate-as-pure/README.md",
     "eathungry/astro-hungrytiger/node_modules/yallist/README.md",
@@ -222,7 +227,6 @@
     "eathungry/astro-hungrytiger/node_modules/@types/babel__template/README.md",
     "eathungry/astro-hungrytiger/node_modules/@types/babel__generator/README.md",
     "eathungry/astro-hungrytiger/node_modules/@types/babel__core/README.md",
-    "eathungry/astro-hungrytiger/node_modules/@babel/plugin-syntax-jsx/README.md",
     "brandingsite/public/icons/whatsapp.png",
     "brandingsite/public/icons/telegram.png",
     "brandingsite/public/icons/slack.png",

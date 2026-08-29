@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { StyleSheet, View, Text, Pressable, ScrollView, TextInput, Modal, Platform, TouchableOpacity, Keyboard } from 'react-native';
 import { KeyboardAwareScrollView, KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -37,6 +37,7 @@ import { ContactMentionPicker, ContactMentionModal, ContactItem } from '@/compon
 import ExploreOverlay from '@/components/ExploreOverlay';
 import CanvasOverlay from '@/components/CanvasOverlay';
 import CanvasCustomizerModal from '@/components/CanvasCustomizerModal';
+import AgentBuilder from '@/components/AgentBuilder';
 import CreateWorkspace from '@/components/CreateWorkspace';
 import { EphemeralPlanCanvas } from '@/components/plans';
 import { TarLogoLoader } from '@/components/TarLogoLoader';
@@ -188,6 +189,7 @@ export default function WorkspacesScreen() {
   const [canvasDoc, setCanvasDoc] = useState<CanvasDocument | null>(null);
   const [loadingCanvas, setLoadingCanvas] = useState(false);
   const [showCanvasCustomizer, setShowCanvasCustomizer] = useState(false);
+  const [showAgentBuilder, setShowAgentBuilder] = useState(false);
   const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false);
   const [newWsName, setNewWsName] = useState('');
   const [newWsCreating, setNewWsCreating] = useState(false);
@@ -1853,6 +1855,9 @@ export default function WorkspacesScreen() {
               <TouchableOpacity onPress={() => { setShowDropdown(false); setShowCanvasCustomizer(true); }} style={styles.switcherQuickAction}>
                 <Text style={styles.switcherQuickActionText}>Edit canvas</Text>
               </TouchableOpacity>
+              <TouchableOpacity onPress={() => { setShowDropdown(false); setShowAgentBuilder(true); }} style={styles.switcherQuickAction}>
+                <Text style={styles.switcherQuickActionText}>New agent</Text>
+              </TouchableOpacity>
               <TouchableOpacity onPress={() => { setShowDropdown(false); setShowSiteScreen(true); }} style={styles.switcherQuickAction}>
                 <Text style={styles.switcherQuickActionText}>Edit storefront</Text>
               </TouchableOpacity>
@@ -2259,6 +2264,16 @@ export default function WorkspacesScreen() {
               setCanvasBlocks(blocks);
             }
           }
+        }}
+      />
+
+      <AgentBuilder
+        visible={showAgentBuilder}
+        onClose={() => setShowAgentBuilder(false)}
+        scope={currentWorkspace?.scope || ''}
+        workspaceName={currentWorkspace?.name || currentWorkspace?.subdomain || 'Workspace'}
+        onSaved={async () => {
+          setShowAgentBuilder(false);
         }}
       />
     </View>

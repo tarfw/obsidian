@@ -806,28 +806,6 @@ Respond strictly in valid JSON format:
                   </Text>
                 </TouchableOpacity>
 
-                {/* Option: Default Sample Image */}
-                <TouchableOpacity
-                  onPress={() => {
-                    const samples: Record<string, string> = {
-                      Product: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500',
-                      Listing: 'https://images.unsplash.com/photo-1564013799919-ab600027ffc6?w=500',
-                      Service: 'https://images.unsplash.com/photo-1521791136368-1a8b27477d15?w=500',
-                      Document: 'https://images.unsplash.com/photo-1450133064473-71024230f91b?w=500',
-                      Asset: 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=500',
-                      Warehouse: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=500',
-                    };
-                    const sampleUrl = samples[subType] || samples.Product;
-                    setImageUrl(sampleUrl);
-                    setTempImageUrl(sampleUrl);
-                    setShowImagePicker(false);
-                  }}
-                  style={[styles.imageOptionBtn, { backgroundColor: theme.border + '15' }]}
-                >
-                  <Ionicons name="image-outline" size={18} color={theme.text} />
-                  <Text style={[styles.imageOptionText, { color: theme.text }]}>Use default sample image</Text>
-                </TouchableOpacity>
-
                 {imageUrl ? (
                   <TouchableOpacity
                     onPress={() => {

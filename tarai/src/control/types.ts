@@ -21,6 +21,7 @@ export interface ControlSpace {
   slug: string;
   name: string;
   region: string;
+  workspace_number: number;
   db: string | null;
   host: string | null;
   schema: number;

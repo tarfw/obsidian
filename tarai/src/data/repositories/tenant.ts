@@ -369,6 +369,7 @@ export class TenantRepository {
     title: string;
     ref?: string;
     priority?: number;
+    status?: number;
     data?: Record<string, unknown>;
   }): Promise<PresentEntity> {
     const now = Date.now();
@@ -376,9 +377,9 @@ export class TenantRepository {
 
     await this.client.execute({
       sql: `INSERT INTO inbox (id, user_id, workspace_id, type, title, ref, priority, status, data, version, created, updated)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, 1, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
             ON CONFLICT(id) DO NOTHING`,
-      args: [input.id, input.userId, input.workspaceId || null, typeCode, input.title, input.ref || null, input.priority || 1, JSON.stringify(input.data || {}), now, now],
+      args: [input.id, input.userId, input.workspaceId || null, typeCode, input.title, input.ref || null, input.priority || 1, input.status || 1, JSON.stringify(input.data || {}), now, now],
     });
 
     return formatRow('inbox', {
@@ -389,7 +390,7 @@ export class TenantRepository {
       title: input.title,
       ref: input.ref || null,
       priority: input.priority || 1,
-      status: 1,
+      status: input.status || 1,
       data: JSON.stringify(input.data || {}),
       version: 1,
       created: now,

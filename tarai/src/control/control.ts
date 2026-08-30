@@ -86,6 +86,19 @@ export class ControlRepository {
     return result.results;
   }
 
+  async retireOwnedSpace(space: string, owner: string): Promise<boolean> {
+    const target = await this.getSpace(space);
+    if (!target) throw new ControlError('missing', 'Workspace not found');
+    if (target.owner !== owner) throw new ControlError('access', 'Only the workspace owner can remove it');
+    const now = unixNow();
+    const result = await this.db.batch([
+      this.db.prepare(`UPDATE spaces SET state = 'archived', updated = ? WHERE id = ? AND owner = ? AND state != 'archived'`).bind(now, space, owner),
+      this.db.prepare(`UPDATE members SET state = 'revoked', updated = ? WHERE space = ? AND state = 'active'`).bind(now, space),
+      this.db.prepare(`UPDATE services SET state = 'ended', updated = ? WHERE space = ? AND state != 'ended'`).bind(now, space),
+    ]);
+    return result[0].meta.changes === 1;
+  }
+
   getSpaceBySlug(slug: string): Promise<ControlSpace | null> {
     return this.db.prepare('SELECT * FROM spaces WHERE slug = ?').bind(slug.toLowerCase()).first<ControlSpace>();
   }
@@ -147,9 +160,10 @@ export class ControlRepository {
            VALUES (?, ?, ?, 'workspace', ?, ?, '{}', ?)`,
         ).bind(`led_${crypto.randomUUID()}`, wallet, -WORKSPACE_CREDITS, input.id, `workspace:${input.idem}`, now),
         this.db.prepare(
-          `INSERT INTO spaces (id, owner, slug, name, region, state, created, updated)
-           VALUES (?, ?, ?, ?, ?, 'provisioning', ?, ?)`,
-        ).bind(input.id, input.owner, input.slug.toLowerCase(), input.name, input.region, now, now),
+          `INSERT INTO spaces (id, owner, slug, name, region, workspace_number, state, created, updated)
+           SELECT ?, ?, ?, ?, ?, COALESCE(MAX(workspace_number), 0) + 1, 'provisioning', ?, ?
+           FROM spaces WHERE owner = ?`,
+        ).bind(input.id, input.owner, input.slug.toLowerCase(), input.name, input.region, now, now, input.owner),
         this.db.prepare(
           `INSERT INTO members (id, space, user, role, state, budget, spent, reset, created, updated)
            VALUES (?, ?, ?, 'owner', 'active', 0, 0, ?, ?, ?)`,

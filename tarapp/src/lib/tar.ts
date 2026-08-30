@@ -54,6 +54,33 @@ export interface AgentRunResult {
   result: { action?: string; summary?: string; data?: Record<string, unknown> } | null;
 }
 
+export interface BotBuilderArtifactDraft {
+  id: string;
+  name: string;
+  fields: string[];
+  initialStatus: string;
+}
+
+export interface BotBuilderStepDraft {
+  id: string;
+  title: string;
+  handler: 'app' | 'agent';
+  card?: { type: 'input' | 'selection' | 'payment' | 'report' | 'list'; fields: string[] };
+  instruction?: string;
+}
+
+export interface BotBuilderDraft {
+  name: string;
+  purpose: string;
+  artifacts: BotBuilderArtifactDraft[];
+  workflows: Array<{ id: string; title: string; artifactId: string; steps: BotBuilderStepDraft[] }>;
+}
+
+export interface HarnessDefinition { id: string; kind: 'data' | 'bot'; name: string; body: Record<string, unknown>; version: number; state: string; }
+export interface HarnessRecord { id: string; type: string; title: string; data: Record<string, unknown>; status: string; version: number; }
+export interface HarnessHomeCard { id: string; kind: 'inbox' | 'action' | 'data' | 'report'; title: string; botId: string; workflowId: string; stepId: string; mode: 'deterministic' | 'agentic'; workspaceId?: string; }
+export interface HarnessHome { role: 'owner' | 'admin' | 'member' | 'guest'; capabilities?: { manageDefinitions: boolean }; now: HarnessHomeCard[]; actions: HarnessHomeCard[]; data: HarnessRecord[]; }
+
 export class TaraiRequestError extends Error {
   constructor(public readonly status: number, message: string, public readonly path: string) {
     super(message);
@@ -115,7 +142,7 @@ function knowledgePath(path: string): string {
   return path.split('/').filter(Boolean).map(encodeURIComponent).join('/');
 }
 
-async function createWorkspace(data: { name: string; subdomain: string; onboarding?: WorkspaceOnboardingInput; description?: string; message?: string; modules?: string[]; type?: string }) {
+async function createWorkspace(data: { name: string; subdomain: string; message?: string }) {
   const created = await request<{ workspace: WorkspaceSummary }>('/api/workspaces', {
     method: 'POST',
     body: data,
@@ -128,11 +155,13 @@ async function chat(message: string, scope?: string): Promise<any> {
   const started = await request<{ run: any }>('/api/intent', {
     method: 'POST',
     scope,
-    body: { intent: message, action: 'workspace.summary', scope: 'workspace' },
+    body: { intent: message, action: 'agent.reply', scope: 'workspace' },
   });
   if (!started.run?.id) return started;
-  for (let attempt = 0; attempt < 12; attempt++) {
-    if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 500));
+  // A Workflow retries provider failures before it refunds the run. Wait long
+  // enough to show the result or its error instead of leaving this screen busy.
+  for (let attempt = 0; attempt < 60; attempt++) {
+    if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 1000));
     const status = await request<{ run: any; result: any }>(`/api/runs/${encodeURIComponent(started.run.id)}`, { scope });
     if (status.run?.state === 'done') {
       return {
@@ -143,14 +172,47 @@ async function chat(message: string, scope?: string): Promise<any> {
       };
     }
     if (status.run?.state === 'failed' || status.run?.state === 'refunded') {
-      throw new TaraiRequestError(500, 'Tar could not complete this request. Reserved credits were refunded.', `/api/runs/${started.run.id}`);
+      throw new TaraiRequestError(500, 'The assistant could not complete this step. Any reserved credits were refunded.', `/api/runs/${started.run.id}`);
     }
   }
-  return { run: started.run, reply: 'Tar is still working. The result will appear in your inbox.', executorResult: { success: false } };
+  throw new TaraiRequestError(504, 'The assistant is taking longer than expected. Please try again.', `/api/runs/${started.run.id}`);
+}
+
+async function waitForAgentRun(scope: string, runId: string): Promise<any> {
+  for (let attempt = 0; attempt < 60; attempt++) {
+    if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 1000));
+    const status = await request<{ run: any; result: any }>(`/api/runs/${encodeURIComponent(runId)}`, { scope });
+    if (status.run?.state === 'done') return status.result;
+    if (status.run?.state === 'failed' || status.run?.state === 'refunded') {
+      throw new TaraiRequestError(500, 'The Bot Builder could not complete this request. Any reserved credits were refunded.', `/api/runs/${runId}`);
+    }
+  }
+  throw new TaraiRequestError(504, 'The Bot Builder is taking longer than expected. Please try again.', `/api/runs/${runId}`);
+}
+
+async function generateBotDraft(scope: string, prompt: string, answers: Record<string, string>, existingArtifacts: Array<{ id: string; name: string; fields: string[] }>): Promise<BotBuilderDraft> {
+  const started = await request<{ run: { id?: string } }>('/api/agents/bot.builder/run', {
+    method: 'POST', scope, body: { prompt, answers, existingArtifacts }, idempotencyKey: newIdempotencyKey('bot-builder'),
+  });
+  if (!started.run?.id) throw new TaraiRequestError(500, 'The Bot Builder did not start.', '/api/agents/bot.builder/run');
+  const result = await waitForAgentRun(scope, started.run.id);
+  const draft = result?.result?.draft;
+  if (!draft || typeof draft !== 'object') throw new TaraiRequestError(500, 'The Bot Builder returned an invalid draft.', `/api/runs/${started.run.id}`);
+  return draft as BotBuilderDraft;
 }
 
 export const tar = {
   chat: (_sessionId: string, message: string, scope?: string) => chat(message, scope),
+  botBuilder: { generate: generateBotDraft },
+  harness: {
+    home: (scope: string) => request<HarnessHome>('/api/harness/home', { scope }),
+    defs: (scope: string, kind?: 'data' | 'bot') => request<{ defs: HarnessDefinition[] }>(`/api/harness/defs${kind ? `?kind=${kind}` : ''}`, { scope }),
+    saveDef: (scope: string, def: { id: string; kind: 'data' | 'bot'; name: string; body: Record<string, unknown> }) => request<{ def: HarnessDefinition }>(`/api/harness/defs/${encodeURIComponent(def.id)}`, { method: 'PUT', scope, body: def }),
+    records: (scope: string, type?: string) => request<{ records: HarnessRecord[] }>(`/api/harness/records${type ? `?type=${encodeURIComponent(type)}` : ''}`, { scope }),
+    command: (scope: string, command: Record<string, unknown>) => request<any>('/api/harness/commands', { method: 'POST', scope, body: command }),
+    inbox: (scope: string) => request<{ items: Array<{ id: string; title?: string; workspace_id?: string; workspace_name?: string; data?: Record<string, unknown>; version?: number }> }>('/api/harness/inbox', { scope }),
+    completeInbox: (scope: string, id: string) => request('/api/harness/inbox/' + encodeURIComponent(id) + '/complete', { method: 'POST', scope }),
+  },
   aiTasks: (_scope: string) => Promise.resolve([]),
   executeAITask: (action: string, params: Record<string, any>, scope: string) => request('/api/intent', { method: 'POST', scope, body: { intent: action, action, parameters: params, scope: 'workspace' } }),
   tool: entityOperation,
@@ -161,6 +223,7 @@ export const tar = {
   workspaceBlueprints: () => request<WorkspaceBlueprintCatalog>('/api/workspace-blueprints'),
   suggestWorkspace: (query: string) => request<{ category: string; activities: string[]; source: 'catalog' | 'ai' | 'fallback' }>('/api/workspace-blueprints/suggest', { method: 'POST', body: { query } }),
   listWorkspaces: (_email?: string) => request<{ workspaces: WorkspaceSummary[] }>('/api/workspaces'),
+  removeWorkspace: (id: string) => request<{ state: 'archived' }>(`/api/workspaces/${encodeURIComponent(id)}/remove`, { method: 'POST' }),
   wallet: () => request<{ wallet: CreditWallet | null }>('/api/wallet'),
   ledger: () => request<{ ledger: CreditLedgerEntry[] }>('/api/ledger'),
   agents: () => request<{ agents: AgentRate[] }>('/api/agents'),

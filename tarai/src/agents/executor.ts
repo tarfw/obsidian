@@ -5,11 +5,13 @@ import { KVCacheService } from '../data/kv.ts';
 import { SiteCompiler, SiteModule } from '../modules/site.ts';
 import { computeSha256 } from '../domain/idempotency.ts';
 import type { FactSlice } from '../domain/facts.ts';
+import { generateBotBuilderDraft } from './bot-builder.ts';
 
 export interface AgentResources {
   data: Client;
   r2: R2StorageService;
   kv: KVCacheService;
+  groqApiKey?: string;
 }
 
 export interface AgentResult {
@@ -20,6 +22,35 @@ export interface AgentResult {
 
 function text(value: unknown, fallback = ''): string {
   return typeof value === 'string' ? value.trim() : fallback;
+}
+
+async function generateAgentReply(intent: string, apiKey: string): Promise<string> {
+  console.log(JSON.stringify({ service: 'tarai', provider: 'groq', stage: 'request.started', model: 'qwen/qwen3.8-27b', input_characters: intent.length }));
+  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({
+      model: 'qwen/qwen3.8-27b',
+      messages: [
+        { role: 'system', content: 'You are a TAR Harness Agent Step. Give clear, concise help using the supplied Artifact data. You may explain, summarize, draft, recommend, or identify a suitable next step. Never claim you changed records, sent messages, processed payments, or executed actions. The App and Gateway control all changes.' },
+        { role: 'user', content: intent.slice(0, 12000) },
+      ],
+      temperature: 0.6,
+      max_completion_tokens: 2048,
+      top_p: 0.95,
+      stream: false,
+      reasoning_effort: 'default',
+    }),
+  });
+  if (!response.ok) {
+    console.error(JSON.stringify({ service: 'tarai', provider: 'groq', stage: 'request.failed', status: response.status }));
+    throw new Error('The language assistant is temporarily unavailable. Please try again.');
+  }
+  const payload = await response.json() as { choices?: Array<{ message?: { content?: unknown } }> };
+  const reply = text(payload.choices?.[0]?.message?.content);
+  if (!reply) throw new Error('The language assistant returned no reply. Please try again.');
+  console.log(JSON.stringify({ service: 'tarai', provider: 'groq', stage: 'request.completed', output_characters: reply.length }));
+  return reply;
 }
 
 async function factSlices(data: Client): Promise<FactSlice[]> {
@@ -47,6 +78,21 @@ export async function executeAgent(
   resources: AgentResources,
 ): Promise<AgentResult> {
   const repository = new TenantRepository(resources.data);
+  if (action === 'agent.reply') {
+    if (!resources.groqApiKey) throw new Error('The language assistant is not configured. Add GROQ_API_KEY to the server secrets.');
+    const intent = text(input.intent);
+    if (!intent) throw new Error('An Agent Step needs an instruction.');
+    const summary = await generateAgentReply(intent, resources.groqApiKey);
+    return { action, summary, data: { reply: summary } };
+  }
+  if (action === 'bot.builder') {
+    if (!resources.groqApiKey) throw new Error('The Bot Builder is not configured. Add GROQ_API_KEY to the server secrets.');
+    const prompt = text(input.prompt);
+    const answers = input.answers && typeof input.answers === 'object' && !Array.isArray(input.answers) ? input.answers as Record<string, string> : undefined;
+    const existingArtifacts = Array.isArray(input.existingArtifacts) ? input.existingArtifacts as Array<{ id: string; name: string; fields: string[] }> : undefined;
+    const draft = await generateBotBuilderDraft({ prompt, answers, existingArtifacts }, resources.groqApiKey);
+    return { action, summary: `Created a draft for ${draft.name}`, data: { draft } };
+  }
   if (action === 'workspace.summary') {
     const rows = await repository.list('matter');
     const counts: Record<string, number> = {};

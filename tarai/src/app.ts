@@ -16,8 +16,9 @@ import type { AgentParams } from './workflows/agent.ts';
 import type { ArchiveParams, RestoreParams } from './workflows/archive.ts';
 import type { ProjectionParams } from './workflows/projection.ts';
 import type { ProvisionParams } from './workflows/provision.ts';
-import { ACTIVITIES, WORKSPACE_CATEGORIES, compileWorkspaceSetup, onboardingCatalog, validateCanvasDocument } from './genui/onboarding.ts';
+import { ACTIVITIES, WORKSPACE_CATEGORIES, onboardingCatalog, validateCanvasDocument } from './genui/onboarding.ts';
 import { DATA_VIEW_REGISTRY, isRegisteredDataView, runDataView } from './genui/views.ts';
+import { HarnessRepository, allowedForRole, botWorkflow, ensureHarnessSchema, stepCard, stepMode } from './harness/repository.ts';
 
 interface WorkflowBinding<P> {
   createBatch(options: Array<{ id?: string; params: P }>): Promise<unknown[]>;
@@ -277,8 +278,10 @@ app.use('/api/*', async (c, next) => {
   const control = new ControlRepository(c.env.CONTROL);
   const user = await control.bootstrapUser(verified.identity);
   if (!user.host && user.state === 'provisioning' && c.env.PROVISION_WORKFLOW) {
-    const name = `user-${verified.identity.userId.toLowerCase().replace(/[^a-z0-9-]/g, '-').slice(0, 48)}`;
-    await c.env.PROVISION_WORKFLOW.createBatch([{ id: `provision-${name}`, params: { kind: 'user', id: user.id, name, region: user.region } }]);
+    const name = verified.identity.userId.toLowerCase().replace(/[^a-z0-9-]/g, '-').slice(0, 48);
+    // Include the control-row timestamp so a previously completed provisioning
+    // instance cannot mask a fresh database reset or recovery attempt.
+    await c.env.PROVISION_WORKFLOW.createBatch([{ id: `provision-${name}-${user.updated}`, params: { kind: 'user', id: user.id, name, region: user.region } }]);
   }
   const token = c.env.TURSO_AUTH_TOKEN;
   const personal = user.host && token ? createDatabaseClientForHost(user.host, token) : undefined;
@@ -305,6 +308,7 @@ app.use('/api/*', async (c, next) => {
   if (!slug) {
     const personalRoute = /^\/api\/entities\/(read|search|create|insert|update|delete)$/.test(c.req.path)
       || c.req.path === '/api/intent'
+      || /^\/api\/harness\//.test(c.req.path)
       || /^\/api\/runs\/[^/]+$/.test(c.req.path)
       || /^\/api\/agents\/[^/]+\/run$/.test(c.req.path);
     if (!personalRoute) {
@@ -429,7 +433,6 @@ app.post('/api/workspaces', async (c) => {
   if (!/^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])?$/.test(slug)) return c.json({ error: 'Workspace address must be 3–63 lowercase letters, numbers, or hyphens' }, 400);
   if (!idem || idem.length > 128) return c.json({ error: 'A valid request key is required. Please try again.' }, 400);
   const identity = c.get('identity');
-  const setup = compileWorkspaceSetup(name, body.onboarding, identity.userId);
   const control = new ControlRepository(c.env.CONTROL);
   if (!c.env.PROVISION_WORKFLOW) return c.json({ error: 'Provisioning is unavailable' }, 503);
   try {
@@ -437,20 +440,27 @@ app.post('/api/workspaces', async (c) => {
     if (existing) return c.json({ workspace: presentSpace(existing) }, 200);
     const id = `ws_${crypto.randomUUID()}`;
     const space = await control.createSpace({ id, owner: identity.userId, slug, name, region, idem });
-    const db = `space-${id.replace(/[^a-z0-9-]/gi, '-').toLowerCase().slice(0, 48)}`;
+    const ownerKey = identity.userId.toLowerCase().replace(/[^a-z0-9-]/g, '-').slice(0, 48);
+    const db = `${ownerKey}-w${space.workspace_number}`;
     try {
-    await c.env.PROVISION_WORKFLOW.createBatch([{ id: `provision-${db}`, params: {
-      kind: 'space', id, name: db, region, displayName: name,
-      profileMarkdown: setup.profileMarkdown,
-      indexMarkdown: setup.indexMarkdown,
-      canvasMarkdown: setup.canvasMarkdown,
-      canvasJson: JSON.stringify(setup.canvas),
-    } }]);
+    await c.env.PROVISION_WORKFLOW.createBatch([{ id: `provision-${db}`, params: { kind: 'space', id, name: db, region } }]);
     } catch (error) {
       await control.failSpace(id, 'workflow_unavailable');
       throw error;
     }
     return c.json({ workspace: presentSpace(space) }, 202);
+  } catch (error) {
+    if (error instanceof ControlError) return c.json({ error: error.message }, errorStatus(error));
+    throw error;
+  }
+});
+
+app.post('/api/workspaces/:id/remove', async (c) => {
+  const control = new ControlRepository(c.env.CONTROL);
+  try {
+    const removed = await control.retireOwnedSpace(c.req.param('id'), c.get('identity').userId);
+    if (!removed) return c.json({ error: 'Workspace is already removed' }, 409);
+    return c.json({ state: 'archived' });
   } catch (error) {
     if (error instanceof ControlError) return c.json({ error: error.message }, errorStatus(error));
     throw error;
@@ -506,7 +516,7 @@ app.post('/api/agents/:action/run', async (c) => {
   if (!idem || idem.length > 128) return c.json({ error: 'Idempotency-Key is required' }, 400);
   const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
   try {
-    if (['site.active', 'site.publish', 'retention.campaign'].includes(action) && auth.role !== 'owner' && auth.role !== 'admin') {
+    if (['site.active', 'site.publish', 'retention.campaign', 'bot.builder'].includes(action) && auth.role !== 'owner' && auth.role !== 'admin') {
       return c.json({ error: 'This action requires an owner or admin' }, 403);
     }
     if (action === 'site.active') {
@@ -519,6 +529,106 @@ app.post('/api/agents/:action/run', async (c) => {
     if (error instanceof ControlError) return c.json({ error: error.message }, errorStatus(error));
     throw error;
   }
+});
+
+/** Canonical TAR Harness API. Workspace data is authoritative here; clients
+ * submit actions through this Gateway rather than mutating tables directly. */
+app.get('/api/harness/home', async (c) => {
+  const data = c.get('data'); await ensureHarnessSchema(data);
+  const repo = new HarnessRepository(data); const auth = c.get('auth');
+  const personalScope = auth.workspaceId.startsWith('personal:');
+  const personal = c.get('personal');
+  if (personalScope) {
+    const [started, records] = await Promise.all([
+      personal ? new TenantRepository(personal).list('inbox', { user_id: auth.userId, status: 2, limit: 20 }) : Promise.resolve([]),
+      repo.listRecords(undefined, 40),
+    ]);
+    return c.json({ role: auth.role, capabilities: { manageDefinitions: false }, now: started.map((item) => ({ id: item.id, kind: 'action', title: item.title || String(item.data.title || 'Work item'), botId: String(item.data.botId || ''), workflowId: String(item.data.workflowId || ''), stepId: String(item.data.stepId || ''), mode: String(item.data.mode || 'deterministic'), workspaceId: item.workspace_id || undefined })), actions: [], data: records.slice(0, 2) });
+  }
+  const [bots, records, runs] = await Promise.all([repo.listDefs('bot'), repo.listRecords(undefined, 40), repo.listRuns(auth.userId)]);
+  const cards = bots.filter((bot) => allowedForRole(bot, auth.role)).flatMap((bot) => {
+    const workflows = Array.isArray(bot.body.workflows) ? bot.body.workflows as Record<string, unknown>[] : [];
+    return workflows.map((workflow) => {
+      const steps = Array.isArray(workflow.steps) ? workflow.steps as Record<string, unknown>[] : [];
+      const first = steps[0]; if (!first || !stepCard(first)) return null;
+      return { id: `${bot.id}:${String(workflow.id)}`, kind: stepCard(first), title: String(workflow.title || bot.name), botId: bot.id, workflowId: String(workflow.id), stepId: String(first.id), mode: stepMode(first) };
+    }).filter(Boolean);
+  });
+  const active = runs.map((run) => {
+    const bot = bots.find((item) => item.id === run.botId); if (!bot) return null;
+    try { const { workflow, steps } = botWorkflow(bot, run.workflowId); const step = steps.find((item) => String(item.id) === run.stepId) || steps[0]; return { id: run.id, kind: 'action', title: String(step.title || workflow.title || bot.name), botId: bot.id, workflowId: run.workflowId, stepId: run.stepId, mode: stepMode(step) }; } catch { return null; }
+  }).filter(Boolean);
+  return c.json({ role: auth.role, capabilities: { manageDefinitions: auth.role === 'owner' || auth.role === 'admin' }, now: active, actions: cards.filter((card) => card && card.kind === 'action').slice(0, 3), data: records.slice(0, 2) });
+});
+
+app.get('/api/harness/inbox', async (c) => {
+  const auth = c.get('auth'); const personal = c.get('personal');
+  if (!personal) return c.json({ error: 'Personal database is being prepared' }, 409);
+  const personalScope = auth.workspaceId.startsWith('personal:');
+  const items = await new TenantRepository(personal).list('inbox', { user_id: auth.userId, ...(personalScope ? {} : { workspace_id: auth.workspaceId }), status: 1, limit: 50 });
+  if (!personalScope) return c.json({ items });
+  const spaces = await new ControlRepository(c.env.CONTROL).listSpaces(auth.userId);
+  const names = new Map(spaces.map((space) => [space.id, space.name]));
+  return c.json({ items: items.filter((item) => item.workspace_id && names.has(item.workspace_id)).map((item) => ({ ...item, workspace_name: names.get(item.workspace_id!) })) });
+});
+
+app.post('/api/harness/inbox/:id/complete', async (c) => {
+  const auth = c.get('auth'); const personal = c.get('personal');
+  if (!personal) return c.json({ error: 'Personal database is being prepared' }, 409);
+  const repository = new TenantRepository(personal); const item = await repository.findById('inbox', c.req.param('id'));
+  const personalScope = auth.workspaceId.startsWith('personal:');
+  if (!item || (!personalScope && item.workspace_id !== auth.workspaceId) || item.actor && item.actor !== auth.userId) return c.json({ error: 'Inbox item not found' }, 404);
+  return c.json({ item: await repository.updateInboxItem(item.id, { status: 2, expectedVersion: item.version }) });
+});
+
+app.get('/api/harness/defs', async (c) => {
+  const data = c.get('data'); await ensureHarnessSchema(data); const kind = c.req.query('kind');
+  if (kind && kind !== 'data' && kind !== 'bot') return c.json({ error: 'Invalid definition kind' }, 400);
+  return c.json({ defs: await new HarnessRepository(data).listDefs(kind as 'data' | 'bot' | undefined) });
+});
+
+app.put('/api/harness/defs/:id', async (c) => {
+  const auth = c.get('auth'); if (auth.role !== 'owner' && auth.role !== 'admin') return c.json({ error: 'Only owners and admins can manage definitions' }, 403);
+  if (auth.workspaceId.startsWith('personal:')) return c.json({ error: 'Personal workspace cannot manage Bot or Workflow definitions' }, 403);
+  const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+  if ((body.kind !== 'data' && body.kind !== 'bot') || typeof body.name !== 'string' || !body.name.trim() || !body.body || typeof body.body !== 'object' || Array.isArray(body.body)) return c.json({ error: 'A definition needs kind, name, and body' }, 400);
+  const data = c.get('data'); await ensureHarnessSchema(data); const repo = new HarnessRepository(data);
+  const def = await repo.putDef({ id: c.req.param('id'), kind: body.kind, name: body.name.trim().slice(0, 120), body: body.body as Record<string, unknown> });
+  await repo.event({ actor: auth.userId, action: 'definition.saved', ref: def.id, data: { kind: def.kind }, idem: c.req.header('Idempotency-Key') || `definition:${def.id}:${def.version}` });
+  return c.json({ def });
+});
+
+app.get('/api/harness/records', async (c) => {
+  const data = c.get('data'); await ensureHarnessSchema(data); return c.json({ records: await new HarnessRepository(data).listRecords(c.req.query('type')) });
+});
+
+app.post('/api/harness/commands', async (c) => {
+  const auth = c.get('auth'); const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+  const action = typeof body.action === 'string' ? body.action : ''; const idem = c.req.header('Idempotency-Key') || (typeof body.id === 'string' ? body.id : '');
+  if (!idem || !['record.create', 'record.update', 'run.start', 'run.advance'].includes(action)) return c.json({ error: 'A valid command and Idempotency-Key are required' }, 400);
+  const data = c.get('data'); await ensureHarnessSchema(data); const repo = new HarnessRepository(data);
+  try {
+    if (action === 'record.create') {
+      const type = typeof body.type === 'string' ? body.type : ''; const title = typeof body.title === 'string' ? body.title : '';
+      if (!type || !title) return c.json({ error: 'Record type and title are required' }, 400);
+      const record = await repo.createRecord({ type, title: title.slice(0, 240), data: body.data && typeof body.data === 'object' && !Array.isArray(body.data) ? body.data as Record<string, unknown> : {}, actor: auth.userId, status: typeof body.status === 'string' ? body.status : undefined });
+      await repo.event({ actor: auth.userId, action, ref: record.id, data: { type }, idem }); return c.json({ record }, 201);
+    }
+    if (action === 'record.update') {
+      if (typeof body.target !== 'string') return c.json({ error: 'Record target is required' }, 400);
+      const record = await repo.updateRecord(body.target, { title: typeof body.title === 'string' ? body.title : undefined, status: typeof body.status === 'string' ? body.status : undefined, data: body.data && typeof body.data === 'object' && !Array.isArray(body.data) ? body.data as Record<string, unknown> : undefined, baseVersion: typeof body.baseVersion === 'number' ? body.baseVersion : undefined });
+      await repo.event({ actor: auth.userId, action, ref: record.id, data: {}, idem }); return c.json({ record });
+    }
+    if (typeof body.botId !== 'string' || typeof body.workflowId !== 'string') return c.json({ error: 'Bot and workflow are required' }, 400);
+    const bot = await repo.getDef(body.botId); if (!bot || bot.kind !== 'bot' || !allowedForRole(bot, auth.role)) return c.json({ error: 'Workflow access denied' }, 403);
+    const { steps } = botWorkflow(bot, body.workflowId);
+    if (action === 'run.start') { const run = await repo.createRun({ botId: bot.id, workflowId: body.workflowId, stepId: String(steps[0].id), recordId: typeof body.recordId === 'string' ? body.recordId : undefined, actor: auth.userId }); const personal = c.get('personal'); if (personal) await new TenantRepository(personal).createInboxItem({ id: `ibx_${run.id}`, userId: auth.userId, workspaceId: auth.workspaceId, type: 'task', title: String(steps[0].title || bot.name), ref: run.id, status: 2, data: { botId: bot.id, workflowId: body.workflowId, stepId: run.stepId, mode: stepMode(steps[0]) } }); await repo.event({ actor: auth.userId, action, ref: run.id, data: {}, idem }); return c.json({ run }, 201); }
+    if (typeof body.target !== 'string') return c.json({ error: 'Run target is required' }, 400);
+    const run = await repo.getRun(body.target); if (!run || run.actor !== auth.userId || run.botId !== bot.id) return c.json({ error: 'Run access denied' }, 403);
+    const index = steps.findIndex((step) => String(step.id) === run.stepId); const next = steps[index + 1];
+    const updated = await repo.updateRun(run.id, { stepId: next ? String(next.id) : run.stepId, state: next ? 'open' : 'complete', data: body.data && typeof body.data === 'object' && !Array.isArray(body.data) ? body.data as Record<string, unknown> : {} });
+    await repo.event({ actor: auth.userId, action, ref: run.id, data: { mode: stepMode(steps[index] || {}) }, idem }); return c.json({ run: updated, step: next || null });
+  } catch (error) { return c.json({ error: error instanceof Error ? error.message : 'Command failed' }, 409); }
 });
 
 app.post('/api/intent', async (c) => {

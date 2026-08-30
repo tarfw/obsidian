@@ -41,5 +41,4 @@ export {
 import './registry/builtins';
 
 // Pure Native Screen & Renderer
-export { default as GenUIScreen } from './GenUIScreen';
 export { default as NativeRenderer } from './registry/NativeRenderer';

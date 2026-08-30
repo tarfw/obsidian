@@ -17,6 +17,21 @@ Configure `payment.captured` to POST to
 `https://tarai.tar-54d.workers.dev/webhooks/razorpay`; settlement and the wallet
 credit occur atomically and duplicate webhooks are harmless.
 
+## Language Agent
+
+Agent Steps use Groq only for language help: understanding a request, drafting,
+summarising and recommending. App Steps continue to run forms, calculations,
+payments and record changes without an LLM.
+
+After rotating any key that was shared in a message, add the replacement as a
+server-only Worker secret:
+
+```sh
+npx wrangler secret put GROQ_API_KEY
+```
+
+The key must never be put in the mobile app, `wrangler.jsonc`, or committed to Git.
+
 ## API
 
 ```text

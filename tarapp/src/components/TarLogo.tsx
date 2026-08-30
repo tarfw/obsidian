@@ -1,8 +1,8 @@
 import React from 'react';
 import { View, StyleProp, ViewStyle } from 'react-native';
 
-// Canonical ratio heights for the 8 vertical slices of Tar mascot
-const RATIOS = [1.0, 1.0, 1.0, 1.0, 1.1, 1.1, 0.55, 0.35];
+// Canonical ratio heights for Tar's main silhouette.
+const RATIOS = [1.0, 1.0, 1.0, 1.0, 1.1, 1.1];
 const TOTAL_RATIO = RATIOS.reduce((a, b) => a + b, 0);
 
 interface TarLogoProps {
@@ -28,11 +28,9 @@ export function TarLogo({
   const y3 = y2 + unitH * RATIOS[2];
   const y4 = y3 + unitH * RATIOS[3];
   const y6 = y4 + unitH * (RATIOS[4] + RATIOS[5]);
-  const y7 = y6 + unitH * RATIOS[6];
-  const yEnd = y7 + unitH * RATIOS[7];
 
   return (
-    <View style={[{ width: size, height: yEnd, position: 'relative' }, style]}>
+    <View style={[{ width: size, height: y6, position: 'relative' }, style]}>
       {/* ── 1. ROW 0: EAR TIPS ── */}
       {/* Left Ear Tip (Cols 0..1) */}
       <View
@@ -93,63 +91,46 @@ export function TarLogo({
           backgroundColor: bgColor,
         }}
       />
-      {/* Left Eye Cutout (Row 3: Col 2) */}
+      {/* Left round eye cutout */}
       <View
         style={{
           position: 'absolute',
-          left: colW * 2 - 0.25,
-          top: y3 - 0.25,
-          width: colW + 0.5,
-          height: y4 - y3 + 0.5,
+          left: colW * 2.03,
+          top: y3 + (y4 - y3 - colW * 0.94) / 2,
+          width: colW * 0.94,
+          height: colW * 0.94,
+          borderRadius: colW,
           backgroundColor: bgColor,
         }}
       />
-      {/* Right Eye Cutout (Row 3: Col 4) */}
+      {/* Right round eye cutout */}
       <View
         style={{
           position: 'absolute',
-          left: colW * 4 - 0.25,
-          top: y3 - 0.25,
-          width: colW + 0.5,
-          height: y4 - y3 + 0.5,
+          left: colW * 4.03,
+          top: y3 + (y4 - y3 - colW * 0.94) / 2,
+          width: colW * 0.94,
+          height: colW * 0.94,
+          borderRadius: colW,
           backgroundColor: bgColor,
+        }}
+      />
+      {/* Small, happy smile cutout */}
+      <View
+        style={{
+          position: 'absolute',
+          left: colW * 2.62,
+          top: y4 + unitH * 0.42,
+          width: colW * 1.76,
+          height: unitH * 0.48,
+          borderBottomWidth: Math.max(1, colW * 0.16),
+          borderBottomColor: bgColor,
+          borderBottomLeftRadius: colW,
+          borderBottomRightRadius: colW,
         }}
       />
 
       {/* ── 4. ROW 6 & 7: FEET & CHIN EXTENSION ── */}
-      {/* Left Foot (Col 0) */}
-      <View
-        style={{
-          position: 'absolute',
-          left: 0,
-          top: y6 - 0.5,
-          width: colW + 0.25,
-          height: y7 - y6 + 0.5,
-          backgroundColor: color,
-        }}
-      />
-      {/* Center Foot + Chin Extension (Col 3) */}
-      <View
-        style={{
-          position: 'absolute',
-          left: colW * 3 - 0.25,
-          top: y6 - 0.5,
-          width: colW + 0.5,
-          height: yEnd - y6 + 0.5,
-          backgroundColor: color,
-        }}
-      />
-      {/* Right Foot (Col 6) */}
-      <View
-        style={{
-          position: 'absolute',
-          left: colW * 6 - 0.25,
-          top: y6 - 0.5,
-          width: colW + 0.5,
-          height: y7 - y6 + 0.5,
-          backgroundColor: color,
-        }}
-      />
     </View>
   );
 }

@@ -1,11 +1,9 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import React, { useMemo, useState } from 'react';
+import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as SecureStore from 'expo-secure-store';
-
-import { ContentCard, PrimaryButton, SecondaryTextAction, tokens } from '@/components/ds';
-import { tar, type WorkspaceBlueprintCatalog, type WorkspaceCategory, type WorkspaceOnboardingInput } from '@/lib/tar';
+import { TarLogo } from '@/components/TarLogo';
+import { tar } from '@/lib/tar';
 
 interface Props {
   visible: boolean;
@@ -13,183 +11,46 @@ interface Props {
   onSuccess: (subdomain: string, name: string) => Promise<void>;
   canClose: boolean;
   existingSubdomains?: string[];
-  onOpenCredits?: () => void;
 }
 
-type StartingPoint = 'organise' | 'retail' | 'services' | 'project' | 'other';
-type CategoryId = 'general' | 'retail' | 'services' | 'project' | 'personal';
+function slugify(value: string) { return value.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40); }
 
-const STARTING_POINTS: { id: StartingPoint; label: string; detail: string; icon: keyof typeof Ionicons.glyphMap }[] = [
-  { id: 'organise', label: 'Keep work organised', detail: 'Tasks, notes and customers', icon: 'checkbox-outline' },
-  { id: 'retail', label: 'Sell things', detail: 'Sales, orders and stock', icon: 'storefront-outline' },
-  { id: 'services', label: 'Manage customers', detail: 'Bookings, customers and tasks', icon: 'people-outline' },
-  { id: 'project', label: 'Plan a project', detail: 'Tasks and shared work', icon: 'git-network-outline' },
-  { id: 'other', label: 'Something else', detail: 'A simple, flexible space', icon: 'grid-outline' },
-];
-
-const STARTER_CATEGORY: Record<StartingPoint, CategoryId> = {
-  organise: 'general', retail: 'retail', services: 'services', project: 'project', other: 'general',
-};
-
-const FALLBACK_CATEGORIES: Record<CategoryId, WorkspaceCategory> = {
-  general: { id: 'general', label: 'General workspace', icon: 'grid-outline', keywords: [], suggestedName: 'My Space', activities: ['tasks', 'customers', 'notes'], priorities: ['tasks.urgent', 'contacts.recent'], actions: ['task.create', 'contact.create', 'pipeline.create'] },
-  retail: { id: 'retail', label: 'Shop or retail store', icon: 'storefront-outline', keywords: [], suggestedName: 'My Store', activities: ['sales', 'orders', 'inventory', 'customers'], priorities: ['sales.today', 'inventory.low', 'orders.upcoming'], actions: ['sale.create', 'product.create', 'inventory.view_low'] },
-  services: { id: 'services', label: 'Service business', icon: 'briefcase-outline', keywords: [], suggestedName: 'My Business', activities: ['customers', 'bookings', 'tasks', 'projects'], priorities: ['tasks.urgent', 'bookings.upcoming', 'pipeline.active'], actions: ['task.create', 'contact.create', 'booking.create'] },
-  project: { id: 'project', label: 'Project or team', icon: 'git-network-outline', keywords: [], suggestedName: 'My Project', activities: ['tasks', 'projects', 'team', 'notes'], priorities: ['tasks.urgent', 'pipeline.active', 'contacts.recent'], actions: ['task.create', 'pipeline.create', 'contact.create'] },
-  personal: { id: 'personal', label: 'Something else', icon: 'grid-outline', keywords: [], suggestedName: 'My Space', activities: ['tasks', 'notes'], priorities: ['tasks.urgent'], actions: ['task.create', 'contact.create'] },
-};
-
-function slugify(input: string): string {
-  return input.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
-}
-
-export default function CreateWorkspace({ visible, onClose, onSuccess, canClose, existingSubdomains = [], onOpenCredits }: Props) {
+export default function CreateWorkspace({ visible, onClose, onSuccess, canClose, existingSubdomains = [] }: Props) {
   const insets = useSafeAreaInsets();
-  const [catalog, setCatalog] = useState<WorkspaceBlueprintCatalog | null>(null);
-  const [startingPoint, setStartingPoint] = useState<StartingPoint>('organise');
-  const [name, setName] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  const [needsCredits, setNeedsCredits] = useState(false);
-
-  useEffect(() => {
-    if (!visible) return;
-    let cancelled = false;
-    tar.workspaceBlueprints().then((data) => {
-      if (!cancelled) setCatalog(data);
-    }).catch(() => {
-      // The general starter keeps creation available during a catalogue outage.
-    });
-    return () => { cancelled = true; };
-  }, [visible]);
-
-  const category = useMemo(() => {
-    const categoryId = STARTER_CATEGORY[startingPoint];
-    return catalog?.categories.find((item) => item.id === categoryId) || FALLBACK_CATEGORIES[categoryId];
-  }, [catalog, startingPoint]);
-  const workspaceName = name.trim() || 'My Space';
-  const slug = useMemo(() => {
-    const base = slugify(workspaceName) || 'my-space';
-    if (!existingSubdomains.includes(base)) return base;
-    let suffix = 2;
-    while (existingSubdomains.includes(`${base}-${suffix}`)) suffix += 1;
-    return `${base}-${suffix}`;
-  }, [workspaceName, existingSubdomains]);
-
-  const close = () => {
-    if (submitting || !canClose) return;
-    setStartingPoint('organise');
-    setName('');
-    setSubmitError(null);
-    setNeedsCredits(false);
-    onClose();
-  };
-
-  const submit = async () => {
-    if (submitting) return;
-    setSubmitting(true);
-    setSubmitError(null);
-    setNeedsCredits(false);
-    try {
-      const onboarding: WorkspaceOnboardingInput = {
-        category: category.id,
-        activities: category.activities,
-        priorities: category.priorities.slice(0, 3),
-        actions: category.actions.slice(0, 3),
-        audience: STARTER_CATEGORY[startingPoint] === 'project' ? 'team' : 'solo',
-      };
-      await tar.createWorkspace({ name: workspaceName, subdomain: slug, onboarding });
-      await SecureStore.setItemAsync('active_workspace_subdomain', slug).catch(() => null);
-      await onSuccess(slug, workspaceName);
-      setStartingPoint('organise');
-      setName('');
-    } catch (cause: any) {
-      const credits = cause?.status === 402 || /not enough credits/i.test(cause?.message || '');
-      setNeedsCredits(credits);
-      setSubmitError(credits ? 'You need 100 credits to create a new space.' : cause?.message || 'Your space could not be created. Try again.');
-    } finally {
-      setSubmitting(false);
+  const [name, setName] = useState(''); const [submitting, setSubmitting] = useState(false); const [error, setError] = useState('');
+  const workspaceName = name.trim() || 'My Workspace';
+  const slug = useMemo(() => { const base = slugify(workspaceName) || 'my-workspace'; if (!existingSubdomains.includes(base)) return base; let suffix = 2; while (existingSubdomains.includes(`${base}-${suffix}`)) suffix += 1; return `${base}-${suffix}`; }, [existingSubdomains, workspaceName]);
+  const close = () => { if (submitting || !canClose) return; setName(''); setError(''); onClose(); };
+  const waitUntilReady = async () => {
+    for (let attempt = 0; attempt < 24; attempt += 1) {
+      const result = await tar.listWorkspaces();
+      const workspace = result.workspaces.find((item) => item.subdomain === slug);
+      if (workspace?.state === 'active') return;
+      if (workspace?.state === 'error') throw new Error('Workspace setup could not be completed. Please try again.');
+      await new Promise<void>((resolve) => setTimeout(resolve, 1250));
     }
+    throw new Error('Workspace setup is taking longer than expected. Please try again shortly.');
   };
-
-  return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" statusBarTranslucent onRequestClose={close}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.container}>
-        <View style={[styles.header, { paddingTop: Math.max(insets.top, 14) + 8 }]}>
-          <Pressable onPress={close} disabled={submitting || !canClose} style={styles.closeButton} accessibilityRole="button" accessibilityLabel="Close create space">
-            <Ionicons name="arrow-back" size={20} color={tokens.color.ink} />
-          </Pressable>
-          <Text style={styles.headerTitle}>New space</Text>
-          <View style={styles.closeButton} />
-        </View>
-
-        <ScrollView contentContainerStyle={[styles.content, { paddingBottom: Math.max(insets.bottom, 24) + 24 }]} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-          <Text style={styles.title}>Start with a simple space</Text>
-          <Text style={styles.subtitle}>Choose a starting point if it helps. You can change everything later.</Text>
-
-          <ContentCard>
-            <Text style={styles.fieldLabel}>Name your space <Text style={styles.optional}>optional</Text></Text>
-            <TextInput value={name} onChangeText={setName} placeholder="My Space" placeholderTextColor={tokens.color.inkFaint} style={styles.nameInput} maxLength={48} returnKeyType="done" accessibilityLabel="Space name" />
-            <Text style={styles.fieldMeta}>Its address will be {slug}.</Text>
-          </ContentCard>
-
-          <View style={styles.section}>
-            <Text style={styles.fieldLabel}>What are you starting with?</Text>
-            <Text style={styles.fieldMeta}>Pick one, or keep the general space selected.</Text>
-            <View style={styles.optionsList}>
-              {STARTING_POINTS.map((option) => {
-                const selected = startingPoint === option.id;
-                return (
-                  <Pressable key={option.id} onPress={() => setStartingPoint(option.id)} style={({ pressed }) => [styles.optionRow, selected && styles.optionRowSelected, pressed && styles.pressed]} accessibilityRole="radio" accessibilityState={{ selected }}>
-                    <View style={[styles.optionIcon, selected && styles.optionIconSelected]}><Ionicons name={option.icon} size={18} color={selected ? tokens.color.accentInk : tokens.color.inkSoft} /></View>
-                    <View style={styles.optionText}><Text style={styles.optionLabel}>{option.label}</Text><Text style={styles.optionDetail}>{option.detail}</Text></View>
-                    <Ionicons name={selected ? 'radio-button-on' : 'radio-button-off'} size={20} color={selected ? tokens.color.ink : tokens.color.inkFaint} />
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
-
-          {submitError ? <View style={styles.error}>
-            <Ionicons name="alert-circle-outline" size={18} color={tokens.color.danger} />
-            <Text style={styles.errorText}>{submitError}</Text>
-            {needsCredits && onOpenCredits ? <Pressable onPress={onOpenCredits}><Text style={styles.creditsLink}>Add credits</Text></Pressable> : null}
-          </View> : null}
-        </ScrollView>
-
-        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 20) }]}>
-          <PrimaryButton label="Create space" onPress={submit} busy={submitting} />
-          <SecondaryTextAction label="Cancel" onPress={close} disabled={submitting} />
-        </View>
-      </KeyboardAvoidingView>
-    </Modal>
-  );
+  const create = async () => {
+    if (submitting) return; setSubmitting(true); setError('');
+    try {
+      await tar.createWorkspace({ name: workspaceName, subdomain: slug });
+      await waitUntilReady();
+      await SecureStore.setItemAsync('active_workspace_subdomain', slug);
+      await onSuccess(slug, workspaceName);
+      setName('');
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Workspace could not be created. Try again.'); } finally { setSubmitting(false); }
+  };
+  return <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={close}>
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.screen}>
+      <ScrollView contentContainerStyle={[styles.content, { paddingTop: Math.max(insets.top, 24) + 44, paddingBottom: Math.max(insets.bottom, 20) + 96 }]} keyboardShouldPersistTaps="handled">
+        <View style={styles.mark}><TarLogo size={64} color="#1E5631" bgColor="#EEF5F1" /></View>
+        <Text style={styles.title}>New workspace</Text><Text style={styles.subtitle}>A shared place for your team's work.</Text>
+        <View style={styles.field}><Text style={styles.label}>Workspace name</Text><TextInput value={name} onChangeText={setName} placeholder="My workspace" placeholderTextColor="#87938A" style={styles.nameInput} maxLength={48} returnKeyType="next" /></View>
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+      </ScrollView>
+      <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 18) }]}><Pressable onPress={() => void create()} disabled={submitting} style={[styles.create, submitting && styles.disabled]}>{submitting ? <View style={styles.creating}><ActivityIndicator color="#fff" /><Text style={styles.createText}>Preparing workspace</Text></View> : <Text style={styles.createText}>Create workspace</Text>}</Pressable><Pressable onPress={close} disabled={submitting} style={styles.cancel}><Text style={styles.cancelText}>Cancel</Text></Pressable></View>
+    </KeyboardAvoidingView>
+  </Modal>;
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: tokens.color.surfaceSunk },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: tokens.spacing.lg, paddingBottom: tokens.spacing.sm },
-  closeButton: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center', backgroundColor: tokens.color.surface, borderWidth: 1, borderColor: tokens.color.borderSoft },
-  headerTitle: { ...tokens.type.bodyStrong, color: tokens.color.ink },
-  content: { padding: tokens.spacing.lg, gap: tokens.spacing.lg },
-  title: { ...tokens.type.headingXl, color: tokens.color.ink },
-  subtitle: { ...tokens.type.body, color: tokens.color.inkMuted },
-  section: { gap: tokens.spacing.sm },
-  fieldLabel: { ...tokens.type.label, color: tokens.color.inkMuted, textTransform: 'uppercase' },
-  optional: { color: tokens.color.inkFaint, fontWeight: '500' },
-  fieldMeta: { ...tokens.type.bodySm, color: tokens.color.inkMuted },
-  nameInput: { ...tokens.type.headingLg, color: tokens.color.ink, paddingVertical: tokens.spacing.sm },
-  optionsList: { gap: tokens.spacing.sm },
-  optionRow: { flexDirection: 'row', alignItems: 'center', gap: tokens.spacing.md, padding: tokens.spacing.md, backgroundColor: tokens.color.surface, borderRadius: tokens.radius.md, borderWidth: 1, borderColor: tokens.color.borderSoft },
-  optionRowSelected: { borderColor: tokens.color.ink, backgroundColor: tokens.color.surfaceSunken },
-  optionIcon: { width: 36, height: 36, borderRadius: tokens.radius.md, backgroundColor: tokens.color.surfaceSunken, alignItems: 'center', justifyContent: 'center' },
-  optionIconSelected: { backgroundColor: tokens.color.ink },
-  optionText: { flex: 1, gap: 1 },
-  optionLabel: { ...tokens.type.bodyStrong, color: tokens.color.ink },
-  optionDetail: { ...tokens.type.bodySm, color: tokens.color.inkMuted },
-  pressed: { opacity: 0.82 },
-  footer: { borderTopWidth: 1, borderTopColor: tokens.color.borderSoft, paddingHorizontal: tokens.spacing.lg, paddingTop: tokens.spacing.md, backgroundColor: tokens.color.surface, gap: tokens.spacing.sm },
-  error: { flexDirection: 'row', alignItems: 'center', gap: tokens.spacing.sm, backgroundColor: tokens.color.dangerBg, borderRadius: tokens.radius.md, padding: tokens.spacing.md },
-  errorText: { ...tokens.type.bodySm, color: tokens.color.danger, flex: 1 },
-  creditsLink: { ...tokens.type.label, color: tokens.color.ink, textDecorationLine: 'underline' },
-});
+const styles = StyleSheet.create({ screen:{flex:1,backgroundColor:'#EEF5F1'},content:{flexGrow:1,paddingHorizontal:28},mark:{width:88,height:88,borderRadius:24,backgroundColor:'#DCEDE2',alignItems:'center',justifyContent:'center',marginBottom:28},title:{fontSize:34,lineHeight:40,fontWeight:'800',letterSpacing:-1,color:'#163A23'},subtitle:{fontSize:17,lineHeight:25,color:'#5C7163',marginTop:9,marginBottom:36},field:{marginBottom:25},label:{fontSize:14,fontWeight:'700',color:'#355142',marginBottom:9},nameInput:{backgroundColor:'#FFF',borderWidth:1,borderColor:'#DCE8E0',borderRadius:14,paddingHorizontal:16,paddingVertical:15,fontSize:18,fontWeight:'700',color:'#163A23'},error:{color:'#B3261E',fontSize:14,lineHeight:20,marginTop:-8},footer:{paddingTop:14,paddingHorizontal:22,borderTopWidth:1,borderColor:'#DCE8E0',backgroundColor:'#F8FCF9'},create:{height:54,borderRadius:14,backgroundColor:'#1E5631',alignItems:'center',justifyContent:'center'},creating:{flexDirection:'row',alignItems:'center',gap:10},disabled:{opacity:.6},createText:{fontSize:16,fontWeight:'800',color:'#FFF'},cancel:{height:42,alignItems:'center',justifyContent:'center'},cancelText:{fontSize:15,fontWeight:'700',color:'#537060'} });

@@ -17,24 +17,22 @@ export default function PipelineCard({ props, designTokens, data = [], onExecute
   const title = props?.title || 'Pipeline Deals';
   const rounded = designTokens?.rounded || {};
 
-  const defaultStages = useMemo(() => ['Lead', 'Contacted', 'Proposal', 'Won'], []);
-
   const dealsProp = props?.deals;
   const baseDeals: PipelineDeal[] = useMemo(() => {
     const sourceDeals = Array.isArray(data) && data.length > 0
       ? data
       : (Array.isArray(dealsProp) ? dealsProp : []);
 
-    return sourceDeals.map((d: any) => ({
-      id: d.id || `deal_${Math.random()}`,
+    return sourceDeals.map((d: any, index: number) => ({
+      id: d.id || `deal_${index}`,
       title: d.title || d.name || d.data?.name || 'Client Flow',
       contactName: d.contactName || d.contact || d.data?.customer || 'Client',
       company: d.company || d.data?.company || '',
       value: typeof d.value === 'number' ? d.value : (Number(d.amount) || 0),
       stageIndex: typeof d.stageIndex === 'number' ? d.stageIndex : (d.stage === 'Won' ? 3 : d.stage === 'Proposal' ? 2 : d.stage === 'Contacted' ? 1 : 0),
-      stages: Array.isArray(d.stages) ? d.stages : defaultStages,
+      stages: Array.isArray(d.stages) ? d.stages : [],
     }));
-  }, [data, dealsProp, defaultStages]);
+  }, [data, dealsProp]);
 
   const [stageOverrides, setStageOverrides] = useState<Record<string, number>>({});
   const [advancingId, setAdvancingId] = useState<string | null>(null);
@@ -108,8 +106,8 @@ export default function PipelineCard({ props, designTokens, data = [], onExecute
 
       <View style={styles.dealList}>
         {activeDeals.slice(0, 3).map((deal) => {
-          const currentStage = deal.stages[deal.stageIndex] || 'Lead';
-          const isWon = deal.stageIndex === deal.stages.length - 1;
+          const currentStage = deal.stages[deal.stageIndex] || 'Unassigned';
+          const canAdvance = deal.stageIndex < deal.stages.length - 1;
           const isBusy = advancingId === deal.id;
 
           return (
@@ -128,7 +126,7 @@ export default function PipelineCard({ props, designTokens, data = [], onExecute
                 <View style={styles.stageBadge}>
                   <Text style={styles.stageBadgeText}>{currentStage}</Text>
                 </View>
-                {!isWon && (
+                {canAdvance && (
                   <TouchableOpacity
                     style={[styles.advanceBtn, isBusy && { opacity: 0.6 }]}
                     onPress={() => handleAdvanceStage(deal)}

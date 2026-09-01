@@ -267,7 +267,7 @@ export function BotBuilder({ visible, scope, existingArtifacts, onClose, onCreat
                 </View>
               </View>
 
-              <Text style={styles.sectionLabel}>DATA</Text>
+              <Text style={styles.sectionLabel}>RECORD TYPES</Text>
               {draft.artifacts.map((artifact) => (
                 <Text key={artifact.id} style={styles.dataLine}>• {artifact.name}</Text>
               ))}

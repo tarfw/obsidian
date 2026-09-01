@@ -1,0 +1,330 @@
+---
+// Community & Content Guidelines for TAR
+// Follows modern community guidelines standard (Buzz / Block model) tailored for TAR local-first platform
+import Layout from "../layouts/Layout.astro";
+import Nav from "../components/Nav.astro";
+import FooterSection from "../components/FooterSection.astro";
+
+const sections = [
+  { id: "purpose", title: "1. Purpose & Core Principles" },
+  { id: "channel-etiquette", title: "2. Channel Etiquette & Opt-Ins" },
+  { id: "prohibited-content", title: "3. Prohibited Content & Abuse" },
+  { id: "ai-conduct", title: "4. Responsible AI & Agentic Conduct" },
+  { id: "workforce-safety", title: "5. Workforce & Access Governance" },
+  { id: "enforcement", title: "6. Enforcement & Account Actions" },
+  { id: "reporting", title: "7. Reporting Violations & Contact" }
+];
+---
+
+<Layout 
+  title="Community & Content Guidelines — TAR" 
+  description="The content, conduct, and channel compliance rules for using TAR, connected messaging interfaces, and AI agent workflows."
+>
+  <Nav />
+
+  <main class="guidelines-main font-dm-sans">
+    <div class="container guidelines-layout-grid">
+      
+      <!-- Left: Sticky Minimal Sidebar Navigation -->
+      <aside class="guidelines-sidebar">
+        <div class="sidebar-sticky-box">
+          <span class="sidebar-label">GUIDELINES</span>
+          <nav class="sidebar-nav">
+            {sections.map((s) => (
+              <a href={`#${s.id}`} class="sidebar-link">{s.title}</a>
+            ))}
+          </nav>
+        </div>
+      </aside>
+
+      <!-- Right: Guidelines Content -->
+      <div class="guidelines-content-col">
+        
+        <!-- Header -->
+        <header class="guidelines-header">
+          <div class="guidelines-badge">Platform Rules</div>
+          <h1 class="guidelines-main-title">Community Guidelines</h1>
+          <p class="guidelines-main-lead">
+            The content, conduct, and channel standards required for operating Workspaces and AI agents on TAR.
+          </p>
+          <span class="guidelines-effective-date">Last Updated: August 31, 2026</span>
+        </header>
+
+        <hr class="guidelines-divider" />
+
+        <!-- 1. Purpose & Core Principles -->
+        <section id="purpose" class="guidelines-section">
+          <h2 class="section-heading">1. Purpose & Core Principles</h2>
+          <p class="section-text">
+            TAR exists to make commerce, operations, and messaging calm, honest, and human-friendly. We connect everyday businesses and organizations to customer channels like WhatsApp, Telegram, and web storefronts.
+          </p>
+          <p class="section-text">
+            These Community Guidelines set forth the rules of conduct and content standards applicable to all Workspace owners, invited staff, and automated workflows.
+          </p>
+        </section>
+
+        <hr class="guidelines-divider" />
+
+        <!-- 2. Channel Etiquette & Opt-Ins -->
+        <section id="channel-etiquette" class="guidelines-section">
+          <h2 class="section-heading">2. Channel Etiquette & Opt-Ins</h2>
+          <p class="section-text">
+            When communicating with customers, patients, or community members:
+          </p>
+          <ul class="guidelines-bullets">
+            <li><strong>Explicit User Consent:</strong> You must have explicit, verifiable consent or an active transactional relationship before sending outbound messages over WhatsApp, SMS, or voice channels.</li>
+            <li><strong>Immediate Opt-Out Honor:</strong> You must promptly honor all opt-out or unsubscribe requests (such as "STOP", "UNSUBSCRIBE", or language equivalents).</li>
+            <li><strong>No Message Flooding:</strong> Automated reminders, promotional broadcasts, and update loops must remain concise, relevant, and bounded in frequency.</li>
+          </ul>
+        </section>
+
+        <hr class="guidelines-divider" />
+
+        <!-- 3. Prohibited Content & Abuse -->
+        <section id="prohibited-content" class="guidelines-section">
+          <h2 class="section-heading">3. Prohibited Content & Abuse</h2>
+          <p class="section-text">
+            The following activities and content are strictly prohibited across all TAR Workspaces and connected channels:
+          </p>
+          <ul class="guidelines-bullets">
+            <li><strong>Fraud & Deception:</strong> Phishing, identity theft, financial impersonation, deceptive investment schemes, or fake invoices.</li>
+            <li><strong>Harassment & Threats:</strong> Cyberbullying, intimidation, hate speech, stalking, or targeted harassment of individuals.</li>
+            <li><strong>Illegal & Exploitative Goods:</strong> Distributing unlicensed pharmaceuticals, counterfeit items, illegal narcotics, or content depicting child exploitation or non-consensual sexual material.</li>
+            <li><strong>System Exploitation:</strong> Attempting to disrupt relay infrastructure, bypass Gateway access controls, or transmit viruses, malware, or ransomware.</li>
+          </ul>
+        </section>
+
+        <hr class="guidelines-divider" />
+
+        <!-- 4. Responsible AI & Agentic Conduct -->
+        <section id="ai-conduct" class="guidelines-section">
+          <h2 class="section-heading">4. Responsible AI & Agentic Conduct</h2>
+          <p class="section-text">
+            TAR integrates bounded AI models (Gemma, Groq Whisper, DeepSeek). When deploying automated agents:
+          </p>
+          <ul class="guidelines-bullets">
+            <li><strong>Transparency:</strong> Clearly identify automated bots so that recipients understand when they are interacting with an AI assistant.</li>
+            <li><strong>Human Agency & Override:</strong> Every automated conversation loop must allow an authorized human staff member to pause the agent and take over instantly with 1 tap.</li>
+            <li><strong>Gateway Consequential Bounds:</strong> Financial ledgers, medical prescriptions, inventory deductions, and user revocations must remain deterministically validated by Gateway code and not delegated to unchecked AI decisions.</li>
+          </ul>
+        </section>
+
+        <hr class="guidelines-divider" />
+
+        <!-- 5. Workforce & Access Governance -->
+        <section id="workforce-safety" class="guidelines-section">
+          <h2 class="section-heading">5. Workforce & Access Governance</h2>
+          <p class="section-text">
+            Workspace administrators are responsible for managing internal team safety:
+          </p>
+          <ul class="guidelines-bullets">
+            <li><strong>Principle of Least Privilege:</strong> Assign staff appropriate roles (Admin, Member, Guest) based strictly on operational necessity.</li>
+            <li><strong>Device Security:</strong> Ensure team devices run official application releases and immediately revoke stolen or decommissioned hardware from the Workspace switcher.</li>
+          </ul>
+        </section>
+
+        <hr class="guidelines-divider" />
+
+        <!-- 6. Enforcement & Account Actions -->
+        <section id="enforcement" class="guidelines-section">
+          <h2 class="section-heading">6. Enforcement & Account Actions</h2>
+          <p class="section-text">
+            If a Workspace or connected channel violates these Guidelines:
+          </p>
+          <ul class="guidelines-bullets">
+            <li><strong>Warning & Corrective Action:</strong> For minor infractions, we will notify the Workspace owner to rectify the issue within 24 hours.</li>
+            <li><strong>Relay Throttling:</strong> Outbound channel dispatch may be restricted to prevent spam or flood damage.</li>
+            <li><strong>Suspension or Termination:</strong> Severe or repeated violations (such as phishing, hate speech, or abuse) will result in immediate suspension of cloud relay sync and credit wallets.</li>
+          </ul>
+        </section>
+
+        <hr class="guidelines-divider" />
+
+        <!-- 7. Reporting Violations & Contact -->
+        <section id="reporting" class="guidelines-section">
+          <h2 class="section-heading">7. Reporting Violations & Contact</h2>
+          <p class="section-text">
+            If you encounter spam, fraudulent activity, or abusive behavior originating from a TAR-connected channel, report it immediately to our trust & safety team at <a href="mailto:abuse@tarfw.com" class="guidelines-link">abuse@tarfw.com</a>.
+          </p>
+        </section>
+
+      </div>
+    </div>
+  </main>
+
+  <FooterSection />
+</Layout>
+
+<style>
+  .guidelines-main {
+    background-color: #ffffff;
+    color: var(--color-ink-black);
+    min-height: 80vh;
+    padding: 40px 0 80px 0;
+  }
+
+  .guidelines-layout-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 48px;
+  }
+
+  @media (min-width: 900px) {
+    .guidelines-layout-grid {
+      grid-template-columns: 220px 1fr;
+      gap: 56px;
+    }
+  }
+
+  /* Sticky Minimal Sidebar */
+  .guidelines-sidebar {
+    display: none;
+  }
+
+  @media (min-width: 900px) {
+    .guidelines-sidebar {
+      display: block;
+    }
+  }
+
+  .sidebar-sticky-box {
+    position: sticky;
+    top: 96px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .sidebar-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: var(--color-slate);
+    text-transform: uppercase;
+  }
+
+  .sidebar-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .sidebar-link {
+    font-size: 13.5px;
+    color: var(--color-graphite);
+    text-decoration: none;
+    padding: 6px 10px;
+    border-radius: 6px;
+    transition: background-color 0.15s ease, color 0.15s ease;
+  }
+
+  .sidebar-link:hover {
+    background-color: #f3f4f6;
+    color: var(--color-canopy-green);
+    font-weight: 600;
+  }
+
+  /* Main Content Column */
+  .guidelines-content-col {
+    max-width: 820px;
+    display: flex;
+    flex-direction: column;
+    gap: 40px;
+  }
+
+  .guidelines-header {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .guidelines-badge {
+    align-self: flex-start;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-canopy-green);
+    background-color: #ecfdf5;
+    padding: 4px 10px;
+    border-radius: 4px;
+  }
+
+  .guidelines-main-title {
+    font-size: clamp(2rem, 3.4vw, 2.8rem);
+    font-weight: 700;
+    color: var(--color-canopy-green);
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    margin: 0;
+  }
+
+  .guidelines-main-lead {
+    font-size: 16px;
+    line-height: 1.6;
+    color: var(--color-graphite);
+    margin: 0;
+  }
+
+  .guidelines-effective-date {
+    font-size: 13px;
+    color: var(--color-slate);
+  }
+
+  .guidelines-divider {
+    border: none;
+    border-top: 1px solid rgba(0, 0, 0, 0.08);
+    margin: 0;
+  }
+
+  /* Sections */
+  .guidelines-section {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    scroll-margin-top: 88px;
+  }
+
+  .section-heading {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--color-canopy-green);
+    letter-spacing: -0.01em;
+    margin: 0;
+  }
+
+  .section-text {
+    font-size: 14.5px;
+    line-height: 1.65;
+    color: var(--color-graphite);
+    margin: 0;
+  }
+
+  .section-text strong {
+    color: var(--color-ink-black);
+  }
+
+  .guidelines-bullets {
+    margin: 4px 0 0 0;
+    padding-left: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .guidelines-bullets li {
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--color-graphite);
+  }
+
+  .guidelines-bullets strong {
+    color: var(--color-ink-black);
+  }
+
+  .guidelines-link {
+    color: var(--color-canopy-green);
+    font-weight: 600;
+    text-decoration: underline;
+  }
+</style>

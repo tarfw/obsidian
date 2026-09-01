@@ -1,6 +1,5 @@
 ---
-// Clean Transparent Header Navigation in Canopy Green with Official Google Play Badge
-import GooglePlayBadge from "./GooglePlayBadge.astro";
+// Clean Transparent Header Navigation in Canopy Green
 import TarLogo from "./TarLogo.astro";
 ---
 
@@ -13,19 +12,16 @@ import TarLogo from "./TarLogo.astro";
       <span class="logo-text font-dm-sans">tar.</span>
     </a>
 
-    <!-- Center: Clean Efficient Menu Links -->
+    <!-- Center/Right: Clean Efficient Menu Links -->
     <nav class="nav-menu" aria-label="Main Navigation">
       <a href="/manifesto" class="nav-link">Manifesto</a>
       <a href="/#capabilities" class="nav-link">Capabilities</a>
       <a href="/agents" class="nav-link">Agents</a>
+      <a href="/learn" class="nav-link">Learn</a>
+      <a href="/harness" class="nav-link nav-link-harness">Harness</a>
       <a href="/#pricing" class="nav-link">Pricing</a>
       <a href="/docs" class="nav-link nav-link-docs">Docs</a>
     </nav>
-
-    <!-- Right: Official Google Play Store Badge -->
-    <div class="nav-right-actions">
-      <GooglePlayBadge height={36} />
-    </div>
 
     <!-- Mobile Menu Toggle -->
     <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Toggle Navigation">
@@ -40,11 +36,10 @@ import TarLogo from "./TarLogo.astro";
       <a href="/manifesto" class="mobile-link">Manifesto</a>
       <a href="/#capabilities" class="mobile-link">Capabilities</a>
       <a href="/agents" class="mobile-link">Agents & Rates</a>
+      <a href="/learn" class="mobile-link">Learn (Guides)</a>
+      <a href="/harness" class="mobile-link">TAR Harness Handbook</a>
       <a href="/#pricing" class="mobile-link">Pricing</a>
       <a href="/docs" class="mobile-link">Documentation</a>
-      <div class="mobile-drawer-cta">
-        <GooglePlayBadge height={40} class="full-width" />
-      </div>
     </div>
   </div>
 </header>
@@ -132,16 +127,14 @@ import TarLogo from "./TarLogo.astro";
     font-family: var(--font-dm-sans);
     font-size: 14.5px;
     font-weight: 500;
-    color: rgba(255, 255, 255, 0.8);
+    color: rgba(255, 255, 255, 0.75);
     text-decoration: none;
-    padding: 7px 14px;
-    border-radius: 8px;
-    transition: color 0.15s ease, background-color 0.15s ease;
+    padding: 6px 10px;
+    transition: color 0.15s ease;
   }
 
   .nav-link:hover {
     color: #ffffff;
-    background-color: rgba(255, 255, 255, 0.08);
   }
 
   .nav-link-docs {
@@ -149,15 +142,8 @@ import TarLogo from "./TarLogo.astro";
     font-weight: 600;
   }
 
-  .nav-right-actions {
-    display: none;
-    align-items: center;
-  }
-
-  @media (min-width: 600px) {
-    .nav-right-actions {
-      display: flex;
-    }
+  .nav-link-docs:hover {
+    color: #ffffff;
   }
 
   .mobile-menu-btn {
@@ -223,11 +209,5 @@ import TarLogo from "./TarLogo.astro";
     text-decoration: none;
     padding: 6px 0;
     border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  }
-
-  .mobile-drawer-cta {
-    margin-top: 8px;
-    display: flex;
-    justify-content: center;
   }
 </style>

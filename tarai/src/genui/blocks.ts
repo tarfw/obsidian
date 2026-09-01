@@ -13,6 +13,7 @@ export const VALID_BLOCK_TYPES: NativeBlockType[] = [
   'contact-card',
   'action-confirm',
   'data-grid',
+  'record-profile',
 ];
 
 export const NativeBlockSchema = v.object({

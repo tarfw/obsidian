@@ -91,6 +91,11 @@ CREATE INDEX IF NOT EXISTS idx_harness_defs_kind ON defs(kind, state, updated DE
 CREATE INDEX IF NOT EXISTS idx_harness_records_type ON records(type, status, updated DESC) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_harness_runs_actor ON runs(actor, state, updated DESC);
 CREATE INDEX IF NOT EXISTS idx_harness_events_ref ON events(ref, created DESC);
+-- Events may be attached to additional Data records through the canonical links
+-- table. This keeps a shared activity timeline without creating a parallel CRM
+-- or event-link store.
+CREATE INDEX IF NOT EXISTS idx_harness_links_event_target
+  ON links(kind, target, created DESC) WHERE deleted_at IS NULL;
 `;
 
 export const WORKSPACE_SCHEMA = `

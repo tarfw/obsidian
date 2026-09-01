@@ -1,71 +1,193 @@
 ---
 // Privacy Policy Page for TAR
+// Follows modern privacy standard (Buzz / Block model) tailored for TAR local-first platform
 import Layout from "../layouts/Layout.astro";
 import Nav from "../components/Nav.astro";
 import FooterSection from "../components/FooterSection.astro";
+
+const sections = [
+  { id: "overview", title: "1. Overview & Core Philosophy" },
+  { id: "device-storage", title: "2. What Stays on Your Device" },
+  { id: "collected-data", title: "3. Information We Collect & Process" },
+  { id: "ai-transience", title: "4. AI Operations & Zero Model Training" },
+  { id: "sync-security", title: "5. Encrypted Sync & Cloud Relays" },
+  { id: "no-selling", title: "6. Zero Monetization or Selling of Data" },
+  { id: "portability", title: "7. Data Portability & Erasure" },
+  { id: "security", title: "8. Security & Cryptographic Protection" },
+  { id: "rights", title: "9. Your Privacy Rights & Choices" },
+  { id: "updates-contact", title: "10. Policy Updates & Contact" }
+];
 ---
 
 <Layout 
   title="Privacy Policy — TAR" 
-  description="TAR Privacy Policy: Local-first data architecture, zero user data selling, zero model training on private messages, and full data sovereignty."
+  description="How TAR collects, uses, and protects information. Local-first data storage, zero user data monetization, zero AI model training on private messages, and complete data sovereignty."
 >
   <Nav />
 
-  <main class="legal-main">
-    <div class="container legal-container font-dm-sans">
-      <header class="legal-header">
-        <div class="legal-badge">Legal Policy</div>
-        <h1 class="legal-title">Privacy Policy</h1>
-        <p class="legal-lead">Last updated: August 2026</p>
-      </header>
+  <main class="legal-main font-dm-sans">
+    <div class="container legal-layout-grid">
+      
+      <!-- Left: Sticky Minimal Sidebar Navigation -->
+      <aside class="legal-sidebar">
+        <div class="sidebar-sticky-box">
+          <span class="sidebar-label">PRIVACY POLICY</span>
+          <nav class="sidebar-nav">
+            {sections.map((s) => (
+              <a href={`#${s.id}`} class="sidebar-link">{s.title}</a>
+            ))}
+          </nav>
+        </div>
+      </aside>
 
-      <hr class="legal-divider" />
+      <!-- Right: Privacy Policy Content -->
+      <div class="legal-content-col">
+        
+        <!-- Header -->
+        <header class="legal-header">
+          <div class="legal-badge">Legal Policy</div>
+          <h1 class="legal-main-title">Privacy Policy</h1>
+          <p class="legal-main-lead">
+            How TAR collects, processes, and protects your information across local-first workspaces and connected interfaces.
+          </p>
+          <span class="legal-effective-date">Last Updated: August 31, 2026</span>
+        </header>
 
-      <article class="legal-body">
-        <section class="legal-section">
-          <h2>1. Fundamental Principles</h2>
-          <p>
-            At TAR, we believe that your business data, patient conversations, customer contacts, and operational records belong exclusively to you. Our architecture is designed around a local-first philosophy where data resides primarily on your hardware.
+        <hr class="legal-divider" />
+
+        <!-- 1. Overview & Core Philosophy -->
+        <section id="overview" class="legal-section">
+          <h2 class="section-heading">1. Overview & Core Philosophy</h2>
+          <p class="section-text">
+            At TAR, we believe your business records, customer conversations, patient notes, orders, and financial ledgers belong exclusively to you. Unlike traditional cloud software platforms that centralize and monetize customer data, TAR is built around a <strong>local-first architectural paradigm</strong>.
+          </p>
+          <p class="section-text">
+            This Privacy Policy explains how information is handled when you use the TAR mobile applications, client software, credit wallets, and cloud relay services (collectively, the "Services").
           </p>
         </section>
 
-        <section class="legal-section">
-          <h2>2. Data We Do and Do Not Collect</h2>
-          <p><strong>What stays on your device:</strong></p>
-          <ul>
-            <li>Your local store database, sales ledgers, customer lists, inventory, and order records.</li>
-            <li>Your local business documents and product catalogs.</li>
-            <li>Direct local chat transcripts and customer interaction logs.</li>
+        <hr class="legal-divider" />
+
+        <!-- 2. What Stays on Your Device -->
+        <section id="device-storage" class="legal-section">
+          <h2 class="section-heading">2. What Stays on Your Device</h2>
+          <p class="section-text">
+            The vast majority of your data never touches our cloud servers and remains stored locally on your physical hardware:
+          </p>
+          <ul class="legal-bullets">
+            <li><strong>Workspace Databases:</strong> Products, customer contacts, order histories, sales transactions, inventory balances, and custom business tables.</li>
+            <li><strong>Documents & Knowledge:</strong> Procedure manuals, Markdown specifications, catalogs, and operational guides.</li>
+            <li><strong>Message History:</strong> Full customer chat transcripts, voice note recordings, and interaction logs.</li>
+            <li><strong>Encryption:</strong> Local databases are encrypted on-device using hardware-backed cryptographic keys.</li>
           </ul>
-          <p><strong>What is processed for service delivery:</strong></p>
-          <ul>
-            <li><strong>AI Operations:</strong> When you invoke AI actions (e.g. WhatsApp auto-reply, audio note transcription, or OCR scan), the specific prompt text or media is sent transiently to provider APIs (Groq Whisper, Gemma, DeepSeek) to fulfill the operation.</li>
-            <li><strong>Zero Model Training:</strong> Your inputs and customer messages are <strong>never</strong> used to train or fine-tune public or third-party AI models.</li>
-            <li><strong>Encrypted Cloud Sync (Optional):</strong> If you enable multi-device sync, encrypted data transactions are replicated via TLS 1.3 over secure cloud servers.</li>
+        </section>
+
+        <hr class="legal-divider" />
+
+        <!-- 3. Information We Collect & Process -->
+        <section id="collected-data" class="legal-section">
+          <h2 class="section-heading">3. Information We Collect & Process</h2>
+          <p class="section-text">
+            To provide identity, billing, and connectivity services, we collect minimal operational information:
+          </p>
+          <ul class="legal-bullets">
+            <li><strong>Account & Identity:</strong> Permanent Google User ID, verified email address, and device registration identifiers.</li>
+            <li><strong>Billing & Credits:</strong> Transaction records, credit pack purchases, wallet balance history, and payment gateway receipts.</li>
+            <li><strong>Relay Telemetry:</strong> Essential network diagnostics, operational error codes, and API rate-limiting metadata required to maintain service availability.</li>
           </ul>
         </section>
 
-        <section class="legal-section">
-          <h2>3. Zero Data Monetization or Selling</h2>
-          <p>
-            We do not sell, rent, monetize, or broker personal data, patient communications, or business telemetry to any third party, data broker, or advertiser.
+        <hr class="legal-divider" />
+
+        <!-- 4. AI Operations & Zero Model Training -->
+        <section id="ai-transience" class="legal-section">
+          <h2 class="section-heading">4. AI Operations & Zero Model Training</h2>
+          <p class="section-text">
+            When you invoke AI capabilities in your Workflows (such as automated WhatsApp customer replies via Gemma, audio transcription via Whisper, or invoice scanning via DeepSeek-OCR):
+          </p>
+          <ul class="legal-bullets">
+            <li><strong>Transient Processing Only:</strong> Specific prompt texts, audio snippets, or document images are transmitted securely to upstream model inference APIs solely to fulfill the requested task and return the result to your Workspace.</li>
+            <li><strong>Zero Training Invariant:</strong> Your business records, customer messages, and prompts are <strong>never</strong> used to train, fine-tune, or improve public or proprietary foundation models.</li>
+            <li><strong>No Persistent Third-Party Storage:</strong> Inference endpoints process your requests ephemerally and do not retain customer content for secondary purposes.</li>
+          </ul>
+        </section>
+
+        <hr class="legal-divider" />
+
+        <!-- 5. Encrypted Sync & Cloud Relays -->
+        <section id="sync-security" class="legal-section">
+          <h2 class="section-heading">5. Encrypted Sync & Cloud Relays</h2>
+          <p class="section-text">
+            If you enable optional multi-device cloud backup:
+          </p>
+          <ul class="legal-bullets">
+            <li><strong>End-to-Transit Security:</strong> Data replicated across your authorized phones, tablets, and store registers is transmitted using TLS 1.3 encryption.</li>
+            <li><strong>Working-Set Sync:</strong> Only your active, authorized working set is synchronized, minimizing cloud exposure.</li>
+            <li><strong>No Unrestricted Credentials:</strong> Mobile client devices sync only their authorized Personal DB working sets and never receive unrestricted master credentials.</li>
+          </ul>
+        </section>
+
+        <hr class="legal-divider" />
+
+        <!-- 6. Zero Monetization or Selling of Data -->
+        <section id="no-selling" class="legal-section">
+          <h2 class="section-heading">6. Zero Monetization or Selling of Data</h2>
+          <p class="section-text">
+            We operate on a transparent computational utility model. We do <strong>not</strong> sell, rent, license, monetize, or trade your personal data, customer records, or communication telemetry to data brokers, third-party advertisers, or surveillance intermediaries.
           </p>
         </section>
 
-        <section class="legal-section">
-          <h2>4. Data Portability and Erasure</h2>
-          <p>
-            Because TAR uses standard open data formats, you can export your entire workspace at any moment with a single tap. If you delete your workspace, local records are immediately erased from your device and any synced cloud backups are purged.
+        <hr class="legal-divider" />
+
+        <!-- 7. Data Portability & Erasure -->
+        <section id="portability" class="legal-section">
+          <h2 class="section-heading">7. Data Portability & Erasure</h2>
+          <p class="section-text">
+            <strong>Complete Portability:</strong> Because TAR structures records in open, documented formats (SQLite, OKF Markdown, standard JSON), you can export your entire database and files at any moment with 1 click.
+          </p>
+          <p class="section-text">
+            <strong>Immediate Erasure:</strong> When you delete a Workspace, local records are immediately wiped from your device. If cloud backup was enabled, all associated cloud backups and relay events are permanently purged from server storage.
           </p>
         </section>
 
-        <section class="legal-section">
-          <h2>5. Contact Us</h2>
-          <p>
-            If you have questions regarding our privacy practices or data handling, contact us directly at <a href="mailto:privacy@tarfw.com" class="legal-link">privacy@tarfw.com</a>.
+        <hr class="legal-divider" />
+
+        <!-- 8. Security & Cryptographic Protection -->
+        <section id="security" class="legal-section">
+          <h2 class="section-heading">8. Security & Cryptographic Protection</h2>
+          <p class="section-text">
+            TAR enforces strict architectural safeguards:
+          </p>
+          <ul class="legal-bullets">
+            <li><strong>Gateway Boundary:</strong> All state mutations must pass strict Gateway verification (checking role, membership, schema, version, and idempotency key).</li>
+            <li><strong>Device Revocation:</strong> Revoked devices lose decryption access on reconnection, and logging out immediately flushes local cryptographic keys and caches.</li>
+          </ul>
+        </section>
+
+        <hr class="legal-divider" />
+
+        <!-- 9. Your Privacy Rights & Choices -->
+        <section id="rights" class="legal-section">
+          <h2 class="section-heading">9. Your Privacy Rights & Choices</h2>
+          <p class="section-text">
+            Depending on your jurisdiction (such as GDPR, CCPA, or DPDP Act), you have the right to access, export, correct, or delete your personal data. Because your data is stored locally on your device, you have immediate, direct control over your records without needing to submit administrative data subject requests.
           </p>
         </section>
-      </article>
+
+        <hr class="legal-divider" />
+
+        <!-- 10. Policy Updates & Contact -->
+        <section id="updates-contact" class="legal-section">
+          <h2 class="section-heading">10. Policy Updates & Contact</h2>
+          <p class="section-text">
+            We may update this Privacy Policy periodically. When updates occur, we will update the "Last Updated" date at the top of this document. Material updates will be communicated via in-app notification.
+          </p>
+          <p class="section-text">
+            If you have questions or inquiries regarding our privacy architecture, contact our data protection team at <a href="mailto:privacy@tarfw.com" class="legal-link">privacy@tarfw.com</a>.
+          </p>
+        </section>
+
+      </div>
     </div>
   </main>
 
@@ -77,12 +199,76 @@ import FooterSection from "../components/FooterSection.astro";
     background-color: #ffffff;
     color: var(--color-ink-black);
     min-height: 80vh;
-    padding: 56px 0 88px 0;
+    padding: 40px 0 80px 0;
   }
 
-  .legal-container {
-    max-width: 760px;
-    margin: 0 auto;
+  .legal-layout-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 48px;
+  }
+
+  @media (min-width: 900px) {
+    .legal-layout-grid {
+      grid-template-columns: 220px 1fr;
+      gap: 56px;
+    }
+  }
+
+  /* Sticky Minimal Sidebar */
+  .legal-sidebar {
+    display: none;
+  }
+
+  @media (min-width: 900px) {
+    .legal-sidebar {
+      display: block;
+    }
+  }
+
+  .sidebar-sticky-box {
+    position: sticky;
+    top: 96px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .sidebar-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: var(--color-slate);
+    text-transform: uppercase;
+  }
+
+  .sidebar-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .sidebar-link {
+    font-size: 13.5px;
+    color: var(--color-graphite);
+    text-decoration: none;
+    padding: 6px 10px;
+    border-radius: 6px;
+    transition: background-color 0.15s ease, color 0.15s ease;
+  }
+
+  .sidebar-link:hover {
+    background-color: #f3f4f6;
+    color: var(--color-canopy-green);
+    font-weight: 600;
+  }
+
+  /* Main Content Column */
+  .legal-content-col {
+    max-width: 820px;
+    display: flex;
+    flex-direction: column;
+    gap: 40px;
   }
 
   .legal-header {
@@ -103,64 +289,76 @@ import FooterSection from "../components/FooterSection.astro";
     border-radius: 4px;
   }
 
-  .legal-title {
-    font-size: clamp(2.2rem, 3.6vw, 2.8rem);
+  .legal-main-title {
+    font-size: clamp(2rem, 3.4vw, 2.8rem);
     font-weight: 700;
     color: var(--color-canopy-green);
+    line-height: 1.1;
     letter-spacing: -0.02em;
     margin: 0;
   }
 
-  .legal-lead {
-    font-size: 14px;
-    color: var(--color-slate);
+  .legal-main-lead {
+    font-size: 16px;
+    line-height: 1.6;
+    color: var(--color-graphite);
     margin: 0;
+  }
+
+  .legal-effective-date {
+    font-size: 13px;
+    color: var(--color-slate);
   }
 
   .legal-divider {
     border: none;
     border-top: 1px solid rgba(0, 0, 0, 0.08);
-    margin: 28px 0 36px 0;
-  }
-
-  .legal-body {
-    display: flex;
-    flex-direction: column;
-    gap: 32px;
-  }
-
-  .legal-section {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-  }
-
-  .legal-section h2 {
-    font-size: 18px;
-    font-weight: 700;
-    color: var(--color-canopy-green);
     margin: 0;
   }
 
-  .legal-section p {
+  /* Sections */
+  .legal-section {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    scroll-margin-top: 88px;
+  }
+
+  .section-heading {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--color-canopy-green);
+    letter-spacing: -0.01em;
+    margin: 0;
+  }
+
+  .section-text {
     font-size: 14.5px;
     line-height: 1.65;
     color: var(--color-graphite);
     margin: 0;
   }
 
-  .legal-section ul {
+  .section-text strong {
+    color: var(--color-ink-black);
+  }
+
+  .legal-bullets {
     margin: 4px 0 0 0;
     padding-left: 20px;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 10px;
   }
 
-  .legal-section li {
+  .legal-bullets li {
     font-size: 14px;
-    line-height: 1.55;
+    line-height: 1.6;
     color: var(--color-graphite);
+  }
+
+  .legal-bullets strong {
+    color: var(--color-ink-black);
   }
 
   .legal-link {

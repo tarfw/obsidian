@@ -653,7 +653,8 @@ export type NativeBlockType =
   | 'pipeline-card'
   | 'contact-card'
   | 'action-confirm'
-  | 'data-grid';
+  | 'data-grid'
+  | 'record-profile';
 
 export interface NativeBlockConfig {
   id: string;
@@ -679,4 +680,3 @@ export interface CanvasAST {
     intentEnabled: boolean;
   };
 }
-

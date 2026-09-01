@@ -1,6 +1,6 @@
 import { createClient } from '@libsql/client';
 import { describe, expect, it } from 'vitest';
-import { HarnessRepository, ensureHarnessSchema } from '../src/harness/repository.ts';
+import { HarnessRepository, ensureCoreWorkspaceDefinitions, ensureHarnessSchema } from '../src/harness/repository.ts';
 
 describe('Harness workspace repository', () => {
   it('keeps definitions, records, runs, and audit events in canonical tables', async () => {
@@ -15,6 +15,20 @@ describe('Harness workspace repository', () => {
     expect((await repo.listDefs('bot'))[0].name).toBe('Orders');
     expect(updated.status).toBe('paid');
     expect(run.recordId).toBe(record.id);
+    await client.close();
+  });
+});
+
+describe('core Workspace definitions', () => {
+  it('installs Contacts and Organizations definitions without creating records', async () => {
+    const client = createClient({ url: 'file::memory:' });
+    await ensureHarnessSchema(client);
+    const repo = new HarnessRepository(client);
+    await ensureCoreWorkspaceDefinitions(repo);
+
+    expect((await repo.listDefs('data')).map((definition) => definition.id)).toEqual(expect.arrayContaining(['data_contacts', 'data_organizations']));
+    expect((await repo.listDefs('bot')).map((definition) => definition.id)).toEqual(expect.arrayContaining(['bot_contacts', 'bot_organizations', 'bot_followups']));
+    expect(await repo.listRecords()).toEqual([]);
     await client.close();
   });
 });

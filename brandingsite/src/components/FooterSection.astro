@@ -1,34 +1,28 @@
 ---
-// Clean, Human Directory Footer in Canopy Green (#0a3922) — 100vh Room Layout
+// Clean, Uncluttered Directory Footer in Canopy Green (#0a3922) — 0 Repetitions & Balanced Grid
 import TarLogo from "./TarLogo.astro";
+import GooglePlayBadge from "./GooglePlayBadge.astro";
 
-const channelLinks = [
-  { name: "WhatsApp", href: "/#overview" },
-  { name: "Telegram", href: "/#overview" },
-  { name: "Websites", href: "/#overview" },
-  { name: "Voice in 40+ Languages", href: "/#overview" }
-];
-
-const capabilityLinks = [
-  { name: "Works Offline", href: "/#capabilities" },
+const productLinks = [
+  { name: "WhatsApp & Telegram", href: "/#channels" },
+  { name: "Voice in 40+ Languages", href: "/#channels" },
   { name: "Unified Team Feed", href: "/#genui" },
-  { name: "Automated Care Loops", href: "/#capabilities" },
-  { name: "Zero Per-Seat Fees", href: "/#pricing" }
+  { name: "Offline-First Engine", href: "/#capabilities" }
 ];
 
-const resourceLinks = [
-  { name: "Manifesto", href: "/manifesto" },
-  { name: "Documentation", href: "/docs" },
-  { name: "Agents & Rates", href: "/agents" },
-  { name: "Pricing", href: "/#pricing" },
-  { name: "FAQ", href: "/#faq" }
+const platformLinks = [
+  { name: "TAR Harness Handbook", href: "/harness" },
+  { name: "Agent Directory & Rates", href: "/agents" },
+  { name: "Developer Documentation", href: "/docs" },
+  { name: "Learn (Agents & Brain)", href: "/learn" },
+  { name: "Security Architecture", href: "/security" }
 ];
 
 const companyLinks = [
-  { name: "Google Play Store", href: "https://play.google.com/store/apps" },
-  { name: "Privacy Policy", href: "/privacy" },
-  { name: "Terms & Conditions", href: "/terms" },
-  { name: "Security Architecture", href: "/security" }
+  { name: "The Manifesto", href: "/manifesto" },
+  { name: "Usage-Based Pricing", href: "/#pricing" },
+  { name: "Help & Support", href: "/support" },
+  { name: "Community Guidelines", href: "/guidelines" }
 ];
 ---
 
@@ -47,41 +41,34 @@ const companyLinks = [
         <p class="brand-tagline">
           Calm, honest messaging for everyday commerce and operations.
         </p>
+        <div class="brand-badge-wrapper">
+          <GooglePlayBadge height={36} />
+        </div>
       </div>
 
-      <!-- Column 1: Channels -->
+      <!-- Column 1: Product -->
       <div class="footer-col">
-        <h4 class="col-title">INTERFACES</h4>
+        <h4 class="col-title">PRODUCT</h4>
         <ul class="col-links">
-          {channelLinks.map((l) => (
+          {productLinks.map((l) => (
             <li><a href={l.href} class="footer-link">{l.name}</a></li>
           ))}
         </ul>
       </div>
 
-      <!-- Column 2: Capabilities -->
+      <!-- Column 2: Platform -->
       <div class="footer-col">
-        <h4 class="col-title">CAPABILITIES</h4>
+        <h4 class="col-title">PLATFORM</h4>
         <ul class="col-links">
-          {capabilityLinks.map((l) => (
+          {platformLinks.map((l) => (
             <li><a href={l.href} class="footer-link">{l.name}</a></li>
           ))}
         </ul>
       </div>
 
-      <!-- Column 3: Resources -->
+      <!-- Column 3: Company -->
       <div class="footer-col">
-        <h4 class="col-title">RESOURCES</h4>
-        <ul class="col-links">
-          {resourceLinks.map((l) => (
-            <li><a href={l.href} class="footer-link">{l.name}</a></li>
-          ))}
-        </ul>
-      </div>
-
-      <!-- Column 4: Legal & Apps -->
-      <div class="footer-col">
-        <h4 class="col-title">LEGAL & APPS</h4>
+        <h4 class="col-title">COMPANY</h4>
         <ul class="col-links">
           {companyLinks.map((l) => (
             <li><a href={l.href} class="footer-link">{l.name}</a></li>
@@ -97,9 +84,8 @@ const companyLinks = [
         © 2026 TAR. Built from Tamil with ❤️ for the world.
       </span>
       <div class="bottom-legal-links">
-        <a href="/privacy">Privacy</a>
-        <a href="/terms">Terms</a>
-        <a href="/security">Security</a>
+        <a href="/privacy">Privacy Policy</a>
+        <a href="/terms">Terms of Service</a>
       </div>
     </div>
 
@@ -110,12 +96,7 @@ const companyLinks = [
   .footer-section {
     background-color: var(--color-canopy-green);
     color: var(--color-paper-white);
-    min-height: 100vh;
-    min-height: 100dvh;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    padding: 64px 0;
+    padding: 80px 0 48px;
     box-sizing: border-box;
     border-top: 1px solid rgba(255, 255, 255, 0.08);
   }
@@ -130,28 +111,29 @@ const companyLinks = [
   .footer-nav-grid {
     display: grid;
     grid-template-columns: 1fr;
-    gap: 36px;
-    padding-bottom: 40px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    gap: 40px;
+    padding-bottom: 48px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   }
 
-  @media (min-width: 600px) {
+  @media (min-width: 640px) {
     .footer-nav-grid {
       grid-template-columns: repeat(2, 1fr);
+      gap: 40px;
     }
   }
 
-  @media (min-width: 960px) {
+  @media (min-width: 1024px) {
     .footer-nav-grid {
-      grid-template-columns: 1.4fr repeat(4, 1fr);
-      gap: 36px;
+      grid-template-columns: 1.5fr 1fr 1fr 1fr;
+      gap: 48px;
     }
   }
 
   .brand-col {
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: 16px;
   }
 
   .footer-logo {
@@ -172,17 +154,23 @@ const companyLinks = [
   .brand-tagline {
     font-size: 14px;
     color: var(--color-mint-wash);
+    opacity: 0.85;
     line-height: 1.6;
-    max-width: 260px;
+    max-width: 280px;
     margin: 0;
+  }
+
+  .brand-badge-wrapper {
+    margin-top: 4px;
   }
 
   .col-title {
     font-size: 11px;
     font-weight: 700;
-    letter-spacing: 0.08em;
-    color: rgba(255, 255, 255, 0.5);
-    margin-bottom: 16px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.45);
+    margin: 0 0 20px 0;
   }
 
   .col-links {
@@ -197,20 +185,22 @@ const companyLinks = [
   .footer-link {
     font-size: 14px;
     color: var(--color-mint-wash);
+    opacity: 0.85;
     text-decoration: none;
-    transition: color 0.15s ease;
+    transition: color 0.15s ease, opacity 0.15s ease;
   }
 
   .footer-link:hover {
     color: #ffffff;
+    opacity: 1;
   }
 
   .footer-bottom-bar {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 16px;
     font-size: 13px;
-    color: rgba(255, 255, 255, 0.6);
+    color: rgba(255, 255, 255, 0.55);
   }
 
   @media (min-width: 640px) {
@@ -223,11 +213,11 @@ const companyLinks = [
 
   .bottom-legal-links {
     display: flex;
-    gap: 18px;
+    gap: 24px;
   }
 
   .bottom-legal-links a {
-    color: rgba(255, 255, 255, 0.6);
+    color: rgba(255, 255, 255, 0.65);
     text-decoration: none;
     transition: color 0.15s ease;
   }

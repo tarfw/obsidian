@@ -1,0 +1,1397 @@
+---
+// TAR Learn — The AI Agent & Company Brain Illustrated Postcard Deck
+// Comprehensive distillation of OpenAI's "A Practical Guide to Building AI Agents"
+// and Slite's "Company Brain" organizational memory research.
+// 12 Square Collector Postcards with zero AI slop, flat design system, and plain English.
+import Layout from "../layouts/Layout.astro";
+import Nav from "../components/Nav.astro";
+import FooterSection from "../components/FooterSection.astro";
+---
+
+<Layout
+  title="Illustrated Postcard Handbook — AI Agents & Company Brain | TAR"
+  description="12 beautifully illustrated square postcards explaining autonomous AI agents and living company memory. Complete distillation of OpenAI's Agent Guide and Slite's Company Brain."
+>
+  <Nav />
+
+  <main class="learn-page font-dm-sans">
+    
+    <!-- Hero Header -->
+    <header class="learn-hero room-canopy-green">
+      <div class="container hero-inner">
+        <div class="badge-pill">TAR Illustrated Postcards • Complete 12-Card Guide</div>
+        <h1 class="hero-title">
+          The AI Agent & Company<br class="hidden-mobile" />
+          Brain Postcard Handbook.
+        </h1>
+        <p class="hero-subtitle">
+          A comprehensive visual guide distilling OpenAI's "A Practical Guide to Building AI Agents" and Slite's "Company Brain" research into 12 square illustrated collector postcards. Built for teams of all technical levels.
+        </p>
+
+        <!-- Filter Pill Controls -->
+        <div class="deck-filter-bar">
+          <button class="filter-pill active" id="btn-all">All 12 Postcards</button>
+          <button class="filter-pill" id="btn-p1">Part 1: OpenAI Agent Guide (01–06)</button>
+          <button class="filter-pill" id="btn-p2">Part 2: Slite Company Brain (07–12)</button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Postcard Gallery Grid Container -->
+    <section class="postcard-gallery-section" id="gallery">
+      <div class="container">
+        
+        <!-- Postcards Grid (Square 1:1 Aspect Ratio Cards) -->
+        <div class="postcards-grid">
+          
+          <!-- ============================================== -->
+          <!-- POSTCARD 01: Chatbots vs Agents + 3 Triad      -->
+          <!-- ============================================== -->
+          <article class="postcard-container card-sage" data-module="1">
+            <div class="postcard-frame">
+              <div class="postcard-header">
+                <div class="postcard-num-stamp">
+                  <span class="stamp-pill">CARD 01 / 12</span>
+                  <span class="stamp-module">PART 1: OPENAI AGENT GUIDE</span>
+                </div>
+                <span class="stamp-topic">Agent Anatomy</span>
+              </div>
+
+              <div class="postcard-illustration-box">
+                <svg viewBox="0 0 400 210" class="postcard-svg" aria-hidden="true">
+                  <!-- The 3 Core Components of an Agent -->
+                  <g transform="translate(15, 15)">
+                    <rect width="115" height="85" rx="10" fill="#ffffff" stroke="#0a3922" stroke-width="1.5" />
+                    <circle cx="57" cy="22" r="12" fill="#d2f2e3" />
+                    <text x="57" y="26" text-anchor="middle" font-size="9" font-weight="800" fill="#0a3922">1</text>
+                    <text x="57" y="48" text-anchor="middle" font-size="9.5" font-weight="700" fill="#0a3922">MODEL</text>
+                    <text x="57" y="62" text-anchor="middle" font-size="7.5" fill="#64748b">LLM reasoning</text>
+                    <text x="57" y="74" text-anchor="middle" font-size="7.5" fill="#64748b">& decision logic</text>
+                  </g>
+
+                  <g transform="translate(142, 15)">
+                    <rect width="115" height="85" rx="10" fill="#ffffff" stroke="#0a3922" stroke-width="1.5" />
+                    <circle cx="57" cy="22" r="12" fill="#eee2ff" />
+                    <text x="57" y="26" text-anchor="middle" font-size="9" font-weight="800" fill="#460095">2</text>
+                    <text x="57" y="48" text-anchor="middle" font-size="9.5" font-weight="700" fill="#0a3922">TOOLS</text>
+                    <text x="57" y="62" text-anchor="middle" font-size="7.5" fill="#64748b">APIs, SQLite DB,</text>
+                    <text x="57" y="74" text-anchor="middle" font-size="7.5" fill="#64748b">& math formulas</text>
+                  </g>
+
+                  <g transform="translate(270, 15)">
+                    <rect width="115" height="85" rx="10" fill="#ffffff" stroke="#0a3922" stroke-width="1.5" />
+                    <circle cx="57" cy="22" r="12" fill="#ccf0f8" />
+                    <text x="57" y="26" text-anchor="middle" font-size="9" font-weight="800" fill="#003642">3</text>
+                    <text x="57" y="48" text-anchor="middle" font-size="9.5" font-weight="700" fill="#0a3922">INSTRUCTIONS</text>
+                    <text x="57" y="62" text-anchor="middle" font-size="7.5" fill="#64748b">System prompt,</text>
+                    <text x="57" y="74" text-anchor="middle" font-size="7.5" fill="#64748b">rules & boundaries</text>
+                  </g>
+
+                  <!-- Agent vs Chatbot Comparison Bar -->
+                  <g transform="translate(15, 112)">
+                    <rect width="180" height="82" rx="10" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5" />
+                    <text x="90" y="20" text-anchor="middle" font-size="8.5" font-weight="700" fill="#64748b">PASSIVE CHATBOT</text>
+                    <text x="14" y="40" font-size="7.5" fill="#475569">• In: Text prompt from user</text>
+                    <text x="14" y="54" font-size="7.5" fill="#475569">• Out: Conversational text only</text>
+                    <text x="14" y="68" font-size="7.5" font-weight="600" fill="#b91c1c">• Zero real-world execution</text>
+                  </g>
+
+                  <g transform="translate(205, 112)">
+                    <rect width="180" height="82" rx="10" fill="#0a3922" stroke="#0a3922" stroke-width="1.5" />
+                    <text x="90" y="20" text-anchor="middle" font-size="8.5" font-weight="700" fill="#55dd4a">AUTONOMOUS AGENT</text>
+                    <text x="14" y="40" font-size="7.5" fill="#ffffff">• In: Operational business goal</text>
+                    <text x="14" y="54" font-size="7.5" fill="#d2f2e3">• Out: Multi-step tool executions</text>
+                    <text x="14" y="68" font-size="7.5" font-weight="700" fill="#55dd4a">• Updates DB & verifies completion</text>
+                  </g>
+                </svg>
+              </div>
+
+              <div class="postcard-body">
+                <h2 class="postcard-title">Chatbots Talk. Agents Execute.</h2>
+                <p class="postcard-desc">
+                  OpenAI defines an agent as a system where an LLM dynamically directs workflow execution using three core pillars: <strong>Model</strong> (reasoning engine), <strong>Tools</strong> (external capabilities), and <strong>Instructions</strong> (operational guardrails).
+                </p>
+              </div>
+
+              <div class="postcard-footer">
+                <div class="scenario-box">
+                  <span class="scenario-tag">EVERYDAY SCENARIO</span>
+                  <p class="scenario-text">A chatbot quotes doctor clinic hours from a text file. An agent queries SQLite, checks doctor rosters, reschedules 14 patient slots, and sends WhatsApp confirmations.</p>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <!-- ============================================== -->
+          <!-- POSTCARD 02: The Run Loop & Self-Correction    -->
+          <!-- ============================================== -->
+          <article class="postcard-container card-mint" data-module="1">
+            <div class="postcard-frame">
+              <div class="postcard-header">
+                <div class="postcard-num-stamp">
+                  <span class="stamp-pill">CARD 02 / 12</span>
+                  <span class="stamp-module">PART 1: OPENAI AGENT GUIDE</span>
+                </div>
+                <span class="stamp-topic">The Run Loop</span>
+              </div>
+
+              <div class="postcard-illustration-box">
+                <svg viewBox="0 0 400 210" class="postcard-svg" aria-hidden="true">
+                  <!-- 4 Step Loop -->
+                  <g transform="translate(25, 20)">
+                    <rect width="160" height="70" rx="10" fill="#ffffff" stroke="#0a3922" stroke-width="1.5" />
+                    <circle cx="20" cy="22" r="10" fill="#d2f2e3" />
+                    <text x="20" y="26" text-anchor="middle" font-size="10" font-weight="800" fill="#0a3922">1</text>
+                    <text x="38" y="24" font-size="11" font-weight="700" fill="#0a3922">OBSERVE</text>
+                    <text x="14" y="46" font-size="8.5" fill="#475569">Ingests voice notes, bills, or</text>
+                    <text x="14" y="58" font-size="8.5" fill="#475569">incoming customer WhatsApp.</text>
+                  </g>
+
+                  <path d="M190 55 H210" stroke="#0a3922" stroke-width="2" />
+                  <polygon points="210,55 204,51 204,59" fill="#0a3922" />
+
+                  <g transform="translate(215, 20)">
+                    <rect width="160" height="70" rx="10" fill="#ffffff" stroke="#0a3922" stroke-width="1.5" />
+                    <circle cx="20" cy="22" r="10" fill="#eee2ff" />
+                    <text x="20" y="26" text-anchor="middle" font-size="10" font-weight="800" fill="#460095">2</text>
+                    <text x="38" y="24" font-size="11" font-weight="700" fill="#0a3922">PLAN STEPS</text>
+                    <text x="14" y="46" font-size="8.5" fill="#475569">Breaks goal into ordered</text>
+                    <text x="14" y="58" font-size="8.5" fill="#475569">sequence of tool operations.</text>
+                  </g>
+
+                  <path d="M295 95 V115" stroke="#0a3922" stroke-width="2" />
+                  <polygon points="295,115 291,109 299,109" fill="#0a3922" />
+
+                  <g transform="translate(215, 120)">
+                    <rect width="160" height="70" rx="10" fill="#0a3922" />
+                    <circle cx="20" cy="22" r="10" fill="#55dd4a" />
+                    <text x="20" y="26" text-anchor="middle" font-size="10" font-weight="800" fill="#0a3922">3</text>
+                    <text x="38" y="24" font-size="11" font-weight="700" fill="#ffffff">ACT / TOOLS</text>
+                    <text x="14" y="46" font-size="8.5" fill="#d2f2e3">Executes deterministic API,</text>
+                    <text x="14" y="58" font-size="8.5" fill="#d2f2e3">database query, or ledger write.</text>
+                  </g>
+
+                  <path d="M210 155 H190" stroke="#0a3922" stroke-width="2" />
+                  <polygon points="190,155 196,151 196,159" fill="#0a3922" />
+
+                  <g transform="translate(25, 120)">
+                    <rect width="160" height="70" rx="10" fill="#ffffff" stroke="#1dbf73" stroke-width="2" />
+                    <circle cx="20" cy="22" r="10" fill="#d2f2e3" />
+                    <text x="20" y="26" text-anchor="middle" font-size="10" font-weight="800" fill="#0a3922">4</text>
+                    <text x="38" y="24" font-size="11" font-weight="700" fill="#0a3922">VERIFY / RECOVER</text>
+                    <text x="14" y="46" font-size="8.5" fill="#475569">Checks exit conditions. If an</text>
+                    <text x="14" y="58" font-size="8.5" fill="#475569">error occurs, self-corrects.</text>
+                  </g>
+
+                  <path d="M105 115 V95" stroke="#1dbf73" stroke-width="1.5" stroke-dasharray="3" />
+                </svg>
+              </div>
+
+              <div class="postcard-body">
+                <h2 class="postcard-title">Observe → Plan → Act → Verify</h2>
+                <p class="postcard-desc">
+                  OpenAI's central execution engine is the <strong>Run Loop</strong>. The agent runs iteratively: inspecting context, planning tools, executing calls, and evaluating results until reaching a verified exit condition or safe human escalation.
+                </p>
+              </div>
+
+              <div class="postcard-footer">
+                <div class="scenario-box">
+                  <span class="scenario-tag">EVERYDAY SCENARIO</span>
+                  <p class="scenario-text">1. Listen to Tamil voice note → 2. Extract 4 medicine items → 3. Deduct stock in SQLite and draft invoice → 4. Verify calculation before sending UPI link.</p>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <!-- ============================================== -->
+          <!-- POSTCARD 03: Orchestration Topologies          -->
+          <!-- ============================================== -->
+          <article class="postcard-container card-lavender" data-module="1">
+            <div class="postcard-frame">
+              <div class="postcard-header">
+                <div class="postcard-num-stamp">
+                  <span class="stamp-pill">CARD 03 / 12</span>
+                  <span class="stamp-module">PART 1: OPENAI AGENT GUIDE</span>
+                </div>
+                <span class="stamp-topic">Orchestration Patterns</span>
+              </div>
+
+              <div class="postcard-illustration-box">
+                <svg viewBox="0 0 400 210" class="postcard-svg" aria-hidden="true">
+                  <!-- Pattern 1: Single Specialist -->
+                  <g transform="translate(10, 20)">
+                    <rect width="115" height="170" rx="10" fill="#ffffff" stroke="#0a3922" stroke-width="1.5" />
+                    <text x="57" y="24" text-anchor="middle" font-size="8.5" font-weight="700" fill="#0a3922">1. SPECIALIST</text>
+                    <circle cx="57" cy="55" r="16" fill="#d2f2e3" />
+                    <text x="57" y="59" text-anchor="middle" font-size="8" font-weight="800" fill="#0a3922">POS</text>
+                    <path d="M57 75 V95" stroke="#0a3922" stroke-width="1.5" />
+                    <rect x="12" y="100" width="91" height="30" rx="4" fill="#0a3922" />
+                    <text x="57" y="118" text-anchor="middle" font-size="8" font-weight="700" fill="#ffffff">Checkout Tool</text>
+                    <text x="57" y="150" text-anchor="middle" font-size="7" fill="#64748b">Single task focus</text>
+                    <text x="57" y="160" text-anchor="middle" font-size="7" fill="#64748b">Lowest complexity</text>
+                  </g>
+
+                  <!-- Pattern 2: Router / Triage -->
+                  <g transform="translate(135, 20)">
+                    <rect width="125" height="170" rx="10" fill="#ffffff" stroke="#0a3922" stroke-width="1.5" />
+                    <text x="62" y="24" text-anchor="middle" font-size="8.5" font-weight="700" fill="#0a3922">2. ROUTER / TRIAGE</text>
+                    <rect x="18" y="38" width="89" height="24" rx="4" fill="#0a3922" />
+                    <text x="62" y="53" text-anchor="middle" font-size="8" font-weight="700" fill="#55dd4a">Router Agent</text>
+                    
+                    <path d="M62 64 V78 M35 78 H90 M35 78 V88 M90 78 V88" stroke="#0a3922" stroke-width="1.2" />
+                    <rect x="12" y="90" width="46" height="24" rx="4" fill="#f1f5f9" stroke="#cbd5e1" />
+                    <text x="35" y="104" text-anchor="middle" font-size="7" font-weight="600" fill="#0a3922">Billing</text>
+                    <rect x="67" y="90" width="46" height="24" rx="4" fill="#f1f5f9" stroke="#cbd5e1" />
+                    <text x="90" y="104" text-anchor="middle" font-size="7" font-weight="600" fill="#0a3922">Support</text>
+                    
+                    <text x="62" y="150" text-anchor="middle" font-size="7" fill="#64748b">Routes by intent</text>
+                    <text x="62" y="160" text-anchor="middle" font-size="7" fill="#64748b">Modularity</text>
+                  </g>
+
+                  <!-- Pattern 3: Manager-Worker Swarm -->
+                  <g transform="translate(270, 20)">
+                    <rect width="120" height="170" rx="10" fill="#ffffff" stroke="#0a3922" stroke-width="1.5" />
+                    <text x="60" y="24" text-anchor="middle" font-size="8.5" font-weight="700" fill="#0a3922">3. MANAGER SWARM</text>
+                    <circle cx="60" cy="48" r="14" fill="#0a3922" />
+                    <text x="60" y="52" text-anchor="middle" font-size="7" font-weight="800" fill="#55dd4a">Lead</text>
+
+                    <path d="M60 64 V78 M25 78 H95 M25 78 V88 M60 78 V88 M95 78 V88" stroke="#0a3922" stroke-width="1.2" />
+                    <circle cx="25" cy="100" r="9" fill="#eee2ff" />
+                    <text x="25" y="103" text-anchor="middle" font-size="6" font-weight="700" fill="#460095">OCR</text>
+                    <circle cx="60" cy="100" r="9" fill="#ccf0f8" />
+                    <text x="60" y="103" text-anchor="middle" font-size="6" font-weight="700" fill="#003642">Tax</text>
+                    <circle cx="95" cy="100" r="9" fill="#ffede8" />
+                    <text x="95" y="103" text-anchor="middle" font-size="6" font-weight="700" fill="#47264c">PDF</text>
+
+                    <text x="60" y="150" text-anchor="middle" font-size="7" fill="#64748b">Parallel delegation</text>
+                    <text x="60" y="160" text-anchor="middle" font-size="7" fill="#64748b">& data synthesis</text>
+                  </g>
+                </svg>
+              </div>
+
+              <div class="postcard-body">
+                <h2 class="postcard-title">Specialists, Routers & Swarms</h2>
+                <p class="postcard-desc">
+                  OpenAI emphasizes three architectural topologies: start with a focused <strong>Single Specialist</strong>; use a <strong>Router Agent</strong> when handling multi-intent triage; and use <strong>Manager-Worker Swarms</strong> for complex parallel synthesis.
+                </p>
+              </div>
+
+              <div class="postcard-footer">
+                <div class="scenario-box">
+                  <span class="scenario-tag">EVERYDAY SCENARIO</span>
+                  <p class="scenario-text">An inbound WhatsApp message is triaged by the Router: voice receipts are delegated to Groq Whisper OCR; stock requests to SQLite; and high-value orders to the store manager.</p>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <!-- ============================================== -->
+          <!-- POSTCARD 04: Deterministic Tools & Schemas     -->
+          <!-- ============================================== -->
+          <article class="postcard-container card-sky" data-module="1">
+            <div class="postcard-frame">
+              <div class="postcard-header">
+                <div class="postcard-num-stamp">
+                  <span class="stamp-pill">CARD 04 / 12</span>
+                  <span class="stamp-module">PART 1: OPENAI AGENT GUIDE</span>
+                </div>
+                <span class="stamp-topic">Deterministic Tools</span>
+              </div>
+
+              <div class="postcard-illustration-box">
+                <svg viewBox="0 0 400 210" class="postcard-svg" aria-hidden="true">
+                  <!-- Probabilistic Guessing -->
+                  <g transform="translate(15, 20)">
+                    <rect width="170" height="170" rx="12" fill="#fff1f2" stroke="#f43f5e" stroke-width="1.5" />
+                    <text x="85" y="24" text-anchor="middle" font-size="8.5" font-weight="700" fill="#be123c">PROBABILISTIC TEXT GUESSING</text>
+                    
+                    <rect x="14" y="40" width="142" height="34" rx="6" fill="#ffffff" stroke="#fecdd3" />
+                    <text x="20" y="56" font-size="8.5" fill="#475569">AI computes math in text:</text>
+                    <text x="20" y="68" font-size="8" fill="#94a3b8">"₹140 x 30 + 18% is ~₹4,900"</text>
+                    
+                    <circle cx="85" cy="110" r="16" fill="#fee2e2" />
+                    <text x="85" y="115" text-anchor="middle" font-size="14" font-weight="800" fill="#be123c">✗</text>
+                    
+                    <text x="85" y="146" text-anchor="middle" font-size="8.5" font-weight="700" fill="#be123c">Hallucinated Rounding Error</text>
+                    <text x="85" y="158" text-anchor="middle" font-size="7.5" fill="#64748b">Mismatched tax ledger balances</text>
+                  </g>
+
+                  <!-- Typed Deterministic Tool -->
+                  <g transform="translate(215, 20)">
+                    <rect width="170" height="170" rx="12" fill="#ecfdf5" stroke="#0a3922" stroke-width="2" />
+                    <text x="85" y="24" text-anchor="middle" font-size="8.5" font-weight="700" fill="#0a3922">TYPED DETERMINISTIC TOOL</text>
+                    
+                    <rect x="14" y="40" width="142" height="52" rx="6" fill="#0a3922" />
+                    <text x="20" y="55" font-size="7.5" font-weight="700" fill="#55dd4a">tool: calculate_invoice()</text>
+                    <text x="20" y="68" font-size="7.5" fill="#ffffff">qty: 30 • unit_price: 140.00</text>
+                    <text x="20" y="80" font-size="7.5" fill="#d2f2e3">gst_rate: 0.18</text>
+                    
+                    <circle cx="85" cy="115" r="14" fill="#55dd4a" />
+                    <text x="85" y="119" text-anchor="middle" font-size="12" font-weight="800" fill="#0a3922">✓</text>
+                    
+                    <text x="85" y="146" text-anchor="middle" font-size="9" font-weight="800" fill="#0a3922">₹4,956.00 Exact</text>
+                    <text x="85" y="158" text-anchor="middle" font-size="7.5" fill="#64748b">100% precision every execution</text>
+                  </g>
+                </svg>
+              </div>
+
+              <div class="postcard-body">
+                <h2 class="postcard-title">Exact Math via Typed Tools</h2>
+                <p class="postcard-desc">
+                  LLMs are word predictors unsuited for raw accounting. OpenAI's guide mandates calling <strong>deterministic tools</strong> with strict JSON schemas, delegating mathematics and database mutations to verified code.
+                </p>
+              </div>
+
+              <div class="postcard-footer">
+                <div class="scenario-box">
+                  <span class="scenario-tag">EVERYDAY SCENARIO</span>
+                  <p class="scenario-text">When billing a ₹14,500 wholesale order, the agent runs the typed arithmetic tool: ₹14,500 + 18% GST = ₹17,110.00. Zero calculation hallucinations.</p>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <!-- ============================================== -->
+          <!-- POSTCARD 05: Guardrails & Human-in-the-Loop    -->
+          <!-- ============================================== -->
+          <article class="postcard-container card-peach" data-module="1">
+            <div class="postcard-frame">
+              <div class="postcard-header">
+                <div class="postcard-num-stamp">
+                  <span class="stamp-pill">CARD 05 / 12</span>
+                  <span class="stamp-module">PART 1: OPENAI AGENT GUIDE</span>
+                </div>
+                <span class="stamp-topic">Guardrails & Safety</span>
+              </div>
+
+              <div class="postcard-illustration-box">
+                <svg viewBox="0 0 400 210" class="postcard-svg" aria-hidden="true">
+                  <!-- Low Risk Routine Funnel -->
+                  <g transform="translate(30, 25)">
+                    <rect width="100" height="60" rx="8" fill="#ffffff" stroke="#0a3922" stroke-width="1.5" />
+                    <text x="50" y="24" text-anchor="middle" font-size="9" font-weight="700" fill="#0a3922">Routine Action</text>
+                    <text x="50" y="38" text-anchor="middle" font-size="7.5" fill="#64748b">Catalog check or</text>
+                    <text x="50" y="48" text-anchor="middle" font-size="7.5" fill="#64748b">standard order</text>
+                  </g>
+
+                  <path d="M135 55 H175" stroke="#0a3922" stroke-width="2" />
+                  <rect x="180" y="40" width="190" height="32" rx="6" fill="#ecfdf5" stroke="#1dbf73" />
+                  <circle cx="196" cy="56" r="6" fill="#1dbf73" />
+                  <text x="285" y="60" text-anchor="middle" font-size="9" font-weight="700" fill="#0a3922">Autonomous Execution (Instant)</text>
+
+                  <!-- High Risk HITL Funnel -->
+                  <g transform="translate(30, 115)">
+                    <rect width="100" height="60" rx="8" fill="#fff1f2" stroke="#dc2626" stroke-width="1.5" />
+                    <text x="50" y="24" text-anchor="middle" font-size="9" font-weight="700" fill="#dc2626">High-Stakes Action</text>
+                    <text x="50" y="38" text-anchor="middle" font-size="7.5" fill="#64748b">Refund > ₹2,000 or</text>
+                    <text x="50" y="48" text-anchor="middle" font-size="7.5" fill="#64748b">prescription change</text>
+                  </g>
+
+                  <path d="M135 145 H175" stroke="#dc2626" stroke-width="2" />
+                  <rect x="180" y="125" width="190" height="42" rx="8" fill="#ffffff" stroke="#dc2626" stroke-width="2" />
+                  <circle cx="198" cy="146" r="8" fill="#fee2e2" />
+                  <text x="198" y="150" text-anchor="middle" font-size="9" font-weight="800" fill="#dc2626">!</text>
+                  <text x="285" y="142" text-anchor="middle" font-size="9" font-weight="700" fill="#dc2626">1-Tap Human Approval Gate</text>
+                  <text x="285" y="156" text-anchor="middle" font-size="7.5" fill="#64748b">Drafts proposal in team feed</text>
+                </svg>
+              </div>
+
+              <div class="postcard-body">
+                <h2 class="postcard-title">Guardrails & Human-in-the-Loop</h2>
+                <p class="postcard-desc">
+                  OpenAI mandates strict guardrails: input validation, circuit breakers, and <strong>Human-in-the-Loop (HITL)</strong> approval gates. Low-risk queries execute autonomously; high-risk actions pause for 1-tap human signoff.
+                </p>
+              </div>
+
+              <div class="postcard-footer">
+                <div class="scenario-box">
+                  <span class="scenario-tag">EVERYDAY SCENARIO</span>
+                  <p class="scenario-text">Routine orders under ₹2,000 commit automatically. A ₹4,000 refund request drafts a ledger proposal in the feed and waits for the store manager to tap Approve.</p>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <!-- ============================================== -->
+          <!-- POSTCARD 06: Evaluation, Monitoring & Rules    -->
+          <!-- ============================================== -->
+          <article class="postcard-container card-cream" data-module="1">
+            <div class="postcard-frame">
+              <div class="postcard-header">
+                <div class="postcard-num-stamp">
+                  <span class="stamp-pill">CARD 06 / 12</span>
+                  <span class="stamp-module">PART 1: OPENAI AGENT GUIDE</span>
+                </div>
+                <span class="stamp-topic">Evaluation & Operations</span>
+              </div>
+
+              <div class="postcard-illustration-box">
+                <svg viewBox="0 0 400 210" class="postcard-svg" aria-hidden="true">
+                  <g transform="translate(25, 18)">
+                    <rect width="165" height="75" rx="8" fill="#ffffff" stroke="#0a3922" stroke-width="1.5" />
+                    <circle cx="20" cy="20" r="10" fill="#d2f2e3" />
+                    <text x="20" y="24" text-anchor="middle" font-size="10" font-weight="800" fill="#0a3922">1</text>
+                    <text x="36" y="22" font-size="9.5" font-weight="700" fill="#0a3922">EVALUATION BENCH</text>
+                    <text x="14" y="44" font-size="8" fill="#475569">Unit test agent trajectories</text>
+                    <text x="14" y="56" font-size="8" fill="#475569">against golden test sets.</text>
+                  </g>
+
+                  <g transform="translate(210, 18)">
+                    <rect width="165" height="75" rx="8" fill="#ffffff" stroke="#0a3922" stroke-width="1.5" />
+                    <circle cx="20" cy="20" r="10" fill="#eee2ff" />
+                    <text x="20" y="24" text-anchor="middle" font-size="10" font-weight="800" fill="#460095">2</text>
+                    <text x="36" y="22" font-size="9.5" font-weight="700" fill="#0a3922">TRAJECTORY LOGS</text>
+                    <text x="14" y="44" font-size="8" fill="#475569">Append-only audit ledger of</text>
+                    <text x="14" y="56" font-size="8" fill="#475569">every prompt, tool, & cost.</text>
+                  </g>
+
+                  <g transform="translate(25, 110)">
+                    <rect width="165" height="75" rx="8" fill="#ffffff" stroke="#0a3922" stroke-width="1.5" />
+                    <circle cx="20" cy="20" r="10" fill="#ccf0f8" />
+                    <text x="20" y="24" text-anchor="middle" font-size="10" font-weight="800" fill="#003642">3</text>
+                    <text x="36" y="22" font-size="9.5" font-weight="700" fill="#0a3922">FAST MODEL ROUTING</text>
+                    <text x="14" y="44" font-size="8" fill="#475569">Route simple tasks to small,</text>
+                    <text x="14" y="56" font-size="8" fill="#475569">ultra-fast inference models.</text>
+                  </g>
+
+                  <g transform="translate(210, 110)">
+                    <rect width="165" height="75" rx="8" fill="#0a3922" />
+                    <circle cx="20" cy="20" r="10" fill="#55dd4a" />
+                    <text x="20" y="24" text-anchor="middle" font-size="10" font-weight="800" fill="#0a3922">4</text>
+                    <text x="36" y="22" font-size="9.5" font-weight="700" fill="#55dd4a">AT-COST UTILITY</text>
+                    <text x="14" y="44" font-size="8" fill="#d2f2e3">Pass-through compute pricing</text>
+                    <text x="14" y="56" font-size="8" fill="#d2f2e3">with ₹0 monthly software fees.</text>
+                  </g>
+                </svg>
+              </div>
+
+              <div class="postcard-body">
+                <h2 class="postcard-title">Evaluation, Audits & Optimization</h2>
+                <p class="postcard-desc">
+                  Production agents require continuous evaluation against trajectory benchmarks. Once accuracy targets are met, optimize cost and latency by routing simpler tasks to smaller, ultra-fast specialist models.
+                </p>
+              </div>
+
+              <div class="postcard-footer">
+                <div class="scenario-box">
+                  <span class="scenario-tag">EVERYDAY SCENARIO</span>
+                  <p class="scenario-text">TAR tracks token consumption in an immutable local SQLite log with transparent pricing (1 Credit = ₹0.10), zero token markups, and ₹0.00 per-seat software taxes.</p>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <!-- ============================================== -->
+          <!-- POSTCARD 07: Context Sprawl Crisis (Slite)     -->
+          <!-- ============================================== -->
+          <article class="postcard-container card-peach" data-module="2">
+            <div class="postcard-frame">
+              <div class="postcard-header">
+                <div class="postcard-num-stamp">
+                  <span class="stamp-pill">CARD 07 / 12</span>
+                  <span class="stamp-module">PART 2: SLITE COMPANY BRAIN</span>
+                </div>
+                <span class="stamp-topic">Context Sprawl</span>
+              </div>
+
+              <div class="postcard-illustration-box">
+                <svg viewBox="0 0 400 210" class="postcard-svg" aria-hidden="true">
+                  <!-- Fragmented Sprawl -->
+                  <g transform="translate(15, 20)">
+                    <rect width="170" height="170" rx="12" fill="#fff1f2" stroke="#f43f5e" stroke-width="1.5" />
+                    <text x="85" y="24" text-anchor="middle" font-size="8.5" font-weight="700" fill="#be123c">FRAGMENTED WIKI SPRAWL</text>
+                    
+                    <circle cx="45" cy="55" r="14" fill="#fee2e2" />
+                    <text x="45" y="58" text-anchor="middle" font-size="7" font-weight="700" fill="#b91c1c">Old PDF</text>
+
+                    <circle cx="125" cy="55" r="14" fill="#fee2e2" />
+                    <text x="125" y="58" text-anchor="middle" font-size="7" font-weight="700" fill="#b91c1c">WhatsApp</text>
+
+                    <circle cx="85" cy="95" r="14" fill="#fee2e2" />
+                    <text x="85" y="98" text-anchor="middle" font-size="7" font-weight="700" fill="#b91c1c">Memory</text>
+
+                    <circle cx="45" cy="135" r="14" fill="#fee2e2" />
+                    <text x="45" y="138" text-anchor="middle" font-size="7" font-weight="700" fill="#b91c1c">Receipts</text>
+
+                    <circle cx="125" cy="135" r="14" fill="#fee2e2" />
+                    <text x="125" y="138" text-anchor="middle" font-size="7" font-weight="700" fill="#b91c1c">Notepads</text>
+
+                    <text x="85" y="162" text-anchor="middle" font-size="8" font-weight="800" fill="#be123c">55% Wikis Abandoned</text>
+                  </g>
+
+                  <!-- Living Company Brain -->
+                  <g transform="translate(215, 20)">
+                    <rect width="170" height="170" rx="12" fill="#ecfdf5" stroke="#0a3922" stroke-width="2" />
+                    <text x="85" y="24" text-anchor="middle" font-size="8.5" font-weight="700" fill="#0a3922">LIVING COMPANY BRAIN</text>
+                    
+                    <circle cx="85" cy="85" r="32" fill="#0a3922" />
+                    <text x="85" y="89" text-anchor="middle" font-size="11" font-weight="800" fill="#55dd4a">BRAIN</text>
+
+                    <!-- Feeds into brain -->
+                    <circle cx="40" cy="55" r="10" fill="#d2f2e3" />
+                    <text x="40" y="58" text-anchor="middle" font-size="6.5" font-weight="700" fill="#0a3922">Voice</text>
+
+                    <circle cx="130" cy="55" r="10" fill="#d2f2e3" />
+                    <text x="130" y="58" text-anchor="middle" font-size="6.5" font-weight="700" fill="#0a3922">Bills</text>
+
+                    <circle cx="40" cy="115" r="10" fill="#d2f2e3" />
+                    <text x="40" y="118" text-anchor="middle" font-size="6.5" font-weight="700" fill="#0a3922">Chats</text>
+
+                    <circle cx="130" cy="115" r="10" fill="#d2f2e3" />
+                    <text x="130" y="118" text-anchor="middle" font-size="6.5" font-weight="700" fill="#0a3922">POS</text>
+
+                    <text x="85" y="152" text-anchor="middle" font-size="8.5" font-weight="800" fill="#0a3922">1 Unified Truth Layer</text>
+                    <text x="85" y="162" text-anchor="middle" font-size="7.5" fill="#64748b">Always fresh on device</text>
+                  </g>
+                </svg>
+              </div>
+
+              <div class="postcard-body">
+                <h2 class="postcard-title">Context Sprawl & Wiki Abandonment</h2>
+                <p class="postcard-desc">
+                  Slite's research across 150+ organizations reveals that over <strong>55% of company wikis are abandoned</strong> within months. When operational facts stay trapped in private chats and memory, both staff and AI bots are forced to guess.
+                </p>
+              </div>
+
+              <div class="postcard-footer">
+                <div class="scenario-box">
+                  <span class="scenario-tag">EVERYDAY SCENARIO</span>
+                  <p class="scenario-text">When a shop updates its return policy on WhatsApp, an outdated PDF handbook causes AI bots and new employees to quote conflicting terms to customers.</p>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <!-- ============================================== -->
+          <!-- POSTCARD 08: Living Memory vs Static Docs      -->
+          <!-- ============================================== -->
+          <article class="postcard-container card-mint" data-module="2">
+            <div class="postcard-frame">
+              <div class="postcard-header">
+                <div class="postcard-num-stamp">
+                  <span class="stamp-pill">CARD 08 / 12</span>
+                  <span class="stamp-module">PART 2: SLITE COMPANY BRAIN</span>
+                </div>
+                <span class="stamp-topic">Living Memory</span>
+              </div>
+
+              <div class="postcard-illustration-box">
+                <svg viewBox="0 0 400 210" class="postcard-svg" aria-hidden="true">
+                  <!-- Dimension Matrix -->
+                  <g transform="translate(25, 20)">
+                    <rect width="165" height="170" rx="10" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5" />
+                    <text x="82" y="24" text-anchor="middle" font-size="9" font-weight="700" fill="#64748b">STATIC WIKI / PDF</text>
+                    
+                    <line x1="15" y1="36" x2="150" y2="36" stroke="#e2e8f0" stroke-width="1" />
+                    
+                    <text x="20" y="55" font-size="8" font-weight="700" fill="#334155">Capture:</text>
+                    <text x="20" y="67" font-size="7.5" fill="#64748b">Manual authoring of docs</text>
+                    
+                    <text x="20" y="90" font-size="8" font-weight="700" fill="#334155">Structure:</text>
+                    <text x="20" y="102" font-size="7.5" fill="#64748b">Unstructured 50-page files</text>
+                    
+                    <text x="20" y="125" font-size="8" font-weight="700" fill="#334155">Sync Speed:</text>
+                    <text x="20" y="137" font-size="7.5" fill="#64748b">Updated once a year (stale)</text>
+                    
+                    <text x="82" y="160" text-anchor="middle" font-size="8" font-weight="700" fill="#b91c1c">Causes AI Hallucination</text>
+                  </g>
+
+                  <g transform="translate(210, 20)">
+                    <rect width="165" height="170" rx="10" fill="#0a3922" stroke="#0a3922" stroke-width="1.5" />
+                    <text x="82" y="24" text-anchor="middle" font-size="9" font-weight="700" fill="#55dd4a">LIVING COMPANY BRAIN</text>
+                    
+                    <line x1="15" y1="36" x2="150" y2="36" stroke="rgba(255,255,255,0.15)" stroke-width="1" />
+                    
+                    <text x="20" y="55" font-size="8" font-weight="700" fill="#ffffff">Capture:</text>
+                    <text x="20" y="67" font-size="7.5" fill="#d2f2e3">At source via voice & bills</text>
+                    
+                    <text x="20" y="90" font-size="8" font-weight="700" fill="#ffffff">Structure:</text>
+                    <text x="20" y="102" font-size="7.5" fill="#d2f2e3">Atomic verified cards</text>
+                    
+                    <text x="20" y="125" font-size="8" font-weight="700" fill="#ffffff">Sync Speed:</text>
+                    <text x="20" y="137" font-size="7.5" fill="#d2f2e3">Instant local sync</text>
+                    
+                    <text x="82" y="160" text-anchor="middle" font-size="8.5" font-weight="800" fill="#55dd4a">100% Grounded Accuracy</text>
+                  </g>
+                </svg>
+              </div>
+
+              <div class="postcard-body">
+                <h2 class="postcard-title">What is a Company Brain?</h2>
+                <p class="postcard-desc">
+                  A Company Brain is not a binder of static pages. It is an active memory layer that captures operational facts as work happens, turning everyday notes into atomic records queryable by humans and AI.
+                </p>
+              </div>
+
+              <div class="postcard-footer">
+                <div class="scenario-box">
+                  <span class="scenario-tag">EVERYDAY SCENARIO</span>
+                  <p class="scenario-text">A vendor sends a new price list on Telegram. The brain parses the table, updates the SQLite catalog, and immediately syncs the local POS counter.</p>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <!-- ============================================== -->
+          <!-- POSTCARD 09: The 3 Pillars of Memory           -->
+          <!-- ============================================== -->
+          <article class="postcard-container card-sage" data-module="2">
+            <div class="postcard-frame">
+              <div class="postcard-header">
+                <div class="postcard-num-stamp">
+                  <span class="stamp-pill">CARD 09 / 12</span>
+                  <span class="stamp-module">PART 2: SLITE COMPANY BRAIN</span>
+                </div>
+                <span class="stamp-topic">Architecture</span>
+              </div>
+
+              <div class="postcard-illustration-box">
+                <svg viewBox="0 0 400 210" class="postcard-svg" aria-hidden="true">
+                  <!-- Pillar 1 -->
+                  <g transform="translate(15, 25)">
+                    <rect width="115" height="160" rx="10" fill="#ffffff" stroke="#0a3922" stroke-width="1.5" />
+                    <circle cx="57" cy="25" r="14" fill="#d2f2e3" />
+                    <text x="57" y="29" text-anchor="middle" font-size="10" font-weight="800" fill="#0a3922">1</text>
+                    <text x="57" y="54" text-anchor="middle" font-size="10" font-weight="700" fill="#0a3922">CAPTURE</text>
+                    <text x="57" y="68" text-anchor="middle" font-size="8" fill="#64748b">At the source</text>
+                    
+                    <rect x="12" y="82" width="91" height="64" rx="6" fill="#f8fafc" />
+                    <text x="18" y="98" font-size="7.5" fill="#334155">Voice memos</text>
+                    <text x="18" y="112" font-size="7.5" fill="#334155">Scanned bills</text>
+                    <text x="18" y="126" font-size="7.5" fill="#334155">WhatsApp notes</text>
+                    <text x="18" y="140" font-size="7" font-weight="600" fill="#1dbf73">Zero friction</text>
+                  </g>
+
+                  <!-- Pillar 2 -->
+                  <g transform="translate(142, 25)">
+                    <rect width="115" height="160" rx="10" fill="#ffffff" stroke="#0a3922" stroke-width="1.5" />
+                    <circle cx="57" cy="25" r="14" fill="#eee2ff" />
+                    <text x="57" y="29" text-anchor="middle" font-size="10" font-weight="800" fill="#460095">2</text>
+                    <text x="57" y="54" text-anchor="middle" font-size="10" font-weight="700" fill="#0a3922">ATOMIZE</text>
+                    <text x="57" y="68" text-anchor="middle" font-size="8" fill="#64748b">Discrete units</text>
+                    
+                    <rect x="12" y="82" width="91" height="64" rx="6" fill="#f8fafc" />
+                    <text x="18" y="98" font-size="7.5" fill="#334155">#ClinicHours</text>
+                    <text x="18" y="112" font-size="7.5" fill="#334155">#DoctorRoster</text>
+                    <text x="18" y="126" font-size="7.5" fill="#334155">#DeliveryFee</text>
+                    <text x="18" y="140" font-size="7" font-weight="600" fill="#460095">Self-contained</text>
+                  </g>
+
+                  <!-- Pillar 3 -->
+                  <g transform="translate(270, 25)">
+                    <rect width="115" height="160" rx="10" fill="#0a3922" />
+                    <circle cx="57" cy="25" r="14" fill="#55dd4a" />
+                    <text x="57" y="29" text-anchor="middle" font-size="10" font-weight="800" fill="#0a3922">3</text>
+                    <text x="57" y="54" text-anchor="middle" font-size="10" font-weight="700" fill="#ffffff">GROUND</text>
+                    <text x="57" y="68" text-anchor="middle" font-size="8" fill="#d2f2e3">Zero guesswork</text>
+                    
+                    <rect x="12" y="82" width="91" height="64" rx="6" fill="rgba(255,255,255,0.08)" />
+                    <text x="18" y="98" font-size="7.5" fill="#ffffff">Exact citation</text>
+                    <text x="18" y="112" font-size="7.5" fill="#ffffff">Author name</text>
+                    <text x="18" y="126" font-size="7.5" fill="#ffffff">Valid timestamp</text>
+                    <text x="18" y="140" font-size="7" font-weight="700" fill="#55dd4a">100% Verified</text>
+                  </g>
+                </svg>
+              </div>
+
+              <div class="postcard-body">
+                <h2 class="postcard-title">Capture → Atomize → Ground</h2>
+                <p class="postcard-desc">
+                  Three foundational pillars maintain organizational memory: 1. <strong>Capture</strong> naturally from audio and receipts; 2. <strong>Atomize</strong> into discrete self-contained cards; 3. <strong>Ground</strong> every reply with exact citations.
+                </p>
+              </div>
+
+              <div class="postcard-footer">
+                <div class="scenario-box">
+                  <span class="scenario-tag">EVERYDAY SCENARIO</span>
+                  <p class="scenario-text">Dr. Ponni records a 10-second voice note: 'Sunday clinic starts at 10 AM.' It atomizes into an active schedule card and instantly updates patient messaging.</p>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <!-- ============================================== -->
+          <!-- POSTCARD 10: Grounding & Zero Hallucinations   -->
+          <!-- ============================================== -->
+          <article class="postcard-container card-sky" data-module="2">
+            <div class="postcard-frame">
+              <div class="postcard-header">
+                <div class="postcard-num-stamp">
+                  <span class="stamp-pill">CARD 10 / 12</span>
+                  <span class="stamp-module">PART 2: SLITE COMPANY BRAIN</span>
+                </div>
+                <span class="stamp-topic">Grounded Retrieval</span>
+              </div>
+
+              <div class="postcard-illustration-box">
+                <svg viewBox="0 0 400 210" class="postcard-svg" aria-hidden="true">
+                  <!-- Query Input -->
+                  <g transform="translate(15, 30)">
+                    <rect width="105" height="60" rx="8" fill="#ffffff" stroke="#0a3922" stroke-width="1.5" />
+                    <text x="52" y="24" text-anchor="middle" font-size="8.5" font-weight="700" fill="#0a3922">Customer Chat</text>
+                    <text x="52" y="40" text-anchor="middle" font-size="8" fill="#475569">"What is the</text>
+                    <text x="52" y="52" text-anchor="middle" font-size="8" fill="#475569">consultation fee?"</text>
+                  </g>
+
+                  <path d="M125 60 H145" stroke="#0a3922" stroke-width="2" />
+
+                  <!-- Grounding Engine -->
+                  <g transform="translate(150, 20)">
+                    <rect width="110" height="80" rx="10" fill="#ecfdf5" stroke="#0a3922" stroke-width="2" />
+                    <text x="55" y="22" text-anchor="middle" font-size="8.5" font-weight="700" fill="#0a3922">Grounding Engine</text>
+                    <circle cx="55" cy="46" r="14" fill="#55dd4a" />
+                    <text x="55" y="50" text-anchor="middle" font-size="12" font-weight="800" fill="#0a3922">✓</text>
+                    <text x="55" y="72" text-anchor="middle" font-size="7.5" font-weight="600" fill="#0a3922">Card #ClinicFees</text>
+                  </g>
+
+                  <path d="M265 60 H285" stroke="#0a3922" stroke-width="2" />
+
+                  <!-- Output Citation -->
+                  <g transform="translate(290, 20)">
+                    <rect width="95" height="80" rx="8" fill="#0a3922" />
+                    <text x="47" y="22" text-anchor="middle" font-size="8.5" font-weight="700" fill="#55dd4a">Verified Reply</text>
+                    <text x="47" y="42" text-anchor="middle" font-size="11" font-weight="800" fill="#ffffff">₹300</text>
+                    <text x="47" y="58" text-anchor="middle" font-size="7" fill="#d2f2e3">Dr. Ponni</text>
+                    <text x="47" y="70" text-anchor="middle" font-size="6.5" fill="#a6a6a6">Aug 31, 2026</text>
+                  </g>
+
+                  <!-- Safe Fallback Banner -->
+                  <g transform="translate(15, 120)">
+                    <rect width="370" height="65" rx="10" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5" />
+                    <circle cx="28" cy="32" r="12" fill="#fff1f2" />
+                    <text x="28" y="36" text-anchor="middle" font-size="10" font-weight="800" fill="#be123c">?</text>
+                    <text x="52" y="28" font-size="9.5" font-weight="700" fill="#0a3922">Strict Fallback Protocol:</text>
+                    <text x="52" y="44" font-size="8.5" fill="#475569">If no active, verified card exists in the SQLite memory layer,</text>
+                    <text x="52" y="56" font-size="8.5" fill="#475569">the agent refuses to guess and escalates to human reception.</text>
+                  </g>
+                </svg>
+              </div>
+
+              <div class="postcard-body">
+                <h2 class="postcard-title">Grounded Citation Standard</h2>
+                <p class="postcard-desc">
+                  The primary blocker in enterprise AI is fear of inaccurate answers. A Company Brain eliminates hallucinations by forcing the model to cite the exact verified card ID, author, and timestamp.
+                </p>
+              </div>
+
+              <div class="postcard-footer">
+                <div class="scenario-box">
+                  <span class="scenario-tag">EVERYDAY SCENARIO</span>
+                  <p class="scenario-text">Customer asks for consultation fee. The bot answers: '₹300 (Verified by Dr. Ponni on August 31, 2026).' If no card exists, it escalates to staff instead of guessing.</p>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <!-- ============================================== -->
+          <!-- POSTCARD 11: Humans & AI Share One Memory      -->
+          <!-- ============================================== -->
+          <article class="postcard-container card-lavender" data-module="2">
+            <div class="postcard-frame">
+              <div class="postcard-header">
+                <div class="postcard-num-stamp">
+                  <span class="stamp-pill">CARD 11 / 12</span>
+                  <span class="stamp-module">PART 2: SLITE COMPANY BRAIN</span>
+                </div>
+                <span class="stamp-topic">Shared Truth Layer</span>
+              </div>
+
+              <div class="postcard-illustration-box">
+                <svg viewBox="0 0 400 210" class="postcard-svg" aria-hidden="true">
+                  <!-- Human Staff Side -->
+                  <g transform="translate(15, 30)">
+                    <rect width="115" height="150" rx="12" fill="#ffffff" stroke="#0a3922" stroke-width="1.5" />
+                    <circle cx="57" cy="30" r="16" fill="#ecfdf5" />
+                    <circle cx="57" cy="24" r="6" fill="#0a3922" />
+                    <path d="M48 38 Q57 34 66 38" stroke="#0a3922" stroke-width="2" fill="none" />
+                    
+                    <text x="57" y="60" text-anchor="middle" font-size="9" font-weight="700" fill="#0a3922">Human Staff</text>
+                    <text x="57" y="74" text-anchor="middle" font-size="7.5" fill="#64748b">Receptionist Tablet</text>
+                    
+                    <rect x="10" y="88" width="95" height="42" rx="4" fill="#f8fafc" />
+                    <text x="16" y="102" font-size="7.5" fill="#334155">Reads #DoctorRoster</text>
+                    <text x="16" y="114" font-size="7.5" fill="#334155">Quotes Dr. Meenakshi</text>
+                    <text x="16" y="124" font-size="7.5" font-weight="600" fill="#0a3922">Friday 10 AM</text>
+                  </g>
+
+                  <!-- Central Shared SQLite Memory -->
+                  <g transform="translate(145, 30)">
+                    <rect width="110" height="150" rx="12" fill="#0a3922" />
+                    <circle cx="55" cy="35" r="16" fill="#55dd4a" />
+                    <text x="55" y="39" text-anchor="middle" font-size="9" font-weight="800" fill="#0a3922">DB</text>
+                    
+                    <text x="55" y="66" text-anchor="middle" font-size="9.5" font-weight="800" fill="#ffffff">SHARED BRAIN</text>
+                    <text x="55" y="78" text-anchor="middle" font-size="7.5" fill="#d2f2e3">SQLite on device</text>
+                    
+                    <rect x="8" y="92" width="94" height="46" rx="4" fill="rgba(255,255,255,0.08)" />
+                    <text x="14" y="106" font-size="7" fill="#55dd4a">1 Source of Truth</text>
+                    <text x="14" y="118" font-size="7" fill="#ffffff">Zero Desync</text>
+                    <text x="14" y="130" font-size="7" fill="#ffffff">Real-time update</text>
+                  </g>
+
+                  <!-- AI Teammate Side -->
+                  <g transform="translate(270, 30)">
+                    <rect width="115" height="150" rx="12" fill="#ffffff" stroke="#0a3922" stroke-width="1.5" />
+                    <circle cx="57" cy="30" r="16" fill="#eee2ff" />
+                    <rect x="47" y="22" width="20" height="16" rx="4" fill="#460095" />
+                    <circle cx="52" cy="30" r="2" fill="#ffffff" />
+                    <circle cx="62" cy="30" r="2" fill="#ffffff" />
+                    
+                    <text x="57" y="60" text-anchor="middle" font-size="9" font-weight="700" fill="#460095">AI Teammate</text>
+                    <text x="57" y="74" text-anchor="middle" font-size="7.5" fill="#64748b">WhatsApp Bot</text>
+                    
+                    <rect x="10" y="88" width="95" height="42" rx="4" fill="#f8fafc" />
+                    <text x="16" y="102" font-size="7.5" fill="#334155">Reads #DoctorRoster</text>
+                    <text x="16" y="114" font-size="7.5" fill="#334155">Quotes Dr. Meenakshi</text>
+                    <text x="16" y="124" font-size="7.5" font-weight="600" fill="#0a3922">Friday 10 AM</text>
+                  </g>
+                </svg>
+              </div>
+
+              <div class="postcard-body">
+                <h2 class="postcard-title">Humans & AI Share One Memory</h2>
+                <p class="postcard-desc">
+                  New hires and AI bots should never require weeks of manual onboarding. Because both read from the exact same living SQLite memory, answers remain identical across counters, phones, and chats.
+                </p>
+              </div>
+
+              <div class="postcard-footer">
+                <div class="scenario-box">
+                  <span class="scenario-tag">EVERYDAY SCENARIO</span>
+                  <p class="scenario-text">A newly hired clinic receptionist checking their tablet app and an automated WhatsApp bot quote identical doctor schedules from their first minute on duty.</p>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <!-- ============================================== -->
+          <!-- POSTCARD 12: 4-Step Action Roadmap             -->
+          <!-- ============================================== -->
+          <article class="postcard-container card-cream" data-module="2">
+            <div class="postcard-frame">
+              <div class="postcard-header">
+                <div class="postcard-num-stamp">
+                  <span class="stamp-pill">CARD 12 / 12</span>
+                  <span class="stamp-module">PART 2: SLITE COMPANY BRAIN</span>
+                </div>
+                <span class="stamp-topic">Actionable Roadmap</span>
+              </div>
+
+              <div class="postcard-illustration-box">
+                <svg viewBox="0 0 400 210" class="postcard-svg" aria-hidden="true">
+                  <g transform="translate(25, 18)">
+                    <rect width="165" height="75" rx="8" fill="#ffffff" stroke="#0a3922" stroke-width="1.5" />
+                    <rect x="10" y="10" width="22" height="16" rx="4" fill="#0a3922" />
+                    <text x="21" y="22" text-anchor="middle" font-size="9" font-weight="800" fill="#55dd4a">01</text>
+                    <text x="38" y="22" font-size="9.5" font-weight="700" fill="#0a3922">AUDIT TOP 10 RULES</text>
+                    <text x="14" y="44" font-size="8" fill="#475569">Write down the 10 questions</text>
+                    <text x="14" y="56" font-size="8" fill="#475569">customers repeat daily.</text>
+                  </g>
+
+                  <g transform="translate(210, 18)">
+                    <rect width="165" height="75" rx="8" fill="#ffffff" stroke="#0a3922" stroke-width="1.5" />
+                    <rect x="10" y="10" width="22" height="16" rx="4" fill="#0a3922" />
+                    <text x="21" y="22" text-anchor="middle" font-size="9" font-weight="800" fill="#55dd4a">02</text>
+                    <text x="38" y="22" font-size="9.5" font-weight="700" fill="#0a3922">STORE ATOMIC CARDS</text>
+                    <text x="14" y="44" font-size="8" fill="#475569">Save as concise key-value</text>
+                    <text x="14" y="56" font-size="8" fill="#475569">cards with assigned owners.</text>
+                  </g>
+
+                  <g transform="translate(25, 110)">
+                    <rect width="165" height="75" rx="8" fill="#ffffff" stroke="#0a3922" stroke-width="1.5" />
+                    <rect x="10" y="10" width="22" height="16" rx="4" fill="#0a3922" />
+                    <text x="21" y="22" text-anchor="middle" font-size="9" font-weight="800" fill="#55dd4a">03</text>
+                    <text x="38" y="22" font-size="9.5" font-weight="700" fill="#0a3922">CONNECT CHANNELS</text>
+                    <text x="14" y="44" font-size="8" fill="#475569">Link WhatsApp & Telegram</text>
+                    <text x="14" y="56" font-size="8" fill="#475569">to start answering instantly.</text>
+                  </g>
+
+                  <g transform="translate(210, 110)">
+                    <rect width="165" height="75" rx="8" fill="#0a3922" />
+                    <rect x="10" y="10" width="22" height="16" rx="4" fill="#55dd4a" />
+                    <text x="21" y="22" text-anchor="middle" font-size="9" font-weight="800" fill="#0a3922">04</text>
+                    <text x="38" y="22" font-size="9.5" font-weight="700" fill="#55dd4a">AUTO-VERIFICATION</text>
+                    <text x="14" y="44" font-size="8" fill="#d2f2e3">Flag unverified cards after</text>
+                    <text x="14" y="56" font-size="8" fill="#d2f2e3">60 days for 1-tap refresh.</text>
+                  </g>
+                </svg>
+              </div>
+
+              <div class="postcard-body">
+                <h2 class="postcard-title">4 Steps to Build Your Brain</h2>
+                <p class="postcard-desc">
+                  Build an active organization memory in one afternoon: 1. Audit top 10 repeated rules; 2. Store as local atomic cards; 3. Connect customer channels; 4. Enable 30-day auto-verification reminders.
+                </p>
+              </div>
+
+              <div class="postcard-footer">
+                <div class="scenario-box">
+                  <span class="scenario-tag">EVERYDAY SCENARIO</span>
+                  <p class="scenario-text">A neighborhood healthcare clinic goes live in 30 minutes with verified cards for consultation rates, UPI payment links, and emergency on-call numbers.</p>
+                </div>
+              </div>
+            </div>
+          </article>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- Bottom Takeaway Banner -->
+    <section class="takeaway-section room-canopy-green">
+      <div class="container takeaway-inner">
+        <div class="takeaway-badge">THE COMPLETE OPERATING SYSTEM</div>
+        <h2 class="takeaway-title">
+          Deterministic Records.<br />
+          Autonomous Agents.<br />
+          Zero Software Seat Fees.
+        </h2>
+        <p class="takeaway-desc">
+          Ready to put autonomous agents and living memory to work in your daily business? Get started with TAR on Android with zero server setup.
+        </p>
+        <div class="takeaway-actions">
+          <a href="/harness" class="btn-solid-mint font-dm-sans">
+            <span>Read TAR Harness Standard</span>
+            <span class="btn-arrow">→</span>
+          </a>
+          <a href="/manifesto" class="btn-outline-white font-dm-sans">
+            <span>The Manifesto</span>
+          </a>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <FooterSection />
+</Layout>
+
+<script>
+  // Simple client-side filter for postcard deck
+  const btnAll = document.getElementById('btn-all');
+  const btnP1 = document.getElementById('btn-p1');
+  const btnP2 = document.getElementById('btn-p2');
+  const cards = document.querySelectorAll('.postcard-container');
+
+  function setFilter(activeBtn, moduleFilter) {
+    [btnAll, btnP1, btnP2].forEach(b => b?.classList.remove('active'));
+    activeBtn?.classList.add('active');
+
+    cards.forEach(card => {
+      const cardModule = card.getAttribute('data-module');
+      if (moduleFilter === 'all' || cardModule === moduleFilter) {
+        (card as HTMLElement).style.display = 'flex';
+      } else {
+        (card as HTMLElement).style.display = 'none';
+      }
+    });
+  }
+
+  btnAll?.addEventListener('click', (e) => {
+    e.preventDefault();
+    setFilter(btnAll, 'all');
+  });
+
+  btnP1?.addEventListener('click', (e) => {
+    e.preventDefault();
+    setFilter(btnP1, '1');
+  });
+
+  btnP2?.addEventListener('click', (e) => {
+    e.preventDefault();
+    setFilter(btnP2, '2');
+  });
+</script>
+
+<style>
+  .learn-page {
+    width: 100%;
+    color: var(--color-ink-black);
+    background-color: #fafaf9;
+  }
+
+  /* Pastel Room Color Foundations */
+  .room-canopy-green {
+    background-color: var(--color-canopy-green);
+    color: var(--color-paper-white);
+  }
+
+  .card-sage {
+    background-color: var(--color-sage-wash);
+  }
+
+  .card-mint {
+    background-color: var(--color-mint-wash);
+  }
+
+  .card-sky {
+    background-color: var(--color-sky-wash);
+  }
+
+  .card-lavender {
+    background-color: var(--color-lavender-mist);
+  }
+
+  .card-peach {
+    background-color: var(--color-peach-wash);
+  }
+
+  .card-cream {
+    background-color: var(--color-cream);
+  }
+
+  /* Hero Section */
+  .learn-hero {
+    padding: 72px 0 60px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .hero-inner {
+    max-width: 860px;
+    margin: 0 auto;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+  }
+
+  .badge-pill {
+    display: inline-flex;
+    padding: 6px 16px;
+    background-color: rgba(85, 221, 74, 0.12);
+    border: 1px solid rgba(85, 221, 74, 0.3);
+    border-radius: var(--radius-tags);
+    color: #55dd4a;
+    font-size: 11.5px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .hero-title {
+    font-size: 38px;
+    font-weight: 700;
+    line-height: 1.15;
+    letter-spacing: -0.03em;
+    color: #ffffff;
+    margin: 0;
+  }
+
+  @media (min-width: 768px) {
+    .hero-title {
+      font-size: 50px;
+    }
+  }
+
+  .hero-subtitle {
+    font-size: 16px;
+    line-height: 1.6;
+    color: var(--color-mint-wash);
+    opacity: 0.9;
+    max-width: 700px;
+    margin: 0;
+  }
+
+  /* Filter Bar */
+  .deck-filter-bar {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 12px;
+  }
+
+  .filter-pill {
+    padding: 8px 18px;
+    border-radius: 9999px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: #ffffff;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    transition: all 0.15s ease;
+  }
+
+  .filter-pill:hover {
+    background: rgba(85, 221, 74, 0.15);
+    border-color: #55dd4a;
+  }
+
+  .filter-pill.active {
+    background-color: #55dd4a;
+    color: #0a3922;
+    border-color: #55dd4a;
+    font-weight: 700;
+  }
+
+  /* Gallery Section */
+  .postcard-gallery-section {
+    padding: 64px 0 96px;
+  }
+
+  /* 2-Column Square Postcard Grid */
+  .postcards-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 36px;
+  }
+
+  @media (min-width: 720px) {
+    .postcards-grid {
+      grid-template-columns: repeat(2, 1fr);
+      gap: 32px;
+    }
+  }
+
+  @media (min-width: 1120px) {
+    .postcards-grid {
+      grid-template-columns: repeat(2, 1fr);
+      gap: 40px;
+    }
+  }
+
+  /* Postcard Outer Card (Square Aspect Ratio & Feel) */
+  .postcard-container {
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 24px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    transition: transform 0.15s ease;
+  }
+
+  .postcard-container:hover {
+    transform: translateY(-3px);
+  }
+
+  .postcard-frame {
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    height: 100%;
+    gap: 16px;
+    box-sizing: border-box;
+  }
+
+  @media (min-width: 600px) {
+    .postcard-frame {
+      padding: 28px;
+    }
+  }
+
+  /* Postcard Header Stamp */
+  .postcard-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 12px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  }
+
+  .postcard-num-stamp {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .stamp-pill {
+    background-color: #0a3922;
+    color: #55dd4a;
+    font-size: 11px;
+    font-weight: 800;
+    padding: 3px 8px;
+    border-radius: 4px;
+    letter-spacing: 0.04em;
+  }
+
+  .stamp-module {
+    font-size: 10.5px;
+    font-weight: 700;
+    color: #0a3922;
+    letter-spacing: 0.06em;
+  }
+
+  .stamp-topic {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--color-slate);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  /* Illustration Box */
+  .postcard-illustration-box {
+    background-color: #ffffff;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 16px;
+    padding: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 200px;
+  }
+
+  .postcard-svg {
+    width: 100%;
+    max-width: 380px;
+    height: auto;
+    display: block;
+  }
+
+  /* Postcard Body */
+  .postcard-body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .postcard-title {
+    font-size: 20px;
+    font-weight: 700;
+    line-height: 1.25;
+    letter-spacing: -0.02em;
+    color: var(--color-canopy-green);
+    margin: 0;
+  }
+
+  .postcard-desc {
+    font-size: 14px;
+    line-height: 1.55;
+    color: var(--color-graphite);
+    margin: 0;
+  }
+
+  /* Postcard Footer Scenario */
+  .postcard-footer {
+    margin-top: auto;
+  }
+
+  .scenario-box {
+    background-color: rgba(255, 255, 255, 0.85);
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 12px;
+    padding: 12px 14px;
+  }
+
+  .scenario-tag {
+    display: block;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    color: #0a3922;
+    margin-bottom: 4px;
+  }
+
+  .scenario-text {
+    font-size: 12.5px;
+    line-height: 1.45;
+    color: var(--color-slate);
+    margin: 0;
+  }
+
+  /* Takeaway Banner */
+  .takeaway-section {
+    padding: 80px 0;
+    text-align: center;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .takeaway-inner {
+    max-width: 680px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+  }
+
+  .takeaway-badge {
+    font-size: 11.5px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    color: #55dd4a;
+  }
+
+  .takeaway-title {
+    font-size: 36px;
+    font-weight: 700;
+    line-height: 1.15;
+    letter-spacing: -0.03em;
+    color: #ffffff;
+    margin: 0;
+  }
+
+  @media (min-width: 768px) {
+    .takeaway-title {
+      font-size: 44px;
+    }
+  }
+
+  .takeaway-desc {
+    font-size: 16px;
+    line-height: 1.6;
+    color: var(--color-mint-wash);
+    opacity: 0.9;
+    margin: 0;
+  }
+
+  .takeaway-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 14px;
+    margin-top: 12px;
+  }
+
+  .btn-solid-mint {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background-color: #55dd4a;
+    color: #0a3922;
+    padding: 12px 24px;
+    border-radius: var(--radius-tags);
+    font-size: 14.5px;
+    font-weight: 700;
+    text-decoration: none;
+    transition: background-color 0.15s ease;
+  }
+
+  .btn-solid-mint:hover {
+    background-color: #6ef062;
+  }
+
+  .btn-outline-white {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: #ffffff;
+    padding: 12px 24px;
+    border-radius: var(--radius-tags);
+    font-size: 14.5px;
+    font-weight: 600;
+    text-decoration: none;
+    transition: all 0.15s ease;
+  }
+
+  .btn-outline-white:hover {
+    border-color: #ffffff;
+    background-color: rgba(255, 255, 255, 0.08);
+  }
+
+  .hidden-mobile {
+    display: none;
+  }
+
+  @media (min-width: 768px) {
+    .hidden-mobile {
+      display: inline;
+    }
+  }
+</style>

@@ -10,14 +10,40 @@ export type CardKind = 'inbox' | 'action' | 'data' | 'report';
 export interface HarnessDef { id: string; kind: DefKind; name: string; body: Record<string, unknown>; version: number; state: string; created: number; updated: number; }
 export interface HarnessRecord { id: string; type: string; title: string; data: Record<string, unknown>; status: string; version: number; createdBy: string; created: number; updated: number; }
 export interface HarnessRun { id: string; botId: string; workflowId: string; stepId: string; recordId: string | null; state: string; data: Record<string, unknown>; version: number; actor: string; created: number; updated: number; }
+export interface HarnessEvent { id: string; actor: string; action: string; ref: string | null; data: Record<string, unknown>; idem: string; created: number; }
+
+const CORE_WORKSPACE_DEFINITIONS: Array<{ id: string; kind: DefKind; name: string; body: Record<string, unknown> }> = [
+  { id: 'data_contacts', kind: 'data', name: 'Contacts', body: { type: 'contacts', fields: ['name', 'email', 'phone', 'organization'], card: { kind: 'data' }, source: { kind: 'core', version: 1 } } },
+  { id: 'data_organizations', kind: 'data', name: 'Organizations', body: { type: 'organizations', fields: ['name', 'website', 'phone'], card: { kind: 'data' }, source: { kind: 'core', version: 1 } } },
+  { id: 'bot_contacts', kind: 'bot', name: 'Contacts', body: { source: { kind: 'core', version: 1 }, roles: ['owner', 'admin', 'member'], workflows: [{ id: 'create_contact', title: 'Add contact', recordType: 'contacts', steps: [{ id: 'contact_details', title: 'Add contact', mode: 'deterministic', actions: ['database.record.create'], card: { kind: 'action', fields: ['name', 'email', 'phone', 'organization'] }, next: 'complete', on_error: 'contact_details' }] }] } },
+  { id: 'bot_organizations', kind: 'bot', name: 'Organizations', body: { source: { kind: 'core', version: 1 }, roles: ['owner', 'admin', 'member'], workflows: [{ id: 'create_organization', title: 'Add organization', recordType: 'organizations', steps: [{ id: 'organization_details', title: 'Add organization', mode: 'deterministic', actions: ['database.record.create'], card: { kind: 'action', fields: ['name', 'website', 'phone'] }, next: 'complete', on_error: 'organization_details' }] }] } },
+  { id: 'bot_followups', kind: 'bot', name: 'Follow-ups', body: { source: { kind: 'core', version: 1 }, roles: ['owner', 'admin', 'member'], workflows: [{ id: 'create_follow_up', title: 'Create follow-up', steps: [{ id: 'follow_up_details', title: 'Create follow-up', mode: 'deterministic', actions: ['inbox.create'], card: { kind: 'action', fields: ['title', 'due', 'related_to'] }, next: 'follow_up_task', on_error: 'follow_up_details' }, { id: 'follow_up_task', title: 'Complete follow-up', mode: 'deterministic', actions: ['inbox.complete'], card: { kind: 'inbox' }, next: 'complete', on_error: 'follow_up_task' }] }] } },
+];
+
+const schemaReady = new Map<string, Promise<void>>();
 
 function json(value: unknown): Record<string, unknown> { try { return typeof value === 'string' ? JSON.parse(value) : (value as Record<string, unknown>) || {}; } catch { return {}; } }
 function now() { return Date.now(); }
 function rowDef(row: Record<string, unknown>): HarnessDef { return { id: String(row.id), kind: row.kind as DefKind, name: String(row.name), body: json(row.body), version: Number(row.version), state: String(row.state), created: Number(row.created), updated: Number(row.updated) }; }
 function rowRecord(row: Record<string, unknown>): HarnessRecord { return { id: String(row.id), type: String(row.type), title: String(row.title), data: json(row.data), status: String(row.status), version: Number(row.version), createdBy: String(row.created_by), created: Number(row.created), updated: Number(row.updated) }; }
 function rowRun(row: Record<string, unknown>): HarnessRun { return { id: String(row.id), botId: String(row.bot_id), workflowId: String(row.workflow_id), stepId: String(row.step_id), recordId: row.record_id ? String(row.record_id) : null, state: String(row.state), data: json(row.data), version: Number(row.version), actor: String(row.actor), created: Number(row.created), updated: Number(row.updated) }; }
+function rowEvent(row: Record<string, unknown>): HarnessEvent { return { id: String(row.id), actor: String(row.actor), action: String(row.action), ref: row.ref ? String(row.ref) : null, data: json(row.data), idem: String(row.idem), created: Number(row.created) }; }
 
-export async function ensureHarnessSchema(client: Client): Promise<void> { await initializeSchema(client, HARNESS_WORKSPACE_SCHEMA); }
+/** Provisioning already installs this schema. Existing workspaces are migrated
+ * once per hot Worker isolate, instead of executing every DDL statement on
+ * each user request. A failed migration is never cached. */
+export async function ensureHarnessSchema(client: Client, workspaceId?: string): Promise<void> {
+  if (!workspaceId) return initializeSchema(client, HARNESS_WORKSPACE_SCHEMA);
+  let ready = schemaReady.get(workspaceId);
+  if (!ready) {
+    ready = initializeSchema(client, HARNESS_WORKSPACE_SCHEMA).catch((error) => {
+      schemaReady.delete(workspaceId);
+      throw error;
+    });
+    schemaReady.set(workspaceId, ready);
+  }
+  await ready;
+}
 
 export class HarnessRepository {
   constructor(private readonly client: Client) {}
@@ -63,9 +89,56 @@ export class HarnessRepository {
     const result = await this.client.execute({ sql: 'SELECT * FROM runs WHERE actor = ? AND state = ? ORDER BY updated DESC LIMIT 20', args: [actor, state] });
     return result.rows.map((row) => rowRun(Object.fromEntries(result.columns.map((column, index) => [column, row[index]]))));
   }
+  async listOpenRunsForRecord(recordId: string, limit = 6): Promise<HarnessRun[]> {
+    const safeLimit = Math.min(Math.max(Math.trunc(limit) || 6, 1), 20);
+    const result = await this.client.execute({ sql: 'SELECT * FROM runs WHERE record_id = ? AND state = ? ORDER BY updated DESC LIMIT ?', args: [recordId, 'open', safeLimit] });
+    return result.rows.map((row) => rowRun(Object.fromEntries(result.columns.map((column, index) => [column, row[index]]))));
+  }
   async getRun(id: string): Promise<HarnessRun | null> { const result = await this.client.execute({ sql: 'SELECT * FROM runs WHERE id=?', args: [id] }); return result.rows[0] ? rowRun(Object.fromEntries(result.columns.map((column, i) => [column, result.rows[0][i]]))) : null; }
-  async updateRun(id: string, input: { stepId: string; state?: string; data?: Record<string, unknown> }): Promise<HarnessRun> { const current = await this.getRun(id); if (!current) throw new Error('Run not found'); const stamp=now(); await this.client.execute({ sql:'UPDATE runs SET step_id=?,state=?,data=?,version=version+1,updated=? WHERE id=?', args:[input.stepId,input.state || current.state,JSON.stringify({ ...current.data, ...(input.data || {}) }),stamp,id] }); return (await this.getRun(id))!; }
-  async event(input: { actor: string; action: string; ref?: string; data?: Record<string, unknown>; idem: string }): Promise<void> { await this.client.execute({ sql:'INSERT INTO events (id,actor,action,ref,data,idem,created) VALUES (?,?,?,?,?,?,?) ON CONFLICT(idem) DO NOTHING', args:[`evt_${crypto.randomUUID()}`,input.actor,input.action,input.ref || null,JSON.stringify(input.data || {}),input.idem,now()] }); }
+  async updateRun(id: string, input: { stepId: string; state?: string; data?: Record<string, unknown>; recordId?: string }): Promise<HarnessRun> { const current = await this.getRun(id); if (!current) throw new Error('Run not found'); const stamp=now(); await this.client.execute({ sql:'UPDATE runs SET step_id=?,record_id=?,state=?,data=?,version=version+1,updated=? WHERE id=?', args:[input.stepId,input.recordId === undefined ? current.recordId : input.recordId,input.state || current.state,JSON.stringify({ ...current.data, ...(input.data || {}) }),stamp,id] }); return (await this.getRun(id))!; }
+  async hasEvent(idem: string): Promise<boolean> { const result = await this.client.execute({ sql: 'SELECT 1 FROM events WHERE idem = ? LIMIT 1', args: [idem] }); return Boolean(result.rows[0]); }
+  async event(input: { actor: string; action: string; ref?: string; data?: Record<string, unknown>; idem: string; relatedRecordIds?: string[] }): Promise<HarnessEvent> {
+    const id = `evt_${crypto.randomUUID()}`;
+    const stamp = now();
+    const related = [...new Set((input.relatedRecordIds || []).filter((value) => typeof value === 'string' && value && value !== input.ref).slice(0, 20))];
+    for (const recordId of related) {
+      if (!await this.getRecord(recordId)) throw new Error('Related record not found');
+    }
+    await this.client.execute({ sql:'INSERT INTO events (id,actor,action,ref,data,idem,created) VALUES (?,?,?,?,?,?,?) ON CONFLICT(idem) DO NOTHING', args:[id,input.actor,input.action,input.ref || null,JSON.stringify(input.data || {}),input.idem,stamp] });
+    const existing = await this.client.execute({ sql: 'SELECT * FROM events WHERE idem = ? LIMIT 1', args: [input.idem] });
+    if (!existing.rows[0]) throw new Error('Could not record event');
+    const event = rowEvent(Object.fromEntries(existing.columns.map((column, index) => [column, existing.rows[0][index]])));
+    for (const recordId of related) {
+      await this.client.execute({
+        sql: `INSERT INTO links (id,source,target,kind,data,version,created,updated)
+              SELECT ?,?,?,?,?,1,?,?
+              WHERE NOT EXISTS (
+                SELECT 1 FROM links WHERE source = ? AND target = ? AND kind = ? AND deleted_at IS NULL
+              )`,
+        args: [`lnk_${crypto.randomUUID()}`, event.id, recordId, 'event_record', '{}', stamp, stamp, event.id, recordId, 'event_record'],
+      });
+    }
+    return event;
+  }
+  async listRecordEvents(recordId: string, limit = 50): Promise<HarnessEvent[]> {
+    const safeLimit = Math.min(Math.max(Math.trunc(limit) || 50, 1), 100);
+    const result = await this.client.execute({
+      sql: `SELECT DISTINCT e.* FROM events e LEFT JOIN links l ON l.source = e.id AND l.kind = 'event_record' AND l.deleted_at IS NULL WHERE e.ref = ? OR l.target = ? ORDER BY e.created DESC LIMIT ?`,
+      args: [recordId, recordId, safeLimit],
+    });
+    return result.rows.map((row) => rowEvent(Object.fromEntries(result.columns.map((column, index) => [column, row[index]]))));
+  }
+}
+
+/** Installs definitions only, never sample or user records. Existing Workspace
+ * customizations are left untouched. */
+export async function ensureCoreWorkspaceDefinitions(repository: HarnessRepository): Promise<HarnessDef[]> {
+  const existing = await repository.listDefs();
+  const ids = new Set(existing.map((definition) => definition.id));
+  const missing = CORE_WORKSPACE_DEFINITIONS.filter((definition) => !ids.has(definition.id));
+  if (!missing.length) return existing;
+  await Promise.all(missing.map((definition) => repository.putDef(definition)));
+  return repository.listDefs();
 }
 
 export function botWorkflow(def: HarnessDef, workflowId: string) {

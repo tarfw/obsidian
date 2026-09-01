@@ -18,7 +18,8 @@ import type { ProjectionParams } from './workflows/projection.ts';
 import type { ProvisionParams } from './workflows/provision.ts';
 import { ACTIVITIES, WORKSPACE_CATEGORIES, onboardingCatalog, validateCanvasDocument } from './genui/onboarding.ts';
 import { DATA_VIEW_REGISTRY, isRegisteredDataView, runDataView } from './genui/views.ts';
-import { HarnessRepository, allowedForRole, botWorkflow, ensureHarnessSchema, stepCard, stepMode } from './harness/repository.ts';
+import { buildRecordProfile } from './genui/record-profile.ts';
+import { HarnessRepository, allowedForRole, botWorkflow, ensureCoreWorkspaceDefinitions, ensureHarnessSchema, stepCard, stepMode, type HarnessDef } from './harness/repository.ts';
 
 interface WorkflowBinding<P> {
   createBatch(options: Array<{ id?: string; params: P }>): Promise<unknown[]>;
@@ -135,6 +136,63 @@ function safeKnowledgePath(value: string): string | null {
 
 function safeJson(value: unknown): string {
   return JSON.stringify(value).replace(/</g, '\\u003c');
+}
+
+function textValue(value: unknown, fallback = '', max = 160): string {
+  if (typeof value !== 'string') return fallback;
+  const clean = value.replace(/[\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return clean.slice(0, max) || fallback;
+}
+
+function objectValue(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function privateSource(value: unknown): boolean {
+  const source = objectValue(value);
+  return source.kind === 'private' && source.version === 1;
+}
+
+function dataDefinitionForRecord(definitions: HarnessDef[], recordType: string) {
+  return definitions.find((definition) => definition.id === recordType
+    || definition.id.replace(/^data_/, '') === recordType
+    || definition.body.type === recordType);
+}
+
+function dayKey(): string { return new Date().toISOString().slice(0, 10); }
+
+function personalPlanDraft(value: unknown, kind: 'plan' | 'routine') {
+  const draft = objectValue(value);
+  const workflows = Array.isArray(draft.workflows) ? draft.workflows : [];
+  const acceptedWorkflows = workflows.slice(0, 6).map((rawWorkflow, workflowIndex) => {
+    const workflow = objectValue(rawWorkflow);
+    const rawSteps = Array.isArray(workflow.steps) ? workflow.steps : [];
+    const steps = rawSteps.slice(0, 12).map((rawStep, stepIndex) => {
+      const step = objectValue(rawStep);
+      const title = textValue(step.title, `Step ${stepIndex + 1}`, 120);
+      return {
+        id: textValue(step.id, `step_${stepIndex + 1}`, 64).toLowerCase().replace(/[^a-z0-9_]+/g, '_') || `step_${stepIndex + 1}`,
+        title,
+        mode: step.handler === 'agent' ? 'agentic' : 'deterministic',
+        instruction: textValue(step.instruction, '', 400) || undefined,
+        card: { kind: 'action' },
+        recurrence: kind === 'routine' ? 'daily' : 'once',
+      };
+    }).filter((step) => Boolean(step.title));
+    if (!steps.length) return null;
+    return {
+      id: textValue(workflow.id, `routine_${workflowIndex + 1}`, 64).toLowerCase().replace(/[^a-z0-9_]+/g, '_') || `routine_${workflowIndex + 1}`,
+      title: textValue(workflow.title, `Plan ${workflowIndex + 1}`, 120),
+      steps,
+    };
+  }).filter(Boolean) as Array<{ id: string; title: string; steps: Array<{ id: string; title: string; mode: string; instruction?: string; card: { kind: string }; recurrence: string }> }>;
+  if (!acceptedWorkflows.length) throw new Error('The plan needs at least one step.');
+  return {
+    name: textValue(draft.name, kind === 'routine' ? 'My routine' : 'My plan', 80),
+    purpose: textValue(draft.purpose, '', 240),
+    kind,
+    workflows: acceptedWorkflows,
+  };
 }
 
 function checkoutPage(input: { paymentId: string; orderId: string; key: string; amount: number; currency: string; credits: number }): string {
@@ -308,6 +366,7 @@ app.use('/api/*', async (c, next) => {
   if (!slug) {
     const personalRoute = /^\/api\/entities\/(read|search|create|insert|update|delete)$/.test(c.req.path)
       || c.req.path === '/api/intent'
+      || /^\/api\/personal\//.test(c.req.path)
       || /^\/api\/harness\//.test(c.req.path)
       || /^\/api\/runs\/[^/]+$/.test(c.req.path)
       || /^\/api\/agents\/[^/]+\/run$/.test(c.req.path);
@@ -531,22 +590,157 @@ app.post('/api/agents/:action/run', async (c) => {
   }
 });
 
+/** Private Me API. Personal plans live only in the signed-in user's Personal DB.
+ * They never reuse workspace inboxes, definitions, records, or roles. */
+app.get('/api/personal/today', async (c) => {
+  const auth = c.get('auth');
+  if (!auth.workspaceId.startsWith('personal:')) return c.json({ error: 'Today is private' }, 403);
+  const data = c.get('data'); await ensureHarnessSchema(data);
+  const repo = new HarnessRepository(data);
+  const [defs, runs, updates] = await Promise.all([
+    repo.listDefs('bot'),
+    repo.listRuns(auth.userId),
+    repo.listRecords('personal_plan_update', 20),
+  ]);
+  const plans = defs.filter((def) => def.body.scope === 'personal' && privateSource(def.body.source));
+  const planById = new Map(plans.map((plan) => [plan.id, plan]));
+  const cards = runs.flatMap((run) => {
+    const plan = planById.get(run.botId);
+    if (!plan || !privateSource(run.data.source)) return [];
+    if (plan.body.kind === 'routine' && run.data.completedOn === dayKey()) return [];
+    try {
+      const { workflow, steps } = botWorkflow(plan, run.workflowId);
+      const step = steps.find((item) => String(item.id) === run.stepId) || steps[0];
+      if (!step) return [];
+      return [{
+        id: run.id,
+        kind: 'action',
+        title: textValue(step.title, textValue(workflow.title, plan.name)),
+        detail: textValue(step.instruction, plan.body.kind === 'routine' ? 'Routine' : 'Plan'),
+        runId: run.id,
+        planId: plan.id,
+        workflowId: run.workflowId,
+        stepId: run.stepId,
+        mode: stepMode(step),
+        order: run.created,
+      }];
+    } catch { return []; }
+  }).sort((left, right) => left.order - right.order);
+  const pending = updates
+    .filter((record) => record.status === 'pending' && privateSource(record.data.source))
+    .map((record) => ({ id: record.id, title: record.title, kind: 'plan-update', detail: 'Review suggested plan', updateId: record.id, order: record.created }));
+  return c.json({ cards: [...pending, ...cards] });
+});
+
+app.post('/api/personal/plan-updates', async (c) => {
+  const auth = c.get('auth');
+  if (!auth.workspaceId.startsWith('personal:')) return c.json({ error: 'Today is private' }, 403);
+  const idem = c.req.header('Idempotency-Key');
+  if (!idem) return c.json({ error: 'Idempotency-Key is required' }, 400);
+  const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
+  try {
+    const proposal = personalPlanDraft(body.draft, body.kind === 'routine' ? 'routine' : 'plan');
+    const repo = new HarnessRepository(c.get('data')); await ensureHarnessSchema(c.get('data'));
+    const update = await repo.createRecord({
+      type: 'personal_plan_update', title: proposal.name,
+      data: { source: { kind: 'private', version: 1 }, proposal },
+      actor: auth.userId, status: 'pending',
+    });
+    await repo.event({ actor: auth.userId, action: 'personal.plan.suggested', ref: update.id, data: {}, idem });
+    return c.json({ update }, 201);
+  } catch (error) { return c.json({ error: error instanceof Error ? error.message : 'Could not prepare this plan' }, 400); }
+});
+
+app.post('/api/personal/tasks', async (c) => {
+  const auth = c.get('auth');
+  if (!auth.workspaceId.startsWith('personal:')) return c.json({ error: 'Today is private' }, 403);
+  const idem = c.req.header('Idempotency-Key');
+  if (!idem) return c.json({ error: 'Idempotency-Key is required' }, 400);
+  const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
+  const title = textValue(body.title, '', 120);
+  if (!title) return c.json({ error: 'Task title is required' }, 400);
+  const data = c.get('data'); await ensureHarnessSchema(data); const repo = new HarnessRepository(data);
+  const plan = await repo.putDef({
+    id: `personal_task_${crypto.randomUUID()}`, kind: 'bot', name: title,
+    body: { scope: 'personal', source: { kind: 'private', version: 1 }, purpose: '', kind: 'plan', workflows: [{ id: 'today', title: 'Today', steps: [{ id: 'task', title, mode: 'deterministic', card: { kind: 'action' }, recurrence: 'once' }] }] },
+  });
+  const run = await repo.createRun({ botId: plan.id, workflowId: 'today', stepId: 'task', actor: auth.userId, data: { source: { kind: 'private', version: 1 }, planKind: 'plan' } });
+  await repo.event({ actor: auth.userId, action: 'personal.task.created', ref: run.id, data: {}, idem });
+  return c.json({ run }, 201);
+});
+
+app.post('/api/personal/plan-updates/:id/accept', async (c) => {
+  const auth = c.get('auth');
+  if (!auth.workspaceId.startsWith('personal:')) return c.json({ error: 'Today is private' }, 403);
+  const idem = c.req.header('Idempotency-Key');
+  if (!idem) return c.json({ error: 'Idempotency-Key is required' }, 400);
+  const data = c.get('data'); await ensureHarnessSchema(data); const repo = new HarnessRepository(data);
+  const update = await repo.getRecord(c.req.param('id'));
+  if (!update || update.type !== 'personal_plan_update' || !privateSource(update.data.source)) return c.json({ error: 'Plan update not found' }, 404);
+  if (update.status === 'accepted' && typeof update.data.planId === 'string') return c.json({ planId: update.data.planId, accepted: true });
+  if (update.status !== 'pending') return c.json({ error: 'Plan update has already been decided' }, 409);
+  try {
+    const proposal = personalPlanDraft(update.data.proposal, objectValue(update.data.proposal).kind === 'routine' ? 'routine' : 'plan');
+    const planId = `personal_plan_${crypto.randomUUID()}`;
+    const plan = await repo.putDef({
+      id: planId, kind: 'bot', name: proposal.name,
+      body: { scope: 'personal', source: { kind: 'private', version: 1 }, purpose: proposal.purpose, kind: proposal.kind, workflows: proposal.workflows },
+    });
+    await Promise.all(proposal.workflows.map((workflow) => repo.createRun({
+      botId: plan.id, workflowId: workflow.id, stepId: String(workflow.steps[0].id), actor: auth.userId,
+      data: { source: { kind: 'private', version: 1 }, planKind: proposal.kind },
+    })));
+    await repo.updateRecord(update.id, { status: 'accepted', data: { planId } });
+    await repo.event({ actor: auth.userId, action: 'personal.plan.accepted', ref: planId, data: { update: update.id }, idem });
+    return c.json({ planId, accepted: true }, 201);
+  } catch (error) { return c.json({ error: error instanceof Error ? error.message : 'Could not accept this plan' }, 409); }
+});
+
+app.post('/api/personal/plan-updates/:id/reject', async (c) => {
+  const auth = c.get('auth');
+  if (!auth.workspaceId.startsWith('personal:')) return c.json({ error: 'Today is private' }, 403);
+  const idem = c.req.header('Idempotency-Key');
+  if (!idem) return c.json({ error: 'Idempotency-Key is required' }, 400);
+  const data = c.get('data'); await ensureHarnessSchema(data); const repo = new HarnessRepository(data);
+  const update = await repo.getRecord(c.req.param('id'));
+  if (!update || update.type !== 'personal_plan_update' || update.status !== 'pending' || !privateSource(update.data.source)) return c.json({ error: 'Plan update not found' }, 404);
+  await repo.updateRecord(update.id, { status: 'rejected' });
+  await repo.event({ actor: auth.userId, action: 'personal.plan.rejected', ref: update.id, data: {}, idem });
+  return c.json({ rejected: true });
+});
+
+app.post('/api/personal/runs/:id/advance', async (c) => {
+  const auth = c.get('auth');
+  if (!auth.workspaceId.startsWith('personal:')) return c.json({ error: 'Today is private' }, 403);
+  const idem = c.req.header('Idempotency-Key');
+  if (!idem) return c.json({ error: 'Idempotency-Key is required' }, 400);
+  const data = c.get('data'); await ensureHarnessSchema(data); const repo = new HarnessRepository(data);
+  const run = await repo.getRun(c.req.param('id'));
+  if (!run || run.actor !== auth.userId || run.state !== 'open' || !privateSource(run.data.source)) return c.json({ error: 'Private step not found' }, 404);
+  if (await repo.hasEvent(idem)) return c.json({ run, duplicate: true });
+  const plan = await repo.getDef(run.botId);
+  if (!plan || plan.body.scope !== 'personal' || !privateSource(plan.body.source)) return c.json({ error: 'Private plan not found' }, 404);
+  try {
+    const { steps } = botWorkflow(plan, run.workflowId);
+    const index = steps.findIndex((step) => String(step.id) === run.stepId);
+    const next = steps[index + 1];
+    const isRoutine = plan.body.kind === 'routine';
+    const updated = await repo.updateRun(run.id, { stepId: next ? String(next.id) : isRoutine ? String(steps[0].id) : run.stepId, state: next || isRoutine ? 'open' : 'complete', data: !next && isRoutine ? { completedOn: dayKey() } : {} });
+    await repo.event({ actor: auth.userId, action: 'personal.step.completed', ref: run.id, data: {}, idem });
+    return c.json({ run: updated, next: next ? { id: next.id, title: next.title } : null });
+  } catch (error) { return c.json({ error: error instanceof Error ? error.message : 'Could not complete this step' }, 409); }
+});
+
 /** Canonical TAR Harness API. Workspace data is authoritative here; clients
  * submit actions through this Gateway rather than mutating tables directly. */
 app.get('/api/harness/home', async (c) => {
-  const data = c.get('data'); await ensureHarnessSchema(data);
-  const repo = new HarnessRepository(data); const auth = c.get('auth');
+  const data = c.get('data'); const auth = c.get('auth'); await ensureHarnessSchema(data, auth.workspaceId);
+  const repo = new HarnessRepository(data);
   const personalScope = auth.workspaceId.startsWith('personal:');
-  const personal = c.get('personal');
-  if (personalScope) {
-    const [started, records] = await Promise.all([
-      personal ? new TenantRepository(personal).list('inbox', { user_id: auth.userId, status: 2, limit: 20 }) : Promise.resolve([]),
-      repo.listRecords(undefined, 40),
-    ]);
-    return c.json({ role: auth.role, capabilities: { manageDefinitions: false }, now: started.map((item) => ({ id: item.id, kind: 'action', title: item.title || String(item.data.title || 'Work item'), botId: String(item.data.botId || ''), workflowId: String(item.data.workflowId || ''), stepId: String(item.data.stepId || ''), mode: String(item.data.mode || 'deterministic'), workspaceId: item.workspace_id || undefined })), actions: [], data: records.slice(0, 2) });
-  }
-  const [bots, records, runs] = await Promise.all([repo.listDefs('bot'), repo.listRecords(undefined, 40), repo.listRuns(auth.userId)]);
-  const cards = bots.filter((bot) => allowedForRole(bot, auth.role)).flatMap((bot) => {
+  if (personalScope) return c.json({ error: 'Use the private Today API for Me' }, 403);
+  const definitions = await ensureCoreWorkspaceDefinitions(repo);
+  const bots = definitions.filter((definition) => definition.kind === 'bot');
+  const cards = bots.filter((bot) => bot.id !== 'bot_followups' && allowedForRole(bot, auth.role)).flatMap((bot) => {
     const workflows = Array.isArray(bot.body.workflows) ? bot.body.workflows as Record<string, unknown>[] : [];
     return workflows.map((workflow) => {
       const steps = Array.isArray(workflow.steps) ? workflow.steps as Record<string, unknown>[] : [];
@@ -554,22 +748,16 @@ app.get('/api/harness/home', async (c) => {
       return { id: `${bot.id}:${String(workflow.id)}`, kind: stepCard(first), title: String(workflow.title || bot.name), botId: bot.id, workflowId: String(workflow.id), stepId: String(first.id), mode: stepMode(first) };
     }).filter(Boolean);
   });
-  const active = runs.map((run) => {
-    const bot = bots.find((item) => item.id === run.botId); if (!bot) return null;
-    try { const { workflow, steps } = botWorkflow(bot, run.workflowId); const step = steps.find((item) => String(item.id) === run.stepId) || steps[0]; return { id: run.id, kind: 'action', title: String(step.title || workflow.title || bot.name), botId: bot.id, workflowId: run.workflowId, stepId: run.stepId, mode: stepMode(step) }; } catch { return null; }
-  }).filter(Boolean);
-  return c.json({ role: auth.role, capabilities: { manageDefinitions: auth.role === 'owner' || auth.role === 'admin' }, now: active, actions: cards.filter((card) => card && card.kind === 'action').slice(0, 3), data: records.slice(0, 2) });
+  return c.json({ role: auth.role, capabilities: { manageDefinitions: auth.role === 'owner' || auth.role === 'admin' }, now: [], actions: cards.filter((card) => card && card.kind === 'action'), data: [] });
 });
 
 app.get('/api/harness/inbox', async (c) => {
   const auth = c.get('auth'); const personal = c.get('personal');
   if (!personal) return c.json({ error: 'Personal database is being prepared' }, 409);
   const personalScope = auth.workspaceId.startsWith('personal:');
+  if (personalScope) return c.json({ error: 'Me has no workspace inbox' }, 403);
   const items = await new TenantRepository(personal).list('inbox', { user_id: auth.userId, ...(personalScope ? {} : { workspace_id: auth.workspaceId }), status: 1, limit: 50 });
-  if (!personalScope) return c.json({ items });
-  const spaces = await new ControlRepository(c.env.CONTROL).listSpaces(auth.userId);
-  const names = new Map(spaces.map((space) => [space.id, space.name]));
-  return c.json({ items: items.filter((item) => item.workspace_id && names.has(item.workspace_id)).map((item) => ({ ...item, workspace_name: names.get(item.workspace_id!) })) });
+  return c.json({ items });
 });
 
 app.post('/api/harness/inbox/:id/complete', async (c) => {
@@ -577,14 +765,16 @@ app.post('/api/harness/inbox/:id/complete', async (c) => {
   if (!personal) return c.json({ error: 'Personal database is being prepared' }, 409);
   const repository = new TenantRepository(personal); const item = await repository.findById('inbox', c.req.param('id'));
   const personalScope = auth.workspaceId.startsWith('personal:');
+  if (personalScope) return c.json({ error: 'Me has no workspace inbox' }, 403);
   if (!item || (!personalScope && item.workspace_id !== auth.workspaceId) || item.actor && item.actor !== auth.userId) return c.json({ error: 'Inbox item not found' }, 404);
   return c.json({ item: await repository.updateInboxItem(item.id, { status: 2, expectedVersion: item.version }) });
 });
 
 app.get('/api/harness/defs', async (c) => {
-  const data = c.get('data'); await ensureHarnessSchema(data); const kind = c.req.query('kind');
+  const auth = c.get('auth'); if (auth.workspaceId.startsWith('personal:')) return c.json({ error: 'Me has no workspace definitions' }, 403);
+  const data = c.get('data'); await ensureHarnessSchema(data, auth.workspaceId); const repo = new HarnessRepository(data); const definitions = await ensureCoreWorkspaceDefinitions(repo); const kind = c.req.query('kind');
   if (kind && kind !== 'data' && kind !== 'bot') return c.json({ error: 'Invalid definition kind' }, 400);
-  return c.json({ defs: await new HarnessRepository(data).listDefs(kind as 'data' | 'bot' | undefined) });
+  return c.json({ defs: kind ? definitions.filter((definition) => definition.kind === kind) : definitions });
 });
 
 app.put('/api/harness/defs/:id', async (c) => {
@@ -599,14 +789,48 @@ app.put('/api/harness/defs/:id', async (c) => {
 });
 
 app.get('/api/harness/records', async (c) => {
-  const data = c.get('data'); await ensureHarnessSchema(data); return c.json({ records: await new HarnessRepository(data).listRecords(c.req.query('type')) });
+  if (c.get('auth').workspaceId.startsWith('personal:')) return c.json({ error: 'Me has no workspace data' }, 403);
+  const auth = c.get('auth'); const data = c.get('data'); await ensureHarnessSchema(data, auth.workspaceId); const repo = new HarnessRepository(data); const allDefinitions = await ensureCoreWorkspaceDefinitions(repo);
+  const [records] = await Promise.all([repo.listRecords(c.req.query('type'))]); const definitions = allDefinitions.filter((definition) => definition.kind === 'data');
+  return c.json({ records: records.filter((record) => {
+    const definition = dataDefinitionForRecord(definitions, record.type);
+    return !definition || allowedForRole(definition, auth.role);
+  }) });
+});
+
+/** Shared, data-driven profile screen. The client receives visual tokens and
+ * official record activity; it never receives fabricated timeline content. */
+app.get('/api/harness/records/:id/profile', async (c) => {
+  const auth = c.get('auth');
+  if (auth.workspaceId.startsWith('personal:')) return c.json({ error: 'Me has no workspace data' }, 403);
+  const data = c.get('data'); await ensureHarnessSchema(data, auth.workspaceId);
+  const repo = new HarnessRepository(data);
+  const [definitions, record] = await Promise.all([ensureCoreWorkspaceDefinitions(repo), repo.getRecord(c.req.param('id'))]);
+  if (!record) return c.json({ error: 'Record not found' }, 404);
+  const definition = dataDefinitionForRecord(definitions.filter((item) => item.kind === 'data'), record.type);
+  if (definition && !allowedForRole(definition, auth.role)) return c.json({ error: 'Record access denied' }, 403);
+  const [events, runs] = await Promise.all([
+    repo.listRecordEvents(record.id, Number(c.req.query('limit') || 20)),
+    repo.listOpenRunsForRecord(record.id),
+  ]);
+  const workflows = runs.map((run) => {
+    const bot = definitions.find((definition) => definition.id === run.botId);
+    const available = Array.isArray(bot?.body.workflows) ? bot.body.workflows as Record<string, unknown>[] : [];
+    const workflow = available.find((item) => String(item.id) === run.workflowId);
+    const steps = Array.isArray(workflow?.steps) ? workflow.steps as Record<string, unknown>[] : [];
+    const step = steps.find((item) => String(item.id) === run.stepId);
+    return { id: run.id, botId: run.botId, workflowId: run.workflowId, stepId: run.stepId, title: String(workflow?.title || bot?.name || 'Workflow'), step: String(step?.title || run.stepId), updatedAt: run.updated };
+  });
+  return c.json({ screen: buildRecordProfile(record, events, workflows) });
 });
 
 app.post('/api/harness/commands', async (c) => {
+  const startedAt = Date.now();
   const auth = c.get('auth'); const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+  if (auth.workspaceId.startsWith('personal:')) return c.json({ error: 'Me uses private plan commands' }, 403);
   const action = typeof body.action === 'string' ? body.action : ''; const idem = c.req.header('Idempotency-Key') || (typeof body.id === 'string' ? body.id : '');
-  if (!idem || !['record.create', 'record.update', 'run.start', 'run.advance'].includes(action)) return c.json({ error: 'A valid command and Idempotency-Key are required' }, 400);
-  const data = c.get('data'); await ensureHarnessSchema(data); const repo = new HarnessRepository(data);
+  if (!idem || !['record.create', 'record.update', 'run.start', 'run.advance', 'run.submit'].includes(action)) return c.json({ error: 'A valid command and Idempotency-Key are required' }, 400);
+  const data = c.get('data'); await ensureHarnessSchema(data, auth.workspaceId); const repo = new HarnessRepository(data); await ensureCoreWorkspaceDefinitions(repo);
   try {
     if (action === 'record.create') {
       const type = typeof body.type === 'string' ? body.type : ''; const title = typeof body.title === 'string' ? body.title : '';
@@ -622,12 +846,32 @@ app.post('/api/harness/commands', async (c) => {
     if (typeof body.botId !== 'string' || typeof body.workflowId !== 'string') return c.json({ error: 'Bot and workflow are required' }, 400);
     const bot = await repo.getDef(body.botId); if (!bot || bot.kind !== 'bot' || !allowedForRole(bot, auth.role)) return c.json({ error: 'Workflow access denied' }, 403);
     const { steps } = botWorkflow(bot, body.workflowId);
-    if (action === 'run.start') { const run = await repo.createRun({ botId: bot.id, workflowId: body.workflowId, stepId: String(steps[0].id), recordId: typeof body.recordId === 'string' ? body.recordId : undefined, actor: auth.userId }); const personal = c.get('personal'); if (personal) await new TenantRepository(personal).createInboxItem({ id: `ibx_${run.id}`, userId: auth.userId, workspaceId: auth.workspaceId, type: 'task', title: String(steps[0].title || bot.name), ref: run.id, status: 2, data: { botId: bot.id, workflowId: body.workflowId, stepId: run.stepId, mode: stepMode(steps[0]) } }); await repo.event({ actor: auth.userId, action, ref: run.id, data: {}, idem }); return c.json({ run }, 201); }
-    if (typeof body.target !== 'string') return c.json({ error: 'Run target is required' }, 400);
-    const run = await repo.getRun(body.target); if (!run || run.actor !== auth.userId || run.botId !== bot.id) return c.json({ error: 'Run access denied' }, 403);
+    if (action === 'run.start') { const run = await repo.createRun({ botId: bot.id, workflowId: body.workflowId, stepId: String(steps[0].id), recordId: typeof body.recordId === 'string' ? body.recordId : undefined, actor: auth.userId }); const personal = c.get('personal'); if (personal && stepCard(steps[0]) === 'inbox') await new TenantRepository(personal).createInboxItem({ id: `ibx_${run.id}`, userId: auth.userId, workspaceId: auth.workspaceId, type: 'task', title: String(steps[0].title || bot.name), ref: run.id, data: { botId: bot.id, workflowId: body.workflowId, stepId: run.stepId, mode: stepMode(steps[0]) } }); await repo.event({ actor: auth.userId, action, ref: run.id, data: { workflow: { botId: bot.id, workflowId: body.workflowId, runId: run.id, stepId: run.stepId } }, idem }); console.log('[HarnessPerf][command]', JSON.stringify({ action, workflowId: body.workflowId, elapsedMs: Date.now() - startedAt })); return c.json({ run }, 201); }
+    let run;
+    if (typeof body.target === 'string') {
+      run = await repo.getRun(body.target);
+      if (!run || run.actor !== auth.userId || run.botId !== bot.id) return c.json({ error: 'Run access denied' }, 403);
+    } else if (action === 'run.submit') {
+      run = await repo.createRun({ botId: bot.id, workflowId: body.workflowId, stepId: String(steps[0].id), actor: auth.userId });
+    } else return c.json({ error: 'Run target is required' }, 400);
     const index = steps.findIndex((step) => String(step.id) === run.stepId); const next = steps[index + 1];
-    const updated = await repo.updateRun(run.id, { stepId: next ? String(next.id) : run.stepId, state: next ? 'open' : 'complete', data: body.data && typeof body.data === 'object' && !Array.isArray(body.data) ? body.data as Record<string, unknown> : {} });
-    await repo.event({ actor: auth.userId, action, ref: run.id, data: { mode: stepMode(steps[index] || {}) }, idem }); return c.json({ run: updated, step: next || null });
+    let recordId = typeof body.recordId === 'string' ? body.recordId : undefined;
+    if (action === 'run.submit' && body.record && !recordId && !run.recordId) {
+      const submitted = body.record && typeof body.record === 'object' && !Array.isArray(body.record) ? body.record as Record<string, unknown> : null;
+      const type = typeof submitted?.type === 'string' ? submitted.type : ''; const title = typeof submitted?.title === 'string' ? submitted.title : '';
+      if (!type || !title) return c.json({ error: 'A record type and title are required to submit this step' }, 400);
+      const record = await repo.createRecord({ type, title: title.slice(0, 240), data: submitted?.data && typeof submitted.data === 'object' && !Array.isArray(submitted.data) ? submitted.data as Record<string, unknown> : {}, actor: auth.userId });
+      recordId = record.id;
+    }
+    const updated = await repo.updateRun(run.id, { stepId: next ? String(next.id) : run.stepId, state: next ? 'open' : 'complete', recordId, data: body.data && typeof body.data === 'object' && !Array.isArray(body.data) ? body.data as Record<string, unknown> : {} });
+    const personal = c.get('personal');
+    if (personal) {
+      const personalRepo = new TenantRepository(personal);
+      const currentItems = await personalRepo.list('inbox', { user_id: auth.userId, workspace_id: auth.workspaceId, ref: run.id, status: 1, limit: 10 });
+      await Promise.all(currentItems.map((item) => personalRepo.updateInboxItem(item.id, { status: 2, expectedVersion: item.version })));
+      if (next && stepCard(next) === 'inbox') await personalRepo.createInboxItem({ id: `ibx_${run.id}_${String(next.id)}`, userId: auth.userId, workspaceId: auth.workspaceId, type: 'task', title: String(next.title || bot.name), ref: run.id, data: { botId: bot.id, workflowId: body.workflowId, stepId: String(next.id), mode: stepMode(next) } });
+    }
+    await repo.event({ actor: auth.userId, action, ref: updated.recordId || run.id, data: { mode: stepMode(steps[index] || {}), workflow: { botId: bot.id, workflowId: body.workflowId, runId: run.id, stepId: run.stepId } }, idem }); console.log('[HarnessPerf][command]', JSON.stringify({ action, workflowId: body.workflowId, elapsedMs: Date.now() - startedAt, createdRecord: action === 'run.submit' && Boolean(recordId) })); return c.json({ run: updated, step: next || null });
   } catch (error) { return c.json({ error: error instanceof Error ? error.message : 'Command failed' }, 409); }
 });
 

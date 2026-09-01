@@ -78,8 +78,32 @@ export interface BotBuilderDraft {
 
 export interface HarnessDefinition { id: string; kind: 'data' | 'bot'; name: string; body: Record<string, unknown>; version: number; state: string; }
 export interface HarnessRecord { id: string; type: string; title: string; data: Record<string, unknown>; status: string; version: number; }
+export interface HarnessDataCard { id: string; kind: 'data'; title: string; dataType: string; count: number; }
+export interface HarnessRecordProfileEvent { id: string; action: string; summary: string; channel: 'message' | 'email' | 'phone' | 'calendar' | 'note' | 'system'; occurredAt: number; actorId: string; workflow?: { botId?: string; workflowId?: string; runId?: string; stepId?: string }; }
+export interface HarnessRecordProfile {
+  design: { version: number; component: 'record-profile'; layout: string; tokens: { page: string; surface: string; border: string; text: string; muted: string; divider: string; insight: string; insightText: string; panelMaxWidth: number; panelPadding: number; avatarSize: number; borderRadius: number; rowMinHeight: number }; };
+  record: { id: string; type: string; title: string; status: string; version: number; createdAt: number; updatedAt: number };
+  identity: { title: string; subtitle?: string; avatarRef?: string; email?: string; phone?: string; initials: string };
+  insight?: string;
+  activity: { heading: string; events: HarnessRecordProfileEvent[]; empty: boolean };
+  workflows?: Array<{ id: string; botId: string; workflowId: string; stepId: string; title: string; step: string; updatedAt: number }>;
+  fields: Array<{ key: string; value: string | number | boolean | null }>;
+}
 export interface HarnessHomeCard { id: string; kind: 'inbox' | 'action' | 'data' | 'report'; title: string; botId: string; workflowId: string; stepId: string; mode: 'deterministic' | 'agentic'; workspaceId?: string; }
-export interface HarnessHome { role: 'owner' | 'admin' | 'member' | 'guest'; capabilities?: { manageDefinitions: boolean }; now: HarnessHomeCard[]; actions: HarnessHomeCard[]; data: HarnessRecord[]; }
+export interface HarnessHome { role: 'owner' | 'admin' | 'member' | 'guest'; capabilities?: { manageDefinitions: boolean }; now: HarnessHomeCard[]; actions: HarnessHomeCard[]; data: HarnessDataCard[]; }
+export interface PersonalTodayCard {
+  id: string;
+  kind: 'action' | 'reminder' | 'report' | 'plan-update';
+  title: string;
+  detail: string;
+  runId?: string;
+  planId?: string;
+  workflowId?: string;
+  stepId?: string;
+  updateId?: string;
+  mode?: 'deterministic' | 'agentic';
+}
+export interface PersonalToday { cards: PersonalTodayCard[]; }
 
 export class TaraiRequestError extends Error {
   constructor(public readonly status: number, message: string, public readonly path: string) {
@@ -101,7 +125,9 @@ async function request<T>(path: string, options: {
   scope?: string;
   idempotencyKey?: string;
 } = {}): Promise<T> {
+  const startedAt = Date.now();
   const idToken = await getValidIdToken();
+  const authenticatedAt = Date.now();
   if (!idToken) throw new TaraiRequestError(401, 'Your Google sign-in has expired. Please sign in again.', path);
   const headers: Record<string, string> = { Authorization: `Bearer ${idToken}` };
   if (options.body) headers['Content-Type'] = 'application/json';
@@ -116,11 +142,13 @@ async function request<T>(path: string, options: {
     headers,
     body: options.body ? JSON.stringify(options.body) : undefined,
   });
+  const respondedAt = Date.now();
   const raw = await response.text();
   let payload: any = {};
   if (raw) {
     try { payload = JSON.parse(raw); } catch { payload = { error: raw }; }
   }
+  console.info('[TarPerf][request]', JSON.stringify({ path, method: options.method || 'GET', status: response.status, authMs: authenticatedAt - startedAt, networkMs: respondedAt - authenticatedAt, totalMs: respondedAt - startedAt }));
   if (!response.ok) throw new TaraiRequestError(response.status, payload.error || `${response.status} ${response.statusText}`, path);
   return payload as T;
 }
@@ -204,13 +232,22 @@ async function generateBotDraft(scope: string, prompt: string, answers: Record<s
 export const tar = {
   chat: (_sessionId: string, message: string, scope?: string) => chat(message, scope),
   botBuilder: { generate: generateBotDraft },
+  personal: {
+    today: () => request<PersonalToday>('/api/personal/today', { scope: 'p' }),
+    addTask: (title: string) => request('/api/personal/tasks', { method: 'POST', scope: 'p', body: { title } }),
+    suggestPlan: (draft: BotBuilderDraft, kind: 'plan' | 'routine') => request('/api/personal/plan-updates', { method: 'POST', scope: 'p', body: { draft, kind } }),
+    acceptPlan: (id: string) => request('/api/personal/plan-updates/' + encodeURIComponent(id) + '/accept', { method: 'POST', scope: 'p' }),
+    rejectPlan: (id: string) => request('/api/personal/plan-updates/' + encodeURIComponent(id) + '/reject', { method: 'POST', scope: 'p' }),
+    completeStep: (runId: string, idempotencyKey?: string) => request('/api/personal/runs/' + encodeURIComponent(runId) + '/advance', { method: 'POST', scope: 'p', idempotencyKey }),
+  },
   harness: {
     home: (scope: string) => request<HarnessHome>('/api/harness/home', { scope }),
     defs: (scope: string, kind?: 'data' | 'bot') => request<{ defs: HarnessDefinition[] }>(`/api/harness/defs${kind ? `?kind=${kind}` : ''}`, { scope }),
     saveDef: (scope: string, def: { id: string; kind: 'data' | 'bot'; name: string; body: Record<string, unknown> }) => request<{ def: HarnessDefinition }>(`/api/harness/defs/${encodeURIComponent(def.id)}`, { method: 'PUT', scope, body: def }),
     records: (scope: string, type?: string) => request<{ records: HarnessRecord[] }>(`/api/harness/records${type ? `?type=${encodeURIComponent(type)}` : ''}`, { scope }),
+    recordProfile: (scope: string, id: string) => request<{ screen: HarnessRecordProfile }>(`/api/harness/records/${encodeURIComponent(id)}/profile`, { scope }),
     command: (scope: string, command: Record<string, unknown>) => request<any>('/api/harness/commands', { method: 'POST', scope, body: command }),
-    inbox: (scope: string) => request<{ items: Array<{ id: string; title?: string; workspace_id?: string; workspace_name?: string; data?: Record<string, unknown>; version?: number }> }>('/api/harness/inbox', { scope }),
+    inbox: (scope: string) => request<{ items: Array<{ id: string; title?: string; ref?: string; workspace_id?: string; workspace_name?: string; data?: Record<string, unknown>; version?: number }> }>('/api/harness/inbox', { scope }),
     completeInbox: (scope: string, id: string) => request('/api/harness/inbox/' + encodeURIComponent(id) + '/complete', { method: 'POST', scope }),
   },
   aiTasks: (_scope: string) => Promise.resolve([]),

@@ -6,13 +6,14 @@ import * as SecureStore from 'expo-secure-store';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { tar, type WorkspaceSummary } from '@/lib/tar';
 import HarnessWorkspaceCanvas from '@/components/HarnessWorkspaceCanvas';
+import PersonalTodayCanvas from '@/components/PersonalTodayCanvas';
 import CreateWorkspace from '@/components/CreateWorkspace';
 import { signOutGoogle } from '@/lib/auth';
 import { EphemeralPlanCanvas } from '@/components/plans';
 
 const PERSONAL_WORKSPACE: WorkspaceSummary = {
   id: 'personal',
-  name: 'My Work',
+  name: 'Me',
   slug: 'personal',
   subdomain: 'personal',
   scope: 'p',
@@ -42,8 +43,8 @@ export default function WorkspacesScreen() {
         ? remoteWorkspaces
         : [PERSONAL_WORKSPACE, ...remoteWorkspaces];
       const savedSubdomain = preferredSubdomain || await SecureStore.getItemAsync('active_workspace_subdomain');
-      const selected = nextWorkspaces.find((workspace) => workspace.subdomain === savedSubdomain && workspace.state === 'active')
-        || nextWorkspaces.find((workspace) => workspace.state === 'active')
+      const selected = nextWorkspaces.find((workspace) => workspace.subdomain === savedSubdomain && workspace.state === 'active' && workspace.scope !== 'p')
+        || nextWorkspaces.find((workspace) => workspace.state === 'active' && workspace.scope !== 'p')
         || nextWorkspaces[0]
         || PERSONAL_WORKSPACE;
       setWorkspaces(nextWorkspaces);
@@ -76,7 +77,7 @@ export default function WorkspacesScreen() {
   const selectWorkspace = async (workspace: WorkspaceSummary) => {
     setCurrentWorkspace(workspace);
     setShowSwitcher(false);
-    await SecureStore.setItemAsync('active_workspace_subdomain', workspace.subdomain).catch(() => null);
+    if (workspace.scope !== 'p') await SecureStore.setItemAsync('active_workspace_subdomain', workspace.subdomain).catch(() => null);
   };
 
   const signOut = () => {
@@ -101,14 +102,16 @@ export default function WorkspacesScreen() {
 
   return (
     <View style={styles.container}>
-      <HarnessWorkspaceCanvas
-        key={currentWorkspace.scope}
-        scope={currentWorkspace.scope}
-        workspaceName={currentWorkspace.name || currentWorkspace.subdomain}
-        workspaceNames={Object.fromEntries(workspaces.flatMap((workspace) => [[workspace.id, workspace.name || workspace.subdomain], [workspace.scope, workspace.name || workspace.subdomain], [workspace.subdomain, workspace.name || workspace.subdomain]]))}
-        onOpenWorkspace={(workspaceId) => { const workspace = workspaces.find((item) => item.id === workspaceId); if (workspace) void selectWorkspace(workspace); }}
-        onOpenWorkspaceSwitcher={() => setShowSwitcher(true)}
-      />
+      {currentWorkspace.scope === 'p' ? (
+        <PersonalTodayCanvas onOpenSwitcher={() => setShowSwitcher(true)} />
+      ) : (
+        <HarnessWorkspaceCanvas
+          key={currentWorkspace.scope}
+          scope={currentWorkspace.scope}
+          workspaceName={currentWorkspace.name || currentWorkspace.subdomain}
+          onOpenWorkspaceSwitcher={() => setShowSwitcher(true)}
+        />
+      )}
 
       <Modal visible={showSwitcher} animationType="slide" presentationStyle="fullScreen" onRequestClose={() => setShowSwitcher(false)}>
         <View style={[styles.switcher, { paddingTop: Math.max(insets.top, 12) }]}>
@@ -125,7 +128,7 @@ export default function WorkspacesScreen() {
                   <View style={styles.workspaceIcon}><Text style={styles.workspaceInitial}>{(workspace.name || workspace.subdomain).charAt(0).toUpperCase()}</Text></View>
                   <View style={styles.workspaceCopy}>
                     <Text style={styles.workspaceTitle}>{workspace.name || workspace.subdomain}</Text>
-                    <Text style={styles.workspaceMeta}>{workspace.state === 'active' ? (workspace.role === 'owner' ? 'Owner' : 'Team member') : 'Preparing workspace'}</Text>
+                    <Text style={styles.workspaceMeta}>{workspace.scope === 'p' ? 'Private' : workspace.state === 'active' ? (workspace.role === 'owner' ? 'Owner' : 'Team member') : 'Preparing workspace'}</Text>
                   </View>
                   {selected && <Ionicons name="checkmark" size={20} color="#1a73e8" />}
                 </TouchableOpacity>

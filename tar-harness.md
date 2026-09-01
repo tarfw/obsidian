@@ -117,7 +117,7 @@ Cards are reusable interfaces, not separate business records or execution primit
 | Data Card | Present a permitted record or record list. |
 | Report Card | Present a deterministic role-relevant summary. |
 
-A Step Card belongs to the active Step. A Home Card is a role-filtered projection or Workflow launcher. A Data Card presents Data; it does not become the Data itself. Card definitions live inside approved Data or Bot definitions and are rendered from authorized Personal DB content. No separate Cards table is required.
+A Step Card belongs to the active Step. A Workspace Work Card is a role-filtered projection or Workflow launcher. A Data Card presents Data; it does not become the Data itself. Card definitions live inside approved Data or Bot definitions and are rendered from their authorized runtime context. No separate Cards table is required.
 
 ## 3. AI-first builder
 
@@ -154,7 +154,7 @@ TAR never silently creates structures, copies sensitive information or grants ac
 ```text
 Control DB    -> identity, Workspaces, memberships and database routing
 Workspace DB  -> official shared truth
-Personal DB   -> local-first personal truth, working set, Inbox and commands
+Personal DB   -> private Me plans and local-first authorized working set
 R2 / OKF      -> files, long content and knowledge
 Gateway       -> permission, validation, commitment, sync and audit
 ```
@@ -163,7 +163,7 @@ Gateway       -> permission, validation, commitment, sync and audit
 | :--- | :---: | :---: | :--- |
 | Control DB | One | No | Platform identity and routing. |
 | Workspace DB | One per Workspace | No | Canonical collaborative Data and automation state. |
-| Personal DB | One per person | Yes | Personal Data and authorized offline work. |
+| Personal DB | One per person | Yes | Private Me plans plus authorized offline working-set data. |
 | R2 bucket | One | No | Files, OKF knowledge, imports and exports. |
 
 The mobile app syncs only the Personal DB and never receives unrestricted Workspace DB credentials.
@@ -212,14 +212,19 @@ events(id, kind, actor, ref, data, idem, created)
 
 | Table | Purpose |
 | :--- | :--- |
-| `defs` | Personal and authorized Workspace definitions. |
-| `records` | Personal records and authorized Workspace working set. |
+| `defs` | Private Plan and Routine definitions. Workspace definitions sync only when required for offline work. |
+| `records` | Private plan updates and authorized Workspace working-set records. |
 | `links` | Relationships required by the working set. |
 | `inbox` | Tasks, approvals, requested input, mentions and notifications. |
 | `commands` | Append-only offline actions awaiting validation. |
 | `sync` | Cursor, access version, expiry and checkpoint state. |
+| `runs` | Private active Plan and Routine execution state. |
 
-The working set contains assigned, owned, recent, Inbox-linked, offline-pinned or explicitly downloaded records. These records are complete enough to use offline; their Workspace versions remain official.
+Every Personal DB row that can be rendered carries source metadata. Private Me rows use `source: private`; synced Workspace rows retain their source Workspace identity. Rows without a valid private source or accessible Workspace origin are not rendered.
+
+Me is a private view, not a Workspace. It renders only confirmed private Plans, Routines, manual private tasks, their active Runs, real report data and pending user-confirmed Plan updates. It never renders Workspace Inbox items, Workspace work, Workspace Data definitions or Workspace reports. Workspace shortcuts may open a Workspace but never copy its work into Me.
+
+The authorized working set contains assigned, owned, recent, Inbox-linked, offline-pinned or explicitly downloaded Workspace records. These records are complete enough to use offline; their Workspace versions remain official. The working set is not Me content.
 
 Turso partial sync reduces bootstrap and bandwidth for this authorized Personal DB. Partial sync is not an authorization boundary.
 
@@ -256,7 +261,7 @@ External content is stored only when the person owns it or has permission.
 Roles set the maximum permission. A Bot or Step may narrow it but cannot broaden it. Offline access is explicit per Data type; sensitive Data can set `offline = false`.
 
 ```text
-Person acts locally
+Workspace person acts locally
   -> UI updates immediately
   -> command enters Personal DB
   -> Turso pushes when connected
@@ -271,7 +276,7 @@ commands(id, space, action, target, data, base_version, status, created)
   status: pending | accepted | rejected | conflict
 ```
 
-The device can read `defs`, `records`, `links` and `inbox`, and append `commands`. It cannot directly edit Workspace records, definitions or permissions.
+The device can read authorized Workspace `defs`, `records`, `links` and `inbox`, and append `commands`. It cannot directly edit Workspace records, definitions or permissions. Private Routine completion may update Me immediately on-device and is replayed with its idempotency key after reconnection.
 
 The UI shows **Pending sync** until confirmation. Ordinary independent field changes may merge deterministically. Payments, approvals, inventory deductions and permissions never use automatic last-write-wins; conflicts pause for review or a registered resolution function.
 
@@ -333,44 +338,49 @@ Use indexed SQL and full-text search before embeddings. Use embeddings only for 
 
 ```text
 Workspace
-|-- Home
-|   |-- Now
-|   |-- Actions
-|   `-- My Data
+|-- Work
 |-- Inbox
 |-- Data
-`-- More
-    `-- Manage              owner/admin only
-        |-- Bots
-        |-- Data definitions
-        |-- Workflows
-        |-- Steps
-        `-- Access
+`-- Build                    owner/admin only
+    |-- Bots
+    |-- Data definitions
+    `-- Workflows
+
+Me
+`-- Today
+    |-- confirmed private Plan and Routine cards
+    |-- pending Plan-update cards
+    `-- Plan / add action
 ```
+
+Workspace navigation is `Work · Inbox · Data` for workers and `Work · Inbox · Data · Build` for owners and admins. Build is the internal owner/admin selector; workers do not see it. The app opens the last selected real Workspace by default. Me is opened explicitly from the Workspace switcher.
+
+Me uses normal language: **Today**, **Plan** and **Routine**. Bots and definitions remain internal implementation terms for private planning and do not appear in Me.
 
 ### 10.1 Ownership and visibility
 
 | Owner/admin manages | Worker uses |
 | :--- | :--- |
-| Bots and Bot settings | Role-based Home |
+| Bots and Bot settings | Role-based Workspace Work |
 | Data definitions and fields | Permitted Data records |
 | Workflows and ordered Steps | Action Cards |
 | Action primitives and integration bindings | Current Inbox tasks |
 | Roles, access and offline policy | Assigned work and reports |
 
-Workers do not normally see builder definitions. `More -> Manage` is visible only when the person's role grants management access.
+Workers do not normally see builder definitions. Build is visible only when the person's role grants management access.
 
-### 10.2 Role-based Home
+### 10.2 Workspace Work and Inbox
 
 ```text
-Now       -> current Inbox work
-Actions   -> permitted Workflow launchers
-My Data   -> relevant Data and deterministic reports
+Work      -> active role-filtered runs, report cards, approved Data views and action launchers
+Inbox     -> waiting assigned work only
+Data      -> permitted Workspace Data
+Build     -> Bots, Data definitions and Workflows for owners and admins
 ```
 
-Home is derived locally from authorized Bot definitions, Workflow state, Inbox and Personal DB Data. It is not manually assembled per person and requires no separate Home or Cards table.
+Starting an Inbox item moves it into Work in that same Workspace. Inbox does not duplicate active work. Workspace Work is derived from authorized Bot definitions, Workflow state and Workspace Data. It is not manually assembled per person and requires no separate Work or Cards table.
 
-To stay uncluttered, Home shows one primary Now Card, up to three Action Cards and up to two Data or Report Cards. Additional content uses **View all**. Priority is deterministic: urgent Inbox work, due work, active runs, then permitted launchers and summaries.
+To stay uncluttered, Work shows active work first, then permitted action launchers, report cards and approved Data views. Priority is deterministic: urgent work, due work, active runs, then permitted launchers and summaries.
 
 Data supports browse, search, add, view, permitted editing, archive, offline availability and pending-sync state. Destructive actions use an overflow menu and confirmation. Normal UI always says **Data**, not Artifact.
 
@@ -386,9 +396,10 @@ Data supports browse, search, add, view, permitted editing, archive, offline ava
 8. Use one Personal sync connection per person and one database per real Workspace, never per Bot.
 9. Use SQL search before embeddings.
 10. AI plans and assists; deterministic code authorizes and commits.
-11. Owners and admins manage definitions; workers receive role-filtered runtime Cards, Data and Inbox work.
+11. Owners and admins manage definitions in Build; workers receive role-filtered Workspace Work, Data and Inbox work.
 12. Action primitives remain beneath Steps and never appear as a second builder model.
 13. Every Step declares `deterministic` or `agentic` control mode.
 14. Agentic Steps may choose only allowlisted actions and transitions; the Gateway retains execution authority.
+15. Me is private life only: it contains private Plans, Routines, active private Runs and user-confirmed Plan changes; it never becomes a cross-Workspace inbox or data browser.
 
 > **Bots provide capability. Workflows organise Steps. Workspace Data holds truth. Personal Data enables offline work. Inbox connects people to work. Gateway protects every official change.**

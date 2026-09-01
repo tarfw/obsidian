@@ -1,347 +1,853 @@
 ---
-// AI Agents & Direct Pass-Through Rates — Clean Editorial Reference Page
+// TAR AI Agents & Bots — Full Editorial Page matching Homepage Design System
+// Incorporating Canonical Architecture from tar-harness.md
 import Layout from "../layouts/Layout.astro";
 import Nav from "../components/Nav.astro";
 import FooterSection from "../components/FooterSection.astro";
-import TarLogo from "../components/TarLogo.astro";
 
-const agentCategories = [
+const metrics = [
+  { val: "₹0.10", label: "1 Credit = 10 Paise (Pass-Through)" },
+  { val: "0%", label: "Markup on AI Model Tokens" },
+  { val: "₹0.00", label: "Per-Seat Staff Fees (Unlimited)" },
+  { val: "100%", label: "Local-First Data Ownership" }
+];
+
+const primitives = [
+  { name: "database", title: "Database", desc: "Read Data or request official changes through Gateway." },
+  { name: "tool", title: "Tools", desc: "Deterministic math calculations, tax formulas, or API hooks." },
+  { name: "skill", title: "AI Skills", desc: "Bounded AI capabilities with strict input/output schemas." },
+  { name: "sandbox", title: "Sandbox", desc: "Isolated code execution with explicit memory & time limits." },
+  { name: "subagent", title: "Subagents", desc: "Delegate bounded AI work and return results to the Step." },
+  { name: "channel", title: "Channels", desc: "Omnichannel WhatsApp, Telegram, Google Chat, Teams & SMS." },
+  { name: "schedule", title: "Schedule", desc: "Cron triggers, care loops, and appointment reminders." },
+  { name: "inbox", title: "Inbox", desc: "Request human review, confirmation, or 1-tap sign-off." }
+];
+
+const botCards = [
   {
-    name: "Workspace & Core Operations",
-    color: "#059669",
-    desc: "Everyday ledger, document scanning, offline sync, and accounting audits.",
-    items: [
-      { action: "Offline orders, sales & catalog", rate: "0 cr (₹0.00)", model: "On-Device", scope: "Instant local operations (Free)" },
-      { action: "Multi-device cloud backup & sync", rate: "1 cr / 600 ops (~₹0.016 / 100 ops)", model: "Cloud Sync", scope: "Encrypted background sync" },
-      { action: "Workspace answer / summary", rate: "0.02 cr (~₹0.002)", model: "Gemma-4", scope: "1 credit = 50 summaries" },
-      { action: "OCR document scan", rate: "0.05 cr / pg (~₹0.0052 / pg)", model: "DeepSeek-OCR 2", scope: "1 credit = 20 pages" },
-      { action: "Bill audit (OCR + ledger)", rate: "0.1 cr / bill (~₹0.01 / bill)", model: "DeepSeek-OCR 2", scope: "Receipt & invoice validation" },
-      { action: "Analyst or tax report", rate: "1 cr / report (~₹0.10 / report)", model: "DeepSeek-V4", scope: "Sales & financial audit" }
+    name: "Customer Support Bot",
+    model: "Gemma-4",
+    rate: "0.02 cr (~₹0.002 / reply)",
+    desc: "Answers customer inquiries on WhatsApp & Telegram, books appointments, and sends reminders with 1-tap human takeover.",
+    steps: ["Receive message", "Extract intent", "Query catalog / slots", "Draft reply", "Gateway audit log"]
+  },
+  {
+    name: "Voice Order Bot",
+    model: "Groq Whisper",
+    rate: "0.30 cr (~₹0.03 / order)",
+    desc: "Transcribes customer audio voice notes across 40+ languages (Tamil, Telugu, Hindi, Spanish, English) into verified orders.",
+    steps: ["Receive audio note", "Transcribe speech", "Extract line items", "Calculate totals", "Create pending order"]
+  },
+  {
+    name: "Document & Invoice OCR Bot",
+    model: "DeepSeek-OCR 2",
+    rate: "0.05 cr / page (~₹0.0052 / pg)",
+    desc: "Scans paper vendor receipts, wholesale bills, and purchase orders. Reconciles line items and inventory automatically.",
+    steps: ["Capture bill photo", "Extract table & totals", "Match supplier items", "Reconcile ledger", "Request approval"]
+  },
+  {
+    name: "Commercial Quote & Swarm Bot",
+    model: "DeepSeek-V4",
+    rate: "0.25 cr / quote (~₹0.025)",
+    desc: "Compiles itemized multi-currency proposals, audits financial balances, and runs deep multi-agent competitive research swarms.",
+    steps: ["Gather project scope", "Calculate pricing tiers", "Generate PDF proposal", "Deliver via WhatsApp", "Track status"]
+  },
+  {
+    name: "Local POS & Register Bot",
+    model: "On-Device SQLite",
+    rate: "0 cr (₹0.00 Free)",
+    desc: "Manages store checkout, counter card payments, customer tagging, and inventory deductions running 100% offline on your device.",
+    steps: ["Scan barcode", "Compute tax & discount", "Record transaction", "Update local stock", "Issue digital receipt"]
+  },
+  {
+    name: "Web Catalog & Ordering Bot",
+    model: "Edge Static Engine",
+    rate: "0.50 cr / deploy (~₹0.05)",
+    desc: "Generates and deploys fast static web storefronts and booking pages to edge CDNs with direct WhatsApp order routing.",
+    steps: ["Read product records", "Compile static pages", "Deploy to edge CDN", "Enable WhatsApp order links", "Monitor traffic"]
+  }
+];
+
+const rateTables = [
+  {
+    title: "1. Core Workspace Operations",
+    rows: [
+      { action: "Offline sales, orders & catalog browsing", rate: "0 cr (₹0.00)", model: "On-Device", notes: "Instant local operations (100% Free)" },
+      { action: "Encrypted multi-device sync (Turso)", rate: "1 cr / 600 ops (~₹0.016 / 100 ops)", model: "Cloud Sync", notes: "TLS 1.3 edge replication" },
+      { action: "Workspace semantic search & query", rate: "0.02 cr (~₹0.002)", model: "Gemma-4", notes: "1 credit = 50 queries" },
+      { action: "Automated daily business summary", rate: "0.05 cr (~₹0.005)", model: "Gemma-4", notes: "Daily cash & order roll-up" }
     ]
   },
   {
-    name: "Messaging & Conversational Agents",
-    color: "#0284c7",
-    desc: "Automated customer support, appointment booking, and multi-language voice transcription.",
-    items: [
-      { action: "Customer WhatsApp / Chat reply", rate: "0.02 cr (~₹0.002 / reply)", model: "Gemma-4", scope: "1 credit = 50 replies" },
-      { action: "Voice note to order", rate: "0.3 cr (~₹0.03 / order)", model: "Whisper Groq", scope: "Tamil, Telugu, Spanish, Arabic, English (40+ languages)" },
-      { action: "Commercial quote or proposal", rate: "0.25 cr (~₹0.025 / doc)", model: "DeepSeek-V4", scope: "Custom PDF generation" },
-      { action: "Customer retention campaign", rate: "0.5 cr (~₹0.05 / batch)", model: "DeepSeek-V4", scope: "Automated batch messaging" }
+    title: "2. Customer Messaging & Channels",
+    rows: [
+      { action: "Customer WhatsApp / Telegram auto-reply", rate: "0.02 cr (~₹0.002 / reply)", model: "Gemma-4", notes: "1 credit = 50 replies (0% markup)" },
+      { action: "Multi-language voice note to order", rate: "0.30 cr (~₹0.03 / order)", model: "Whisper Groq", notes: "40+ languages supported" },
+      { action: "Interactive WhatsApp action button dispatch", rate: "0.01 cr (~₹0.001 / msg)", model: "Channel Gateway", notes: "Direct API pass-through" },
+      { action: "Automated care follow-up loop", rate: "0.04 cr (~₹0.004 / loop)", model: "Gemma-4", notes: "Post-appointment check-in" }
     ]
   },
   {
-    name: "Sites, Catalogs & Web Publishing",
-    color: "#7c3aed",
-    desc: "Autonomous static web publishing, instant online storefronts, and edge deployments.",
-    items: [
-      { action: "Publish or update a site", rate: "0.5 cr / run (~₹0.05 / run)", model: "Edge Build", scope: "Global edge CDN deployment" },
-      { action: "Edit a site section", rate: "0.25 cr / run (~₹0.025 / run)", model: "Astro Mutation", scope: "Live section component mutation" },
-      { action: "Active public site hosting", rate: "50 cr / mo (₹5.00 / mo)", model: "Global Edge", scope: "Fast global edge hosting" },
-      { action: "Generate a site draft", rate: "3 cr / draft (~₹0.30 / draft)", model: "DeepSeek-V4", scope: "Multi-turn design & copy draft" }
+    title: "3. Documents, Vision & Auditing",
+    rows: [
+      { action: "Paper bill / invoice OCR scan", rate: "0.05 cr / page (~₹0.0052 / pg)", model: "DeepSeek-OCR 2", notes: "1 credit = 20 pages" },
+      { action: "Full bill audit & stock reconciliation", rate: "0.10 cr / bill (~₹0.01 / bill)", model: "DeepSeek-OCR 2", notes: "Table & line item match" },
+      { action: "Itemized PDF quote & proposal generation", rate: "0.25 cr (~₹0.025 / doc)", model: "DeepSeek-V4", notes: "Custom formatted PDF" },
+      { action: "Financial ledger tax analysis report", rate: "1.00 cr / report (~₹0.10 / report)", model: "DeepSeek-V4", notes: "Comprehensive P&L audit" }
     ]
   },
   {
-    name: "Intelligence & Autonomous Swarms",
-    color: "#d97706",
-    desc: "Deep research dossiers, competitive price checks, lead verification, and image processing.",
-    items: [
-      { action: "Competitor price check", rate: "0.02 cr / item (~₹0.002)", model: "Web Lookup", scope: "Real-time catalogue lookup" },
-      { action: "Operations workflow pipeline", rate: "0.5 cr / pipeline (~₹0.05)", model: "Agent Pipeline", scope: "Multi-step automated execution" },
-      { action: "Product photo cleanup", rate: "1 cr / image (~₹0.10 / image)", model: "Vision Agent", scope: "Background removal & cleanup" },
-      { action: "Verified lead batch", rate: "2 cr / batch (~₹0.20 / batch)", model: "DeepSeek-V4", scope: "B2B verification loop" },
-      { action: "Deep research swarm", rate: "12 cr / dossier (~₹1.20 / task)", model: "Multi-Agent Swarm", scope: "Autonomous multi-agent research" }
+    title: "4. Autonomous Research & Swarms",
+    rows: [
+      { action: "Real-time competitor price lookup", rate: "0.02 cr / item (~₹0.002)", model: "Web Lookup", notes: "Live catalogue check" },
+      { action: "B2B verified lead batch", rate: "2.00 cr / batch (~₹0.20 / batch)", model: "DeepSeek-V4", notes: "Verified business records" },
+      { action: "Product photo background cleanup", rate: "1.00 cr / image (~₹0.10 / image)", model: "Vision Agent", notes: "Clean catalogue assets" },
+      { action: "Deep autonomous research swarm", rate: "12.00 cr (~₹1.20 / task)", model: "Multi-Agent Swarm", notes: "Multi-turn industry dossier" }
     ]
   }
+];
+
+const safetySteps = [
+  { num: "1", title: "Agent Proposes", desc: "LLM reasons over allowlisted context and selects an allowed action or drafting transition." },
+  { num: "2", title: "Gateway Validates", desc: "Gateway checks workspace membership, role, Bot/Step authority, schema, and base version." },
+  { num: "3", title: "Human Approves", desc: "High-consequence payments, inventory adjustments, or user changes pause for 1-tap sign-off." },
+  { num: "4", title: "Code Commits", desc: "Deterministic code writes official Workspace DB records and logs an immutable audit event." }
 ];
 ---
 
 <Layout 
-  title="AI Agents & Direct Pass-Through Rates — TAR" 
-  description="Transparent, 0% markup pass-through rates for Whisper, Gemma, DeepSeek, OCR, and autonomous agent swarms in TAR."
+  title="AI Agents & Bots — TAR Architecture & Pass-Through Rates" 
+  description="Build custom Bots with ordered Steps. Bounded AI assistance, Gateway safety, and transparent wholesale pass-through rates on Gemma, Whisper, and DeepSeek."
 >
   <Nav />
 
-  <main class="agents-main font-dm-sans">
-    <div class="container agents-container">
-      
-      <!-- Header -->
-      <header class="agents-header">
-        <div class="agents-badge">DIRECT PASS-THROUGH</div>
-        <h1 class="agents-title">Transparent AI Agent Rates.</h1>
-        <p class="agents-lead">
-          TAR connects your business to world-class language, vision, and voice models with <strong>0% token profit markups</strong>. You pay the exact at-cost pass-through fee: <strong>1 Credit = ₹0.10 (10 Paise)</strong>. Credits never expire.
-        </p>
-      </header>
+  <main class="page-body font-dm-sans">
+    
+    <!-- ROOM 1: HERO ROOM (Canopy Green Room) -->
+    <section class="agents-hero-room room-canopy-green" id="overview">
+      <div class="container hero-container">
+        
+        <div class="hero-text-block">
+          <h1 class="display-hero hero-title">
+            Bots provide capability.<br />
+            Workflows organise Steps.<br />
+            <span class="text-leaf-bright">Gateway protects every change.</span>
+          </h1>
 
-      <!-- Monthly Breakdown Callout Banner -->
-      <div class="calculator-banner">
-        <div class="calc-inner">
-          <div class="calc-left">
-            <span class="calc-tag">Typical Monthly Usage</span>
-            <h3 class="calc-title">Active Clinic or Retail Store</h3>
-            <p class="calc-desc">
-              1 Active Workspace (₹10) + 500 WhatsApp Replies (₹1) + 100 Invoice OCR Scans (₹0.52) + 20 Quotes (₹0.50)
-            </p>
-          </div>
-          <div class="calc-right">
-            <div class="calc-total-pill font-mono">
-              <span class="calc-total-val">~₹12.18 / mo</span>
-              <span class="calc-credits-val">(~121.6 credits)</span>
+          <p class="hero-lead">
+            TAR separates reasoning from authority. AI plans, extracts, and drafts; deterministic Gateway code authorizes and commits. Access language, vision, and voice models at <strong>0% profit markup</strong>.
+          </p>
+        </div>
+
+        <div class="hero-metrics-row">
+          {metrics.map((m) => (
+            <div class="hero-metric-card">
+              <span class="metric-val font-mono">{m.val}</span>
+              <span class="metric-lbl">{m.label}</span>
             </div>
-            <span class="calc-subtext">A single ₹100 top-up covers 8+ months of active operations.</span>
+          ))}
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ROOM 2: EXECUTION MODES & PRIMITIVES (Mint Wash Room) -->
+    <section class="modes-section pastel-room-mint" id="execution">
+      <div class="container">
+        
+        <div class="section-head-left">
+          <h2 class="display-section-lg section-title">
+            Deterministic by default.<br />
+            Agentic by choice.
+          </h2>
+          <p class="section-lead">
+            In TAR, <strong>Step is the only builder term for work</strong>. A Step combines optional Cards, deterministic App functions, and AI help.
+          </p>
+        </div>
+
+        <!-- 2 Side-by-side Mode Cards -->
+        <div class="modes-grid">
+          <div class="mode-box white-card">
+            <div class="mode-header">
+              <span class="mode-pill font-mono">MODE 1</span>
+              <h3 class="mode-heading">Deterministic Steps</h3>
+            </div>
+            <p class="mode-body">
+              Code follows declared actions and transitions. It may invoke bounded AI help for drafting or extraction, but the LLM cannot alter tools, transitions, or financial records.
+            </p>
+            <div class="mode-footer font-mono">
+              Checkout → Calculate Total → Take Payment → Deduct Stock
+            </div>
+          </div>
+
+          <div class="mode-box white-card">
+            <div class="mode-header">
+              <span class="mode-pill font-mono agentic-pill">MODE 2</span>
+              <h3 class="mode-heading">Agentic Steps</h3>
+            </div>
+            <p class="mode-body">
+              The LLM reasons and selects among strictly allowlisted actions and transitions within a declared budget and timeout. Gateway code still validates and commits every state change.
+            </p>
+            <div class="mode-footer font-mono">
+              Reason → Select Allowlisted Tool → Gateway Validate → Commit
+            </div>
           </div>
         </div>
-      </div>
 
-      <!-- Agent Categories Tables -->
-      <div class="tables-cluster">
-        {agentCategories.map((group) => (
-          <div class="agent-table-card">
-            <div class="table-card-head">
-              <div class="card-head-left">
-                <span class="category-dot" style={`background-color: ${group.color};`}></span>
-                <h2 class="category-name">{group.name}</h2>
+        <!-- 8 Action Primitives Grid -->
+        <div class="primitives-container">
+          <h3 class="primitives-title">The 8 Registered Action Primitives Beneath Steps</h3>
+          <div class="primitives-grid">
+            {primitives.map((p) => (
+              <div class="primitive-item white-card">
+                <code class="primitive-code font-mono">{p.name}</code>
+                <h4 class="primitive-heading">{p.title}</h4>
+                <p class="primitive-text">{p.desc}</p>
               </div>
-              <p class="category-desc">{group.desc}</p>
-            </div>
-
-            <div class="table-scroll-wrap">
-              <table class="agents-flat-table">
-                <thead>
-                  <tr>
-                    <th style="width: 35%;">Action / Capability</th>
-                    <th style="width: 30%;">Pass-Through Rate</th>
-                    <th style="width: 15%;">Model</th>
-                    <th style="width: 20%;">Scope & Notes</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {group.items.map((item) => (
-                    <tr>
-                      <td class="action-cell">
-                        <strong>{item.action}</strong>
-                      </td>
-                      <td class="rate-cell font-mono">
-                        {item.rate}
-                      </td>
-                      <td class="model-cell">
-                        <span class="model-badge">{item.model}</span>
-                      </td>
-                      <td class="scope-cell">
-                        {item.scope}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            ))}
           </div>
-        ))}
-      </div>
+        </div>
 
-      <!-- Bottom Principle Statement -->
-      <div class="agents-bottom-box">
-        <h3 class="bottom-box-title">Why at-cost compute matters</h3>
-        <p class="bottom-box-desc">
-          Most enterprise platforms hide AI token costs behind opaque ₹5,000/month tier upgrades and charge a 500% markup on inference. TAR routes requests directly through open-source and specialized model endpoints at pure wholesale cost. You own your data, manage your wallet, and run agents with total financial predictability.
+      </div>
+    </section>
+
+    <!-- ROOM 3: ACTIVE BOT SHOWCASE (Lilac Wash Room) -->
+    <section class="bots-section pastel-room-lilac" id="bots">
+      <div class="container">
+        
+        <div class="section-head-left">
+          <h2 class="display-section-lg section-title">
+            Standard Bots for<br />
+            everyday operations.
+          </h2>
+          <p class="section-lead">
+            Build with plain language. TAR drafts the Bot, Workflows, and ordered Steps with human review.
+          </p>
+        </div>
+
+        <div class="bots-grid">
+          {botCards.map((b) => (
+            <div class="bot-box white-card">
+              <div class="bot-top-row">
+                <span class="bot-model font-mono">{b.model}</span>
+                <span class="bot-rate font-mono">{b.rate}</span>
+              </div>
+              <h3 class="bot-title">{b.name}</h3>
+              <p class="bot-desc">{b.desc}</p>
+              
+              <div class="bot-steps-block">
+                <span class="steps-label font-mono">ORDERED STEPS</span>
+                <ol class="steps-list">
+                  {b.steps.map((st) => (
+                    <li>{st}</li>
+                  ))}
+                </ol>
+              </div>
+            </div>
+          ))}
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ROOM 4: TRANSPARENT RATES (Sage Wash Room) -->
+    <section class="rates-section pastel-room-sage" id="rates">
+      <div class="container">
+        
+        <div class="section-head-left">
+          <h2 class="display-section-lg section-title">
+            Raw wholesale rates.<br />
+            0% profit markup.
+          </h2>
+          <p class="section-lead">
+            We pass through exact provider compute costs. 1 Credit = ₹0.10 (10 Paise). Credits never expire.
+          </p>
+        </div>
+
+        <!-- Monthly Estimator Banner -->
+        <div class="estimator-card white-card">
+          <div class="estimator-left">
+            <span class="estimator-tag font-mono">PRACTICAL ESTIMATE</span>
+            <h3 class="estimator-heading">Typical Active Clinic or Store Usage</h3>
+            <p class="estimator-desc">1 Cloud Synced Store + 500 WhatsApp AI Replies + 100 Invoice Scans + 20 Quotes + Unlimited Staff</p>
+          </div>
+          <div class="estimator-right">
+            <div class="estimator-price font-mono">
+              <span class="price-val">~₹12.18</span>
+              <span class="price-period">/ month (121.8 credits)</span>
+            </div>
+            <span class="estimator-note">A single ₹100 starter top-up covers over 8 months of everyday operations.</span>
+          </div>
+        </div>
+
+        <!-- Rates Tables -->
+        <div class="tables-wrapper">
+          {rateTables.map((t) => (
+            <div class="table-card white-card">
+              <h3 class="table-title">{t.title}</h3>
+              <div class="table-scroll-wrap">
+                <table class="rates-table">
+                  <thead>
+                    <tr>
+                      <th style="width: 36%;">Action / Capability</th>
+                      <th style="width: 30%;">Wholesale Rate</th>
+                      <th style="width: 14%;">Engine</th>
+                      <th style="width: 20%;">Notes</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {t.rows.map((r) => (
+                      <tr>
+                        <td><strong>{r.action}</strong></td>
+                        <td class="rate-cell font-mono">{r.rate}</td>
+                        <td><span class="engine-badge font-mono">{r.model}</span></td>
+                        <td class="notes-cell">{r.notes}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ))}
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ROOM 5: THE GATEWAY SAFETY INVARIANT (Peach Wash Room) -->
+    <section class="safety-section pastel-room-peach" id="safety">
+      <div class="container">
+        
+        <div class="section-head-left">
+          <h2 class="display-section-lg section-title">
+            The Gateway authority<br />
+            pipeline.
+          </h2>
+          <p class="section-lead">
+            Artificial intelligence never directly writes records, alters permissions, or commits funds.
+          </p>
+        </div>
+
+        <div class="safety-steps-grid">
+          {safetySteps.map((s) => (
+            <div class="safety-step-card white-card">
+              <div class="step-badge">{s.num}</div>
+              <div class="step-content">
+                <h3 class="step-heading">{s.title}</h3>
+                <p class="step-desc">{s.desc}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ROOM 6: PRE-FOOTER CTA (Canopy Green Room) -->
+    <section class="cta-section room-canopy-green">
+      <div class="container cta-container">
+        <h2 class="display-section-lg cta-heading">
+          Deploy your first Bot<br />
+          <span class="text-leaf-bright">in under two minutes.</span>
+        </h2>
+        
+        <p class="cta-sub">
+          Install TAR, create a local-first workspace for free, and connect your everyday messaging channels.
         </p>
-      </div>
 
-    </div>
+        <div class="cta-buttons-row">
+          <a href="/docs" class="btn-leaf-bright">
+            Read User Docs →
+          </a>
+          <a href="/harness" class="btn-ghost-light">
+            Read TAR Harness Standard
+          </a>
+        </div>
+      </div>
+    </section>
+
   </main>
 
   <FooterSection />
 </Layout>
 
 <style>
-  .agents-main {
-    background-color: var(--color-lavender-mist);
-    min-height: 80vh;
-    padding: 48px 0 80px 0;
+  .page-body {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
   }
 
-  .agents-container {
-    max-width: 980px;
+  .text-leaf-bright {
+    color: #55dd4a;
+  }
+
+  /* Shared White Card Container */
+  .white-card {
+    background-color: #ffffff;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 16px;
+    padding: 24px;
+    box-sizing: border-box;
+  }
+
+  /* Shared Section Head Left */
+  .section-head-left {
+    max-width: 720px;
+    margin-bottom: 32px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .section-title {
+    color: var(--color-canopy-green);
+    line-height: 1.08;
+  }
+
+  .section-lead {
+    font-size: 15px;
+    line-height: 1.6;
+    color: var(--color-graphite);
+    margin: 0;
+  }
+
+  .section-lead strong {
+    color: var(--color-ink-black);
+  }
+
+  /* Room 1: Hero Section */
+  .agents-hero-room {
+    background-color: var(--color-canopy-green);
+    color: #ffffff;
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 64px 0;
+    box-sizing: border-box;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .hero-container {
     display: flex;
     flex-direction: column;
     gap: 36px;
   }
 
-  /* Header */
-  .agents-header {
+  .hero-text-block {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 16px;
+    max-width: 860px;
   }
 
-  .agents-badge {
-    align-self: flex-start;
-    display: inline-flex;
-    align-items: center;
-    background-color: var(--color-canopy-green);
+  .hero-title {
     color: #ffffff;
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    padding: 4px 12px;
-    border-radius: 9999px;
+    line-height: 1.05;
   }
 
-  .agents-title {
-    font-size: clamp(2rem, 4vw, 3rem);
-    color: var(--color-canopy-green);
-    line-height: 1.08;
-    letter-spacing: -0.02em;
-  }
-
-  .agents-lead {
-    font-size: 16px;
+  .hero-lead {
+    font-size: clamp(16px, 2vw, 18px);
     line-height: 1.6;
-    color: var(--color-graphite);
-    max-width: 780px;
+    color: var(--color-mint-wash);
     margin: 0;
   }
 
-  /* Calculator Banner */
-  .calculator-banner {
-    background-color: #ffffff;
-    border: 1px solid rgba(0, 0, 0, 0.08);
-    border-radius: 14px;
-    padding: 24px;
-    box-sizing: border-box;
-  }
-
-  .calc-inner {
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
-  }
-
-  @media (min-width: 768px) {
-    .calc-inner {
-      flex-direction: row;
-      justify-content: space-between;
-      align-items: center;
-      gap: 32px;
-    }
-  }
-
-  .calc-left {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-
-  .calc-tag {
-    font-size: 11px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--color-canopy-green);
-  }
-
-  .calc-title {
-    font-size: 18px;
-    font-weight: 700;
-    color: var(--color-canopy-green);
-    margin: 0;
-  }
-
-  .calc-desc {
-    font-size: 13.5px;
-    color: var(--color-slate);
-    line-height: 1.5;
-    margin: 0;
-  }
-
-  .calc-right {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 6px;
-  }
-
-  @media (min-width: 768px) {
-    .calc-right {
-      align-items: flex-end;
-    }
-  }
-
-  .calc-total-pill {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-    background-color: var(--color-canopy-green);
+  .hero-lead strong {
     color: #ffffff;
-    padding: 8px 16px;
-    border-radius: 8px;
   }
 
-  .calc-total-val {
-    font-size: 18px;
-    font-weight: 700;
-    color: #55dd4a;
+  .hero-metrics-row {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
   }
 
-  .calc-credits-val {
-    font-size: 12px;
-    color: rgba(255, 255, 255, 0.8);
+  @media (min-width: 600px) {
+    .hero-metrics-row {
+      grid-template-columns: repeat(2, 1fr);
+    }
   }
 
-  .calc-subtext {
-    font-size: 12px;
-    color: var(--color-slate);
+  @media (min-width: 960px) {
+    .hero-metrics-row {
+      grid-template-columns: repeat(4, 1fr);
+    }
   }
 
-  /* Table Cards */
-  .tables-cluster {
-    display: flex;
-    flex-direction: column;
-    gap: 24px;
-  }
-
-  .agent-table-card {
-    background-color: #ffffff;
-    border: 1px solid rgba(0, 0, 0, 0.08);
-    border-radius: 14px;
-    overflow: hidden;
-  }
-
-  .table-card-head {
-    padding: 16px 20px;
-    background-color: #ffffff;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  .hero-metric-card {
+    background-color: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    padding: 18px 20px;
     display: flex;
     flex-direction: column;
     gap: 4px;
   }
 
-  .card-head-left {
+  .metric-val {
+    font-size: 26px;
+    font-weight: 700;
+    color: #55dd4a;
+  }
+
+  .metric-lbl {
+    font-size: 13px;
+    color: var(--color-mint-wash);
+    line-height: 1.35;
+  }
+
+  /* Room 2: Modes Section */
+  .modes-section {
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 64px 0;
+    box-sizing: border-box;
+    color: var(--color-ink-black);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  }
+
+  .modes-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+
+  @media (min-width: 768px) {
+    .modes-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+
+  .mode-box {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .mode-header {
     display: flex;
     align-items: center;
     gap: 10px;
   }
 
-  .category-dot {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    flex-shrink: 0;
+  .mode-pill {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--color-canopy-green);
+    background-color: var(--color-sage-wash);
+    padding: 2px 8px;
+    border-radius: 4px;
   }
 
-  .category-name {
-    font-size: 15px;
+  .mode-pill.agentic-pill {
+    color: #7c3aed;
+    background-color: var(--color-lilac-wash);
+  }
+
+  .mode-heading {
+    font-size: 18px;
     font-weight: 700;
     color: var(--color-canopy-green);
     margin: 0;
   }
 
-  .category-desc {
-    font-size: 13px;
-    color: var(--color-slate);
+  .mode-body {
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--color-graphite);
     margin: 0;
-    padding-left: 20px;
+  }
+
+  .mode-footer {
+    margin-top: auto;
+    background-color: #f9fbf9;
+    border: 1px solid rgba(10, 57, 34, 0.08);
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--color-canopy-green);
+  }
+
+  .primitives-container {
+    margin-top: 36px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .primitives-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--color-canopy-green);
+    margin: 0;
+  }
+
+  .primitives-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  @media (min-width: 600px) {
+    .primitives-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+
+  @media (min-width: 960px) {
+    .primitives-grid {
+      grid-template-columns: repeat(4, 1fr);
+    }
+  }
+
+  .primitive-item {
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .primitive-code {
+    align-self: flex-start;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--color-canopy-green);
+    background-color: var(--color-mint-wash);
+    padding: 2px 6px;
+    border-radius: 3px;
+  }
+
+  .primitive-heading {
+    font-size: 13.5px;
+    font-weight: 700;
+    color: var(--color-ink-black);
+    margin: 0;
+  }
+
+  .primitive-text {
+    font-size: 12px;
+    color: var(--color-slate);
+    line-height: 1.4;
+    margin: 0;
+  }
+
+  /* Room 3: Bots Section */
+  .bots-section {
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 64px 0;
+    box-sizing: border-box;
+    color: var(--color-ink-black);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  }
+
+  .bots-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+
+  @media (min-width: 640px) {
+    .bots-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .bots-grid {
+      grid-template-columns: repeat(3, 1fr);
+    }
+  }
+
+  .bot-box {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .bot-top-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .bot-model {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--color-canopy-green);
+    background-color: #f3f4f6;
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+
+  .bot-rate {
+    font-size: 11.5px;
+    font-weight: 700;
+    color: var(--color-canopy-green);
+  }
+
+  .bot-title {
+    font-size: 16.5px;
+    font-weight: 700;
+    color: var(--color-canopy-green);
+    margin: 0;
+  }
+
+  .bot-desc {
+    font-size: 13px;
+    color: var(--color-graphite);
+    line-height: 1.5;
+    margin: 0;
+  }
+
+  .bot-steps-block {
+    margin-top: auto;
+    background-color: #f9fafb;
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    border-radius: 6px;
+    padding: 8px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .steps-label {
+    font-size: 9.5px;
+    font-weight: 700;
+    color: var(--color-slate);
+    letter-spacing: 0.06em;
+  }
+
+  .steps-list {
+    margin: 0;
+    padding-left: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 11.5px;
+    color: var(--color-graphite);
+  }
+
+  /* Room 4: Rates Section */
+  .rates-section {
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 64px 0;
+    box-sizing: border-box;
+    color: var(--color-ink-black);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  }
+
+  .estimator-card {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+
+  @media (min-width: 768px) {
+    .estimator-card {
+      flex-direction: row;
+      justify-content: space-between;
+      align-items: center;
+    }
+  }
+
+  .estimator-left {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .estimator-tag {
+    align-self: flex-start;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--color-canopy-green);
+    background-color: var(--color-mint-wash);
+    padding: 2px 6px;
+    border-radius: 3px;
+  }
+
+  .estimator-heading {
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--color-canopy-green);
+    margin: 0;
+  }
+
+  .estimator-desc {
+    font-size: 13px;
+    color: var(--color-graphite);
+    margin: 0;
+  }
+
+  .estimator-right {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  @media (min-width: 768px) {
+    .estimator-right {
+      align-items: flex-end;
+    }
+  }
+
+  .estimator-price {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+  }
+
+  .price-val {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--color-canopy-green);
+  }
+
+  .price-period {
+    font-size: 12px;
+    color: var(--color-slate);
+  }
+
+  .estimator-note {
+    font-size: 11px;
+    color: var(--color-slate);
+  }
+
+  .tables-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .table-card {
+    padding: 0;
+    overflow: hidden;
+  }
+
+  .table-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--color-canopy-green);
+    padding: 14px 18px;
+    margin: 0;
+    background-color: #f9fbf9;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
   }
 
   .table-scroll-wrap {
@@ -349,16 +855,16 @@ const agentCategories = [
     width: 100%;
   }
 
-  .agents-flat-table {
+  .rates-table {
     width: 100%;
     border-collapse: collapse;
     font-size: 13px;
     text-align: left;
   }
 
-  .agents-flat-table th {
+  .rates-table th {
     background-color: #ffffff;
-    padding: 10px 20px;
+    padding: 10px 18px;
     font-size: 11px;
     font-weight: 700;
     color: var(--color-slate);
@@ -367,14 +873,14 @@ const agentCategories = [
     letter-spacing: 0.04em;
   }
 
-  .agents-flat-table td {
-    padding: 12px 20px;
+  .rates-table td {
+    padding: 11px 18px;
     border-bottom: 1px solid rgba(0, 0, 0, 0.05);
     color: var(--color-ink-black);
     vertical-align: middle;
   }
 
-  .agents-flat-table tr:last-child td {
+  .rates-table tr:last-child td {
     border-bottom: none;
   }
 
@@ -384,43 +890,129 @@ const agentCategories = [
     color: var(--color-canopy-green);
   }
 
-  .model-badge {
-    display: inline-flex;
-    background-color: rgba(10, 57, 34, 0.06);
-    color: var(--color-canopy-green);
+  .engine-badge {
     font-size: 11px;
     font-weight: 600;
-    padding: 3px 8px;
-    border-radius: 4px;
+    color: var(--color-canopy-green);
+    background-color: rgba(10, 57, 34, 0.06);
+    padding: 2px 6px;
+    border-radius: 3px;
   }
 
-  .scope-cell {
-    font-size: 12.5px;
+  .notes-cell {
+    font-size: 12px;
     color: var(--color-slate);
   }
 
-  /* Bottom Statement */
-  .agents-bottom-box {
-    background-color: #ffffff;
-    border: 1px solid rgba(0, 0, 0, 0.08);
-    border-radius: 14px;
-    padding: 24px;
+  /* Room 5: Safety Section */
+  .safety-section {
+    min-height: 100vh;
+    min-height: 100dvh;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    justify-content: center;
+    padding: 64px 0;
+    box-sizing: border-box;
+    color: var(--color-ink-black);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
   }
 
-  .bottom-box-title {
+  .safety-steps-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  @media (min-width: 600px) {
+    .safety-steps-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .safety-steps-grid {
+      grid-template-columns: repeat(4, 1fr);
+    }
+  }
+
+  .safety-step-card {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .step-badge {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background-color: var(--color-canopy-green);
+    color: #ffffff;
+    font-size: 12px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .step-content {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .step-heading {
     font-size: 16px;
     font-weight: 700;
     color: var(--color-canopy-green);
     margin: 0;
   }
 
-  .bottom-box-desc {
-    font-size: 14px;
-    line-height: 1.6;
+  .step-desc {
+    font-size: 13px;
+    line-height: 1.5;
     color: var(--color-graphite);
     margin: 0;
+  }
+
+  /* Room 6: CTA Section */
+  .cta-section {
+    background-color: var(--color-canopy-green);
+    color: #ffffff;
+    min-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 64px 0;
+    box-sizing: border-box;
+    text-align: center;
+  }
+
+  .cta-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+  }
+
+  .cta-heading {
+    color: #ffffff;
+    line-height: 1.08;
+    margin: 0;
+  }
+
+  .cta-sub {
+    font-size: clamp(15px, 2vw, 17px);
+    color: var(--color-mint-wash);
+    max-width: 600px;
+    line-height: 1.6;
+    margin: 0;
+  }
+
+  .cta-buttons-row {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 14px;
+    margin-top: 8px;
   }
 </style>

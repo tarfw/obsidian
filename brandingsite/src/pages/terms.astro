@@ -1,65 +1,228 @@
 ---
-// Terms & Conditions Page for TAR
+// Terms of Service Page for TAR
+// Follows modern terms of service standard (Buzz / Block model) tailored for TAR local-first platform
 import Layout from "../layouts/Layout.astro";
 import Nav from "../components/Nav.astro";
 import FooterSection from "../components/FooterSection.astro";
+
+const sections = [
+  { id: "acceptance", title: "1. Acceptance of Terms" },
+  { id: "eligibility", title: "2. Eligibility & Accounts" },
+  { id: "service-model", title: "3. Architecture & Service Models" },
+  { id: "data-ownership", title: "4. Data Ownership & Content" },
+  { id: "acceptable-use", title: "5. Acceptable Use & Guidelines" },
+  { id: "billing-credits", title: "6. Billing, Credits & Compute" },
+  { id: "ai-operations", title: "7. AI Operations & Boundaries" },
+  { id: "third-party", title: "8. Third-Party Interfaces" },
+  { id: "termination", title: "9. Termination & Data Portability" },
+  { id: "disclaimers", title: "10. Disclaimers & Warranty" },
+  { id: "liability", title: "11. Limitation of Liability" },
+  { id: "general", title: "12. General Legal Terms & Contact" }
+];
 ---
 
 <Layout 
-  title="Terms & Conditions — TAR" 
-  description="TAR Terms & Conditions: Plain-English terms for credit packs, at-cost compute pass-through, and software licensing."
+  title="Terms of Service — TAR" 
+  description="The terms that govern your use of the TAR application, local-first workspaces, credit wallet, and connected communications services."
 >
   <Nav />
 
-  <main class="legal-main">
-    <div class="container legal-container font-dm-sans">
-      <header class="legal-header">
-        <div class="legal-badge">Legal Terms</div>
-        <h1 class="legal-title">Terms & Conditions</h1>
-        <p class="legal-lead">Last updated: August 2026</p>
-      </header>
+  <main class="terms-main font-dm-sans">
+    <div class="container terms-layout-grid">
+      
+      <!-- Left: Sticky Minimal Sidebar Navigation -->
+      <aside class="terms-sidebar">
+        <div class="sidebar-sticky-box">
+          <span class="sidebar-label">TERMS OF SERVICE</span>
+          <nav class="sidebar-nav">
+            {sections.map((s) => (
+              <a href={`#${s.id}`} class="sidebar-link">{s.title}</a>
+            ))}
+          </nav>
+        </div>
+      </aside>
 
-      <hr class="legal-divider" />
+      <!-- Right: Terms Content -->
+      <div class="terms-content-col">
+        
+        <!-- Header -->
+        <header class="terms-header">
+          <div class="terms-badge">Legal Terms</div>
+          <h1 class="terms-main-title">Terms of Service</h1>
+          <p class="terms-main-lead">
+            The terms that govern your use of TAR, local-first workspaces, and connected services.
+          </p>
+          <span class="terms-effective-date">Last Updated: August 31, 2026</span>
+        </header>
 
-      <article class="legal-body">
-        <section class="legal-section">
-          <h2>1. Overview & Acceptance</h2>
-          <p>
-            By installing the TAR native mobile application, creating a workspace, or using TAR credit packs, you agree to these Terms. If you are using TAR on behalf of an organization, clinic, or business, you represent that you have the authority to bind that entity.
+        <hr class="terms-divider" />
+
+        <!-- 1. Acceptance of Terms -->
+        <section id="acceptance" class="terms-section">
+          <h2 class="section-heading">1. Acceptance of Terms</h2>
+          <p class="section-text">
+            These Terms of Service ("Terms") constitute a legally binding agreement between you ("you", "your", or "User") and TAR ("TAR", "we", "us", or "our") governing your access to and use of the TAR native applications, client software, websites, APIs, credit wallets, and cloud relay services (collectively, the "Services").
+          </p>
+          <p class="section-text">
+            By downloading, installing, accessing, or using the Services, or by creating a Workspace, you agree to be bound by these Terms. If you are entering into these Terms on behalf of a company, organization, clinic, or other legal entity, you represent and warrant that you have full authority to bind that entity to these Terms.
           </p>
         </section>
 
-        <section class="legal-section">
-          <h2>2. Workspace Ownership & License</h2>
-          <p>
-            You retain all rights, title, and interest in and to your business records, product catalogs, customer lists, documents, and communications. TAR grants you a non-exclusive license to use the TAR application and services in accordance with these terms.
+        <hr class="terms-divider" />
+
+        <!-- 2. Eligibility & Accounts -->
+        <section id="eligibility" class="terms-section">
+          <h2 class="section-heading">2. Eligibility & Accounts</h2>
+          <p class="section-text">
+            <strong>Age Requirement:</strong> You must be at least 18 years of age or the age of legal majority in your jurisdiction to create an account, purchase credits, or operate a Workspace.
+          </p>
+          <p class="section-text">
+            <strong>Account Security:</strong> You access TAR through verified authentication providers (such as Google Identity). You are solely responsible for maintaining the confidentiality of your credentials, device security keys, and all activities that occur within your Workspaces. You must immediately notify us of any unauthorized access or security breach.
           </p>
         </section>
 
-        <section class="legal-section">
-          <h2>3. Credit Packs & Billing</h2>
-          <ul>
-            <li><strong>Unit of Account:</strong> 1 TAR Credit is priced at ₹0.10 (10 Paise).</li>
-            <li><strong>At-Cost Pass-Through:</strong> Credits are deducted solely based on the actual compute and API resources consumed by your workspace actions.</li>
-            <li><strong>Zero Per-Seat Markup:</strong> You may invite an unlimited number of staff, cashiers, nurses, or field workers to your workspace at ₹0.00 additional seat license cost.</li>
-            <li><strong>Non-Expiring Wallet:</strong> Credits in your active account wallet do not expire.</li>
+        <hr class="terms-divider" />
+
+        <!-- 3. Architecture & Service Models -->
+        <section id="service-model" class="terms-section">
+          <h2 class="section-heading">3. Architecture & Service Models</h2>
+          <p class="section-text">
+            TAR is designed on a local-first, distributed architecture:
+          </p>
+          <ul class="terms-bullets">
+            <li><strong>Local On-Device Workspaces:</strong> Your business records, product catalogs, customer lists, inventory, and transaction histories reside primarily on your local physical hardware. Local Workspaces operate independently and remain 100% functional without an active internet connection.</li>
+            <li><strong>Optional Cloud Relay & Sync:</strong> If enabled, TAR provides encrypted multi-device synchronization across your authorized mobile devices and registers. Synced data is transmitted over TLS 1.3 encrypted channels.</li>
+            <li><strong>Self-Hosted & Edge Relays:</strong> Organizations may operate approved edge nodes or self-hosted relays under their own administrative boundaries.</li>
           </ul>
         </section>
 
-        <section class="legal-section">
-          <h2>4. Fair Use & Channel Compliance</h2>
-          <p>
-            You are responsible for ensuring that all messages dispatched to third-party interfaces (such as WhatsApp, Telegram, Google Chat, or MS Teams) comply with the applicable terms and anti-spam policies of those respective channel providers.
+        <hr class="terms-divider" />
+
+        <!-- 4. Data Ownership & Content -->
+        <section id="data-ownership" class="terms-section">
+          <h2 class="section-heading">4. Data Ownership & Content</h2>
+          <p class="section-text">
+            <strong>You Own Your Data:</strong> You retain 100% ownership, title, and intellectual property rights in and to all business records, documents, product specifications, customer communications, media files, and workflows created or stored in your Workspaces ("Customer Content").
+          </p>
+          <p class="section-text">
+            <strong>Limited License to Operate:</strong> You grant TAR only the limited, non-exclusive license necessary to transmit, route, process, and replicate Customer Content solely for the purpose of operating the Services, performing your requested automations, and delivering channel messages on your behalf.
+          </p>
+          <p class="section-text">
+            <strong>Zero Vendor Lock-in & Portability:</strong> TAR stores records in open, documented formats. You retain the right to export your complete Workspace database, schemas, and documents at any time with a single click.
           </p>
         </section>
 
-        <section class="legal-section">
-          <h2>5. Limitation of Liability</h2>
-          <p>
-            TAR is provided on an "as is" and "as available" basis. While we build for offline resilience and high availability, we are not liable for external third-party messaging API outages or telecommunication disruptions.
+        <hr class="terms-divider" />
+
+        <!-- 5. Acceptable Use & Guidelines -->
+        <section id="acceptable-use" class="terms-section">
+          <h2 class="section-heading">5. Acceptable Use & Guidelines</h2>
+          <p class="section-text">
+            You agree not to use the Services to:
+          </p>
+          <ul class="terms-bullets">
+            <li>Violate any applicable national, international, or local laws, regulations, or privacy rights.</li>
+            <li>Transmit unsolicited bulk messages, spam, phishing schemes, or fraudulent marketing communications.</li>
+            <li>Distribute malware, viruses, ransomware, or malicious code.</li>
+            <li>Engage in harassment, hate speech, defamation, or content depicting exploitation or sexual violence.</li>
+            <li>Attempt to reverse-engineer, decompile, or compromise the cryptographic boundaries of the Gateway or cloud sync relays.</li>
+            <li>Violate the acceptable use policies of connected messaging channels (such as the WhatsApp Business Messaging Policy or Telegram Terms).</li>
+          </ul>
+        </section>
+
+        <hr class="terms-divider" />
+
+        <!-- 6. Billing, Credits & Compute -->
+        <section id="billing-credits" class="terms-section">
+          <h2 class="section-heading">6. Billing, Credits & Compute</h2>
+          <p class="section-text">
+            TAR operates on a transparent, computational pass-through model:
+          </p>
+          <ul class="terms-bullets">
+            <li><strong>Unit of Measure:</strong> 1 TAR Credit equals <strong>₹0.10 (10 Paise)</strong>.</li>
+            <li><strong>At-Cost Compute Pass-Through:</strong> Usage credits are deducted solely for the actual computational resources consumed (e.g., LLM inference tokens, audio transcription minutes via Whisper, document OCR scans). We do not apply opaque token profit markups.</li>
+            <li><strong>Zero Per-Seat Taxes:</strong> Workspace owners may invite unlimited doctors, cashiers, nurses, drivers, or volunteers to their Workspace at <strong>₹0.00 (Free)</strong> per seat. Invited staff consume operations from the Workspace owner's centralized credit wallet.</li>
+            <li><strong>Non-Expiring Wallet:</strong> Paid credit balances in active accounts do not expire.</li>
+            <li><strong>Taxes:</strong> All fees are exclusive of applicable GST or local sales taxes unless explicitly stated otherwise.</li>
+          </ul>
+        </section>
+
+        <hr class="terms-divider" />
+
+        <!-- 7. AI Operations & Boundaries -->
+        <section id="ai-operations" class="terms-section">
+          <h2 class="section-heading">7. AI Operations & Boundaries</h2>
+          <p class="section-text">
+            <strong>Bounded Agentic Execution:</strong> In accordance with the TAR Harness architectural standard, artificial intelligence models provide bounded language understanding, drafting, research, and extraction capabilities. AI models do not possess autonomous authority to commit official financial records, alter permissions, or execute consequential external actions without Gateway validation or human sign-off.
+          </p>
+          <p class="section-text">
+            <strong>Zero Model Training:</strong> Your private messages, customer conversations, and internal business records are <strong>never</strong> used to train, fine-tune, or improve third-party foundation models.
           </p>
         </section>
-      </article>
+
+        <hr class="terms-divider" />
+
+        <!-- 8. Third-Party Interfaces -->
+        <section id="third-party" class="terms-section">
+          <h2 class="section-heading">8. Third-Party Interfaces</h2>
+          <p class="section-text">
+            The Services allow integration with third-party messaging networks and hardware terminals, including Meta/WhatsApp, Telegram, Google Chat, Microsoft Teams, and POS card readers. Your use of external networks is subject to the terms and privacy policies of the respective providers. TAR is not responsible for upstream carrier outages, third-party account suspensions, or network fees imposed by third-party providers.
+          </p>
+        </section>
+
+        <hr class="terms-divider" />
+
+        <!-- 9. Termination & Data Portability -->
+        <section id="termination" class="terms-section">
+          <h2 class="section-heading">9. Termination & Data Portability</h2>
+          <p class="section-text">
+            You may terminate these Terms at any time by exporting your data and deleting your Workspaces and account. TAR may suspend or terminate your access to hosted cloud relay services or credit wallets if you materially breach these Terms or engage in fraudulent or unlawful activities.
+          </p>
+          <p class="section-text">
+            Upon termination, your local records remain stored on your physical device unless you choose to delete the local application. Cloud sync backups are permanently purged upon verified Workspace deletion.
+          </p>
+        </section>
+
+        <hr class="terms-divider" />
+
+        <!-- 10. Disclaimers & Warranty -->
+        <section id="disclaimers" class="terms-section">
+          <h2 class="section-heading">10. Disclaimers & Warranty</h2>
+          <p class="section-text">
+            THE SERVICES ARE PROVIDED ON AN "AS IS" AND "AS AVAILABLE" BASIS. TO THE MAXIMUM EXTENT PERMITTED BY LAW, TAR DISCLAIMS ALL WARRANTIES, EXPRESS OR IMPLIED, INCLUDING WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT. WE DO NOT GUARANTEE THAT THE SERVICES WILL BE ENTIRELY UNINTERRUPTED OR ERROR-FREE, NOR THAT THIRD-PARTY MESSAGING NETWORKS WILL TRANSMIT MESSAGES WITHOUT DELAYS.
+          </p>
+        </section>
+
+        <hr class="terms-divider" />
+
+        <!-- 11. Limitation of Liability -->
+        <section id="liability" class="terms-section">
+          <h2 class="section-heading">11. Limitation of Liability</h2>
+          <p class="section-text">
+            TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, IN NO EVENT SHALL TAR, ITS AFFILIATES, DIRECTORS, EMPLOYEES, OR AGENTS BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES, INCLUDING LOSS OF PROFITS, DATA, GOODWILL, OR BUSINESS INTERRUPTION, ARISING OUT OF OR IN CONNECTION WITH YOUR USE OF OR INABILITY TO USE THE SERVICES.
+          </p>
+          <p class="section-text">
+            TAR'S TOTAL AGGREGATE LIABILITY FOR ANY CLAIMS UNDER THESE TERMS SHALL BE LIMITED TO THE TOTAL AMOUNT PAID BY YOU TO TAR IN THE TWELVE (12) MONTHS PRECEDING THE EVENT GIVING RISE TO THE CLAIM.
+          </p>
+        </section>
+
+        <hr class="terms-divider" />
+
+        <!-- 12. General Legal Terms & Contact -->
+        <section id="general" class="terms-section">
+          <h2 class="section-heading">12. General Legal Terms & Contact</h2>
+          <p class="section-text">
+            <strong>Governing Law:</strong> These Terms shall be governed by and construed in accordance with the laws of India, without regard to its conflict of law principles.
+          </p>
+          <p class="section-text">
+            <strong>Modifications:</strong> We may update these Terms from time to time. When changes are made, we will revise the "Last Updated" date at the top of this page. Material changes will be communicated via in-app notification or email. Continued use of the Services following notice of changes constitutes acceptance of the revised Terms.
+          </p>
+          <p class="section-text">
+            <strong>Contact Us:</strong> If you have questions regarding these Terms or legal inquiries, contact our legal team at <a href="mailto:legal@tarfw.com" class="terms-link">legal@tarfw.com</a>.
+          </p>
+        </section>
+
+      </div>
     </div>
   </main>
 
@@ -67,25 +230,89 @@ import FooterSection from "../components/FooterSection.astro";
 </Layout>
 
 <style>
-  .legal-main {
+  .terms-main {
     background-color: #ffffff;
     color: var(--color-ink-black);
     min-height: 80vh;
-    padding: 56px 0 88px 0;
+    padding: 40px 0 80px 0;
   }
 
-  .legal-container {
-    max-width: 760px;
-    margin: 0 auto;
+  .terms-layout-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 48px;
   }
 
-  .legal-header {
+  @media (min-width: 900px) {
+    .terms-layout-grid {
+      grid-template-columns: 220px 1fr;
+      gap: 56px;
+    }
+  }
+
+  /* Sticky Minimal Sidebar */
+  .terms-sidebar {
+    display: none;
+  }
+
+  @media (min-width: 900px) {
+    .terms-sidebar {
+      display: block;
+    }
+  }
+
+  .sidebar-sticky-box {
+    position: sticky;
+    top: 96px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .sidebar-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: var(--color-slate);
+    text-transform: uppercase;
+  }
+
+  .sidebar-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .sidebar-link {
+    font-size: 13.5px;
+    color: var(--color-graphite);
+    text-decoration: none;
+    padding: 6px 10px;
+    border-radius: 6px;
+    transition: background-color 0.15s ease, color 0.15s ease;
+  }
+
+  .sidebar-link:hover {
+    background-color: #f3f4f6;
+    color: var(--color-canopy-green);
+    font-weight: 600;
+  }
+
+  /* Main Content Column */
+  .terms-content-col {
+    max-width: 820px;
+    display: flex;
+    flex-direction: column;
+    gap: 40px;
+  }
+
+  .terms-header {
     display: flex;
     flex-direction: column;
     gap: 12px;
   }
 
-  .legal-badge {
+  .terms-badge {
     align-self: flex-start;
     font-size: 11px;
     font-weight: 700;
@@ -97,63 +324,81 @@ import FooterSection from "../components/FooterSection.astro";
     border-radius: 4px;
   }
 
-  .legal-title {
-    font-size: clamp(2.2rem, 3.6vw, 2.8rem);
+  .terms-main-title {
+    font-size: clamp(2rem, 3.4vw, 2.8rem);
     font-weight: 700;
     color: var(--color-canopy-green);
+    line-height: 1.1;
     letter-spacing: -0.02em;
     margin: 0;
   }
 
-  .legal-lead {
-    font-size: 14px;
-    color: var(--color-slate);
+  .terms-main-lead {
+    font-size: 16px;
+    line-height: 1.6;
+    color: var(--color-graphite);
     margin: 0;
   }
 
-  .legal-divider {
+  .terms-effective-date {
+    font-size: 13px;
+    color: var(--color-slate);
+  }
+
+  .terms-divider {
     border: none;
     border-top: 1px solid rgba(0, 0, 0, 0.08);
-    margin: 28px 0 36px 0;
-  }
-
-  .legal-body {
-    display: flex;
-    flex-direction: column;
-    gap: 32px;
-  }
-
-  .legal-section {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-  }
-
-  .legal-section h2 {
-    font-size: 18px;
-    font-weight: 700;
-    color: var(--color-canopy-green);
     margin: 0;
   }
 
-  .legal-section p {
+  /* Sections */
+  .terms-section {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    scroll-margin-top: 88px;
+  }
+
+  .section-heading {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--color-canopy-green);
+    letter-spacing: -0.01em;
+    margin: 0;
+  }
+
+  .section-text {
     font-size: 14.5px;
     line-height: 1.65;
     color: var(--color-graphite);
     margin: 0;
   }
 
-  .legal-section ul {
+  .section-text strong {
+    color: var(--color-ink-black);
+  }
+
+  .terms-bullets {
     margin: 4px 0 0 0;
     padding-left: 20px;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 10px;
   }
 
-  .legal-section li {
+  .terms-bullets li {
     font-size: 14px;
-    line-height: 1.55;
+    line-height: 1.6;
     color: var(--color-graphite);
+  }
+
+  .terms-bullets strong {
+    color: var(--color-ink-black);
+  }
+
+  .terms-link {
+    color: var(--color-canopy-green);
+    font-weight: 600;
+    text-decoration: underline;
   }
 </style>

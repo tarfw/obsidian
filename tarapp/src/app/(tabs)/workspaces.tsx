@@ -1,202 +1,25 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import * as SecureStore from 'expo-secure-store';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { tar, type WorkspaceSummary } from '@/lib/tar';
 import HarnessWorkspaceCanvas from '@/components/HarnessWorkspaceCanvas';
-import PersonalTodayCanvas from '@/components/PersonalTodayCanvas';
 import CreateWorkspace from '@/components/CreateWorkspace';
+import { harness, type HarnessWorkspace } from '@/lib/harness';
 import { signOutGoogle } from '@/lib/auth';
-import { EphemeralPlanCanvas } from '@/components/plans';
-
-const PERSONAL_WORKSPACE: WorkspaceSummary = {
-  id: 'personal',
-  name: 'Me',
-  slug: 'personal',
-  subdomain: 'personal',
-  scope: 'p',
-  role: 'owner',
-  state: 'active',
-};
-const CREDIT_BALANCE_KEY = 'cached_credit_balance';
+import { useRouter } from 'expo-router';
 
 export default function WorkspacesScreen() {
-  const insets = useSafeAreaInsets();
-  const router = useRouter();
-  const params = useLocalSearchParams<{ subdomain?: string }>();
-  const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([]);
-  const [currentWorkspace, setCurrentWorkspace] = useState<WorkspaceSummary | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [showSwitcher, setShowSwitcher] = useState(false);
-  const [showWorkspaceCreator, setShowWorkspaceCreator] = useState(false);
-  const [showPlanManager, setShowPlanManager] = useState(false);
-  const [walletBalance, setWalletBalance] = useState<number | null>(null);
-
-  const loadWorkspaces = useCallback(async (preferredSubdomain?: string) => {
-    setLoading(true);
-    try {
-      const result = await tar.listWorkspaces();
-      const remoteWorkspaces = result.workspaces || [];
-      const nextWorkspaces = remoteWorkspaces.some((workspace) => workspace.scope === 'p')
-        ? remoteWorkspaces
-        : [PERSONAL_WORKSPACE, ...remoteWorkspaces];
-      const savedSubdomain = preferredSubdomain || await SecureStore.getItemAsync('active_workspace_subdomain');
-      const selected = nextWorkspaces.find((workspace) => workspace.subdomain === savedSubdomain && workspace.state === 'active' && workspace.scope !== 'p')
-        || nextWorkspaces.find((workspace) => workspace.state === 'active' && workspace.scope !== 'p')
-        || nextWorkspaces[0]
-        || PERSONAL_WORKSPACE;
-      setWorkspaces(nextWorkspaces);
-      setCurrentWorkspace(selected);
-    } catch {
-      setWorkspaces([PERSONAL_WORKSPACE]);
-      setCurrentWorkspace(PERSONAL_WORKSPACE);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    const loadTimer = setTimeout(() => { void loadWorkspaces(params.subdomain); }, 0);
-    return () => clearTimeout(loadTimer);
-  }, [loadWorkspaces, params.subdomain]);
-
-  useEffect(() => {
-    if (!showSwitcher) return;
-    void SecureStore.getItemAsync(CREDIT_BALANCE_KEY).then((cached) => {
-      if (cached !== null && Number.isFinite(Number(cached))) setWalletBalance(Number(cached));
-    });
-    void tar.wallet().then((result) => {
-      const balance = result.wallet?.balance ?? 0;
-      setWalletBalance(balance);
-      return SecureStore.setItemAsync(CREDIT_BALANCE_KEY, String(balance));
-    }).catch(() => undefined);
-  }, [showSwitcher]);
-
-  const selectWorkspace = async (workspace: WorkspaceSummary) => {
-    setCurrentWorkspace(workspace);
-    setShowSwitcher(false);
-    if (workspace.scope !== 'p') await SecureStore.setItemAsync('active_workspace_subdomain', workspace.subdomain).catch(() => null);
-  };
-
-  const signOut = () => {
-    Alert.alert('Sign out?', 'You can sign in again at any time.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Sign out', style: 'destructive', onPress: () => {
-          void (async () => {
-            await signOutGoogle();
-            await SecureStore.deleteItemAsync('active_workspace_subdomain');
-            setShowSwitcher(false);
-            router.replace('/auth');
-          })();
-        },
-      },
-    ]);
-  };
-
-  if (loading || !currentWorkspace) {
-    return <View style={styles.loading}><ActivityIndicator size="large" color="#1a73e8" /></View>;
-  }
-
-  return (
-    <View style={styles.container}>
-      {currentWorkspace.scope === 'p' ? (
-        <PersonalTodayCanvas onOpenSwitcher={() => setShowSwitcher(true)} />
-      ) : (
-        <HarnessWorkspaceCanvas
-          key={currentWorkspace.scope}
-          scope={currentWorkspace.scope}
-          workspaceName={currentWorkspace.name || currentWorkspace.subdomain}
-          onOpenWorkspaceSwitcher={() => setShowSwitcher(true)}
-        />
-      )}
-
-      <Modal visible={showSwitcher} animationType="slide" presentationStyle="fullScreen" onRequestClose={() => setShowSwitcher(false)}>
-        <View style={[styles.switcher, { paddingTop: Math.max(insets.top, 12) }]}>
-          <View style={styles.switcherHeader}>
-            <TouchableOpacity onPress={() => setShowSwitcher(false)} style={styles.iconButton}><Ionicons name="arrow-back" size={20} color="#202124" /></TouchableOpacity>
-            <Text style={styles.switcherTitle}>Workspaces</Text>
-            <TouchableOpacity onPress={() => { setShowSwitcher(false); setShowWorkspaceCreator(true); }} style={styles.newButton}><Text style={styles.newButtonText}>New</Text></TouchableOpacity>
-          </View>
-          <ScrollView contentContainerStyle={[styles.workspaceList, { paddingBottom: 16 + insets.bottom }]}>
-            {workspaces.map((workspace) => {
-              const selected = workspace.scope === currentWorkspace.scope;
-              return (
-                <TouchableOpacity key={workspace.scope} disabled={workspace.state !== 'active'} onPress={() => { void selectWorkspace(workspace); }} style={[styles.workspaceRow, workspace.state !== 'active' && styles.workspaceRowPending]}>
-                  <View style={styles.workspaceIcon}><Text style={styles.workspaceInitial}>{(workspace.name || workspace.subdomain).charAt(0).toUpperCase()}</Text></View>
-                  <View style={styles.workspaceCopy}>
-                    <Text style={styles.workspaceTitle}>{workspace.name || workspace.subdomain}</Text>
-                    <Text style={styles.workspaceMeta}>{workspace.scope === 'p' ? 'Private' : workspace.state === 'active' ? (workspace.role === 'owner' ? 'Owner' : 'Team member') : 'Preparing workspace'}</Text>
-                  </View>
-                  {selected && <Ionicons name="checkmark" size={20} color="#1a73e8" />}
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-          <TouchableOpacity
-            style={styles.creditsButton}
-            onPress={() => { setShowSwitcher(false); setShowPlanManager(true); }}
-          >
-            <View style={styles.creditsCopy}>
-              <Text style={styles.creditsLabel}>Credits</Text>
-              <Text style={styles.creditsMeta}>{`${(walletBalance ?? 0).toLocaleString('en-IN')} available`}</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color="#5f6368" />
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.signOutButton, { marginBottom: Math.max(insets.bottom, 16) }]} onPress={signOut}>
-            <Ionicons name="log-out-outline" size={19} color="#5f6368" />
-            <Text style={styles.signOutText}>Sign out</Text>
-          </TouchableOpacity>
-        </View>
-      </Modal>
-
-      <EphemeralPlanCanvas
-        visible={showPlanManager}
-        onClose={() => setShowPlanManager(false)}
-        workspaceName={currentWorkspace.name}
-        subdomain={currentWorkspace.subdomain}
-        scope={currentWorkspace.scope}
-        workspaces={workspaces}
-      />
-
-      <CreateWorkspace
-        visible={showWorkspaceCreator}
-        canClose={workspaces.length > 0}
-        existingSubdomains={workspaces.map((workspace) => workspace.subdomain)}
-        onClose={() => setShowWorkspaceCreator(false)}
-        onSuccess={async (subdomain) => {
-          setShowWorkspaceCreator(false);
-          await loadWorkspaces(subdomain);
-        }}
-      />
-
-    </View>
-  );
+  const insets = useSafeAreaInsets(); const router = useRouter();
+  const [workspaces, setWorkspaces] = useState<HarnessWorkspace[]>([]); const [current, setCurrent] = useState<HarnessWorkspace | null>(null); const [loading, setLoading] = useState(true); const [switcher, setSwitcher] = useState(false); const [creating, setCreating] = useState(false); const [inviting, setInviting] = useState(false); const [inviteEmail, setInviteEmail] = useState(''); const [sendingInvite, setSendingInvite] = useState(false);
+  const reload = useCallback(async (preferredSlug?: string) => { setLoading(true); try { const result = await harness.listWorkspaces(); setWorkspaces(result.workspaces); setCurrent(result.workspaces.find((item) => item.slug === preferredSlug) || result.workspaces[0] || null); } finally { setLoading(false); } }, []);
+  useEffect(() => { const timer = setTimeout(() => { void reload(); }, 0); return () => clearTimeout(timer); }, [reload]);
+  if (loading) return <View style={styles.loading}><ActivityIndicator size="large" color="#1a73e8" /></View>;
+  if (!current) return <CreateWorkspace visible canClose={false} existingSlugs={[]} onClose={() => undefined} onSuccess={async (slug) => { await reload(slug); }} />;
+  return <View style={styles.page}>
+    <HarnessWorkspaceCanvas key={current.slug} scope={current.slug} workspaceName={current.name} onOpenWorkspaceSwitcher={() => setSwitcher(true)} />
+    <Modal visible={switcher} animationType="slide" presentationStyle="fullScreen" onRequestClose={() => setSwitcher(false)}><View style={[styles.switcher, { paddingTop: Math.max(insets.top, 12) }]}><View style={styles.header}><TouchableOpacity onPress={() => setSwitcher(false)} style={styles.icon}><Ionicons name="arrow-back" size={20} color="#202124" /></TouchableOpacity><Text style={styles.headerTitle}>Workspaces</Text><View style={styles.headerActions}>{current.mode === 'work' ? <TouchableOpacity onPress={() => setInviting(true)} style={styles.invite}><Text style={styles.newText}>Invite</Text></TouchableOpacity> : null}<TouchableOpacity onPress={() => { setSwitcher(false); setCreating(true); }} style={styles.new}><Text style={styles.newText}>New</Text></TouchableOpacity></View></View><ScrollView contentContainerStyle={styles.list}>{workspaces.map((workspace) => <TouchableOpacity key={workspace.id} onPress={() => { setCurrent(workspace); setSwitcher(false); }} style={styles.row}><View style={styles.avatar}><Text style={styles.avatarText}>{workspace.name.charAt(0).toUpperCase()}</Text></View><View style={styles.copy}><Text style={styles.name}>{workspace.name}</Text><Text style={styles.detail}>{workspace.mode === 'personal' ? 'Personal' : workspace.role === 'owner' ? 'Owner' : 'Team member'}</Text></View>{workspace.id === current.id ? <Ionicons name="checkmark" size={20} color="#1a73e8" /> : null}</TouchableOpacity>)}</ScrollView><TouchableOpacity style={[styles.signOut, { marginBottom: Math.max(insets.bottom, 16) }]} onPress={() => { void signOutGoogle().finally(() => router.replace('/auth')); }}><Ionicons name="log-out-outline" size={19} color="#5f6368" /><Text style={styles.signOutText}>Sign out</Text></TouchableOpacity></View></Modal>
+    <CreateWorkspace visible={creating} canClose existingSlugs={workspaces.map((workspace) => workspace.slug)} onClose={() => setCreating(false)} onSuccess={async (slug) => { setCreating(false); await reload(slug); }} />
+    <Modal visible={inviting} transparent animationType="fade" onRequestClose={() => setInviting(false)}><View style={styles.overlay}><View style={styles.sheet}><Text style={styles.sheetTitle}>Invite member</Text><Text style={styles.sheetText}>They get access when they sign in with this Google email.</Text><TextInput autoFocus autoCapitalize="none" keyboardType="email-address" value={inviteEmail} onChangeText={setInviteEmail} placeholder="name@example.com" style={styles.input} /><View style={styles.sheetActions}><TouchableOpacity onPress={() => setInviting(false)}><Text style={styles.cancel}>Cancel</Text></TouchableOpacity><TouchableOpacity disabled={!inviteEmail.trim() || sendingInvite} onPress={async () => { setSendingInvite(true); try { await harness.inviteMember(current.slug, inviteEmail); setInviteEmail(''); setInviting(false); Alert.alert('Invite saved', 'Access activates when they sign in with this Google email.'); } catch (cause) { Alert.alert('Could not invite', cause instanceof Error ? cause.message : 'Try again.'); } finally { setSendingInvite(false); } }}><Text style={[styles.newText, (!inviteEmail.trim() || sendingInvite) && styles.disabled]}>{sendingInvite ? 'Saving' : 'Invite'}</Text></TouchableOpacity></View></View></View></Modal>
+  </View>;
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#ffffff' },
-  loading: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#ffffff' },
-  switcher: { flex: 1, backgroundColor: '#ffffff' },
-  switcherHeader: { height: 58, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#e8eaed' },
-  iconButton: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center' },
-  switcherTitle: { color: '#202124', fontSize: 17, fontWeight: '700' },
-  newButton: { width: 42, height: 34, alignItems: 'flex-end', justifyContent: 'center' },
-  newButtonText: { color: '#1a73e8', fontSize: 14, fontWeight: '700' },
-  workspaceList: { flexGrow: 1, paddingHorizontal: 16 },
-  workspaceRow: { minHeight: 68, flexDirection: 'row', alignItems: 'center', gap: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#e8eaed' },
-  workspaceRowPending: { opacity: 0.55 },
-  workspaceIcon: { width: 38, height: 38, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: '#e8f0fe' },
-  workspaceInitial: { color: '#1a73e8', fontSize: 17, fontWeight: '800' },
-  workspaceCopy: { flex: 1 },
-  workspaceTitle: { color: '#202124', fontSize: 15, fontWeight: '700' },
-  workspaceMeta: { color: '#5f6368', fontSize: 12, marginTop: 2 },
-  signOutButton: { minHeight: 52, marginHorizontal: 16, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#e8eaed', flexDirection: 'row', alignItems: 'center', gap: 10 },
-  signOutText: { color: '#5f6368', fontSize: 15, fontWeight: '600' },
-  creditsButton: { minHeight: 62, marginHorizontal: 16, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#e8eaed', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  creditsCopy: { gap: 3 },
-  creditsLabel: { color: '#202124', fontSize: 15, fontWeight: '700' },
-  creditsMeta: { color: '#5f6368', fontSize: 12 },
-});
+const styles = StyleSheet.create({ page:{flex:1,backgroundColor:'#fff'},loading:{flex:1,alignItems:'center',justifyContent:'center',backgroundColor:'#fff'},switcher:{flex:1,backgroundColor:'#fff'},header:{height:58,paddingHorizontal:16,flexDirection:'row',alignItems:'center',justifyContent:'space-between',borderBottomWidth:StyleSheet.hairlineWidth,borderColor:'#e8eaed'},icon:{width:34,height:34,alignItems:'center',justifyContent:'center'},headerTitle:{fontSize:17,fontWeight:'700',color:'#202124'},headerActions:{flexDirection:'row',alignItems:'center',gap:10},invite:{height:34,justifyContent:'center'},new:{width:42,height:34,alignItems:'flex-end',justifyContent:'center'},newText:{color:'#1a73e8',fontSize:14,fontWeight:'700'},list:{flexGrow:1,paddingHorizontal:16},row:{minHeight:68,flexDirection:'row',alignItems:'center',gap:12,borderBottomWidth:StyleSheet.hairlineWidth,borderColor:'#e8eaed'},avatar:{width:38,height:38,borderRadius:10,alignItems:'center',justifyContent:'center',backgroundColor:'#e8f0fe'},avatarText:{color:'#1a73e8',fontSize:17,fontWeight:'800'},copy:{flex:1},name:{color:'#202124',fontSize:15,fontWeight:'700'},detail:{color:'#5f6368',fontSize:12,marginTop:2},signOut:{minHeight:52,marginHorizontal:16,borderTopWidth:StyleSheet.hairlineWidth,borderColor:'#e8eaed',flexDirection:'row',alignItems:'center',gap:10},signOutText:{color:'#5f6368',fontSize:15,fontWeight:'600'},overlay:{flex:1,backgroundColor:'#0005',justifyContent:'center',padding:24},sheet:{backgroundColor:'#fff',borderRadius:14,padding:22},sheetTitle:{fontSize:22,fontWeight:'800',color:'#202124'},sheetText:{fontSize:14,color:'#5f6368',marginTop:7,marginBottom:16},input:{borderBottomWidth:1,borderColor:'#dadce0',fontSize:16,color:'#202124',paddingVertical:12},sheetActions:{flexDirection:'row',justifyContent:'flex-end',gap:24,marginTop:22},cancel:{color:'#5f6368',fontWeight:'700'},disabled:{opacity:.45} });

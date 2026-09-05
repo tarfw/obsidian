@@ -1,0 +1,30 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "tarharness",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-05",
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    "OIDC_ISSUER": "https://accounts.google.com,accounts.google.com",
+    "OIDC_AUDIENCE": "226183831843-5sjvl1hsv4d04aucnqsqn19u83o4f5ku.apps.googleusercontent.com",
+    "OIDC_JWKS_URL": "https://www.googleapis.com/oauth2/v3/certs",
+    "TURSO_ORG": "tarfwrk",
+    "TURSO_GROUP": "default"
+  },
+  "workers_dev": true,
+  "preview_urls": false,
+  "d1_databases": [
+    {
+      "binding": "CONTROL",
+      "database_name": "tarharness-control",
+      "database_id": "1e150218-2f2e-442e-971c-81109cd4be1a",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "queues": {
+    "producers": [{ "binding": "OUTBOX", "queue": "tarharness-outbox" }],
+    "consumers": [{ "queue": "tarharness-outbox", "max_batch_size": 10, "max_retries": 5 }]
+  },
+  "triggers": { "crons": ["*/5 * * * *"] },
+  "observability": { "enabled": true, "head_sampling_rate": 1 }
+}

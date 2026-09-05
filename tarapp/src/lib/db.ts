@@ -1,12 +1,9 @@
 import { Database, getDbPath } from "@tursodatabase/sync-react-native";
 import { SCHEMA_STATEMENTS } from "./schema";
 import { getCurrentUser } from "./auth";
-import { tar } from "./tar";
 
 const dbConnections: Record<string, Database> = {};
-const syncEndpoints: Record<string, { url: string | null }> = {};
 export let cachedSelfId: string | null = null;
-let activeSyncPullPromise: Promise<void> | null = null;
 
 export async function getSelfId(): Promise<string> {
   if (cachedSelfId) return cachedSelfId;
@@ -105,10 +102,10 @@ export function routeDbForEntity(_type: string | null, scope: string | null): Da
     return getGlobalDb();
   }
   if (prefix === 'w' && scope) {
-    throw new Error('Workspace mutations must pass through the authoritative Tarai gateway.');
+    throw new Error('Workspace mutations must pass through the TarHarness gateway.');
   }
   if (prefix === 'o' && scope) {
-    throw new Error('Order mutations must pass through the authoritative Tarai gateway.');
+    throw new Error('Order mutations must pass through the TarHarness gateway.');
   }
   return getLocalPrivateDb(selfId);
 }
@@ -139,41 +136,11 @@ async function migrateLegacyTables(db: Database) {
   } catch (_) {}
 }
 
-async function refreshSyncEndpoint(userId: string): Promise<boolean> {
-  try {
-    const syncInfo = await tar.getSyncBootstrap();
-    if (!syncInfo?.url) return false;
-    syncEndpoints[userId] = { url: syncInfo.url };
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/** Pull the current user's Personal Sync DB into its local-first SQLite file. */
-export async function syncPull(): Promise<void> {
-  if (activeSyncPullPromise) return activeSyncPullPromise;
-
-  activeSyncPullPromise = (async () => {
-    try {
-      const userId = cachedSelfId;
-      if (userId) await refreshSyncEndpoint(userId);
-      const db = getUserDb();
-      if (!(db as any).isSync) return;
-      await db.pull();
-    } catch (err) {
-      console.warn('[Sync] Pull failed:', err);
-    } finally {
-      activeSyncPullPromise = null;
-    }
-  })();
-
-  return activeSyncPullPromise;
-}
+/** Kept for local callers; workspace data is now read through TarHarness. */
+export async function syncPull(): Promise<void> {}
 
 /**
- * Compatibility hook for optimistic UI helpers. Personal Sync is read-only for
- * workspace projections, so authoritative writes continue through Tarai.
+ * Compatibility hook for optimistic UI helpers. Workspace writes use TarHarness.
  */
 export function scheduleSyncPush(): void {}
 
@@ -181,40 +148,14 @@ export async function switchUser(userId: string): Promise<Database> {
   console.log(`[DB] switchUser: session for user = ${userId}`);
   cachedSelfId = userId;
 
-  let db: Database;
-  try {
-    syncEndpoints[userId] = { url: null };
-    await refreshSyncEndpoint(userId);
-    db = new Database({
-      path: getDbPath(`${userId}_sync.db`),
-      // Returning null keeps an existing local database available offline.
-      url: () => syncEndpoints[userId]?.url ?? null,
-      // The native SDK invokes this provider per sync request, so the client
-      // does not persist a long-lived database credential.
-      authToken: async () => {
-        const syncInfo = await tar.getSyncBootstrap();
-        if (!syncInfo?.token) throw new Error('Personal Sync token unavailable');
-        syncEndpoints[userId] = { url: syncInfo.url };
-        return syncInfo.token;
-      },
-    });
-    (db as any).isSync = true;
-    dbConnections[userId] = db;
-    notifyDbChange(db);
-  } catch {
-    db = getLocalPrivateDb(userId);
-  }
+  const db = getLocalPrivateDb(userId);
 
   try {
     await db.connect();
     await migrateLegacyTables(db);
-    if (!(db as any).isSync) {
-      for (const sql of SCHEMA_STATEMENTS) {
-        try { await db.exec(sql); } catch (_) {}
-      }
+    for (const sql of SCHEMA_STATEMENTS) {
+      try { await db.exec(sql); } catch (_) {}
     }
-    // Refresh the selected local operational projections.
-    syncPull().catch(() => {});
   } catch (e) {
     console.error(`[DB] switchUser DB init failed:`, e);
     throw e;
@@ -228,7 +169,6 @@ export async function closeConnection(key: string): Promise<void> {
     try {
       dbConnections[key].close();
       delete dbConnections[key];
-      delete syncEndpoints[key];
       await new Promise(resolve => setTimeout(resolve, 150));
     } catch (e) {
       console.warn(`[DB] failed to close connection for key: ${key}`, e);

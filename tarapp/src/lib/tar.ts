@@ -285,7 +285,6 @@ export const tar = {
   writeEvent: (scope: string, type: string, data: Record<string, any>, idem?: string) => entityOperation('create', { table: 'motion', type, data, scope, idem }),
   getInbox: (scope: string) => entityOperation('read', { table: 'inbox', scope }),
   markTaskDone: (taskId: string, scope: string) => entityOperation('update', { table: 'inbox', id: taskId, patch: { status: 2 }, scope }),
-  getSyncBootstrap: () => request<{ url: string; token: string; host: string; db: string; expiresAt: number }>('/api/sync/bootstrap'),
   metrics: (scope: string) => request<{ view: string; rows: Array<{ value: number; count: number }> }>(`/api/data-views/metrics.get`, { scope }),
   timeline: (_opts?: { limit?: number; since?: string }) => Promise.resolve([]),
   okf: {

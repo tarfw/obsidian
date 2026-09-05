@@ -4,5 +4,11 @@
     "node_modules/",
     "*/node_modules/",
     "**/node_modules/**"
-  ]
+  ],
+  "pdfExportSettings": {
+    "pageSize": "Letter",
+    "landscape": false,
+    "margin": "0",
+    "downscalePercent": 100
+  }
 }

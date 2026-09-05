@@ -1,405 +1,114 @@
 # TAR Harness
 
-**Canonical product and architecture standard**
-
-## Abstract
-
-TAR is a local-first work platform for a general workforce. Owners and admins define Data, Bots, Workflows, Steps and access. Workers receive role-filtered Data, Inbox work and Action Cards. Deterministic code owns official state changes; bounded AI may assist or control an agentic Step without gaining authority to commit changes. The Gateway enforces this boundary across online, offline and external-system work.
-
-## 1. Product model
-
-```text
-Workspace
-|-- Data
-|   `-- Products, customers, orders, sales and any custom business records
-|-- Bots
-|   `-- Bot
-|       `-- Workflows
-|           `-- Workflow
-|               `-- ordered Steps
-`-- Gateway
-    `-- validates and records every official change
-```
-
-| Word | Meaning |
-| :--- | :--- |
-| Artifact | Internal term for official shared business data. Normal UI says **Data**. |
-| Bot | A named capability, such as POS Bot or Support Bot. |
-| Workflow | A sequence of work owned by a Bot. |
-| Step | One thing that happens next in a Workflow. |
-| Card | Optional UI shown when a person must see, choose, enter or confirm something. |
-| App function | Registered deterministic calculation, validation, save, send or integration. |
-| AI help | Language understanding, research, drafting or recommendation. |
-| Gateway | The only authority that can commit official Data or external-system changes. |
-
-A Step may use any combination of a Card, App function and AI help. Most Steps do not need a Card. **Step is the only builder term for work.**
-
-| Step | Card | App function | AI help |
-| :--- | :---: | :---: | :---: |
-| Select products | Yes | Optional | No |
-| Calculate total | No | Yes | No |
-| Take payment | Yes | Yes | No |
-| Update inventory | No | Yes | No |
-| Recommend products | Sometimes | Optional | Yes |
-
-AI may propose a result but cannot directly write records, process payments, change permissions or call consequential external systems.
-
-## 2. Step execution standard
-
-A Step is the only unit of work exposed by the builder. Its implementation may combine one or more registered action primitives.
-
-```text
-Step
-|-- mode            deterministic | agentic
-|-- actions[]       one or more registered primitives
-|-- card?           optional human interface
-|-- entry           conditions required to start
-|-- access          permitted roles and record scope
-|-- next            success transition
-`-- on_error        deterministic failure transition
-```
-
-### 2.1 Execution modes
-
-| Mode | Control rule |
-| :--- | :--- |
-| `deterministic` | Code follows declared actions and transitions. It may call bounded AI help, but the LLM does not choose tools or the next Step. |
-| `agentic` | The LLM may reason and choose among explicitly allowed actions and transitions. Gateway-controlled code still validates and performs official changes. |
-
-AI help is a capability; agentic is a control mode. Therefore, a deterministic Step may use AI to extract or draft a declared output, while an agentic Step may decide how to pursue a bounded objective.
-
-An agentic Step declares:
-
-```text
-objective
-context
-allowed_actions
-allowed_transitions
-output_schema
-budget
-timeout
-fallback
-```
-
-The LLM may read permitted context, call allowlisted read/draft capabilities, select an allowed transition and propose a change. It cannot expand its allowlist, change its budget, bypass approval or directly commit Data, payments, permissions or external effects. Invalid, uncertain or exhausted runs follow the declared fallback.
-
-```text
-Agentic Step reasons
-  -> selects allowed action or transition
-  -> Gateway validates authority, input and current state
-  -> deterministic code executes or rejects
-  -> result and rationale are recorded
-```
-
-### 2.2 Action primitives
-
-| Primitive | Purpose |
-| :--- | :--- |
-| `database` | Read Data or request an official Data change through the Gateway. |
-| `tool` | Run a registered deterministic function or integration. |
-| `skill` | Run a bounded AI capability with declared inputs and outputs. |
-| `sandbox` | Execute isolated code with explicit limits and no implicit authority. |
-| `subagent` | Delegate bounded AI work and return a result to the current Step. |
-| `channel` | Send or receive through an approved external communication channel. |
-| `schedule` | Start or resume work at a time, delay or recurrence. |
-| `inbox` | Assign human work or request input, confirmation or approval. |
+**Three concepts. One execution path.**
+
+[Action catalog](actionsreg.md) | [Implementation reference](tar-harness-implementation.md) | [Examples](tarharnessexamples.md)
+
+This file owns the architecture; linked references hold capability and engineering details.
+
+## Workspace
+
+~~~text
+Google sign-in -> Personal workspace -> Records + Inbox
+                         +-> Work workspace -> members + shared work
+~~~
 
-Primitives are implementation details beneath a Step. People build and run Steps; they do not manually orchestrate primitives. Every primitive declares validation, permission, idempotency, timeout, retry and audit behavior. AI primitives can propose outputs but cannot grant themselves authority to commit changes.
+- Sign-in creates one Personal workspace once and reuses it on every device.
+- Work workspaces are created only when shared work needs them; invitations activate when that Google email signs in.
+- D1 stores Google identity, membership and routing. Each workspace has one isolated Turso database.
 
-### 2.3 Card standard
+## 1. Records — information
 
-Cards are reusable interfaces, not separate business records or execution primitives.
+| Record | Purpose |
+|---|---|
+| Contact / Organisation | People, organisations and their relationships. |
+| Task | Human work; Subtasks are checklist items. |
+| Interaction | A call, message, email, meeting or note. |
+| Document | File metadata and a stored-file reference. |
+| Business Record | Products, orders, bookings, inventory, money, projects or cases, enabled as needed. |
 
-| Card | Purpose |
-| :--- | :--- |
-| Inbox Card | Present the current assigned human task, input or approval. |
-| Action Card | Start or advance a permitted Workflow. |
-| Data Card | Present a permitted record or record list. |
-| Report Card | Present a deterministic role-relevant summary. |
+- Start with Contacts, Organisations, Tasks, Documents and Interactions.
+- Links connect Records; shared forms and views display them.
+- Membership and policy grant access. Contact roles describe relationships only.
 
-A Step Card belongs to the active Step. A Workspace Work Card is a role-filtered projection or Workflow launcher. A Data Card presents Data; it does not become the Data itself. Card definitions live inside approved Data or Bot definitions and are rendered from their authorized runtime context. No separate Cards table is required.
+## 2. Actions — work
 
-## 3. AI-first builder
+**Every executable capability is a registered Action. No separate Step model.**
 
-```text
-Describe the work
-  -> TAR asks short guided questions
-  -> TAR checks existing Workspace Data
-  -> TAR reuses suitable Data or proposes new Data and fields
-  -> TAR drafts the Bot, Workflows and ordered Steps
-  -> person reviews Data, fields and actions
-  -> Gateway creates the approved definitions
-```
+| Type | Performs work through |
+|---|---|
+| App | Deterministic code or an approved integration. |
+| Agent | Bounded reasoning and allowed choices. |
+| Human | A Task waiting for an authorised response. |
 
-The review stays simple:
+Record edits, communication, files, approvals, schedules, research, business operations and administration all use Actions. Categories belong in the catalog, not separate engines.
 
-```text
-POS Bot
-  Data: Products, Customers, Sales, Inventory
+### Mandatory execution
 
-  Checkout
-    1. Select products
-    2. Calculate total
-    3. Take payment
-    4. Update inventory
-    5. Send receipt
+~~~text
+Action [Gateway checks -> execute -> validate result -> commit] -> saved result
+~~~
 
-  [Create Bot]  [Change something]  [More options]
-```
+**Gateway is built into execution. It is mandatory, cannot be skipped and is never a builder-added Flow step.**
 
-TAR never silently creates structures, copies sensitive information or grants access. **More options** exposes field types, relationships, validation, statuses and permissions.
+| Guarantee | Rule |
+|---|---|
+| Authority | Validate access, inputs, outputs, Record versions and required approvals. |
+| Direct use | Actions work outside Flows with the same checks; reads need no business mutation. |
+| Durable change | Save workspace changes, progress, audit and delivery intent atomically. |
+| Duplicate safety | Repeated accepted requests return the saved result without another effect or charge. |
+| External effects | Deliver committed intent through Outbox; wait for confirmed success before dependent work. |
+| Uncertainty | Reconcile an unclear delivery result or request review before retrying. |
+| Agent limits | Allowed data/Actions and time/cost budgets; no direct commit authority. |
 
-## 4. Storage architecture
+### Supporting parts
 
-```text
-Control DB    -> identity, Workspaces, memberships and database routing
-Workspace DB  -> official shared truth
-Personal DB   -> private Me plans and local-first authorized working set
-R2 / OKF      -> files, long content and knowledge
-Gateway       -> permission, validation, commitment, sync and audit
-```
+| Part | Place in the architecture |
+|---|---|
+| Channels / connectors | Adapters behind Actions and incoming triggers. |
+| Models / MCP / skills / sandboxes / subagents | Approved Action implementations. |
+| Inbox / Queue | Views of assigned / unassigned open Tasks. |
+| Forms / screens | Fixed Action inputs and Record views. |
+| Outbox / queues / databases | Internal delivery, recovery and storage infrastructure. |
 
-| Store | Quantity | Local-first? | Purpose |
-| :--- | :---: | :---: | :--- |
-| Control DB | One | No | Platform identity and routing. |
-| Workspace DB | One per Workspace | No | Canonical collaborative Data and automation state. |
-| Personal DB | One per person | Yes | Private Me plans plus authorized offline working-set data. |
-| R2 bucket | One | No | Files, OKF knowledge, imports and exports. |
+## 3. Flows — process
 
-The mobile app syncs only the Personal DB and never receives unrestricted Workspace DB credentials.
+~~~text
+Verified trigger -> Run -> Action -> saved result -> next Action -> outcome
+~~~
 
-### 4.1 Control DB
+| Part | Rule |
+|---|---|
+| Definition | Versioned trigger + ordered Actions + explicit outcome routes. |
+| Run | Saved execution progress; pins Flow and Action versions. |
+| Sequence | Linear by default; branch only when needed. |
+| Human wait | One Task per waiting Human Action; accepted completion resumes its Run once. |
+| Other waits | Save the expected event or due time and a deadline/reminder policy. |
+| Recovery | Resume durable progress; bounded safe retries end in visible work or failure. |
+| Schedule | Each recurring occurrence starts a distinct, deduplicated Run. |
+| Cancellation | Stop new work; compensate committed effects separately when needed. |
+| Bot | Named Flow bindings and guidance. |
+| Kit | Versioned Record types, views, Action dependencies, templates and policy. |
 
-| Table | Purpose |
-| :--- | :--- |
-| `users` | Google identities; Google user ID is permanent, not email. |
-| `spaces` | Workspace metadata and DB routing. |
-| `members` | Workspace role, membership state and access version. |
-| `devices` | Device registration, last access and revocation. |
+### Creation
 
-### 4.2 Workspace DB
+~~~text
+Describe -> reuse Records/Actions -> draft Flow -> preview -> approve -> publish
+~~~
 
-Each Workspace DB has six tables. It does not repeat a Workspace ID in every row.
+- Preview outcomes, access, approvals and cost.
+- Validate versions, bindings, routes, permissions and fallbacks before publication.
+- Review and register new executable implementations before use.
+- Apply published changes to new Runs; explicitly migrate active Runs.
+- Kit installation requires owner review; upgrades show a diff and preserve local customisation.
 
-| Table | Purpose |
-| :--- | :--- |
-| `defs` | Versioned Data and Bot definitions. |
-| `records` | Official Products, Orders, Contacts, approvals and file metadata. |
-| `links` | Record relationships. |
-| `runs` | Active and completed Workflow executions. |
-| `access` | Role rules for each Data type. |
-| `events` | Immutable, idempotent audit history. |
+### Everyday use
 
-```text
-defs(id, kind, name, body, version, status, created, updated)
-  kind: data | bot
+~~~text
+Work  = Records + Inbox
+Build = Flows + Actions + settings
+~~~
 
-records(id, type, title, data, status, version, owner, created, updated)
+Show the next action, owner, status and relevant due date. Keep technical traces in Run details.
 
-links(id, from_id, to_id, kind, data, created)
-
-runs(id, bot, workflow, step, state, data, version, created, updated)
-
-access(role, type, scope, read, add, edit, remove, offline)
-  scope: all | team | assigned | own | none
-
-events(id, kind, actor, ref, data, idem, created)
-```
-
-`defs.body` contains fields, validation and display rules when `kind = data`; it contains Bot settings and complete ordered Workflows and Steps when `kind = bot`. Approvals and file metadata are typed `records`; binary files are not.
-
-### 4.3 Personal local-first DB
-
-| Table | Purpose |
-| :--- | :--- |
-| `defs` | Private Plan and Routine definitions. Workspace definitions sync only when required for offline work. |
-| `records` | Private plan updates and authorized Workspace working-set records. |
-| `links` | Relationships required by the working set. |
-| `inbox` | Tasks, approvals, requested input, mentions and notifications. |
-| `commands` | Append-only offline actions awaiting validation. |
-| `sync` | Cursor, access version, expiry and checkpoint state. |
-| `runs` | Private active Plan and Routine execution state. |
-
-Every Personal DB row that can be rendered carries source metadata. Private Me rows use `source: private`; synced Workspace rows retain their source Workspace identity. Rows without a valid private source or accessible Workspace origin are not rendered.
-
-Me is a private view, not a Workspace. It renders only confirmed private Plans, Routines, manual private tasks, their active Runs, real report data and pending user-confirmed Plan updates. It never renders Workspace Inbox items, Workspace work, Workspace Data definitions or Workspace reports. Workspace shortcuts may open a Workspace but never copy its work into Me.
-
-The authorized working set contains assigned, owned, recent, Inbox-linked, offline-pinned or explicitly downloaded Workspace records. These records are complete enough to use offline; their Workspace versions remain official. The working set is not Me content.
-
-Turso partial sync reduces bootstrap and bandwidth for this authorized Personal DB. Partial sync is not an authorization boundary.
-
-## 5. R2 and OKF
-
-```text
-users/{user}/files/{file}
-spaces/{space}/files/{record}/{file}
-spaces/{space}/okf/{type}/{record}.md
-spaces/{space}/exports/{export}
-```
-
-Use one OKF Markdown file per record by default for its long description, detailed specifications, FAQ, provenance and Agent knowledge. Images, video, audio and PDFs remain separate R2 objects. Split the OKF file only for size, permission or independent-update needs.
-
-| Information | Store |
-| :--- | :--- |
-| Searchable, filterable, transactional or offline fields | `records` |
-| Long text and Agent knowledge | One OKF file |
-| Images, video, audio and PDFs | R2 objects |
-| R2/OKF references | `records.data` |
-| Change history | `events` |
-
-External content is stored only when the person owns it or has permission.
-
-## 6. Access and local-first operation
-
-| Role | Default access |
-| :--- | :--- |
-| Owner | Everything. |
-| Admin | Workspace management except ownership and billing. |
-| Member | Allowed Data and team, assigned or owned records. |
-| Guest | Explicitly selected read-only Data. |
-
-Roles set the maximum permission. A Bot or Step may narrow it but cannot broaden it. Offline access is explicit per Data type; sensitive Data can set `offline = false`.
-
-```text
-Workspace person acts locally
-  -> UI updates immediately
-  -> command enters Personal DB
-  -> Turso pushes when connected
-  -> Gateway checks membership, role, Bot, Step, schema and base version
-  -> Workspace DB accepts or rejects
-  -> Gateway appends an event
-  -> confirmed result returns to Personal DB
-```
-
-```text
-commands(id, space, action, target, data, base_version, status, created)
-  status: pending | accepted | rejected | conflict
-```
-
-The device can read authorized Workspace `defs`, `records`, `links` and `inbox`, and append `commands`. It cannot directly edit Workspace records, definitions or permissions. Private Routine completion may update Me immediately on-device and is replayed with its idempotency key after reconnection.
-
-The UI shows **Pending sync** until confirmation. Ordinary independent field changes may merge deterministically. Payments, approvals, inventory deductions and permissions never use automatic last-write-wins; conflicts pause for review or a registered resolution function.
-
-Local databases are encrypted with a device-protected key. Access expires, membership changes increment the access version, revoked records are removed on reconnection, and logout removes the local key and cache.
-
-## 7. Gateway
-
-For every official change, the Gateway checks:
-
-1. Workspace membership and role.
-2. Bot and Step authority.
-3. Data schema and current state.
-4. Record version and idempotency key.
-5. Approval and duplicate-protection requirements.
-
-It then rejects the request or commits it and appends an audit event. A rejection remains visible with a corrective message.
-
-## 8. Inbox Step functions
-
-Inbox connects a person to a waiting Workflow:
-
-```text
-inbox.create
-inbox.assign
-inbox.request_input
-inbox.request_approval
-inbox.complete
-```
-
-```text
-Workflow waits for a person
-  -> Gateway creates Personal Inbox item
-  -> person responds online or offline
-  -> response becomes a command
-  -> Gateway validates it
-  -> Workflow continues and Inbox item completes
-```
-
-```text
-inbox(id, space, run, step, kind, title, body,
-      status, priority, due, version, created)
-```
-
-The Inbox item references the official Workspace run; it does not replace it.
-
-## 9. Agent access
-
-Agents query official Workspace Data through Gateway tools. They receive only relevant definitions, permission-filtered query results, current Workflow context and registered Step actions. They never receive an entire database or use Personal projections for official decisions.
-
-The same safety boundary applies to AI help and agentic Steps. AI help returns a declared result to fixed control flow. An agentic Step may select allowlisted actions or transitions, but every official effect remains a deterministic Gateway execution.
-
-```text
-Agent proposes -> Gateway validates -> person approves when required -> code commits
-```
-
-Use indexed SQL and full-text search before embeddings. Use embeddings only for semantic retrieval over long OKF knowledge.
-
-## 10. App UI
-
-```text
-Workspace
-|-- Work
-|-- Inbox
-|-- Data
-`-- Build                    owner/admin only
-    |-- Bots
-    |-- Data definitions
-    `-- Workflows
-
-Me
-`-- Today
-    |-- confirmed private Plan and Routine cards
-    |-- pending Plan-update cards
-    `-- Plan / add action
-```
-
-Workspace navigation is `Work · Inbox · Data` for workers and `Work · Inbox · Data · Build` for owners and admins. Build is the internal owner/admin selector; workers do not see it. The app opens the last selected real Workspace by default. Me is opened explicitly from the Workspace switcher.
-
-Me uses normal language: **Today**, **Plan** and **Routine**. Bots and definitions remain internal implementation terms for private planning and do not appear in Me.
-
-### 10.1 Ownership and visibility
-
-| Owner/admin manages | Worker uses |
-| :--- | :--- |
-| Bots and Bot settings | Role-based Workspace Work |
-| Data definitions and fields | Permitted Data records |
-| Workflows and ordered Steps | Action Cards |
-| Action primitives and integration bindings | Current Inbox tasks |
-| Roles, access and offline policy | Assigned work and reports |
-
-Workers do not normally see builder definitions. Build is visible only when the person's role grants management access.
-
-### 10.2 Workspace Work and Inbox
-
-```text
-Work      -> active role-filtered runs, report cards, approved Data views and action launchers
-Inbox     -> waiting assigned work only
-Data      -> permitted Workspace Data
-Build     -> Bots, Data definitions and Workflows for owners and admins
-```
-
-Starting an Inbox item moves it into Work in that same Workspace. Inbox does not duplicate active work. Workspace Work is derived from authorized Bot definitions, Workflow state and Workspace Data. It is not manually assembled per person and requires no separate Work or Cards table.
-
-To stay uncluttered, Work shows active work first, then permitted action launchers, report cards and approved Data views. Priority is deterministic: urgent work, due work, active runs, then permitted launchers and summaries.
-
-Data supports browse, search, add, view, permitted editing, archive, offline availability and pending-sync state. Destructive actions use an overflow menu and confirmation. Normal UI always says **Data**, not Artifact.
-
-## 11. Canonical rules
-
-1. Workspace DB holds official shared truth; Personal DB enables authorized local-first work.
-2. Bots own Workflows; Workflows contain ordered Steps.
-3. A Step may combine optional Card, App function and AI help.
-4. Gateway is the only path to official Data or external-system changes.
-5. Inbox is a deterministic human-action primitive that can pause and resume runs.
-6. R2/OKF holds heavy content, not operational truth; default to one OKF file per record.
-7. Synchronize only the active authorized working set and project changes only to affected people.
-8. Use one Personal sync connection per person and one database per real Workspace, never per Bot.
-9. Use SQL search before embeddings.
-10. AI plans and assists; deterministic code authorizes and commits.
-11. Owners and admins manage definitions in Build; workers receive role-filtered Workspace Work, Data and Inbox work.
-12. Action primitives remain beneath Steps and never appear as a second builder model.
-13. Every Step declares `deterministic` or `agentic` control mode.
-14. Agentic Steps may choose only allowlisted actions and transitions; the Gateway retains execution authority.
-15. Me is private life only: it contains private Plans, Routines, active private Runs and user-confirmed Plan changes; it never becomes a cross-Workspace inbox or data browser.
-
-> **Bots provide capability. Workflows organise Steps. Workspace Data holds truth. Personal Data enables offline work. Inbox connects people to work. Gateway protects every official change.**
+**Reuse first. Add only what the work needs.**

@@ -1,0 +1,5 @@
+node_modules/
+.wrangler/
+.env
+coverage/
+worker-startup.cpuprofile

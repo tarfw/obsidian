@@ -1,56 +1,17 @@
 import React, { useMemo, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import * as SecureStore from 'expo-secure-store';
 import { TarLogo } from '@/components/TarLogo';
-import { tar } from '@/lib/tar';
+import { harness } from '@/lib/harness';
 
-interface Props {
-  visible: boolean;
-  onClose: () => void;
-  onSuccess: (subdomain: string, name: string) => Promise<void>;
-  canClose: boolean;
-  existingSubdomains?: string[];
-}
+interface Props { visible: boolean; onClose: () => void; onSuccess: (slug: string) => Promise<void>; canClose: boolean; existingSlugs?: string[]; }
+const slugify = (value: string) => value.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
 
-function slugify(value: string) { return value.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40); }
-
-export default function CreateWorkspace({ visible, onClose, onSuccess, canClose, existingSubdomains = [] }: Props) {
-  const insets = useSafeAreaInsets();
-  const [name, setName] = useState(''); const [submitting, setSubmitting] = useState(false); const [error, setError] = useState('');
-  const workspaceName = name.trim() || 'My Workspace';
-  const slug = useMemo(() => { const base = slugify(workspaceName) || 'my-workspace'; if (!existingSubdomains.includes(base)) return base; let suffix = 2; while (existingSubdomains.includes(`${base}-${suffix}`)) suffix += 1; return `${base}-${suffix}`; }, [existingSubdomains, workspaceName]);
-  const close = () => { if (submitting || !canClose) return; setName(''); setError(''); onClose(); };
-  const waitUntilReady = async () => {
-    for (let attempt = 0; attempt < 24; attempt += 1) {
-      const result = await tar.listWorkspaces();
-      const workspace = result.workspaces.find((item) => item.subdomain === slug);
-      if (workspace?.state === 'active') return;
-      if (workspace?.state === 'error') throw new Error('Workspace setup could not be completed. Please try again.');
-      await new Promise<void>((resolve) => setTimeout(resolve, 1250));
-    }
-    throw new Error('Workspace setup is taking longer than expected. Please try again shortly.');
-  };
-  const create = async () => {
-    if (submitting) return; setSubmitting(true); setError('');
-    try {
-      await tar.createWorkspace({ name: workspaceName, subdomain: slug });
-      await waitUntilReady();
-      await SecureStore.setItemAsync('active_workspace_subdomain', slug);
-      await onSuccess(slug, workspaceName);
-      setName('');
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Workspace could not be created. Try again.'); } finally { setSubmitting(false); }
-  };
-  return <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={close}>
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.screen}>
-      <ScrollView contentContainerStyle={[styles.content, { paddingTop: Math.max(insets.top, 24) + 44, paddingBottom: Math.max(insets.bottom, 20) + 96 }]} keyboardShouldPersistTaps="handled">
-        <View style={styles.mark}><TarLogo size={64} color="#1E5631" bgColor="#EEF5F1" /></View>
-        <Text style={styles.title}>New workspace</Text><Text style={styles.subtitle}>A shared place for your team's work.</Text>
-        <View style={styles.field}><Text style={styles.label}>Workspace name</Text><TextInput value={name} onChangeText={setName} placeholder="My workspace" placeholderTextColor="#87938A" style={styles.nameInput} maxLength={48} returnKeyType="next" /></View>
-        {error ? <Text style={styles.error}>{error}</Text> : null}
-      </ScrollView>
-      <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 18) }]}><Pressable onPress={() => void create()} disabled={submitting} style={[styles.create, submitting && styles.disabled]}>{submitting ? <View style={styles.creating}><ActivityIndicator color="#fff" /><Text style={styles.createText}>Preparing workspace</Text></View> : <Text style={styles.createText}>Create workspace</Text>}</Pressable><Pressable onPress={close} disabled={submitting} style={styles.cancel}><Text style={styles.cancelText}>Cancel</Text></Pressable></View>
-    </KeyboardAvoidingView>
-  </Modal>;
+export default function CreateWorkspace({ visible, onClose, onSuccess, canClose, existingSlugs = [] }: Props) {
+  const insets = useSafeAreaInsets(); const [name, setName] = useState(''); const [submitting, setSubmitting] = useState(false); const [error, setError] = useState('');
+  const workspaceName = name.trim() || 'My Workspace'; const slug = useMemo(() => { const base = slugify(workspaceName) || 'my-workspace'; if (!existingSlugs.includes(base)) return base; let suffix = 2; while (existingSlugs.includes(`${base}-${suffix}`)) suffix += 1; return `${base}-${suffix}`; }, [existingSlugs, workspaceName]);
+  const close = () => { if (!submitting && canClose) { setName(''); setError(''); onClose(); } };
+  const create = async () => { if (submitting) return; setSubmitting(true); setError(''); try { await harness.createWorkspace(workspaceName, slug); await onSuccess(slug); setName(''); } catch (cause) { setError(cause instanceof Error ? cause.message : 'Workspace could not be created.'); } finally { setSubmitting(false); } };
+  return <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={close}><KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.screen}><ScrollView contentContainerStyle={[styles.content, { paddingTop: Math.max(insets.top, 24) + 44, paddingBottom: Math.max(insets.bottom, 20) + 96 }]} keyboardShouldPersistTaps="handled"><View style={styles.mark}><TarLogo size={64} color="#1E5631" bgColor="#EEF5F1" /></View><Text style={styles.title}>New workspace</Text><Text style={styles.subtitle}>A shared place for your team&apos;s work.</Text><View style={styles.field}><Text style={styles.label}>Workspace name</Text><TextInput value={name} onChangeText={setName} placeholder="My workspace" placeholderTextColor="#87938A" style={styles.nameInput} maxLength={48} /></View>{error ? <Text style={styles.error}>{error}</Text> : null}</ScrollView><View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 18) }]}><Pressable onPress={() => void create()} disabled={submitting} style={[styles.create, submitting && styles.disabled]}>{submitting ? <View style={styles.creating}><ActivityIndicator color="#fff" /><Text style={styles.createText}>Preparing workspace</Text></View> : <Text style={styles.createText}>Create workspace</Text>}</Pressable>{canClose ? <Pressable onPress={close} disabled={submitting} style={styles.cancel}><Text style={styles.cancelText}>Cancel</Text></Pressable> : null}</View></KeyboardAvoidingView></Modal>;
 }
 const styles = StyleSheet.create({ screen:{flex:1,backgroundColor:'#EEF5F1'},content:{flexGrow:1,paddingHorizontal:28},mark:{width:88,height:88,borderRadius:24,backgroundColor:'#DCEDE2',alignItems:'center',justifyContent:'center',marginBottom:28},title:{fontSize:34,lineHeight:40,fontWeight:'800',letterSpacing:-1,color:'#163A23'},subtitle:{fontSize:17,lineHeight:25,color:'#5C7163',marginTop:9,marginBottom:36},field:{marginBottom:25},label:{fontSize:14,fontWeight:'700',color:'#355142',marginBottom:9},nameInput:{backgroundColor:'#FFF',borderWidth:1,borderColor:'#DCE8E0',borderRadius:14,paddingHorizontal:16,paddingVertical:15,fontSize:18,fontWeight:'700',color:'#163A23'},error:{color:'#B3261E',fontSize:14,lineHeight:20,marginTop:-8},footer:{paddingTop:14,paddingHorizontal:22,borderTopWidth:1,borderColor:'#DCE8E0',backgroundColor:'#F8FCF9'},create:{height:54,borderRadius:14,backgroundColor:'#1E5631',alignItems:'center',justifyContent:'center'},creating:{flexDirection:'row',alignItems:'center',gap:10},disabled:{opacity:.6},createText:{fontSize:16,fontWeight:'800',color:'#FFF'},cancel:{height:42,alignItems:'center',justifyContent:'center'},cancelText:{fontSize:15,fontWeight:'700',color:'#537060'} });

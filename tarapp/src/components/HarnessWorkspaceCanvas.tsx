@@ -1,29 +1,87 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { harness, type HarnessRecord } from '@/lib/harness';
+import ActionInterfaceHost from '@/action-interfaces/ActionInterfaceHost';
+import BotDirectory from '@/components/BotDirectory';
+import { harness, type HarnessAction, type HarnessCanvasCard, type HarnessInterfaceContract, type HarnessRecord } from '@/lib/harness';
 
-type Tab = 'work' | 'inbox' | 'records'; type DraftKind = 'record' | 'task';
-interface Props { scope: string; workspaceName: string; onOpenWorkspaceSwitcher: () => void; }
+type Tab = 'canvas' | 'inbox' | 'records';
+interface Props { scope: string; workspaceName: string; role: 'owner' | 'admin' | 'member' | 'guest'; onOpenWorkspaceSwitcher: () => void; }
+interface OpenAction { action: HarnessAction; input?: Record<string, unknown>; title?: string; }
 const titleCase = (value: string) => value.replace(/[_-]+/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
 
-export default function HarnessWorkspaceCanvas({ scope, workspaceName, onOpenWorkspaceSwitcher }: Props) {
+export default function HarnessWorkspaceCanvas({ scope, workspaceName, role, onOpenWorkspaceSwitcher }: Props) {
   const insets = useSafeAreaInsets();
-  const [tab, setTab] = useState<Tab>('work'); const [records, setRecords] = useState<HarnessRecord[]>([]); const [tasks, setTasks] = useState<HarnessRecord[]>([]);
-  const [loading, setLoading] = useState(true); const [error, setError] = useState(''); const [compose, setCompose] = useState(false); const [kind, setKind] = useState<DraftKind>('record'); const [title, setTitle] = useState(''); const [recordType, setRecordType] = useState('contact'); const [saving, setSaving] = useState(false);
-  const reload = useCallback(async () => { setError(''); try { const [nextRecords, nextInbox] = await Promise.all([harness.records(scope), harness.inbox(scope)]); setRecords(nextRecords.records); setTasks(nextInbox.tasks); } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not load workspace.'); } finally { setLoading(false); } }, [scope]);
-  const retryWorkspace = async () => { setLoading(true); setError(''); try { await harness.createWorkspace(workspaceName, scope); await reload(); } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not provision workspace.'); setLoading(false); } };
+  const [tab, setTab] = useState<Tab>('canvas');
+  const [cards, setCards] = useState<HarnessCanvasCard[]>([]);
+  const [records, setRecords] = useState<HarnessRecord[]>([]);
+  const [tasks, setTasks] = useState<HarnessRecord[]>([]);
+  const [actions, setActions] = useState<HarnessAction[]>([]);
+  const [interfaces, setInterfaces] = useState<HarnessInterfaceContract[]>([]);
+  const [openAction, setOpenAction] = useState<OpenAction | null>(null);
+  const [directoryOpen, setDirectoryOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  const reload = useCallback(async () => {
+    setError('');
+    try {
+      const [nextCanvas, nextRecords, nextInbox, registry] = await Promise.all([harness.canvas(scope), harness.records(scope), harness.inbox(scope), harness.registry()]);
+      setCards(nextCanvas.cards); setRecords(nextRecords.records); setTasks(nextInbox.tasks); setActions(registry.actions); setInterfaces(registry.interfaces);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not load workspace.'); }
+    finally { setLoading(false); }
+  }, [scope]);
+
   useEffect(() => { const timer = setTimeout(() => { void reload(); }, 0); return () => clearTimeout(timer); }, [reload]);
-  const save = async () => { const clean = title.trim(); if (!clean || saving) return; setSaving(true); try { if (kind === 'task') await harness.createTask(scope, clean); else await harness.createRecord(scope, { type: recordType.trim().toLowerCase() || 'record', title: clean }); setCompose(false); setTitle(''); await reload(); } catch (cause) { Alert.alert('Could not save', cause instanceof Error ? cause.message : 'Try again.'); } finally { setSaving(false); } };
-  const complete = async (task: HarnessRecord) => { try { await harness.completeTask(scope, task.id); await reload(); } catch (cause) { Alert.alert('Could not complete task', cause instanceof Error ? cause.message : 'Try again.'); } };
+  const retryWorkspace = async () => { setLoading(true); await reload(); };
+  const open = (actionId: string, input?: Record<string, unknown>, title?: string) => { const action = actions.find((item) => item.id === actionId); if (!action) { Alert.alert('Action unavailable', 'This Action is not registered for the workspace.'); return; } setOpenAction({ action, input, title }); };
+  const openCard = (card: HarnessCanvasCard) => { if (card.kind === 'action') open(card.actionId, card.initialInput, card.title); else if (card.kind === 'flow') open(card.actionId || 'flow.start', card.initialInput || { flowId: card.flowId }, card.title); };
+
   return <View style={styles.page}>
-    <View style={[styles.header, { paddingTop: insets.top }]}><TouchableOpacity onPress={onOpenWorkspaceSwitcher} style={styles.workspace}><Text numberOfLines={1} style={styles.workspaceName}>{workspaceName}</Text><Ionicons name="chevron-down" size={16} color="#5f6368" /></TouchableOpacity><View style={styles.tabs}>{(['work', 'inbox', 'records'] as Tab[]).map((item) => <TouchableOpacity key={item} onPress={() => setTab(item)} style={styles.tab}><Text style={[styles.tabText, tab === item && styles.tabActive]}>{item === 'work' ? 'Work' : titleCase(item)}</Text></TouchableOpacity>)}</View></View>
-    <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 32 }]}>{error ? <Pressable style={styles.error} onPress={() => void retryWorkspace()}><Text style={styles.errorText}>{error} Tap to retry.</Text></Pressable> : null}{loading ? <View style={styles.center}><ActivityIndicator color="#1a73e8" /></View> : <>{tab === 'work' && <><Text style={styles.heading}>Next work</Text>{tasks.length ? tasks.map((task) => <TaskRow key={task.id} task={task} onComplete={complete} />) : <Empty text="No tasks waiting for you." />}</>}{tab === 'inbox' && <>{tasks.length ? tasks.map((task) => <TaskRow key={task.id} task={task} onComplete={complete} />) : <Empty text="You're all caught up." />}</>}{tab === 'records' && <>{records.length ? records.map((record) => <View key={record.id} style={styles.record}><View style={styles.recordCopy}><Text style={styles.recordTitle}>{record.title}</Text><Text style={styles.recordDetail}>{titleCase(record.type)} · {titleCase(record.state)}</Text></View></View>) : <Empty text="No records yet." />}</>}</>}</ScrollView>
-    <TouchableOpacity style={styles.fab} onPress={() => setCompose(true)} accessibilityLabel="Create work"><Ionicons name="add" size={27} color="#fff" /></TouchableOpacity>
-    <Modal visible={compose} transparent animationType="fade" onRequestClose={() => setCompose(false)}><View style={styles.overlay}><View style={styles.sheet}><Text style={styles.sheetTitle}>Create</Text><View style={styles.switch}>{(['record', 'task'] as DraftKind[]).map((value) => <TouchableOpacity key={value} style={[styles.switchButton, kind === value && styles.switchSelected]} onPress={() => setKind(value)}><Text style={styles.switchText}>{titleCase(value)}</Text></TouchableOpacity>)}</View>{kind === 'record' ? <TextInput value={recordType} onChangeText={setRecordType} placeholder="Type, for example contact" style={styles.input} /> : null}<TextInput autoFocus value={title} onChangeText={setTitle} placeholder={kind === 'task' ? 'What needs doing?' : 'Record name'} style={styles.input} onSubmitEditing={() => void save()} /><View style={styles.actions}><TouchableOpacity onPress={() => setCompose(false)}><Text style={styles.cancel}>Cancel</Text></TouchableOpacity><TouchableOpacity disabled={saving || !title.trim()} onPress={() => void save()}><Text style={[styles.save, (!title.trim() || saving) && styles.disabled]}>{saving ? 'Saving' : 'Save'}</Text></TouchableOpacity></View></View></View></Modal>
+    <View style={[styles.header, { paddingTop: insets.top }]}><TouchableOpacity onPress={onOpenWorkspaceSwitcher} style={styles.workspace}><Text numberOfLines={1} style={styles.workspaceName}>{workspaceName}</Text><Ionicons name="chevron-down" size={16} color="#68758c" /></TouchableOpacity><View style={styles.tabs}>{(['canvas', 'inbox', 'records'] as Tab[]).map((item) => <TouchableOpacity key={item} onPress={() => setTab(item)} style={[styles.tab, tab === item && styles.tabSelected]}><Text style={[styles.tabText, tab === item && styles.tabActive]}>{titleCase(item)}</Text></TouchableOpacity>)}</View></View>
+    <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 32 }]}>{error ? <Pressable style={styles.error} onPress={() => void retryWorkspace()}><Text style={styles.errorText}>{error} Tap to retry.</Text></Pressable> : null}{loading ? <View style={styles.center}><ActivityIndicator color="#172033" /></View> : <>
+      {tab === 'canvas' ? <Canvas cards={cards} onOpen={openCard} onOpenDirectory={() => setDirectoryOpen(true)} /> : null}
+      {tab === 'inbox' ? <><Text style={styles.heading}>Inbox</Text><Text style={styles.subheading}>Your human Actions, in one place.</Text>{tasks.length ? tasks.map((task) => <TaskRow key={task.id} task={task} onOpen={() => open('task.complete', { taskId: task.id }, task.title)} />) : <Empty text="Nothing waiting." />}</> : null}
+      {tab === 'records' ? <><Text style={styles.heading}>Records</Text><Text style={styles.subheading}>Shared information created by your work.</Text>{records.length ? records.map((record) => <View key={record.id} style={styles.record}><View style={styles.recordCopy}><Text style={styles.recordTitle}>{record.title}</Text><Text style={styles.recordDetail}>{titleCase(record.type)} · {titleCase(record.state)}</Text></View></View>) : <Empty text="No records yet." />}</> : null}
+    </>}</ScrollView>
+    <ActionInterfaceHost action={openAction?.action || null} contracts={interfaces} scope={scope} initialInput={openAction?.input} contextTitle={openAction?.title} onClose={() => setOpenAction(null)} onSuccess={() => { setOpenAction(null); void reload(); }} />
+    <BotDirectory visible={directoryOpen} scope={scope} canInstall={role === 'owner' || role === 'admin'} onClose={() => setDirectoryOpen(false)} onChanged={() => { void reload(); }} onCreateCustom={(botId, botTitle) => { setDirectoryOpen(false); open('flow.publish', { botId }, botTitle); }} />
   </View>;
 }
-function TaskRow({ task, onComplete }: { task: HarnessRecord; onComplete: (task: HarnessRecord) => void }) { return <View style={styles.task}><View style={styles.recordCopy}><Text style={styles.recordTitle}>{task.title}</Text><Text style={styles.recordDetail}>Assigned work</Text></View><TouchableOpacity onPress={() => void onComplete(task)} style={styles.complete} accessibilityLabel={`Complete ${task.title}`}><Ionicons name="checkmark" size={18} color="#1a73e8" /></TouchableOpacity></View>; }
+
+function Canvas({ cards, onOpen, onOpenDirectory }: { cards: HarnessCanvasCard[]; onOpen: (card: HarnessCanvasCard) => void; onOpenDirectory: () => void }) {
+  const data = cards.filter((card) => card.kind === 'data');
+  const work = cards.filter((card) => card.kind !== 'data');
+  const icons: Record<string, keyof typeof Ionicons.glyphMap> = {
+    sell: 'bag-outline', orders: 'receipt-outline', stock: 'cube-outline',
+    customers: 'people-outline', register: 'cash-outline',
+  };
+  return <>
+    <View style={styles.canvasToolbar}>
+      <Text style={styles.overviewTitle}>Overview</Text>
+      <TouchableOpacity style={styles.directoryButton} onPress={onOpenDirectory} accessibilityLabel="Add Bot"><Ionicons name="add" size={17} color="#172033" /><Text style={styles.directoryText}>Add</Text></TouchableOpacity>
+    </View>
+    <View style={styles.metricGrid}>{data.map((card) => <View key={card.id} accessibilityLabel={card.title + ': ' + card.value + (card.caption ? '. ' + card.caption : '')} style={[styles.metric, card.id.startsWith('pos-') && styles.posMetric]}>
+      <Text numberOfLines={1} style={styles.metricTitle}>{card.title}</Text>
+      <Text numberOfLines={1} adjustsFontSizeToFit style={[styles.metricValue, card.id.startsWith('pos-') && styles.posMetricValue]}>{card.value}</Text>
+    </View>)}</View>
+    {work.map((card) => <TouchableOpacity key={card.id} style={styles.workCard} onPress={() => onOpen(card)} accessibilityLabel={card.title}>
+      <View style={styles.workIcon}><Ionicons name={icons[String(card.initialInput?.section)] || (card.kind === 'flow' ? 'git-branch-outline' : 'flash-outline')} size={21} color="#536174" /></View>
+      <Text style={styles.canvasRowTitle}>{card.title}</Text>
+      <Ionicons name="chevron-forward" size={17} color="#9aa3b1" />
+    </TouchableOpacity>)}
+  </>;
+}
+
+function TaskRow({ task, onOpen }: { task: HarnessRecord; onOpen: () => void }) { return <TouchableOpacity onPress={onOpen} style={styles.task}><View style={styles.recordCopy}><Text style={styles.recordTitle}>{task.title}</Text><Text style={styles.recordDetail}>Assigned to you · Open</Text></View><View style={styles.review}><Text style={styles.reviewText}>Review</Text></View></TouchableOpacity>; }
 function Empty({ text }: { text: string }) { return <Text style={styles.empty}>{text}</Text>; }
-const styles = StyleSheet.create({ page:{flex:1,backgroundColor:'#fff'},header:{borderBottomWidth:1,borderColor:'#e8eaed',backgroundColor:'#fff'},workspace:{height:52,paddingHorizontal:24,flexDirection:'row',gap:6,alignItems:'center'},workspaceName:{flexShrink:1,fontSize:20,fontWeight:'800',color:'#202124'},tabs:{flexDirection:'row',paddingHorizontal:24,gap:24},tab:{paddingVertical:12},tabText:{fontSize:15,fontWeight:'600',color:'#5f6368'},tabActive:{color:'#1a73e8'},content:{padding:24},center:{minHeight:160,justifyContent:'center',alignItems:'center'},heading:{fontSize:24,fontWeight:'800',color:'#202124',marginBottom:12},task:{minHeight:68,borderTopWidth:StyleSheet.hairlineWidth,borderColor:'#e8eaed',flexDirection:'row',alignItems:'center',gap:14},record:{minHeight:64,borderBottomWidth:StyleSheet.hairlineWidth,borderColor:'#e8eaed',justifyContent:'center'},recordCopy:{flex:1},recordTitle:{fontSize:16,fontWeight:'700',color:'#202124'},recordDetail:{fontSize:13,color:'#70757a',marginTop:3},complete:{width:38,height:38,borderWidth:1,borderColor:'#d2e3fc',borderRadius:19,alignItems:'center',justifyContent:'center'},empty:{color:'#70757a',fontSize:16,paddingVertical:18},error:{backgroundColor:'#fce8e6',borderRadius:8,padding:12,marginBottom:14},errorText:{color:'#a50e0e'},fab:{position:'absolute',right:24,bottom:26,width:56,height:56,borderRadius:28,backgroundColor:'#1a73e8',alignItems:'center',justifyContent:'center',elevation:3},overlay:{flex:1,backgroundColor:'#0005',justifyContent:'center',padding:24},sheet:{backgroundColor:'#fff',borderRadius:14,padding:22},sheetTitle:{fontSize:22,fontWeight:'800',color:'#202124',marginBottom:16},switch:{flexDirection:'row',gap:8,marginBottom:12},switchButton:{paddingHorizontal:13,paddingVertical:8,borderRadius:16,borderWidth:1,borderColor:'#dadce0'},switchSelected:{backgroundColor:'#e8f0fe',borderColor:'#1a73e8'},switchText:{color:'#202124',fontWeight:'700'},input:{borderBottomWidth:1,borderColor:'#dadce0',fontSize:16,color:'#202124',paddingVertical:12,marginBottom:10},actions:{flexDirection:'row',justifyContent:'flex-end',gap:24,marginTop:10},cancel:{color:'#5f6368',fontWeight:'700'},save:{color:'#1a73e8',fontWeight:'800'},disabled:{opacity:.45} });
+
+const styles = StyleSheet.create({
+  canvasToolbar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
+  overviewTitle: { fontSize: 15, fontWeight: '600', color: '#68758c' },
+  canvasRowTitle: { flex: 1, fontSize: 15, fontWeight: '600', color: '#172033' },
+  posMetric: { minHeight: 76, flexBasis: '27%', padding: 10, borderRadius: 10 },
+  posMetricValue: { fontSize: 21 },
+  page:{flex:1,backgroundColor:'#fff'},header:{borderBottomWidth:1,borderColor:'#e3e7ef',backgroundColor:'#fff'},workspace:{height:52,paddingHorizontal:24,flexDirection:'row',gap:6,alignItems:'center'},workspaceName:{flexShrink:1,fontSize:20,fontWeight:'800',color:'#172033'},tabs:{flexDirection:'row',paddingHorizontal:24,gap:24},tab:{paddingVertical:12,borderBottomWidth:2,borderColor:'transparent'},tabSelected:{borderColor:'#172033'},tabText:{fontSize:14,fontWeight:'600',color:'#68758c'},tabActive:{color:'#172033'},content:{padding:20},center:{minHeight:180,justifyContent:'center',alignItems:'center'},canvasTitleRow:{flexDirection:'row',alignItems:'flex-start',gap:12},directoryButton:{height:38,paddingHorizontal:13,borderRadius:19,backgroundColor:'#f1f3f8',flexDirection:'row',alignItems:'center',gap:4},directoryText:{fontSize:13,fontWeight:'800',color:'#172033'},heading:{fontSize:25,fontWeight:'800',color:'#172033'},subheading:{fontSize:14,lineHeight:20,color:'#68758c',marginTop:4,marginBottom:20},metricGrid:{flexDirection:'row',flexWrap:'wrap',gap:8,marginBottom:16},metric:{flexGrow:1,flexBasis:'45%',minHeight:132,borderWidth:1,borderColor:'#e3e7ef',borderRadius:18,padding:16,justifyContent:'space-between',backgroundColor:'#fff'},metricTitle:{fontSize:13,fontWeight:'700',color:'#68758c'},metricValue:{fontSize:34,fontWeight:'800',color:'#172033'},metricCaption:{fontSize:11,lineHeight:15,color:'#7b879a'},sectionLabel:{fontSize:11,fontWeight:'800',letterSpacing:1.2,color:'#7b879a',marginBottom:8},workCard:{minHeight:56,borderBottomWidth:StyleSheet.hairlineWidth,borderColor:'#e3e7ef',flexDirection:'row',alignItems:'center',gap:12},workIcon:{width:28,height:36,alignItems:'center',justifyContent:'center'},flowIcon:{backgroundColor:'#e8f7f0'},task:{minHeight:72,borderBottomWidth:StyleSheet.hairlineWidth,borderColor:'#e3e7ef',flexDirection:'row',alignItems:'center',gap:14},record:{minHeight:64,borderBottomWidth:StyleSheet.hairlineWidth,borderColor:'#e3e7ef',justifyContent:'center'},recordCopy:{flex:1},recordTitle:{fontSize:16,fontWeight:'700',color:'#172033'},recordDetail:{fontSize:13,lineHeight:18,color:'#68758c',marginTop:3},review:{paddingHorizontal:12,paddingVertical:7,borderRadius:14,backgroundColor:'#f1f3f8'},reviewText:{fontSize:12,fontWeight:'800',color:'#172033'},empty:{color:'#68758c',fontSize:16,paddingVertical:18},error:{backgroundColor:'#fff1f0',borderRadius:12,padding:12,marginBottom:14},errorText:{color:'#b42318'},
+});

@@ -9,7 +9,33 @@ Production Worker for TAR's Records, Actions and Flows model. Effect v4 runs the
 - Turso workspace provisioning and the Records / Links / Definitions / Runs / Events / Outbox schema.
 - Mandatory Gateway execution for `record.create`, `record.update`, `task.create`, `task.complete` and `flow.start`.
 - Scoped idempotency with input fingerprints and immutable Action audit events.
-- Native TAR App client and workspace UI for Records and Inbox Tasks.
+- Authoritative Action and interface-contract registries exposed by `GET /v1/actions`.
+- Business-defined workspace canvases exposed by `GET /v1/workspaces/:slug/canvas`.
+- Native TAR App registry that maps interface keys to reusable form, confirmation and Flow screens.
+
+## Business canvas definition
+
+A published `kit` definition may contain `data.canvas.cards`. Cards contain no execution logic; they bind to registered data, Actions or published Flows:
+
+```json
+{
+  "canvas": {
+    "cards": [
+      { "id": "open-work", "kind": "data", "title": "Open work", "metric": "tasks.open" },
+      { "id": "new-customer", "kind": "action", "title": "Add customer", "actionId": "record.create" },
+      { "id": "onboarding", "kind": "flow", "title": "Customer onboarding", "flowId": "customer-onboarding" }
+    ]
+  }
+}
+```
+
+Supported foundation metrics are `records.count` and `tasks.open`. Without a published Kit, TAR supplies a minimal canvas with both values, Create record, Create task and every published Flow.
+
+## Bot Directory
+
+`GET /v1/workspaces/:slug/directory` returns ready Bots, their template Flows, and installation state. Owners and admins choose the Flows they need and add the Bot through the registered `directory.install` Action. Installation publishes the Bot definition, selected versioned Flow definitions, and a small Kit containing their canvas cards.
+
+Custom Flows belong to an installed Bot and use the registered `flow.publish` Action. TAR App's Flow Builder orders existing registered Actions and publishes the Flow plus its canvas card through the same Gateway and idempotency checks. Removing a Bot archives its definitions while preserving Records, Runs, and audit history.
 
 ## Production setup
 

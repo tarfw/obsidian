@@ -38,4 +38,27 @@ describe('mandatory Gateway execution', () => {
     await Effect.runPromise(executeGateway(client, access, { actionId: 'task.create', idempotencyKey: 'task-1', input: { title: 'Review order' } }));
     await expect(Effect.runPromise(executeGateway(client, access, { actionId: 'task.create', idempotencyKey: 'task-1', input: { title: 'Different task' } }))).rejects.toThrow('different input');
   });
+
+  it('installs selected Bot Flows and their canvas cards idempotently', async () => {
+    const client = await workspace();
+    const request = { actionId: 'directory.install' as const, idempotencyKey: 'install-sales-1', input: { itemId: 'sales', flowIds: ['customer-follow-up'] } };
+    const first = await Effect.runPromise(executeGateway(client, access, request));
+    const replay = await Effect.runPromise(executeGateway(client, access, request));
+    expect(first).toEqual(replay);
+    const definitions = await client.execute("SELECT kind,state FROM definitions WHERE id LIKE 'directory.sales.%'");
+    expect(definitions.rows).toHaveLength(3);
+    expect(definitions.rows.every((item) => item.state === 'published')).toBe(true);
+    await Effect.runPromise(executeGateway(client, access, { actionId: 'directory.remove', idempotencyKey: 'remove-sales-1', input: { itemId: 'sales' } }));
+    const removed = await client.execute("SELECT state FROM definitions WHERE id LIKE 'directory.sales.%'");
+    expect(removed.rows.every((item) => item.state === 'archived')).toBe(true);
+  });
+
+  it('publishes a custom Flow through the Gateway', async () => {
+    const client = await workspace();
+    await Effect.runPromise(executeGateway(client, access, { actionId: 'directory.install', idempotencyKey: 'install-sales-custom-1', input: { itemId: 'sales', flowIds: ['customer-follow-up'] } }));
+    const result = await Effect.runPromise(executeGateway(client, access, { actionId: 'flow.publish', idempotencyKey: 'publish-flow-1', input: { botId: 'sales', flowId: 'custom.sales.new-customer', name: 'New customer', actions: [{ id: 'record.create' }, { id: 'task.create' }] } }));
+    expect(result).toEqual({ flowId: 'custom.sales.new-customer', published: true });
+    const definitions = await client.execute("SELECT kind FROM definitions WHERE id LIKE 'custom.sales.new-customer%'");
+    expect(definitions.rows).toHaveLength(2);
+  });
 });

@@ -5,7 +5,12 @@ import { ControlStore } from './db/control.ts';
 import { openWorkspaceDatabase, provisionWorkspaceDatabase, query } from './db/turso.ts';
 import { executeGateway, type GatewayRequest } from './gateway/actions.ts';
 import { HarnessError, badRequest, forbidden, notFound, unavailable } from './errors.ts';
-import { actionCatalog, type AccessContext, type RecordItem } from './types.ts';
+import type { AccessContext, RecordItem } from './types.ts';
+import { actionCatalog, interfaceCatalog } from './registry/catalog.ts';
+import { buildWorkspaceCanvas } from './registry/canvas.ts';
+import { botDirectory, directoryDefinitionIds } from './registry/directory.ts';
+import { posSummary, readPos } from './pos/store.ts';
+import { readProductContent } from './pos/content.ts';
 
 type RuntimeEnv = Env & { readonly TURSO_PLATFORM_TOKEN?: string };
 const jsonHeaders = { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' };
@@ -84,11 +89,23 @@ async function listDefinitions(client: Client) {
   return rows.map((item) => ({ id: String(item.id), kind: String(item.kind), name: String(item.name), version: Number(item.version), state: String(item.state), data: object(JSON.parse(String(item.data))) }));
 }
 
+async function workspaceCanvas(client: Client, role: AccessContext['member']['role']) {
+  const [definitions, counts] = await Promise.all([
+    listDefinitions(client),
+    Effect.runPromise(query<Record<string, unknown>>(client, { sql: `SELECT COUNT(*) AS records,
+      SUM(CASE WHEN type='task' AND state='open' THEN 1 ELSE 0 END) AS open_tasks
+      FROM records WHERE archived_at IS NULL` })),
+  ]);
+  const count = counts[0] || {};
+  const pos = definitions.some((item) => item.id === 'directory.pos.bot' && item.state === 'published') ? await posSummary(client) : undefined;
+  return buildWorkspaceCanvas(definitions, { records: Number(count.records || 0), openTasks: Number(count.open_tasks || 0), pos }, role);
+}
+
 async function handle(request: Request, env: RuntimeEnv): Promise<Response> {
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders });
   const url = new URL(request.url); const path = url.pathname;
   if (request.method === 'GET' && path === '/health') return response({ ok: true, service: 'tarharness', now: new Date().toISOString(), tursoProvisioning: Boolean(env.TURSO_PLATFORM_TOKEN && env.TURSO_ORG && !env.TURSO_ORG.startsWith('REPLACE_')) });
-  if (request.method === 'GET' && path === '/v1/actions') return response({ actions: actionCatalog });
+  if (request.method === 'GET' && path === '/v1/actions') return response({ actions: actionCatalog, interfaces: interfaceCatalog });
   if (request.method === 'GET' && path === '/v1/workspaces') {
     const { value, control } = await identity(request, env); await ensurePersonalWorkspace(value, control, env); const workspaces = await Effect.runPromise(control.listWorkspaces(value.id));
     return response({ workspaces: workspaces.map(({ workspace, role }) => ({ id: workspace.id, name: workspace.name, slug: workspace.slug, scope: workspace.slug, role, mode: workspace.mode, state: workspace.state })) });
@@ -106,14 +123,39 @@ async function handle(request: Request, env: RuntimeEnv): Promise<Response> {
     return response({ invitation: { email, role, state: 'pending' } }, 201);
   }
   return withWorkspace(env, current, async (client) => {
+    const productContentMatch = /^pos\/products\/([^/]+)\/content$/.exec(nested);
+    if (request.method === 'GET' && productContentMatch) {
+      if (current.member.role === 'guest') throw forbidden();
+      return response({ content: await readProductContent(client, env.PRODUCT_CONTENT, current, decodeURIComponent(productContentMatch[1])) });
+    }
+    if (request.method === 'GET' && /^pos\/(overview|products|orders|customers)$/.test(nested)) {
+      const offset = Number(url.searchParams.get('offset') || 0);
+      if (!Number.isSafeInteger(offset) || offset < 0) throw badRequest('Invalid page.');
+      if (current.member.role === 'guest') throw forbidden();
+      return response(await readPos(client, current, nested.slice(4), url.searchParams.get('q') || '', offset));
+    }
     if (request.method === 'GET' && nested === 'records') {
       const type = url.searchParams.get('type');
+      if (current.member.role === 'guest' && type?.startsWith('pos.')) throw forbidden();
       const rows = await Effect.runPromise(query<Record<string, unknown>>(client, type ? { sql: 'SELECT * FROM records WHERE type=? AND archived_at IS NULL ORDER BY updated_at DESC LIMIT 100', args: [type] } : { sql: 'SELECT * FROM records WHERE archived_at IS NULL ORDER BY updated_at DESC LIMIT 100' }));
-      return response({ records: rows.map(record) });
+      return response({ records: rows.filter((row) => current.member.role !== 'guest' || !String(row.type).startsWith('pos.')).map(record) });
     }
     if (request.method === 'GET' && nested === 'inbox') {
       const rows = await Effect.runPromise(query<Record<string, unknown>>(client, { sql: 'SELECT * FROM records WHERE type=\'task\' AND state=\'open\' AND (assignee_id=? OR assignee_id IS NULL) AND archived_at IS NULL ORDER BY updated_at DESC LIMIT 100', args: [current.identity.id] }));
       return response({ tasks: rows.map(record) });
+    }
+    if (request.method === 'GET' && nested === 'canvas') return response({ cards: await workspaceCanvas(client, current.member.role) });
+    if (request.method === 'GET' && nested === 'directory') {
+      const definitions = await listDefinitions(client);
+      const published = new Set(definitions.filter((item) => item.state === 'published').map((item) => item.id));
+      return response({ bots: botDirectory.map((bot) => ({
+        ...bot,
+        installed: published.has(directoryDefinitionIds(bot.id).bot),
+        flows: [
+          ...bot.flows.map((flow) => ({ ...flow, template: true, installed: published.has(directoryDefinitionIds(bot.id, flow.id).flow!) })),
+          ...definitions.filter((item) => item.kind === 'flow' && item.state === 'published' && item.data.source === 'custom' && item.data.botId === bot.id).map((item) => ({ id: item.id, title: item.name, description: String(item.data.description || 'Custom Flow'), records: [], actions: Array.isArray(item.data.actions) ? item.data.actions : [], template: false, installed: true })),
+        ],
+      })) });
     }
     if (request.method === 'GET' && nested === 'definitions') return response({ definitions: await listDefinitions(client) });
     if (request.method === 'PUT' && nested.startsWith('definitions/')) {
@@ -127,10 +169,10 @@ async function handle(request: Request, env: RuntimeEnv): Promise<Response> {
         ON CONFLICT(id) DO UPDATE SET name=excluded.name,version=definitions.version+1,state=excluded.state,data=excluded.data,updated_at=excluded.updated_at`, args: [id, kind, name, body.state === 'published' ? 'published' : 'draft', JSON.stringify(data), at, at] });
       return response({ definition: { id, kind, name, state: body.state === 'published' ? 'published' : 'draft' } });
     }
-    const actionMatch = /^actions\/(record\.create|record\.update|task\.create|task\.complete|flow\.start)$/.exec(nested);
+    const actionMatch = /^actions\/([a-z.]+)$/.exec(nested);
     if (request.method === 'POST' && actionMatch) {
       const key = request.headers.get('Idempotency-Key') || ''; const input = await Effect.runPromise(parseJson(request));
-      const result = await Effect.runPromise(executeGateway(client, current, { actionId: actionMatch[1] as GatewayRequest['actionId'], idempotencyKey: key, input }));
+      const result = await Effect.runPromise(executeGateway(client, current, { actionId: actionMatch[1] as GatewayRequest['actionId'], idempotencyKey: key, input }, { productContent: env.PRODUCT_CONTENT, ai: env.AI }));
       return response(result, 201);
     }
     throw notFound('Route not found.');

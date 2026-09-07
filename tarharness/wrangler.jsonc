@@ -26,5 +26,9 @@
     "consumers": [{ "queue": "tarharness-outbox", "max_batch_size": 10, "max_retries": 5 }]
   },
   "triggers": { "crons": ["*/5 * * * *"] },
-  "observability": { "enabled": true, "head_sampling_rate": 1 }
+  "observability": { "enabled": true, "head_sampling_rate": 1 },
+  "r2_buckets": [
+    { "binding": "PRODUCT_CONTENT", "bucket_name": "tar-product-content" }
+  ],
+  "ai": { "binding": "AI" }
 }

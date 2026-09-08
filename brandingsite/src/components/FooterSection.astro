@@ -33,12 +33,69 @@ const legalLinks = [
       <a href="https://play.google.com/store/apps" class="get-started-btn">GET STARTED</a>
     </div>
 
-    <!-- Bee mascots peeking over the divider — TAR logo pixel-rect grid,
-         one per color, gently animated -->
-    <div class="peek-row" aria-hidden="true">
-      <!-- Bee 1: yellow -->
-      <div class="bee bee-1">
-        <svg viewBox="0 0 7 7.1" width="72" height="73">
+    <!-- Story caption -->
+    <p class="bee-story font-dm-sans">
+      At dusk, the TAR bees fly the day home — every order, every reply,
+      every review, safely back to the hive.
+    </p>
+
+    <!-- Bee environment: night meadow, hive, flowers, three mascot bees -->
+    <div class="bee-scene" aria-hidden="true">
+
+      <!-- beehive — pixel boxes version -->
+      <div class="hive">
+        <svg viewBox="0 0 26 20" width="130" height="100">
+          <rect x="3" y="0" width="20" height="2" fill="#b5772a" />
+          <rect x="1" y="2" width="24" height="4" fill="#e8a33d" />
+          <rect x="2" y="6" width="22" height="4" fill="#e8a33d" />
+          <rect x="3" y="10" width="20" height="4" fill="#e8a33d" />
+          <rect x="4" y="14" width="18" height="4" fill="#e8a33d" />
+          <rect x="11" y="15" width="4" height="3" fill="#1d2b20" />
+          <rect x="0" y="18" width="26" height="2" fill="#b5772a" />
+        </svg>
+        <span class="hive-glow"></span>
+      </div>
+
+      <!-- pixel flowers -->
+      <div class="flower f1">
+        <svg viewBox="0 0 8 18" width="32" height="72">
+          <rect x="3" y="6" width="1.4" height="12" fill="#3c7a4a" />
+          <rect x="1" y="10" width="2" height="1" fill="#3c7a4a" />
+          <rect x="5" y="13" width="2" height="1" fill="#3c7a4a" />
+          <rect x="2.6" y="0" width="2.8" height="2.8" fill="#ffcf3f" />
+          <rect x="0" y="2.6" width="8" height="2.8" fill="#ffcf3f" />
+          <rect x="2.6" y="5.2" width="2.8" height="2.8" fill="#ffcf3f" />
+          <rect x="3.3" y="3.3" width="1.4" height="1.4" fill="#b5772a" />
+        </svg>
+      </div>
+      <div class="flower f2">
+        <svg viewBox="0 0 8 18" width="26" height="58">
+          <rect x="3" y="6" width="1.4" height="12" fill="#3c7a4a" />
+          <rect x="5" y="11" width="2" height="1" fill="#3c7a4a" />
+          <rect x="2.6" y="0" width="2.8" height="2.8" fill="#ff7bac" />
+          <rect x="0" y="2.6" width="8" height="2.8" fill="#ff7bac" />
+          <rect x="2.6" y="5.2" width="2.8" height="2.8" fill="#ff7bac" />
+          <rect x="3.3" y="3.3" width="1.4" height="1.4" fill="#ffffff" />
+        </svg>
+      </div>
+      <div class="flower f3">
+        <svg viewBox="0 0 8 18" width="24" height="54">
+          <rect x="3" y="6" width="1.4" height="12" fill="#3c7a4a" />
+          <rect x="1" y="9" width="2" height="1" fill="#3c7a4a" />
+          <rect x="2.6" y="0" width="2.8" height="2.8" fill="#55dd4a" />
+          <rect x="0" y="2.6" width="8" height="2.8" fill="#55dd4a" />
+          <rect x="2.6" y="5.2" width="2.8" height="2.8" fill="#55dd4a" />
+          <rect x="3.3" y="3.3" width="1.4" height="1.4" fill="#b5772a" />
+        </svg>
+      </div>
+
+      <!-- Bee 1: GUARD — hovers at the hive entrance -->
+      <div class="bee bee-1 role-guard">
+        <svg viewBox="0 -0.9 7 8" width="54" height="62">
+          <g class="bee-wings">
+            <rect x="1.1" y="-0.75" width="2" height="0.7" fill="#dff1ff" />
+            <rect x="3.9" y="-0.75" width="2" height="0.7" fill="#dff1ff" />
+          </g>
           <path class="bee-body" fill="#ffcf3f" d="M0 0 H2 V1 H5 V0 H7 V1 H6 V2 H7 V6.75 H6 V6.2 H4 V7.1 H3 V6.2 H1 V6.75 H0 V2 H1 V1 H0 Z" />
           <g class="bee-eyes">
             <rect x="1.4" y="3.15" width="0.7" height="0.7" fill="#ffffff" />
@@ -48,9 +105,14 @@ const legalLinks = [
           </g>
         </svg>
       </div>
-      <!-- Bee 2: pink -->
-      <div class="bee bee-2">
-        <svg viewBox="0 0 7 7.1" width="120" height="122">
+
+      <!-- Bee 2: FORAGER — crosses the meadow -->
+      <div class="bee bee-2 role-forager">
+        <svg viewBox="0 -0.9 7 8" width="84" height="96">
+          <g class="bee-wings">
+            <rect x="1.1" y="-0.75" width="2" height="0.7" fill="#dff1ff" />
+            <rect x="3.9" y="-0.75" width="2" height="0.7" fill="#dff1ff" />
+          </g>
           <path class="bee-body" fill="#ff7bac" d="M0 0 H2 V1 H5 V0 H7 V1 H6 V2 H7 V6.75 H6 V6.2 H4 V7.1 H3 V6.2 H1 V6.75 H0 V2 H1 V1 H0 Z" />
           <g class="bee-eyes">
             <rect x="1.4" y="3.15" width="0.7" height="0.7" fill="#ffffff" />
@@ -60,9 +122,14 @@ const legalLinks = [
           </g>
         </svg>
       </div>
-      <!-- Bee 3: green -->
-      <div class="bee bee-3">
-        <svg viewBox="0 0 7 7.1" width="56" height="57">
+
+      <!-- Bee 3: GARDENER — hops flower to flower -->
+      <div class="bee bee-3 role-gardener">
+        <svg viewBox="0 -0.9 7 8" width="46" height="53">
+          <g class="bee-wings">
+            <rect x="1.1" y="-0.75" width="2" height="0.7" fill="#dff1ff" />
+            <rect x="3.9" y="-0.75" width="2" height="0.7" fill="#dff1ff" />
+          </g>
           <path class="bee-body" fill="#55dd4a" d="M0 0 H2 V1 H5 V0 H7 V1 H6 V2 H7 V6.75 H6 V6.2 H4 V7.1 H3 V6.2 H1 V6.75 H0 V2 H1 V1 H0 Z" />
           <g class="bee-eyes">
             <rect x="1.4" y="3.15" width="0.7" height="0.7" fill="#ffffff" />
@@ -72,6 +139,7 @@ const legalLinks = [
           </g>
         </svg>
       </div>
+
     </div>
 
     <!-- Navigation Columns -->
@@ -167,28 +235,108 @@ const legalLinks = [
     box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
   }
 
-  /* Bees peeking over the divider line */
-  .peek-row {
+  /* Story caption */
+  .bee-story {
+    text-align: center;
+    font-size: 13.5px;
+    color: rgba(255, 255, 255, 0.55);
+    margin: 0 0 24px;
+  }
+
+  /* Bee environment scene */
+  .bee-scene {
     position: relative;
-    height: 96px;
+    height: 190px;
     overflow: hidden;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    display: flex;
-    justify-content: center;
-    align-items: flex-end;
-    gap: 56px;
+  }
+
+  .hive {
+    position: absolute;
+    left: 7%;
+    bottom: -1px;
+  }
+
+  .hive-glow {
+    position: absolute;
+    left: 50%;
+    bottom: 8px;
+    width: 14px;
+    height: 8px;
+    transform: translateX(-50%);
+    background: #ffd97a;
+    opacity: 0.55;
+    filter: blur(4px);
+    animation: glow-pulse 2.8s ease-in-out infinite;
+  }
+
+  @keyframes glow-pulse {
+    0%, 100% { opacity: 0.35; }
+    50% { opacity: 0.75; }
+  }
+
+  .flower {
+    position: absolute;
+    bottom: -1px;
+    transform-origin: bottom center;
+    animation: flower-sway 4.5s ease-in-out infinite;
+  }
+
+  .f1 { left: 38%; animation-delay: 0s; }
+  .f2 { left: 62%; animation-delay: 1.2s; }
+  .f3 { left: 84%; animation-delay: 2.3s; }
+
+  @keyframes flower-sway {
+    0%, 100% { transform: rotate(0deg); }
+    30% { transform: rotate(-2.5deg); }
+    70% { transform: rotate(2.5deg); }
   }
 
   .bee {
+    position: absolute;
     display: flex;
-    align-items: flex-end;
-    margin-bottom: -1px;
     animation: bee-bob 2.6s ease-in-out infinite;
   }
 
+  /* GUARD: hover beside the hive entrance */
+  .role-guard {
+    left: 21.5%;
+    bottom: 34px;
+  }
+
+  /* FORAGER: crosses the meadow, out and back */
+  .role-forager {
+    left: 20%;
+    top: 24px;
+    animation: bee-bob 2.6s ease-in-out infinite, bee-cross 16s ease-in-out infinite;
+  }
+
+  @keyframes bee-cross {
+    0%, 100% { left: 20%; transform: scaleX(1); }
+    48% { left: 78%; transform: scaleX(1); }
+    50% { left: 78%; transform: scaleX(-1); }
+    98% { left: 20%; transform: scaleX(-1); }
+  }
+
+  /* GARDENER: hops between flowers */
+  .role-gardener {
+    left: 56%;
+    bottom: 88px;
+    animation: bee-bob 2.2s ease-in-out infinite, bee-hop 9s ease-in-out infinite;
+  }
+
+  @keyframes bee-hop {
+    0%, 100% { left: 56%; bottom: 88px; }
+    15% { bottom: 118px; }
+    30% { left: 60%; bottom: 88px; }
+    45% { bottom: 122px; }
+    60% { left: 65%; bottom: 88px; }
+    75% { bottom: 118px; }
+    90% { left: 56%; }
+  }
+
   .bee-1 { animation-delay: 0s; }
-  .bee-2 { animation-delay: 0.5s; }
-  .bee-3 { animation-delay: 1s; }
+  .bee-3 { animation-delay: 0.5s; }
 
   .bee-body {
     transform-origin: 3.5px 7.1px;
@@ -205,13 +353,24 @@ const legalLinks = [
     animation: bee-blink 4.2s ease-in-out infinite;
   }
 
+  .bee-wings {
+    transform-origin: 3.5px 0px;
+    transform-box: view-box;
+    animation: wing-flutter 0.22s ease-in-out infinite alternate;
+  }
+
+  @keyframes wing-flutter {
+    from { transform: scaleY(1); }
+    to { transform: scaleY(0.35); }
+  }
+
   .bee-1 .bee-eyes { animation-delay: 1.1s; }
   .bee-2 .bee-eyes { animation-delay: 2.3s; }
   .bee-3 .bee-eyes { animation-delay: 3.4s; }
 
   @keyframes bee-bob {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-7px); }
+    0%, 100% { margin-bottom: 0; }
+    50% { margin-bottom: 7px; }
   }
 
   @keyframes bee-sway {
@@ -225,8 +384,30 @@ const legalLinks = [
     94% { transform: scaleY(0.08); }
   }
 
+  @media (max-width: 639px) {
+    .bee-scene {
+      height: 150px;
+    }
+
+    .f3 { display: none; }
+
+    .role-forager {
+      animation: bee-bob 2.6s ease-in-out infinite;
+      left: 55%;
+      top: 16px;
+    }
+
+    .role-gardener {
+      left: 66%;
+    }
+
+    .role-gardener {
+      animation: bee-bob 2.2s ease-in-out infinite;
+    }
+  }
+
   @media (prefers-reduced-motion: reduce) {
-    .bee, .bee-body, .bee-eyes {
+    .bee, .bee-body, .bee-eyes, .bee-wings, .flower, .hive-glow {
       animation: none;
     }
   }

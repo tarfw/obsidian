@@ -9,7 +9,7 @@ import type { AccessContext, RecordItem } from './types.ts';
 import { actionCatalog, interfaceCatalog } from './registry/catalog.ts';
 import { buildWorkspaceCanvas } from './registry/canvas.ts';
 import { botDirectory, directoryDefinitionIds } from './registry/directory.ts';
-import { posSummary, readPos } from './pos/store.ts';
+import { posSummary, readPos, readPosInbox } from './pos/store.ts';
 import { readProductContent } from './pos/content.ts';
 
 type RuntimeEnv = Env & { readonly TURSO_PLATFORM_TOKEN?: string };
@@ -142,7 +142,8 @@ async function handle(request: Request, env: RuntimeEnv): Promise<Response> {
     }
     if (request.method === 'GET' && nested === 'inbox') {
       const rows = await Effect.runPromise(query<Record<string, unknown>>(client, { sql: 'SELECT * FROM records WHERE type=\'task\' AND state=\'open\' AND (assignee_id=? OR assignee_id IS NULL) AND archived_at IS NULL ORDER BY updated_at DESC LIMIT 100', args: [current.identity.id] }));
-      return response({ tasks: rows.map(record) });
+      const pos = current.member.role === 'guest' ? { orders: [] } : await readPosInbox(client).catch(() => ({ orders: [] }));
+      return response({ tasks: rows.map(record), orders: pos.orders });
     }
     if (request.method === 'GET' && nested === 'canvas') return response({ cards: await workspaceCanvas(client, current.member.role) });
     if (request.method === 'GET' && nested === 'directory') {

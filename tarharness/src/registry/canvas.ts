@@ -48,7 +48,8 @@ function configuredCards(definitions: readonly StoredDefinition[], metrics: Canv
       if (!flow) return [];
       if (flow.data.botId === 'pos') {
         if (role === 'guest') return [];
-        return [{ id, kind: 'flow', title, description: text(card.description), flowId, actionId: 'pos.open', initialInput: { section: flow.data.templateId } }];
+        const section = String(flow.data.templateId);
+        return [{ id, kind: 'flow', title: section === 'sell' ? 'New sale' : title, description: text(card.description), flowId, actionId: 'pos.open', initialInput: { section } }];
       }
       return [{ id, kind: 'flow', title, description: text(card.description) || 'Start or continue this process.', flowId }];
     }

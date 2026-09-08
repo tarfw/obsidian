@@ -13,6 +13,7 @@ export const POS_INDEXES = [
   "CREATE UNIQUE INDEX IF NOT EXISTS pos_unique_barcode ON records(json_extract(data,'$.barcode')) WHERE type='pos.product' AND json_extract(data,'$.barcode')!='' AND archived_at IS NULL",
   "CREATE UNIQUE INDEX IF NOT EXISTS pos_unique_sku ON records(json_extract(data,'$.sku')) WHERE type='pos.product' AND json_extract(data,'$.sku')!='' AND archived_at IS NULL",
   "CREATE UNIQUE INDEX IF NOT EXISTS pos_one_open_register ON records(type) WHERE type='pos.register' AND state='open'",
+  "CREATE UNIQUE INDEX IF NOT EXISTS pos_unique_draft_key ON records(owner_id,json_extract(data,'$.draftKey')) WHERE type='pos.order' AND json_extract(data,'$.draftKey') IS NOT NULL",
 ];
 export interface PosRecord { id: string; title: string; state: string; data: Data; version: number; createdAt: number }
 const object = (value: unknown): Data => value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Data : {};
@@ -68,6 +69,12 @@ export async function readPos(db: DB, context: AccessContext, section: string, s
     summary: await posSummary(db), canManage: context.member.role === 'owner' || context.member.role === 'admin', paymentMethods: ['cash', 'upi'] };
 }
 
+export async function readPosInbox(db: DB) {
+  await requirePos(db);
+  const result = await db.execute({ sql: "SELECT * FROM records WHERE type='pos.order' AND state='open' AND archived_at IS NULL ORDER BY updated_at DESC,id LIMIT 100" });
+  return { orders: result.rows.map(decode) };
+}
+
 async function movement(db: DB, product: PosRecord, delta: number, reason: string, actor: string, reference?: string) {
   const stock = integer(Number(product.data.stock) + delta, 'Stock');
   await put(db, 'pos.product', product.title, { ...product.data, stock }, actor, product.id);
@@ -86,7 +93,7 @@ export async function executePos(client: Client, context: AccessContext, actionI
     }
     const result = await mutate(tx, context, actionId, input);
     const at = Date.now();
-    const templateId = actionId === 'pos.checkout' ? 'sell' : actionId === 'pos.refund' ? 'orders' : actionId.startsWith('pos.product.') || actionId.startsWith('pos.stock.') ? 'stock' : actionId.startsWith('pos.customer.') ? 'customers' : actionId.startsWith('pos.register.') ? 'register' : null;
+    const templateId = actionId === 'pos.checkout' || actionId.startsWith('pos.order.') ? 'sell' : actionId === 'pos.refund' ? 'orders' : actionId.startsWith('pos.product.') || actionId.startsWith('pos.stock.') ? 'stock' : actionId.startsWith('pos.customer.') ? 'customers' : actionId.startsWith('pos.register.') ? 'register' : null;
     const flowId = templateId ? 'directory.pos.' + templateId + '.flow' : null;
     let runId: string | null = null;
     if (flowId) {
@@ -167,6 +174,68 @@ async function mutate(db: Transaction, context: AccessContext, action: string, i
     if (await register(db)) throw conflict('A register is already open.');
     return { register: await put(db, 'pos.register', settings.title, { opening: integer(input.opening, 'Opening cash'), openedBy: actor, currency: settings.data.currency }, actor, undefined, 'open') };
   }
+  if (action === 'pos.order.save') {
+    const orderId = text(input.orderId);
+    const clientDraftKey = text(input.draftKey);
+    let current = orderId ? await get(db, orderId, 'pos.order') : null;
+    if (!current && clientDraftKey) {
+      const existing = await db.execute({ sql: "SELECT * FROM records WHERE type='pos.order' AND owner_id=? AND json_extract(data,'$.draftKey')=? AND archived_at IS NULL LIMIT 1", args: [actor, clientDraftKey] });
+      current = existing.rows[0] ? decode(existing.rows[0]) : null;
+    }
+    if (orderId && (!current || current.state !== 'open')) throw conflict('This order is no longer open.');
+    if (current && current.state !== 'open') throw conflict('This order is no longer open.');
+    if (current && orderId && current.version !== input.version) throw conflict('Order changed. Reload the Inbox.');
+    const cart = Array.isArray(input.items) ? input.items.map(object) : [];
+    if (!cart.length || cart.length > 100) throw badRequest('Add between 1 and 100 products.');
+    if (new Set(cart.map((line) => line.productId)).size !== cart.length) throw badRequest('Combine duplicate products into one line.');
+    const discountBps = integer(input.discountBps ?? 0, 'Discount', 0, 10000);
+    const lines: Data[] = [];
+    let subtotal = 0, discount = 0, tax = 0;
+    for (const line of cart) {
+      const product = await get(db, text(line.productId), 'pos.product');
+      if (!product) throw notFound('Product no longer available.');
+      if (line.version !== product.version) throw conflict(product.title + ' changed. Reload the cart.');
+      const quantity = integer(line.quantity, 'Quantity', 1, 10000);
+      if (quantity > Number(product.data.stock)) throw conflict('Not enough stock for ' + product.title + '.');
+      const gross = integer(Number(product.data.price) * quantity, 'Line total');
+      const lineDiscount = Math.round(gross * discountBps / 10000);
+      const lineTax = Math.round((gross - lineDiscount) * Number(product.data.taxBps) / 10000);
+      subtotal += gross; discount += lineDiscount; tax += lineTax;
+      const prior = Array.isArray(current?.data.lines) ? current.data.lines.map(object).find((item) => String(item.productId) === product.id) : null;
+      lines.push({ productId: product.id, title: product.title, quantity, price: product.data.price, discount: lineDiscount, tax: lineTax, total: gross - lineDiscount + lineTax, status: text(prior?.status, 40) || 'pending' });
+    }
+    const customerId = text(input.customerId) || text(current?.data.customerId);
+    const customer = customerId ? await get(db, customerId, 'pos.customer') : null;
+    if (customerId && !customer) throw notFound('Customer not found.');
+    const requestedType = text(input.orderType) || text(current?.data.orderType);
+    const orderType = ['counter', 'dine-in', 'takeaway', 'delivery'].includes(requestedType) ? requestedType : 'counter';
+    const total = integer(subtotal - discount + tax, 'Sale total');
+    const order = await put(db, 'pos.order', 'Open order', { ...current?.data, draftKey: clientDraftKey || current?.data.draftKey || null, lines, subtotal, discount, discountBps, tax, total, currency: settings.data.currency,
+      paymentStatus: 'unpaid', customerId: customerId || null, customerName: customer?.title || null, table: text(input.table, 80) || current?.data.table || null, orderType,
+      storeName: settings.title, location: settings.data.location }, actor, current?.id, 'open');
+    return { order };
+  }
+  if (action === 'pos.order.item.update') {
+    const order = await get(db, text(input.orderId), 'pos.order');
+    if (!order || order.state !== 'open') throw notFound('Open order not found.');
+    if (order.version !== input.version) throw conflict('Order changed. Reload the Inbox.');
+    const productId = text(input.productId);
+    const next = text(input.status, 40);
+    const transitions: Record<string, readonly string[]> = { pending: ['preparing'], preparing: ['ready'], ready: [] };
+    const lines = Array.isArray(order.data.lines) ? order.data.lines.map(object) : [];
+    const line = lines.find((item) => String(item.productId) === productId);
+    if (!line) throw notFound('Order item not found.');
+    const current = text(line.status, 40) || 'pending';
+    if (!transitions[current]?.includes(next)) throw conflict('That item cannot move to this status.');
+    line.status = next;
+    return { order: await put(db, 'pos.order', order.title, { ...order.data, lines }, actor, order.id, order.state) };
+  }
+  if (action === 'pos.order.cancel') {
+    const order = await get(db, text(input.orderId), 'pos.order');
+    if (!order || order.state !== 'open') throw notFound('Open order not found.');
+    if (order.version !== input.version) throw conflict('Order changed. Reload the Inbox.');
+    return { order: await put(db, 'pos.order', order.title, { ...order.data, cancelledAt: Date.now() }, actor, order.id, 'cancelled') };
+  }
   const session = await register(db);
   if (!session) throw badRequest('Open the register first.');
   if (action === 'pos.register.close') {
@@ -184,10 +253,18 @@ async function mutate(db: Transaction, context: AccessContext, action: string, i
       const duplicate = await db.execute({ sql: "SELECT id FROM records WHERE type='pos.payment' AND json_extract(data,'$.reference')=?", args: [reference] });
       if (duplicate.rows.length) throw conflict('This UPI reference is already recorded.');
     }
+    const draftId = text(input.orderId);
+    const draft = draftId ? await get(db, draftId, 'pos.order') : null;
+    if (draftId && (!draft || draft.state !== 'open')) throw conflict('This order is no longer awaiting payment.');
     const cart = Array.isArray(input.items) ? input.items.map(object) : [];
     if (!cart.length || cart.length > 100) throw badRequest('Add between 1 and 100 products.');
     if (new Set(cart.map((line) => line.productId)).size !== cart.length) throw badRequest('Combine duplicate products into one line.');
     const discountBps = integer(input.discountBps ?? 0, 'Discount', 0, 10000);
+    if (draft) {
+      const savedLines = Array.isArray(draft.data.lines) ? draft.data.lines.map(object) : [];
+      const sameCart = savedLines.length === cart.length && savedLines.every((line) => cart.some((item) => String(item.productId) === String(line.productId) && Number(item.quantity) === Number(line.quantity)));
+      if (!sameCart || discountBps !== Number(draft.data.discountBps || 0)) throw conflict('Order changed. Return to the Inbox and save the updated cart.');
+    }
     const lines: Data[] = [];
     let subtotal = 0, discount = 0, tax = 0;
     for (const line of cart) {
@@ -206,12 +283,12 @@ async function mutate(db: Transaction, context: AccessContext, action: string, i
     if (input.expectedTotal !== total) throw conflict('Total changed. Review the cart.');
     const tendered = input.method === 'upi' ? total : integer(input.tendered, 'Cash received');
     if (tendered < total) throw badRequest('Cash received is below the total.');
-    const customerId = text(input.customerId);
+    const customerId = draft ? text(draft.data.customerId) : text(input.customerId);
     const customer = customerId ? await get(db, customerId, 'pos.customer') : null;
     if (customerId && !customer) throw notFound('Customer not found.');
-    const order = await put(db, 'pos.order', 'Sale', { lines, subtotal, discount, tax, total, currency: settings.data.currency, businessDate,
+    const order = await put(db, 'pos.order', 'Sale', { ...draft?.data, lines, subtotal, discount, tax, total, currency: settings.data.currency, businessDate,
       method: input.method, reference, verification: input.method === 'upi' ? 'cashier_confirmed' : 'cash', tendered, change: tendered - total, customerId: customerId || null, customerName: customer?.title || null,
-      registerId: session.id, storeName: settings.title, location: settings.data.location, receiptFooter: settings.data.receiptFooter }, actor, undefined, 'paid');
+      paymentStatus: 'paid', registerId: session.id, storeName: settings.title, location: settings.data.location, receiptFooter: settings.data.receiptFooter }, actor, draft?.id, 'paid');
     for (const line of lines) await movement(db, (await get(db, String(line.productId), 'pos.product'))!, -Number(line.quantity), 'Sale', actor, order.id);
     await put(db, 'pos.payment', 'Sale payment', { orderId: order.id, amount: total, method: input.method, reference: reference || null, registerId: session.id, businessDate }, actor);
     return { order };

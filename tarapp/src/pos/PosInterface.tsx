@@ -22,6 +22,7 @@ export default function PosInterface(props: ActionInterfaceProps) {
   const insets = useSafeAreaInsets();
   const wide = useWindowDimensions().width >= 760;
   const initialSection = (sections.find((item) => item.key === props.initialInput?.section)?.key || 'sell') as Section;
+  const initialOrderId = typeof props.initialInput?.orderId === 'string' ? props.initialInput.orderId : '';
   const savedSession = getPosSession(props.scope);
   const hasSavedProducts = initialSection === 'sell' && savedSession?.products !== undefined;
   const [section, setSection] = useState<Section>(initialSection);
@@ -34,17 +35,23 @@ export default function PosInterface(props: ActionInterfaceProps) {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [form, setForm] = useState<PosFormSpec | null>(null);
-  const [cart, setCart] = useState<CartLine[]>(() => savedSession?.cart || []);
+  const [cart, setCart] = useState<CartLine[]>([]);
   const [cartOpen, setCartOpen] = useState(false);
-  const [discount, setDiscount] = useState(() => savedSession?.discount || '0');
-  const [customer, setCustomer] = useState<PosRecord | null>(() => savedSession?.customer || null);
+  const [discount, setDiscount] = useState('0');
+  const [customer, setCustomer] = useState<PosRecord | null>(null);
   const [order, setOrder] = useState<PosRecord | null>(null);
+  const [draftOrderId, setDraftOrderId] = useState(initialOrderId);
+  const [draftSaving, setDraftSaving] = useState(false);
+  const [draftLoading, setDraftLoading] = useState(Boolean(initialOrderId));
   const [hasMore, setHasMore] = useState(false);
   const [pending, setPending] = useState<PendingPosAction | null>(null);
   const [journalReady, setJournalReady] = useState(false);
   const [revision, setRevision] = useState(0);
   const requestId = useRef(0);
   const journal = useRef<Awaited<ReturnType<typeof posJournal>> | null>(null);
+  const draftRef = useRef<{ id: string; version: number } | null>(null);
+  const draftSignature = useRef('');
+  const draftKey = useRef(initialOrderId || createOperationKey('pos.draft'));
   const currency = overview?.summary.currency || 'INR';
   const discountBps = Math.round(Number(discount || 0) * 100);
   const totals = cartTotals(cart, Number.isFinite(discountBps) ? discountBps : 0);
@@ -62,6 +69,24 @@ export default function PosInterface(props: ActionInterfaceProps) {
     void harness.pos<PosOverview>(props.scope, 'overview').then((value) => { if (alive) setOverview(value); }).catch((cause: Error) => { if (alive) setError(cause.message); });
     return () => { alive = false; };
   }, [props.scope]);
+  useEffect(() => {
+    if (!initialOrderId) return;
+    let alive = true;
+    void (async () => {
+      const response = await harness.pos<{ items: PosRecord[] }>(props.scope, 'orders', initialOrderId);
+      const draft = response.items.find((item) => item.id === initialOrderId);
+      if (!draft || draft.state !== 'open') throw new Error('This order is no longer awaiting payment.');
+      const lines = Array.isArray(draft.data.lines) ? draft.data.lines as SaleLine[] : [];
+      const products = await Promise.all(lines.map((line) => harness.pos<{ items: PosRecord[] }>(props.scope, 'products', line.productId)));
+      const cartLines = lines.map((line, index) => {
+        const product = products[index].items.find((item) => item.id === line.productId);
+        if (!product) throw new Error(line.title + ' is no longer available.');
+        return { product, quantity: line.quantity };
+      });
+      if (alive) { draftRef.current = { id: draft.id, version: draft.version }; setCart(cartLines); setDiscount(String(Number(draft.data.discountBps || 0) / 100)); setDraftOrderId(draft.id); setCartOpen(true); }
+    })().catch((cause: Error) => { if (alive) setError(cause.message); }).finally(() => { if (alive) setDraftLoading(false); });
+    return () => { alive = false; };
+  }, [initialOrderId, props.scope]);
   useEffect(() => {
     const current = getPosSession(props.scope);
     savePosSession(props.scope, {
@@ -94,6 +119,30 @@ export default function PosInterface(props: ActionInterfaceProps) {
     }, 180);
     return () => { alive = false; clearTimeout(timer); };
   }, [section, search, props.scope, revision]);
+  useEffect(() => {
+    if (!cart.length) {
+      const draft = draftRef.current;
+      if (draft && !draftSaving) {
+        draftRef.current = null; draftSignature.current = ''; setDraftOrderId('');
+        void harness.executeAction(props.scope, 'pos.order.cancel', { orderId: draft.id, version: draft.version }, createOperationKey('pos.order.cancel')).catch((cause: Error) => setError(cause.message));
+      }
+      return;
+    }
+    if (!overview?.settings || draftLoading || form || draftSaving) return;
+    const signature = JSON.stringify({ items: cart.map((line) => [line.product.id, line.product.version, line.quantity]), discountBps, customerId: customer?.id || '' });
+    if (signature === draftSignature.current) return;
+    const timer = setTimeout(() => {
+      setDraftSaving(true);
+      void harness.executeAction<{ order: PosRecord }>(props.scope, 'pos.order.save', {
+        items: cart.map((line) => ({ productId: line.product.id, version: line.product.version, quantity: line.quantity })), discountBps, customerId: customer?.id || '', orderId: draftRef.current?.id, version: draftRef.current?.version, draftKey: draftKey.current,
+      }, createOperationKey('pos.order.save')).then((result) => {
+        draftRef.current = { id: result.order.id, version: result.order.version };
+        draftSignature.current = signature;
+        setDraftOrderId(result.order.id);
+      }).catch((cause: Error) => setError(cause.message)).finally(() => setDraftSaving(false));
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [cart, customer?.id, discountBps, draftLoading, draftSaving, form, overview?.settings, props.scope]);
   const refresh = async () => { await reloadOverview(); setRevision((value) => value + 1); };
   const more = async () => {
     if (loading || !hasMore) return;
@@ -146,7 +195,8 @@ export default function PosInterface(props: ActionInterfaceProps) {
       setSection(previous.section); setSearch(previous.search); setCartOpen(previous.cartOpen);
       return;
     }
-    if (cart.length) Alert.alert('Leave this sale?', 'The current cart will be discarded.', [{ text: 'Keep selling', style: 'cancel' }, { text: 'Leave', onPress: () => props.onSuccess({}) }]);
+    if (draftOrderId) props.onSuccess({});
+    else if (cart.length) Alert.alert('Leave this sale?', 'The current cart will be discarded.', [{ text: 'Keep selling', style: 'cancel' }, { text: 'Leave', onPress: () => props.onSuccess({}) }]);
     else props.onSuccess({});
   };
   const selectCustomer = (selected: PosRecord) => {
@@ -179,30 +229,27 @@ export default function PosInterface(props: ActionInterfaceProps) {
       const stored = product?.data.contentKey ? (await harness.posProductContent(props.scope, product.id)).content : {};
       const value = (key: string) => typeof stored[key] === 'string' ? String(stored[key]) : '';
       let savedProduct = product;
-      setForm({ title: product ? 'Edit product' : 'Add product', submit: 'Save product', fields: [
+      setForm({ title: product ? 'Edit product' : 'Add product', product: true, submit: 'Save product', fields: [
         { key: 'title', label: 'Product name', value: product?.title },
-        { key: 'price', label: 'Selling price (' + currency + ')', numeric: true, value: String(Number(product?.data.price || 0) / 100) },
-        ...(!product ? [{ key: 'stock', label: 'Opening stock', numeric: true, value: '0' }] : []),
-        { key: 'imageUrl', label: 'Product image URL', value: String(product?.data.imageUrl || ''), hint: 'Optional HTTPS image.' },
-        { key: 'shortDescription', label: 'Short description', value: String(product?.data.shortDescription || ''), advanced: true },
+        { key: 'price', label: 'Price', numeric: true, value: String(Number(product?.data.price || 0) / 100) },
+        ...(!product ? [{ key: 'stock', label: 'Stock', numeric: true, value: '0' }] : []),
+        { key: 'imageUrl', label: 'Image', value: String(product?.data.imageUrl || ''), image: true },
+        { key: 'shortDescription', label: 'Summary', value: String(product?.data.shortDescription || ''), advanced: true },
         { key: 'sku', label: 'SKU', value: String(product?.data.sku || ''), advanced: true },
         { key: 'barcode', label: 'Barcode', value: String(product?.data.barcode || ''), advanced: true },
         { key: 'category', label: 'Category', value: String(product?.data.category || ''), advanced: true },
         { key: 'brand', label: 'Brand', value: String(product?.data.brand || ''), advanced: true },
-        { key: 'variant', label: 'Variant / size', value: String(product?.data.variant || ''), advanced: true },
-        { key: 'unit', label: 'Unit', value: String(product?.data.unit || ''), hint: 'For example: item, kg, litre or box.', advanced: true },
-        { key: 'cost', label: 'Cost price (' + currency + ')', numeric: true, value: String(Number(product?.data.cost || 0) / 100), advanced: true },
-        { key: 'tax', label: 'Tax % added to price', numeric: true, value: String(Number(product?.data.taxBps || 0) / 100), advanced: true },
+        { key: 'variant', label: 'Variant', value: String(product?.data.variant || ''), advanced: true },
+        { key: 'unit', label: 'Unit', value: String(product?.data.unit || ''), advanced: true },
+        { key: 'cost', label: 'Cost', numeric: true, value: String(Number(product?.data.cost || 0) / 100), advanced: true },
+        { key: 'tax', label: 'Tax', numeric: true, value: String(Number(product?.data.taxBps || 0) / 100), advanced: true },
         { key: 'supplier', label: 'Supplier', value: String(product?.data.supplier || ''), advanced: true },
-        { key: 'lowStock', label: 'Low stock threshold', numeric: true, value: String(product?.data.lowStock ?? 5), advanced: true },
-        { key: 'sourceUrl', label: 'Reference page', value: value('sourceUrl'), hint: 'Optional HTTPS source, such as a supplier or marketplace page.', advanced: true },
-        { key: 'longDescription', label: 'Long description', value: value('longDescription'), multiline: true, advanced: true },
-        { key: 'specifications', label: 'Specifications', value: value('specifications'), multiline: true, advanced: true },
-        { key: 'sourceNotes', label: 'Source notes', value: value('sourceNotes'), hint: 'Paste only content you have permission to use. Stored in R2.', multiline: true, advanced: true },
-      ], assist: async (values) => {
-        const result = await execute('pos.product.draft', { prompt: [values.title, values.category, values.brand, values.variant, values.unit, values.shortDescription, values.longDescription, values.specifications, values.sourceNotes].filter(Boolean).join('\n') });
-        return result.draft as Record<string, string>;
-      }, save: async (values) => {
+        { key: 'lowStock', label: 'Reorder', numeric: true, value: String(product?.data.lowStock ?? 5), advanced: true },
+        { key: 'sourceUrl', label: 'Source', value: value('sourceUrl'), advanced: true },
+        { key: 'longDescription', label: 'Description', value: value('longDescription'), multiline: true, advanced: true },
+        { key: 'specifications', label: 'Specs', value: value('specifications'), multiline: true, advanced: true },
+        { key: 'sourceNotes', label: 'Notes', value: value('sourceNotes'), multiline: true, advanced: true },
+      ], save: async (values) => {
         const result = await execute('pos.product.save', { ...values, id: savedProduct?.id, version: savedProduct?.version, price: minorUnits(values.price), cost: minorUnits(values.cost || '0'), taxBps: minorUnits(values.tax || '0'), stock: Number(values.stock || 0), lowStock: Number(values.lowStock || 0) });
         savedProduct = result.product as PosRecord;
         const hasContent = Boolean(savedProduct.data.contentKey || values.sourceUrl || values.longDescription || values.specifications || values.sourceNotes);
@@ -228,6 +275,18 @@ export default function PosInterface(props: ActionInterfaceProps) {
       { key: 'amount', label: session ? 'Cash counted' : 'Opening cash', numeric: true, value: '0', hint: session ? 'Expected cash: ' + money(session.expected, currency) : 'Cash in the drawer before sales.' },
     ], save: (values) => saveAction(session ? 'pos.register.close' : 'pos.register.open', session ? { counted: minorUnits(values.amount), registerId: session.id } : { opening: minorUnits(values.amount) }) });
   };
+  const saveToInbox = () => {
+    if (!cart.length) return;
+    if (!Number.isSafeInteger(discountBps) || discountBps < 0 || discountBps > 10000) { Alert.alert('Invalid discount', 'Enter a percentage from 0 to 100.'); return; }
+    setForm({ title: 'Order details', submit: 'Save order', fields: [
+      { key: 'orderType', label: 'Order type', value: 'counter', hint: 'counter, dine-in, takeaway or delivery' },
+      { key: 'table', label: 'Table number', hint: 'Optional' },
+    ], save: async (values) => {
+      const result = await execute('pos.order.save', { items: cart.map((line) => ({ productId: line.product.id, version: line.product.version, quantity: line.quantity })), discountBps, customerId: customer?.id, orderId: draftRef.current?.id, version: draftRef.current?.version, draftKey: draftKey.current, orderType: values.orderType, table: values.table });
+      const saved = result.order as PosRecord;
+      draftRef.current = { id: saved.id, version: saved.version }; draftSignature.current = JSON.stringify({ items: cart.map((line) => [line.product.id, line.product.version, line.quantity]), discountBps, customerId: customer?.id || '' }); setDraftOrderId(saved.id);
+    } });
+  };
   const checkout = (method: 'cash' | 'upi') => {
     if (!cart.length) return;
     if (!overview?.register) {
@@ -242,8 +301,8 @@ export default function PosInterface(props: ActionInterfaceProps) {
       save: async (values) => {
         const result = await execute('pos.checkout', { items: cart.map((line) => ({ productId: line.product.id, version: line.product.version, quantity: line.quantity })),
           method, discountBps, expectedTotal: totals.total, tendered: method === 'cash' ? minorUnits(values.tendered) : totals.total,
-          reference: values.reference || '', received: method === 'upi', customerId: customer?.id });
-        setOrder(result.order as PosRecord); setCart([]); setCustomer(null); setDiscount('0'); setCartOpen(false);
+          reference: values.reference || '', received: method === 'upi', customerId: customer?.id, orderId: draftOrderId || undefined });
+        setOrder(result.order as PosRecord); setCart([]); setCustomer(null); setDiscount('0'); setCartOpen(false); setDraftOrderId(''); draftRef.current = null; draftSignature.current = '';
         await refreshAfterSave();
       },
     });
@@ -284,7 +343,7 @@ export default function PosInterface(props: ActionInterfaceProps) {
     <View style={styles.panelHeading}><Text style={styles.heading}>Cart · {count}</Text><TouchableOpacity style={styles.touch} onPress={() => { setCart([]); setDiscount('0'); setCustomer(null); }}><Text style={styles.muted}>Clear</Text></TouchableOpacity></View>
     <TouchableOpacity style={styles.customer} onPress={() => chooseSection('customers')}><Ionicons name="person-add-outline" size={18} color="#565b60" /><Text style={styles.body}>{customer?.title || 'Add customer'}</Text></TouchableOpacity>
     <ScrollView style={styles.cartLines}>{cart.map((line) => <View key={line.product.id} style={styles.line}><View style={styles.copy}><Text style={styles.body}>{line.product.title}</Text><Text style={styles.muted}>{money(Number(line.product.data.price), currency)}</Text></View><View style={styles.stepper}><TouchableOpacity accessibilityLabel={'Remove one ' + line.product.title} style={styles.touch} onPress={() => changeQuantity(line.product.id, -1)}><Ionicons name="remove" size={18} /></TouchableOpacity><Text>{line.quantity}</Text><TouchableOpacity accessibilityLabel={'Add one ' + line.product.title} style={styles.touch} onPress={() => changeQuantity(line.product.id, 1)}><Ionicons name="add" size={18} /></TouchableOpacity></View></View>)}{!cart.length ? <Text style={styles.empty}>Add products to start a sale.</Text> : null}</ScrollView>
-    <View style={styles.totals}><View style={styles.totalRow}><Text style={styles.muted}>Discount %</Text><TextInput accessibilityLabel="Discount percentage" style={styles.discount} keyboardType="decimal-pad" value={discount} onChangeText={setDiscount} /></View><Total label="Subtotal" value={money(totals.subtotal, currency)} /><Total label="Discount" value={'−' + money(totals.discount, currency)} /><Total label="Tax" value={money(totals.tax, currency)} /><Total label="Total" value={money(totals.total, currency)} bold /><View style={styles.payments}><Button title="Cash" disabled={!cart.length || busy} onPress={() => checkout('cash')} /><Button title="UPI" disabled={!cart.length || busy} onPress={() => checkout('upi')} /></View></View>
+    <View style={styles.totals}><View style={styles.totalRow}><Text style={styles.muted}>Discount %</Text><TextInput accessibilityLabel="Discount percentage" style={styles.discount} keyboardType="decimal-pad" value={discount} onChangeText={setDiscount} /></View><Total label="Subtotal" value={money(totals.subtotal, currency)} /><Total label="Discount" value={'−' + money(totals.discount, currency)} /><Total label="Tax" value={money(totals.tax, currency)} /><Total label="Total" value={money(totals.total, currency)} bold /><View style={styles.payments}><Button title="Order details" disabled={!cart.length || busy || draftSaving} secondary onPress={saveToInbox} /><Button title="Cash" disabled={!cart.length || busy || draftSaving} onPress={() => checkout('cash')} /><Button title="UPI" disabled={!cart.length || busy || draftSaving} onPress={() => checkout('upi')} /></View></View>
   </View>;
 
   return <Modal visible={props.visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={back}>

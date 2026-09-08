@@ -20,7 +20,7 @@ export const botDirectory: readonly BotDirectoryItem[] = [
     id: 'pos', title: 'POS Bot', category: 'Retail', description: 'Sell, take payments and keep stock in sync.',
     guidance: 'Set up your store, add products and open the register.',
     flows: [
-      { id: 'sell', title: 'Sell', description: 'Products, cart and payment', records: ['Order', 'Payment'], actions: [{ id: 'pos.checkout' }] },
+      { id: 'sell', title: 'New sale', description: 'Start an order; continue it from Inbox', records: ['Order', 'Payment'], actions: [{ id: 'pos.order.save' }, { id: 'pos.checkout' }] },
       { id: 'orders', title: 'Orders & returns', description: 'Receipts and returns', records: ['Order'], actions: [{ id: 'pos.refund' }] },
       { id: 'stock', title: 'Stock', description: 'Products and inventory', records: ['Product'], actions: [{ id: 'pos.product.save' }, { id: 'pos.product.content.save' }, { id: 'pos.product.draft' }, { id: 'pos.stock.adjust' }] },
       { id: 'customers', title: 'Customers', description: 'Customer details and history', records: ['Customer'], actions: [{ id: 'pos.customer.save' }] },

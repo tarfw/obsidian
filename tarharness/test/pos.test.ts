@@ -3,7 +3,7 @@ import { Effect } from 'effect';
 import { afterEach, describe, expect, it } from 'vitest';
 import { WORKSPACE_SCHEMA } from '../src/db/schema.ts';
 import { executeGateway } from '../src/gateway/actions.ts';
-import { posSummary, readPos } from '../src/pos/store.ts';
+import { posSummary, readPos, readPosInbox } from '../src/pos/store.ts';
 import type { AccessContext } from '../src/types.ts';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -35,6 +35,22 @@ async function fixture() {
   return { client, run, product, sale };
 }
 describe('POS ledger', { timeout: 20000 }, () => {
+  it('persists open carts for the Inbox, advances item work, then pays the same order', async () => {
+    const { client, run, sale } = await fixture();
+    const input = { items: sale.items, discountBps: sale.discountBps, customerId: '', orderType: 'dine-in', table: '7', draftKey: 'device-sale-1' };
+    const draft = await run('pos.order.save', input);
+    const retry = await run('pos.order.save', input);
+    const order = retry.order as { id: string; version: number; state: string; data: { lines: { productId: string; status: string }[] } };
+    expect((draft.order as { id: string }).id).toBe(order.id);
+    expect(order).toMatchObject({ state: 'open', data: { paymentStatus: 'unpaid', table: '7', orderType: 'dine-in' } });
+    expect((await readPosInbox(client)).orders).toHaveLength(1);
+    const advanced = await run('pos.order.item.update', { orderId: order.id, version: order.version, productId: order.data.lines[0].productId, status: 'preparing' });
+    expect((advanced.order as { data: { lines: { status: string }[] } }).data.lines[0].status).toBe('preparing');
+    const paid = await run('pos.checkout', { ...sale, orderId: order.id });
+    expect((paid.order as { id: string; state: string; data: { paymentStatus: string } }).id).toBe(order.id);
+    expect((paid.order as { state: string; data: { paymentStatus: string } }).state).toBe('paid');
+    expect((await readPosInbox(client)).orders).toHaveLength(0);
+  });
   it('commits server-priced sale, stock, receipt and cash balance exactly once', async () => {
     const { client, run, product, sale } = await fixture();
     const first = await run('pos.checkout', sale, 'sale-once');

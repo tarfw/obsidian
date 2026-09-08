@@ -1,25 +1,41 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Ionicons from '@expo/vector-icons/Ionicons';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import HarnessWorkspaceCanvas from '@/components/HarnessWorkspaceCanvas';
 import CreateWorkspace from '@/components/CreateWorkspace';
 import { harness, type HarnessWorkspace } from '@/lib/harness';
-import { signOutGoogle } from '@/lib/auth';
-import { useRouter } from 'expo-router';
 
 export default function WorkspacesScreen() {
-  const insets = useSafeAreaInsets(); const router = useRouter();
-  const [workspaces, setWorkspaces] = useState<HarnessWorkspace[]>([]); const [current, setCurrent] = useState<HarnessWorkspace | null>(null); const [loading, setLoading] = useState(true); const [switcher, setSwitcher] = useState(false); const [creating, setCreating] = useState(false); const [inviting, setInviting] = useState(false); const [inviteEmail, setInviteEmail] = useState(''); const [sendingInvite, setSendingInvite] = useState(false);
-  const reload = useCallback(async (preferredSlug?: string) => { setLoading(true); try { const result = await harness.listWorkspaces(); setWorkspaces(result.workspaces); setCurrent(result.workspaces.find((item) => item.slug === preferredSlug) || result.workspaces[0] || null); } finally { setLoading(false); } }, []);
+  const [workspaces, setWorkspaces] = useState<HarnessWorkspace[]>([]);
+  const [current, setCurrent] = useState<HarnessWorkspace | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
+  const reload = useCallback(async (preferredSlug?: string) => {
+    setLoading(true);
+    try {
+      const result = await harness.listWorkspaces();
+      setWorkspaces(result.workspaces);
+      setCurrent((previous) => result.workspaces.find((item) => item.slug === preferredSlug)
+        || result.workspaces.find((item) => item.id === previous?.id)
+        || result.workspaces[0]
+        || null);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
   useEffect(() => { const timer = setTimeout(() => { void reload(); }, 0); return () => clearTimeout(timer); }, [reload]);
-  if (loading) return <View style={styles.loading}><ActivityIndicator size="large" color="#1a73e8" /></View>;
+  if (loading) return <View style={styles.loading}><ActivityIndicator size="large" color="#3559e0" /></View>;
   if (!current) return <CreateWorkspace visible canClose={false} existingSlugs={[]} onClose={() => undefined} onSuccess={async (slug) => { await reload(slug); }} />;
   return <View style={styles.page}>
-    <HarnessWorkspaceCanvas key={current.slug} scope={current.slug} workspaceName={current.name} role={current.role} onOpenWorkspaceSwitcher={() => setSwitcher(true)} />
-    <Modal visible={switcher} animationType="slide" presentationStyle="fullScreen" onRequestClose={() => setSwitcher(false)}><View style={[styles.switcher, { paddingTop: Math.max(insets.top, 12) }]}><View style={styles.header}><TouchableOpacity onPress={() => setSwitcher(false)} style={styles.icon}><Ionicons name="arrow-back" size={20} color="#202124" /></TouchableOpacity><Text style={styles.headerTitle}>Workspaces</Text><View style={styles.headerActions}>{current.mode === 'work' ? <TouchableOpacity onPress={() => setInviting(true)} style={styles.invite}><Text style={styles.newText}>Invite</Text></TouchableOpacity> : null}<TouchableOpacity onPress={() => { setSwitcher(false); setCreating(true); }} style={styles.new}><Text style={styles.newText}>New</Text></TouchableOpacity></View></View><ScrollView contentContainerStyle={styles.list}>{workspaces.map((workspace) => <TouchableOpacity key={workspace.id} onPress={() => { setCurrent(workspace); setSwitcher(false); }} style={styles.row}><View style={styles.avatar}><Text style={styles.avatarText}>{workspace.name.charAt(0).toUpperCase()}</Text></View><View style={styles.copy}><Text style={styles.name}>{workspace.name}</Text><Text style={styles.detail}>{workspace.mode === 'personal' ? 'Personal' : workspace.role === 'owner' ? 'Owner' : 'Team member'}</Text></View>{workspace.id === current.id ? <Ionicons name="checkmark" size={20} color="#1a73e8" /> : null}</TouchableOpacity>)}</ScrollView><TouchableOpacity style={[styles.signOut, { marginBottom: Math.max(insets.bottom, 16) }]} onPress={() => { void signOutGoogle().finally(() => router.replace('/auth')); }}><Ionicons name="log-out-outline" size={19} color="#5f6368" /><Text style={styles.signOutText}>Sign out</Text></TouchableOpacity></View></Modal>
+    <HarnessWorkspaceCanvas
+      scope={current.slug}
+      workspaceName={current.mode === 'personal' ? 'Personal' : current.name}
+      role={current.role}
+      workspaces={workspaces}
+      onSelectWorkspace={(slug) => { const workspace = workspaces.find((item) => item.slug === slug); if (workspace) setCurrent(workspace); }}
+      onCreateWorkspace={() => setCreating(true)}
+    />
     <CreateWorkspace visible={creating} canClose existingSlugs={workspaces.map((workspace) => workspace.slug)} onClose={() => setCreating(false)} onSuccess={async (slug) => { setCreating(false); await reload(slug); }} />
-    <Modal visible={inviting} transparent animationType="fade" onRequestClose={() => setInviting(false)}><View style={styles.overlay}><View style={styles.sheet}><Text style={styles.sheetTitle}>Invite member</Text><Text style={styles.sheetText}>They get access when they sign in with this Google email.</Text><TextInput autoFocus autoCapitalize="none" keyboardType="email-address" value={inviteEmail} onChangeText={setInviteEmail} placeholder="name@example.com" style={styles.input} /><View style={styles.sheetActions}><TouchableOpacity onPress={() => setInviting(false)}><Text style={styles.cancel}>Cancel</Text></TouchableOpacity><TouchableOpacity disabled={!inviteEmail.trim() || sendingInvite} onPress={async () => { setSendingInvite(true); try { await harness.inviteMember(current.slug, inviteEmail); setInviteEmail(''); setInviting(false); Alert.alert('Invite saved', 'Access activates when they sign in with this Google email.'); } catch (cause) { Alert.alert('Could not invite', cause instanceof Error ? cause.message : 'Try again.'); } finally { setSendingInvite(false); } }}><Text style={[styles.newText, (!inviteEmail.trim() || sendingInvite) && styles.disabled]}>{sendingInvite ? 'Saving' : 'Invite'}</Text></TouchableOpacity></View></View></View></Modal>
   </View>;
 }
-const styles = StyleSheet.create({ page:{flex:1,backgroundColor:'#fff'},loading:{flex:1,alignItems:'center',justifyContent:'center',backgroundColor:'#fff'},switcher:{flex:1,backgroundColor:'#fff'},header:{height:58,paddingHorizontal:16,flexDirection:'row',alignItems:'center',justifyContent:'space-between',borderBottomWidth:StyleSheet.hairlineWidth,borderColor:'#e8eaed'},icon:{width:34,height:34,alignItems:'center',justifyContent:'center'},headerTitle:{fontSize:17,fontWeight:'700',color:'#202124'},headerActions:{flexDirection:'row',alignItems:'center',gap:10},invite:{height:34,justifyContent:'center'},new:{width:42,height:34,alignItems:'flex-end',justifyContent:'center'},newText:{color:'#1a73e8',fontSize:14,fontWeight:'700'},list:{flexGrow:1,paddingHorizontal:16},row:{minHeight:68,flexDirection:'row',alignItems:'center',gap:12,borderBottomWidth:StyleSheet.hairlineWidth,borderColor:'#e8eaed'},avatar:{width:38,height:38,borderRadius:10,alignItems:'center',justifyContent:'center',backgroundColor:'#e8f0fe'},avatarText:{color:'#1a73e8',fontSize:17,fontWeight:'800'},copy:{flex:1},name:{color:'#202124',fontSize:15,fontWeight:'700'},detail:{color:'#5f6368',fontSize:12,marginTop:2},signOut:{minHeight:52,marginHorizontal:16,borderTopWidth:StyleSheet.hairlineWidth,borderColor:'#e8eaed',flexDirection:'row',alignItems:'center',gap:10},signOutText:{color:'#5f6368',fontSize:15,fontWeight:'600'},overlay:{flex:1,backgroundColor:'#0005',justifyContent:'center',padding:24},sheet:{backgroundColor:'#fff',borderRadius:14,padding:22},sheetTitle:{fontSize:22,fontWeight:'800',color:'#202124'},sheetText:{fontSize:14,color:'#5f6368',marginTop:7,marginBottom:16},input:{borderBottomWidth:1,borderColor:'#dadce0',fontSize:16,color:'#202124',paddingVertical:12},sheetActions:{flexDirection:'row',justifyContent:'flex-end',gap:24,marginTop:22},cancel:{color:'#5f6368',fontWeight:'700'},disabled:{opacity:.45} });
+
+const styles = StyleSheet.create({ page: { flex: 1, backgroundColor: '#fff' }, loading: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' } });

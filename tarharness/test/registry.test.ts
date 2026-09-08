@@ -38,7 +38,7 @@ describe('registry contracts', () => {
       ] } } },
     ], { records: 10, openTasks: 0, pos: { sales: 12345, orders: 2, lowStock: 1, currency: 'INR', businessDate: '2026-09-07' } }, 'member');
     expect(cards).toHaveLength(4);
-    expect(cards.map((card) => card.title)).toEqual(['Sales today', 'Orders today', 'Low stock', 'Sell']);
+    expect(cards.map((card) => card.title)).toEqual(['Sales today', 'Orders today', 'Low stock', 'New sale']);
     expect(cards[3]).toMatchObject({ actionId: 'pos.open', initialInput: { section: 'sell' } });
   });
 });

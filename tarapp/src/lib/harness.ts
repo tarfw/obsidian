@@ -43,7 +43,7 @@ export const harness = {
   installDirectoryBot: (slug: string, itemId: string, flowIds: string[], operationKey: string) => request<{ itemId: string; flowIds: string[]; installed: true }>(workspacePath(slug, 'actions/directory.install'), { method: 'POST', body: { itemId, flowIds }, key: operationKey }),
   removeDirectoryBot: (slug: string, itemId: string, operationKey: string) => request<{ itemId: string; installed: false }>(workspacePath(slug, 'actions/directory.remove'), { method: 'POST', body: { itemId }, key: operationKey }),
   records: (slug: string, type?: string) => request<{ records: HarnessRecord[] }>(`${workspacePath(slug, 'records')}${type ? `?type=${encodeURIComponent(type)}` : ''}`),
-  inbox: (slug: string) => request<{ tasks: HarnessRecord[] }>(workspacePath(slug, 'inbox')),
+  inbox: (slug: string) => request<{ tasks: HarnessRecord[]; orders: HarnessRecord[] }>(workspacePath(slug, 'inbox')),
   executeAction: <T extends Record<string, unknown> = Record<string, unknown>>(slug: string, actionId: string, input: Record<string, unknown>, operationKey: string) => request<T>(workspacePath(slug, `actions/${encodeURIComponent(actionId)}`), { method: 'POST', body: input, key: operationKey }),
   createRecord: (slug: string, input: { type: string; title: string; data?: Record<string, unknown> }) => request<{ record: HarnessRecord }>(workspacePath(slug, 'actions/record.create'), { method: 'POST', body: input, key: createOperationKey('record.create') }),
   createTask: (slug: string, title: string) => request<{ record: HarnessRecord }>(workspacePath(slug, 'actions/task.create'), { method: 'POST', body: { title }, key: createOperationKey('task.create') }),

@@ -1,52 +1,81 @@
 ---
-// Clean, Uncluttered Directory Footer in Canopy Green (#0a3922) — 0 Repetitions & Balanced Grid
-import TarLogo from "./TarLogo.astro";
-import GooglePlayBadge from "./GooglePlayBadge.astro";
-
+// Vellum-style dark footer: GET STARTED pill, bee mascot peeking over the
+// divider, four link columns, minimal bottom bar.
 const productLinks = [
-  { name: "WhatsApp & Telegram", href: "/#channels" },
-  { name: "Voice in 40+ Languages", href: "/#channels" },
-  { name: "Unified Team Feed", href: "/#genui" },
-  { name: "Offline-First Engine", href: "/#capabilities" }
+  { name: "Product", href: "/#capabilities" },
+  { name: "Channels", href: "/#channels" },
+  { name: "Pricing", href: "/#pricing" }
 ];
 
-const platformLinks = [
-  { name: "TAR Harness Handbook", href: "/harness" },
-  { name: "Agent Directory & Rates", href: "/agents" },
-  { name: "Developer Documentation", href: "/docs" },
-  { name: "Learn (Agents & Brain)", href: "/learn" },
-  { name: "Security Architecture", href: "/security" }
+const resourcesLinks = [
+  { name: "Docs", href: "/docs" },
+  { name: "Harness Handbook", href: "/harness" },
+  { name: "Learn", href: "/learn" }
 ];
 
 const companyLinks = [
-  { name: "The Manifesto", href: "/manifesto" },
-  { name: "Usage-Based Pricing", href: "/#pricing" },
-  { name: "Help & Support", href: "/support" },
-  { name: "Community Guidelines", href: "/guidelines" }
+  { name: "Manifesto", href: "/manifesto" },
+  { name: "Support", href: "/support" },
+  { name: "Community", href: "/guidelines" }
+];
+
+const legalLinks = [
+  { name: "Privacy", href: "/privacy" },
+  { name: "Terms", href: "/terms" }
 ];
 ---
 
-<footer class="footer-section room-canopy-green">
+<footer class="footer-section">
   <div class="container footer-container font-dm-sans">
-    
-    <!-- Navigation Columns Grid -->
-    <div class="footer-nav-grid">
-      
-      <!-- Brand Column -->
-      <div class="footer-col brand-col">
-        <a href="/" class="footer-logo" aria-label="TAR Homepage">
-          <TarLogo size={28} color="#55dd4a" />
-          <span class="footer-logo-txt">tar.</span>
-        </a>
-        <p class="brand-tagline">
-          Calm, honest messaging for everyday commerce and operations.
-        </p>
-        <div class="brand-badge-wrapper">
-          <GooglePlayBadge height={36} />
-        </div>
-      </div>
 
-      <!-- Column 1: Product -->
+    <!-- GET STARTED -->
+    <div class="cta-row">
+      <a href="https://play.google.com/store/apps" class="get-started-btn">GET STARTED</a>
+    </div>
+
+    <!-- Bee mascots peeking over the divider — TAR logo pixel-rect grid,
+         one per color, gently animated -->
+    <div class="peek-row" aria-hidden="true">
+      <!-- Bee 1: yellow -->
+      <div class="bee bee-1">
+        <svg viewBox="0 0 7 7.1" width="72" height="73">
+          <path class="bee-body" fill="#ffcf3f" d="M0 0 H2 V1 H5 V0 H7 V1 H6 V2 H7 V6.75 H6 V6.2 H4 V7.1 H3 V6.2 H1 V6.75 H0 V2 H1 V1 H0 Z" />
+          <g class="bee-eyes">
+            <rect x="1.4" y="3.15" width="0.7" height="0.7" fill="#ffffff" />
+            <rect x="4.9" y="3.15" width="0.7" height="0.7" fill="#ffffff" />
+            <rect x="1.6" y="3.35" width="0.35" height="0.35" fill="#1c1c1c" />
+            <rect x="5.1" y="3.35" width="0.35" height="0.35" fill="#1c1c1c" />
+          </g>
+        </svg>
+      </div>
+      <!-- Bee 2: pink -->
+      <div class="bee bee-2">
+        <svg viewBox="0 0 7 7.1" width="120" height="122">
+          <path class="bee-body" fill="#ff7bac" d="M0 0 H2 V1 H5 V0 H7 V1 H6 V2 H7 V6.75 H6 V6.2 H4 V7.1 H3 V6.2 H1 V6.75 H0 V2 H1 V1 H0 Z" />
+          <g class="bee-eyes">
+            <rect x="1.4" y="3.15" width="0.7" height="0.7" fill="#ffffff" />
+            <rect x="4.9" y="3.15" width="0.7" height="0.7" fill="#ffffff" />
+            <rect x="1.6" y="3.35" width="0.35" height="0.35" fill="#1c1c1c" />
+            <rect x="5.1" y="3.35" width="0.35" height="0.35" fill="#1c1c1c" />
+          </g>
+        </svg>
+      </div>
+      <!-- Bee 3: green -->
+      <div class="bee bee-3">
+        <svg viewBox="0 0 7 7.1" width="56" height="57">
+          <path class="bee-body" fill="#55dd4a" d="M0 0 H2 V1 H5 V0 H7 V1 H6 V2 H7 V6.75 H6 V6.2 H4 V7.1 H3 V6.2 H1 V6.75 H0 V2 H1 V1 H0 Z" />
+          <g class="bee-eyes">
+            <rect x="1.4" y="3.15" width="0.7" height="0.7" fill="#ffffff" />
+            <rect x="4.9" y="3.15" width="0.7" height="0.7" fill="#ffffff" />
+            <rect x="1.6" y="3.35" width="0.35" height="0.35" fill="#1c1c1c" />
+            <rect x="5.1" y="3.35" width="0.35" height="0.35" fill="#1c1c1c" />
+          </g>
+        </svg>
+      </div>
+    </div>
+
+    <!-- Navigation Columns -->
+    <div class="footer-nav-grid">
       <div class="footer-col">
         <h4 class="col-title">PRODUCT</h4>
         <ul class="col-links">
@@ -56,17 +85,15 @@ const companyLinks = [
         </ul>
       </div>
 
-      <!-- Column 2: Platform -->
       <div class="footer-col">
-        <h4 class="col-title">PLATFORM</h4>
+        <h4 class="col-title">RESOURCES</h4>
         <ul class="col-links">
-          {platformLinks.map((l) => (
+          {resourcesLinks.map((l) => (
             <li><a href={l.href} class="footer-link">{l.name}</a></li>
           ))}
         </ul>
       </div>
 
-      <!-- Column 3: Company -->
       <div class="footer-col">
         <h4 class="col-title">COMPANY</h4>
         <ul class="col-links">
@@ -76,16 +103,26 @@ const companyLinks = [
         </ul>
       </div>
 
+      <div class="footer-col">
+        <h4 class="col-title">LEGAL</h4>
+        <ul class="col-links">
+          {legalLinks.map((l) => (
+            <li><a href={l.href} class="footer-link">{l.name}</a></li>
+          ))}
+        </ul>
+      </div>
     </div>
 
-    <!-- Bottom Legal Bar -->
+    <!-- Bottom Bar -->
     <div class="footer-bottom-bar">
-      <span class="copy-txt">
-        © 2026 TAR. Built from Tamil with ❤️ for the world.
-      </span>
-      <div class="bottom-legal-links">
-        <a href="/privacy">Privacy Policy</a>
-        <a href="/terms">Terms of Service</a>
+      <span class="copy-txt">© 2026 TAR. Built from Tamil with ❤️ for the world.</span>
+      <div class="social-icons">
+        <a href="https://x.com" aria-label="X" class="social-link">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+        </a>
+        <a href="https://github.com" aria-label="GitHub" class="social-link">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>
+        </a>
       </div>
     </div>
 
@@ -94,74 +131,133 @@ const companyLinks = [
 
 <style>
   .footer-section {
-    background-color: var(--color-canopy-green);
+    background-color: #1d2b20;
     color: var(--color-paper-white);
-    padding: 80px 0 48px;
+    padding: 0 0 40px;
     box-sizing: border-box;
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
   }
 
   .footer-container {
     width: 100%;
     display: flex;
     flex-direction: column;
-    gap: 48px;
   }
 
+  /* GET STARTED */
+  .cta-row {
+    display: flex;
+    justify-content: center;
+    padding: 72px 0 64px;
+  }
+
+  .get-started-btn {
+    background: #ffffff;
+    color: #14211a;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-decoration: none;
+    padding: 16px 34px;
+    border-radius: 999px;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  .get-started-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+  }
+
+  /* Bees peeking over the divider line */
+  .peek-row {
+    position: relative;
+    height: 96px;
+    overflow: hidden;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    justify-content: center;
+    align-items: flex-end;
+    gap: 56px;
+  }
+
+  .bee {
+    display: flex;
+    align-items: flex-end;
+    margin-bottom: -1px;
+    animation: bee-bob 2.6s ease-in-out infinite;
+  }
+
+  .bee-1 { animation-delay: 0s; }
+  .bee-2 { animation-delay: 0.5s; }
+  .bee-3 { animation-delay: 1s; }
+
+  .bee-body {
+    transform-origin: 3.5px 7.1px;
+    animation: bee-sway 3.4s ease-in-out infinite;
+  }
+
+  .bee-1 .bee-body { animation-delay: 0.2s; }
+  .bee-2 .bee-body { animation-delay: 0.9s; }
+  .bee-3 .bee-body { animation-delay: 1.5s; }
+
+  .bee-eyes {
+    transform-origin: 3.5px 3.15px;
+    transform-box: view-box;
+    animation: bee-blink 4.2s ease-in-out infinite;
+  }
+
+  .bee-1 .bee-eyes { animation-delay: 1.1s; }
+  .bee-2 .bee-eyes { animation-delay: 2.3s; }
+  .bee-3 .bee-eyes { animation-delay: 3.4s; }
+
+  @keyframes bee-bob {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-7px); }
+  }
+
+  @keyframes bee-sway {
+    0%, 100% { transform: rotate(0deg); }
+    30% { transform: rotate(-2.4deg); }
+    70% { transform: rotate(2.4deg); }
+  }
+
+  @keyframes bee-blink {
+    0%, 91%, 97%, 100% { transform: scaleY(1); }
+    94% { transform: scaleY(0.08); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .bee, .bee-body, .bee-eyes {
+      animation: none;
+    }
+  }
+
+  .bee svg {
+    display: block;
+  }
+
+  @media (max-width: 639px) {
+    .peek-row {
+      gap: 32px;
+    }
+
+    .bee-3 {
+      display: none;
+    }
+  }
+
+  /* Navigation Columns */
   .footer-nav-grid {
     display: grid;
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, 1fr);
     gap: 40px;
-    padding-bottom: 48px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    padding: 48px 0;
   }
 
-  @media (min-width: 640px) {
+  @media (min-width: 900px) {
     .footer-nav-grid {
-      grid-template-columns: repeat(2, 1fr);
-      gap: 40px;
-    }
-  }
-
-  @media (min-width: 1024px) {
-    .footer-nav-grid {
-      grid-template-columns: 1.5fr 1fr 1fr 1fr;
+      grid-template-columns: repeat(4, 1fr);
       gap: 48px;
     }
-  }
-
-  .brand-col {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-  }
-
-  .footer-logo {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    color: #55dd4a;
-    text-decoration: none;
-  }
-
-  .footer-logo-txt {
-    font-size: 26px;
-    font-weight: 700;
-    letter-spacing: -0.04em;
-    color: #ffffff;
-  }
-
-  .brand-tagline {
-    font-size: 14px;
-    color: var(--color-mint-wash);
-    opacity: 0.85;
-    line-height: 1.6;
-    max-width: 280px;
-    margin: 0;
-  }
-
-  .brand-badge-wrapper {
-    margin-top: 4px;
   }
 
   .col-title {
@@ -170,7 +266,7 @@ const companyLinks = [
     letter-spacing: 0.1em;
     text-transform: uppercase;
     color: rgba(255, 255, 255, 0.45);
-    margin: 0 0 20px 0;
+    margin: 0 0 18px 0;
   }
 
   .col-links {
@@ -184,23 +280,23 @@ const companyLinks = [
 
   .footer-link {
     font-size: 14px;
-    color: var(--color-mint-wash);
-    opacity: 0.85;
+    color: rgba(255, 255, 255, 0.8);
     text-decoration: none;
-    transition: color 0.15s ease, opacity 0.15s ease;
+    transition: color 0.15s ease;
   }
 
   .footer-link:hover {
     color: #ffffff;
-    opacity: 1;
   }
 
+  /* Bottom Bar */
   .footer-bottom-bar {
     display: flex;
     flex-direction: column;
     gap: 16px;
     font-size: 13px;
-    color: rgba(255, 255, 255, 0.55);
+    color: rgba(255, 255, 255, 0.5);
+    padding-top: 24px;
   }
 
   @media (min-width: 640px) {
@@ -211,18 +307,21 @@ const companyLinks = [
     }
   }
 
-  .bottom-legal-links {
-    display: flex;
-    gap: 24px;
+  .copy-txt {
+    margin: 0;
   }
 
-  .bottom-legal-links a {
-    color: rgba(255, 255, 255, 0.65);
-    text-decoration: none;
+  .social-icons {
+    display: flex;
+    gap: 18px;
+  }
+
+  .social-link {
+    color: rgba(255, 255, 255, 0.55);
     transition: color 0.15s ease;
   }
 
-  .bottom-legal-links a:hover {
+  .social-link:hover {
     color: #ffffff;
   }
 </style>

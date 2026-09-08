@@ -1,20 +1,20 @@
 ---
-// Run Your Teams on Channels — Simple, Compact & Direct
+// Run Your Teams on Channels — New Plan: Slack, Discord, Google Chat
 const teamCapabilities = [
   {
-    badge: "TEAM INBOX",
-    title: "Shared Team Feed (₹0)",
-    desc: "Invite unlimited cashiers, drivers, and staff. Everyone collaborates in one calm feed."
+    badge: "TEAM CHANNELS",
+    title: "Slack, Discord & Google Chat",
+    desc: "Add the bot once. Alerts, reviews and digests post to the right channel — zero per-seat fees."
   },
   {
     badge: "WORKFLOWS",
-    title: "1-Tap In-Chat Approvals",
-    desc: "Approve supply orders, schedule changes, and bills directly from WhatsApp or Telegram."
+    title: "1-Tap In-Channel Approvals",
+    desc: "Approve sales reviews, quotes and shift changes directly from Slack or Discord."
   },
   {
-    badge: "VOICE NOTES",
-    title: "Voice Notes to Records",
-    desc: "Send audio notes in any language. Whisper transcribes them into orders and ledgers instantly."
+    badge: "ORGANIZED FEEDS",
+    title: "Right Message, Right Channel",
+    desc: "Flow outcomes map to purpose channels — #sales-alerts, #reviews, #general. Never one noisy feed."
   }
 ];
 ---
@@ -27,12 +27,12 @@ const teamCapabilities = [
       <!-- Left Column: Headline & Team Capabilities -->
       <div class="teams-narrative-col">
         <h2 class="display-section-lg section-title">
-          Run your teams<br />
-          <span class="text-canopy">on everyday channels.</span>
+          Approvals, alerts and reviews<br />
+          <span class="text-canopy">in your team's channels.</span>
         </h2>
 
         <p class="section-lead font-dm-sans">
-          One shared inbox with zero per-seat software fees. Connect frontline workers, staff, and customers on the messaging apps they already use.
+          TAR joins your Slack, Discord and Google Chat and posts where each decision belongs — calm, organized channels instead of one noisy feed.
         </p>
 
         <div class="team-caps-list font-dm-sans">
@@ -64,41 +64,41 @@ const teamCapabilities = [
           <!-- 3 Compact Team Operation Message Cards -->
           <div class="whatsapp-cards-stack">
             
-            <!-- Message 1: Roster & Shift Approval -->
+            <!-- Message 1: Sales Review Approval -->
             <div class="wa-bubble-card">
               <div class="wa-bubble-main">
                 <p class="wa-msg-text">
-                  Dr. Ponni approved shift swap with Dr. Meenakshi for Friday clinic. 14 patient visits re-assigned.
+                  Sales review requested: Quote #2213 (€4,800) needs approval before Friday. Posted to #reviews.
                 </p>
                 <span class="wa-timestamp">11:20 AM</span>
               </div>
               <button class="wa-action-bar-btn font-dm-sans">
                 <span class="wa-btn-icon">✓</span>
-                <span>View Updated Roster</span>
+                <span>Approve Review</span>
               </button>
             </div>
 
-            <!-- Message 2: Logistics Voice Note & Receipt Scan -->
+            <!-- Message 2: Lead Follow-Up Assignment -->
             <div class="wa-bubble-card">
               <div class="wa-bubble-main">
                 <p class="wa-msg-text">
-                  🎙️ Audio from Logistics: "Delivered 30 boxes to Central Ward. Invoice #902 receipt scanned and synced offline."
+                  New lead assigned to Priya. Follow-up task scheduled for tomorrow, 10:00 AM.
                 </p>
                 <span class="wa-timestamp">11:24 AM</span>
               </div>
             </div>
 
-            <!-- Message 3: Team Broadcast Confirmation -->
+            <!-- Message 3: End-of-Day Digest -->
             <div class="wa-bubble-card">
               <div class="wa-bubble-main">
                 <p class="wa-msg-text">
-                  Weather alert broadcasted to 18 staff members on Telegram & WhatsApp. 18 confirmed read.
+                  Day closed — 32 orders, 4 returns, €1,480 collected. Digest posted to #sales-alerts.
                 </p>
                 <span class="wa-timestamp">11:25 AM</span>
               </div>
               <button class="wa-action-bar-btn font-dm-sans">
                 <span class="wa-btn-icon">↗</span>
-                <span>Open Team Feed</span>
+                <span>View Digest</span>
               </button>
             </div>
 

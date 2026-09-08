@@ -1,40 +1,44 @@
 ---
-// Multi-Channel Solutions — Ultra-Compact & Uncluttered
-const channels = [
+// Reach Every Customer — New Plan: WhatsApp, Telegram, Messenger, Instagram DM, Email, On-site chat
+const channelGroups = [
   {
-    title: "WhatsApp Business",
-    desc: "Interactive booking buttons, catalog orders, and PDF invoices on the app customers open daily."
+    title: "Chat apps",
+    chips: "WhatsApp · Telegram · Messenger · Instagram DM",
+    desc: "Interactive booking buttons, catalog orders and PDF invoices on the apps customers open daily."
   },
   {
-    title: "SMS Global",
-    desc: "Guaranteed OTP and urgent dispatch delivery to any basic mobile phone in 190+ countries."
+    title: "Email",
+    chips: "Quotes · Invoices · Follow-ups",
+    desc: "Templates, delivery tracking and replies in one feed — quotes and receipts that always arrive."
   },
   {
-    title: "Voice Notes",
-    desc: "Speak naturally in Tamil, English, and 40+ languages. Whisper transcribes audio into records instantly."
+    title: "On-site chat",
+    chips: "Website widget",
+    desc: "Turn website visitors into conversations and conversations into orders — no third-party tools."
   }
 ];
 ---
 
 <section class="channels-compare-section pastel-room-lilac" id="channels">
   <div class="container">
-    
+
     <!-- Section Header -->
     <div class="section-head-left">
       <h2 class="display-section-lg section-title">
         Reach every customer on<br />
-        WhatsApp, SMS, or Voice.
+        their favorite channel.
       </h2>
       <p class="section-lead font-dm-sans">
-        One unified customer feed. Choose the right channel for every interaction.
+        Customers can't be forced onto one app — so TAR supports many. Two-way conversations, tracked in one customer feed.
       </p>
     </div>
 
     <!-- 3 Clean Columns -->
     <div class="channels-compare-grid font-dm-sans">
-      {channels.map((c) => (
+      {channelGroups.map((c) => (
         <div class="channel-col">
           <h3 class="channel-title">{c.title}</h3>
+          <p class="channel-chips">{c.chips}</p>
           <p class="channel-desc">{c.desc}</p>
         </div>
       ))}
@@ -115,6 +119,16 @@ const channels = [
     font-size: 17.5px;
     font-weight: 700;
     color: var(--color-canopy-green);
+    margin: 0;
+  }
+
+  .channel-chips {
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--color-canopy-green);
+    opacity: 0.75;
     margin: 0;
   }
 

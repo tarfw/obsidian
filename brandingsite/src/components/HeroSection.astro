@@ -1,61 +1,73 @@
 ---
-// Human-Centric Hero Section in Turn.io Canopy Green (#0a3922)
-// Pixel-perfect alignment, self-contained SVG for MS Teams, clean spacing, and bold readable typography
+// Team-Channel Hero Section in Turn.io Canopy Green (#0a3922)
+// "Run your teams on everyday channels" — organized channel groups: Internal team / Customer / Social publishing
 import TarLogo from "./TarLogo.astro";
 ---
 
 <section class="human-hero-section room-canopy-green" id="overview">
   <div class="container hero-container-grid">
-    
-    <!-- Left: Editorial Headline & High-Visibility, Bold Lead -->
+
+    <!-- Left: Editorial Headline & Organized Channel Groups -->
     <div class="hero-text-col">
       <h1 class="display-hero hero-heading">
-        Workforce,<br />
-        Business and Agents<br />
-        <span class="text-leaf-bright">on Millions of Interfaces.</span>
+        Run your business on<br />
+        <span class="text-leaf-bright">everyday channels.</span>
       </h1>
 
       <p class="hero-lead font-dm-sans">
-        An open system connecting your operations to
-        
-        <!-- 1. Android Native App -->
-        <span class="hero-channel-badge"><span class="badge-icon bg-android" title="Android"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M17.523 15.3414c-.5511 0-.9993-.4486-.9993-.9997s.4482-.9993.9993-.9993c.551 0 .9993.4482.9993.9993.0001.5511-.4483.9997-.9993.9997m-11.046 0c-.5511 0-.9993-.4486-.9993-.9997s.4482-.9993.9993-.9993c.5511 0 .9993.4482.9993.9993 0 .5511-.4482.9997-.9993.9997m11.4045-6.02l1.996-3.4572c.156-.2701.0633-.6159-.2068-.7719-.2705-.1565-.6158-.0634-.7719.2069l-2.023 3.504C15.356 8.134 13.722 7.8 12 7.8c-1.722 0-3.356.334-4.8778 1.0032L5.099 5.2992c-.156-.2703-.5013-.3634-.7718-.2069-.2701.156-.3628.5018-.2068.7719l1.996 3.4572C2.688 11.2868.343 14.8644 0 19.143h24c-.343-4.2786-2.688-7.8562-6.1185-9.8216"/></svg></span><span class="badge-name">Android</span></span>,
-
-        <!-- 2. iOS Native App -->
-        <span class="hero-channel-badge"><span class="badge-icon bg-ios" title="iOS"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 6.37c.63-.77 1.06-1.85.94-2.93-.93.04-2.03.63-2.69 1.4-.58.67-1.09 1.76-.95 2.81 1.03.08 2.07-.51 2.7-1.28z"/></svg></span><span class="badge-name">iOS</span></span>,
-
-        <!-- 3. WhatsApp -->
-        <span class="hero-channel-badge"><span class="badge-icon bg-whatsapp" title="WhatsApp"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.816 9.816 0 0 0 12.04 2zm.01 1.67c2.2 0 4.26.86 5.82 2.41a8.167 8.167 0 0 1 2.41 5.83c0 4.54-3.7 8.24-8.24 8.24-1.48 0-2.93-.4-4.2-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.188 8.188 0 0 1-1.26-4.38c0-4.54 3.7-8.24 8.24-8.24h.02z"/></svg></span><span class="badge-name">WhatsApp</span></span>,
-
-        <!-- 4. Telegram -->
-        <span class="hero-channel-badge"><span class="badge-icon bg-telegram" title="Telegram"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg></span><span class="badge-name">Telegram</span></span>,
-
-        <!-- 5. Discord -->
-        <span class="hero-channel-badge"><span class="badge-icon bg-discord" title="Discord"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994.021-.041.001-.09-.041-.106a13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.929 1.793 8.18 1.793 12.061 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.894.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.028zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg></span><span class="badge-name">Discord</span></span>,
-
-        <!-- 6. Slack -->
-        <span class="hero-channel-badge"><span class="badge-icon bg-slack" title="Slack"><svg viewBox="0 0 24 24" width="18" height="18"><path d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zM6.313 15.165a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313z" fill="#E01E5A"/><path d="M8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zM8.834 6.313a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312z" fill="#36C5F0"/><path d="M18.956 8.834a2.528 2.528 0 0 1 2.522-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.522 2.521h-2.522V8.834z" fill="#2EB67D"/><path d="M15.165 18.956a2.528 2.528 0 0 1 2.523 2.522A2.528 2.528 0 0 1 15.165 24a2.527 2.527 0 0 1-2.52-2.522v-2.522h2.52zM15.165 17.688a2.527 2.527 0 0 1-2.52-2.523 2.526 2.526 0 0 1 2.52-2.52h6.313A2.527 2.527 0 0 1 24 15.165a2.528 2.528 0 0 1-2.522 2.523h-6.313z" fill="#ECB22E"/></svg></span><span class="badge-name">Slack</span></span>,
-
-        <!-- 7. Google Chat (Clean Official 2-Bubble Workspace SVG) -->
-        <span class="hero-channel-badge"><span class="badge-icon bg-gchat" title="Google Chat"><svg viewBox="0 0 24 24" width="18" height="18"><path d="M2.5 4.5C2.5 3.12 3.62 2 5 2h9.5c1.38 0 2.5 1.12 2.5 2.5v6c0 1.38-1.12 2.5-2.5 2.5H7L2.5 17.5V4.5z" fill="#00AC47"/><path d="M7 9.5C7 8.12 8.12 7 9.5 7H19c1.38 0 2.5 1.12 2.5 2.5v6c0 1.38-1.12 2.5-2.5 2.5h-1.5L17 21.5l-4-3.5H9.5C8.12 18 7 16.88 7 15.5v-6z" fill="#00832D"/></svg></span><span class="badge-name">Google Chat</span></span>,
-
-        <!-- 8. MS Teams (Authentic Self-Contained Microsoft Teams Vector) -->
-        <span class="hero-channel-badge"><span class="badge-icon bg-teams" title="MS Teams"><svg viewBox="0 0 24 24" width="18" height="18" fill="none"><circle cx="16.5" cy="6" r="2.5" fill="#7B83EB"/><path d="M19.5 9.5h-3.8c-.8 0-1.4.6-1.4 1.4v2.6c.5.2 1 .3 1.7.3 2 0 3.5-.8 3.5-2.8V9.5z" fill="#7B83EB"/><circle cx="9.5" cy="5" r="3" fill="#ffffff" opacity="0.95"/><path d="M14 9.5H5c-1.1 0-2 .9-2 2V18h11v-6.5c0-1.1-.9-2-2-2z" fill="#ffffff" opacity="0.95"/><rect x="2" y="7.5" width="9.5" height="9.5" rx="2" fill="#464EB8"/><path d="M5.1 9.8h3.3v1.2H7.2V14H6v-3H5.1V9.8z" fill="#ffffff"/></svg></span><span class="badge-name">MS Teams</span></span>,
-
-        <!-- 9. POS (Outlined Square-Style Modern Reader on Light BG) -->
-        <span class="hero-channel-badge"><span class="badge-icon bg-pos-light" title="POS"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#111827" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="4"/><rect x="8.5" y="8.5" width="7" height="7" rx="1.8"/></svg></span><span class="badge-name">POS</span></span>,
-
-        <!-- 10. Voice (Minimalist, Modern 5-Bar Audio Waveform) -->
-        <span class="hero-channel-badge"><span class="badge-icon bg-voice" title="Voice"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><rect x="2" y="9" width="2.5" height="6" rx="1.25"/><rect x="6.5" y="5" width="2.5" height="14" rx="1.25"/><rect x="11" y="2" width="2.5" height="20" rx="1.25"/><rect x="15.5" y="5" width="2.5" height="14" rx="1.25"/><rect x="20" y="9" width="2.5" height="6" rx="1.25"/></svg></span><span class="badge-name">Voice</span></span>,
-
-        and other everyday interfaces.
+        One system, everywhere your people already are.
       </p>
+
+      <div class="hero-channel-groups font-dm-sans">
+
+        <!-- Internal team -->
+        <div class="channel-group">
+          <span class="group-label">Internal team</span>
+          <div class="group-badges">
+            <span class="hero-channel-badge"><span class="badge-icon bg-slack" title="Slack"><svg viewBox="0 0 24 24" width="14" height="14"><path d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zM6.313 15.165a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313z" fill="#E01E5A"/><path d="M8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zM8.834 6.313a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312z" fill="#36C5F0"/><path d="M18.956 8.834a2.528 2.528 0 0 1 2.522-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.522 2.521h-2.522V8.834z" fill="#2EB67D"/><path d="M15.165 18.956a2.528 2.528 0 0 1 2.523 2.522A2.528 2.528 0 0 1 15.165 24a2.527 2.527 0 0 1-2.52-2.522v-2.522h2.52zM15.165 17.688a2.527 2.527 0 0 1-2.52-2.523 2.526 2.526 0 0 1 2.52-2.52h6.313A2.527 2.527 0 0 1 24 15.165a2.528 2.528 0 0 1-2.522 2.523h-6.313z" fill="#ECB22E"/></svg></span><span class="badge-name">Slack</span></span>
+            <span class="hero-channel-badge"><span class="badge-icon bg-discord" title="Discord"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994.021-.041.001-.09-.041-.106a13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.929 1.793 8.18 1.793 12.061 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.894.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.028zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg></span><span class="badge-name">Discord</span></span>
+            <span class="hero-channel-badge"><span class="badge-icon bg-gchat" title="Google Chat"><svg viewBox="0 0 24 24" width="14" height="14"><path d="M2.5 4.5C2.5 3.12 3.62 2 5 2h9.5c1.38 0 2.5 1.12 2.5 2.5v6c0 1.38-1.12 2.5-2.5 2.5H7L2.5 17.5V4.5z" fill="#00AC47"/><path d="M7 9.5C7 8.12 8.12 7 9.5 7H19c1.38 0 2.5 1.12 2.5 2.5v6c0 1.38-1.12 2.5-2.5 2.5h-1.5L17 21.5l-4-3.5H9.5C8.12 18 7 16.88 7 15.5v-6z" fill="#00832D"/></svg></span><span class="badge-name">Google Chat</span></span>
+          </div>
+        </div>
+
+        <!-- Customer -->
+        <div class="channel-group">
+          <span class="group-label">Customer</span>
+          <div class="group-badges">
+            <span class="hero-channel-badge"><span class="badge-icon bg-websites" title="Website"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14.5 14.5 0 0 1 0 18M12 3a14.5 14.5 0 0 0 0 18"/></svg></span><span class="badge-name">Website</span></span>
+            <span class="hero-channel-badge"><span class="badge-icon bg-mail" title="Email"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M3 7l9 6 9-6"/></svg></span><span class="badge-name">Email</span></span>
+            <span class="hero-channel-badge"><span class="badge-icon bg-whatsapp" title="WhatsApp"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.816 9.816 0 0 0 12.04 2zm.01 1.67c2.2 0 4.26.86 5.82 2.41a8.167 8.167 0 0 1 2.41 5.83c0 4.54-3.7 8.24-8.24 8.24-1.48 0-2.93-.4-4.2-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.188 8.188 0 0 1-1.26-4.38c0-4.54 3.7-8.24 8.24-8.24h.02z"/></svg></span><span class="badge-name">WhatsApp</span></span>
+            <span class="hero-channel-badge"><span class="badge-icon bg-telegram" title="Telegram"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg></span><span class="badge-name">Telegram</span></span>
+            <span class="hero-channel-badge"><span class="badge-icon bg-messenger" title="Messenger"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M12 0C5.24 0 0 4.952 0 11.64c0 3.499 1.434 6.521 3.769 8.61a.96.96 0 0 1 .323.683l.065 2.135a.96.96 0 0 0 1.347.849l2.381-1.052a.96.96 0 0 1 .641-.047 13.09 13.09 0 0 0 3.474.469c6.76 0 12-4.952 12-11.64S18.76 0 12 0zm6.806 8.786l-3.24 5.148a1.8 1.8 0 0 1-2.605.48l-2.58-1.933a.72.72 0 0 0-.865 0l-3.486 2.656c-.466.355-1.074-.205-.763-.7l3.238-5.15a1.8 1.8 0 0 1 2.606-.48l2.58 1.934a.72.72 0 0 0 .866 0l3.486-2.655c.465-.356 1.074.205.763.7z"/></svg></span><span class="badge-name">Messenger</span></span>
+            <span class="hero-channel-badge"><span class="badge-icon bg-instagram" title="Instagram DM"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M12 0C8.74 0 8.333.015 7.053.072 5.775.132 4.905.333 4.14.63c-.789.306-1.459.717-2.126 1.384S.935 3.35.63 4.14C.333 4.905.131 5.775.072 7.053.012 8.333 0 8.74 0 12s.015 3.667.072 4.947c.06 1.277.261 2.148.558 2.913.306.788.717 1.459 1.384 2.126.667.666 1.336 1.079 2.126 1.384.766.296 1.636.499 2.913.558C8.333 23.988 8.74 24 12 24s3.667-.015 4.947-.072c1.277-.06 2.148-.262 2.913-.558.788-.306 1.459-.718 2.126-1.384.666-.667 1.079-1.335 1.384-2.126.296-.765.499-1.636.558-2.913.06-1.28.072-1.687.072-4.947s-.015-3.667-.072-4.947c-.06-1.277-.262-2.149-.558-2.913-.306-.789-.718-1.459-1.384-2.126C21.319 1.347 20.651.935 19.86.63c-.765-.297-1.636-.499-2.913-.558C15.667.012 15.26 0 12 0zm0 2.16c3.203 0 3.585.016 4.85.071 1.17.055 1.805.249 2.227.415.562.217.96.477 1.382.896.419.42.679.819.896 1.381.164.422.36 1.057.413 2.227.057 1.266.07 1.646.07 4.85s-.015 3.585-.074 4.85c-.061 1.17-.256 1.805-.421 2.227-.224.562-.479.96-.899 1.382-.419.419-.824.679-1.38.896-.42.164-1.065.36-2.235.413-1.274.057-1.649.07-4.859.07-3.211 0-3.586-.015-4.859-.074-1.171-.061-1.816-.256-2.236-.421-.569-.224-.96-.479-1.379-.899-.421-.419-.69-.824-.9-1.38-.165-.42-.359-1.065-.42-2.235-.045-1.26-.061-1.649-.061-4.844 0-3.196.016-3.586.061-4.861.061-1.17.255-1.814.42-2.234.21-.57.479-.96.9-1.381.419-.419.81-.689 1.379-.898.42-.166 1.051-.361 2.221-.421 1.275-.045 1.65-.06 4.859-.06l.045.03zm0 3.678a6.162 6.162 0 1 0 0 12.324 6.162 6.162 0 0 0 0-12.324zM12 16c-2.21 0-4-1.79-4-4s1.79-4 4-4 4 1.79 4 4-1.79 4-4 4zm7.846-10.405a1.441 1.441 0 0 1-2.88 0 1.44 1.44 0 0 1 2.88 0z"/></svg></span><span class="badge-name">Instagram DM</span></span>
+            <span class="hero-channel-badge"><span class="badge-icon bg-widget" title="On-site chat widget"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H9l-5 4V5.5z"/><circle cx="8.5" cy="9.5" r="0.6" fill="currentColor"/><circle cx="12" cy="9.5" r="0.6" fill="currentColor"/><circle cx="15.5" cy="9.5" r="0.6" fill="currentColor"/></svg></span><span class="badge-name">On-site chat</span></span>
+          </div>
+        </div>
+
+        <!-- Social publishing -->
+        <div class="channel-group">
+          <span class="group-label">Social publishing</span>
+          <div class="group-badges">
+            <span class="hero-channel-badge"><span class="badge-icon bg-instagram" title="Instagram"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M12 0C8.74 0 8.333.015 7.053.072 5.775.132 4.905.333 4.14.63c-.789.306-1.459.717-2.126 1.384S.935 3.35.63 4.14C.333 4.905.131 5.775.072 7.053.012 8.333 0 8.74 0 12s.015 3.667.072 4.947c.06 1.277.261 2.148.558 2.913.306.788.717 1.459 1.384 2.126.667.666 1.336 1.079 2.126 1.384.766.296 1.636.499 2.913.558C8.333 23.988 8.74 24 12 24s3.667-.015 4.947-.072c1.277-.06 2.148-.262 2.913-.558.788-.306 1.459-.718 2.126-1.384.666-.667 1.079-1.335 1.384-2.126.296-.765.499-1.636.558-2.913.06-1.28.072-1.687.072-4.947s-.015-3.667-.072-4.947c-.06-1.277-.262-2.149-.558-2.913-.306-.789-.718-1.459-1.384-2.126C21.319 1.347 20.651.935 19.86.63c-.765-.297-1.636-.499-2.913-.558C15.667.012 15.26 0 12 0zm0 2.16c3.203 0 3.585.016 4.85.071 1.17.055 1.805.249 2.227.415.562.217.96.477 1.382.896.419.42.679.819.896 1.381.164.422.36 1.057.413 2.227.057 1.266.07 1.646.07 4.85s-.015 3.585-.074 4.85c-.061 1.17-.256 1.805-.421 2.227-.224.562-.479.96-.899 1.382-.419.419-.824.679-1.38.896-.42.164-1.065.36-2.235.413-1.274.057-1.649.07-4.859.07-3.211 0-3.586-.015-4.859-.074-1.171-.061-1.816-.256-2.236-.421-.569-.224-.96-.479-1.379-.899-.421-.419-.69-.824-.9-1.38-.165-.42-.359-1.065-.42-2.235-.045-1.26-.061-1.649-.061-4.844 0-3.196.016-3.586.061-4.861.061-1.17.255-1.814.42-2.234.21-.57.479-.96.9-1.381.419-.419.81-.689 1.379-.898.42-.166 1.051-.361 2.221-.421 1.275-.045 1.65-.06 4.859-.06l.045.03zm0 3.678a6.162 6.162 0 1 0 0 12.324 6.162 6.162 0 0 0 0-12.324zM12 16c-2.21 0-4-1.79-4-4s1.79-4 4-4 4 1.79 4 4-1.79 4-4 4zm7.846-10.405a1.441 1.441 0 0 1-2.88 0 1.44 1.44 0 0 1 2.88 0z"/></svg></span><span class="badge-name">Instagram</span></span>
+            <span class="hero-channel-badge"><span class="badge-icon bg-linkedin" title="LinkedIn"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 0 1-2.063-2.065 2.064 2.064 0 1 1 2.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg></span><span class="badge-name">LinkedIn</span></span>
+            <span class="hero-channel-badge"><span class="badge-icon bg-facebook" title="Facebook"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg></span><span class="badge-name">Facebook</span></span>
+            <span class="hero-channel-badge"><span class="badge-icon bg-tiktok" title="TikTok"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z"/></svg></span><span class="badge-name">TikTok</span></span>
+            <span class="hero-channel-badge"><span class="badge-icon bg-youtube" title="YouTube"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg></span><span class="badge-name">YouTube</span></span>
+            <span class="hero-channel-badge"><span class="badge-icon bg-pinterest" title="Pinterest"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M12.017 0C5.396 0 .029 5.367.029 11.987c0 5.079 3.158 9.417 7.618 11.162-.105-.949-.199-2.403.041-3.439.219-.937 1.406-5.957 1.406-5.957s-.359-.72-.359-1.781c0-1.663.967-2.911 2.168-2.911 1.024 0 1.518.769 1.518 1.688 0 1.029-.653 2.567-.992 3.992-.285 1.193.6 2.165 1.775 2.165 2.128 0 3.768-2.245 3.768-5.487 0-2.861-2.063-4.869-5.008-4.869-3.41 0-5.409 2.562-5.409 5.199 0 1.033.394 2.143.889 2.741.099.12.112.225.085.345-.09.375-.293 1.199-.334 1.363-.053.225-.172.271-.401.165-1.495-.69-2.433-2.878-2.433-4.646 0-3.776 2.748-7.252 7.92-7.252 4.158 0 7.392 2.967 7.392 6.923 0 4.135-2.607 7.462-6.233 7.462-1.214 0-2.354-.629-2.758-1.379l-.749 2.848c-.269 1.045-1.004 2.352-1.498 3.146 1.123.345 2.306.535 3.55.535 6.607 0 11.985-5.365 11.985-11.987C23.97 5.39 18.592.026 11.985.026L12.017 0z"/></svg></span><span class="badge-name">Pinterest</span></span>
+            <span class="hero-channel-badge"><span class="badge-icon bg-reddit" title="Reddit"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg></span><span class="badge-name">Reddit</span></span>
+            <span class="hero-channel-badge"><span class="badge-icon bg-bluesky" title="Bluesky"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M12 10.8c-1.087-2.114-4.046-6.053-6.798-7.995C2.566.944 1.561 1.266.902 1.565.139 1.908 0 3.08 0 3.768c0 .69.378 5.65.624 6.479.815 2.736 3.713 3.66 6.383 3.364.136-.02.275-.039.415-.056-.138.022-.276.04-.415.056-3.912.58-7.387 2.005-2.83 7.078 5.013 5.19 6.87-1.113 7.823-4.308.953 3.195 2.05 9.271 7.733 4.308 4.267-4.308 1.172-6.498-2.74-7.078a8.741 8.741 0 0 0-.415-.056c.14.017.279.036.415.056 2.67.297 5.568-.628 6.383-3.364.246-.828.624-5.79.624-6.478 0-.69-.139-1.861-.902-2.206-.659-.298-1.664-.62-4.3 1.24C16.046 4.748 13.087 8.687 12 10.8z"/></svg></span><span class="badge-name">Bluesky</span></span>
+            <span class="hero-channel-badge"><span class="badge-icon bg-threads" title="Threads"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M12.186 24h-.007c-3.581-.024-6.334-1.205-8.184-3.509C2.35 18.44 1.5 15.586 1.472 12.01v-.017c.03-3.579.879-6.43 2.525-8.482C5.845 1.205 8.6.024 12.18 0h.014c2.746.02 5.043.725 6.826 2.098 1.677 1.29 2.858 3.13 3.509 5.467l-2.04.569c-1.104-3.96-3.898-5.984-8.304-6.015-2.91.022-5.11.936-6.54 2.717C4.307 6.504 3.616 8.914 3.589 12c.027 3.086.718 5.496 2.057 7.164 1.43 1.783 3.631 2.698 6.54 2.717 2.623-.02 4.358-.631 5.8-2.045 1.647-1.613 1.618-3.593 1.09-4.798-.31-.71-.873-1.3-1.634-1.75-.192 1.352-.622 2.446-1.284 3.272-.886 1.102-2.14 1.704-3.73 1.79-1.202.065-2.361-.218-3.259-.801-1.063-.689-1.685-1.74-1.752-2.964-.065-1.19.408-2.285 1.33-3.082.88-.76 2.119-1.207 3.583-1.291a13.853 13.853 0 0 1 3.02.142c-.126-.742-.375-1.332-.75-1.757-.513-.586-1.308-.883-2.359-.89h-.029c-.844 0-1.992.232-2.721 1.32L7.734 7.847c.98-1.454 2.568-2.256 4.478-2.256h.044c3.194.02 5.097 1.975 5.287 5.388.108.046.216.094.321.142 1.497.7 2.58 1.761 3.154 3.07.797 1.82.871 4.79-1.548 7.158-1.85 1.81-4.094 2.628-7.277 2.65Zm1.003-11.69c-.242 0-.487.007-.739.021-1.836.103-2.98.946-2.916 2.143.067 1.256 1.452 1.839 2.784 1.767 1.224-.065 2.818-.543 3.086-3.71a10.5 10.5 0 0 0-2.215-.221z"/></svg></span><span class="badge-name">Threads</span></span>
+            <span class="hero-channel-badge"><span class="badge-icon bg-store" title="Google Business Profile"><svg viewBox="0 0 24 24" width="14" height="14"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg></span><span class="badge-name">Google Business</span></span>
+          </div>
+        </div>
+
+      </div>
     </div>
 
     <!-- Right: Clean WhatsApp Dark Mode Mockup (No Background Code) -->
     <div class="hero-visual-col">
       <div class="dark-window-frame font-dm-sans">
-        
+
         <!-- macOS Window Controls Top-Left -->
         <div class="window-controls-bar">
           <span class="window-dot"></span>
@@ -65,7 +77,7 @@ import TarLogo from "./TarLogo.astro";
 
         <!-- 3 Clean WhatsApp Dark Mode Message Cards -->
         <div class="whatsapp-cards-stack">
-          
+
           <!-- Message 1: Appointment Reminder with Reschedule Button -->
           <div class="wa-bubble-card">
             <div class="wa-bubble-main">
@@ -119,7 +131,7 @@ import TarLogo from "./TarLogo.astro";
     min-height: calc(100vh - 68px);
     display: flex;
     align-items: center;
-    padding: 24px 0;
+    padding: 16px 0;
     overflow: hidden;
   }
 
@@ -147,13 +159,13 @@ import TarLogo from "./TarLogo.astro";
   .hero-text-col {
     display: flex;
     flex-direction: column;
-    gap: 18px;
+    gap: 14px;
   }
 
   .hero-heading {
     color: var(--color-paper-white);
-    line-height: 1.05;
-    font-size: clamp(2.35rem, 4.2vw, 3.65rem);
+    line-height: 1.04;
+    font-size: clamp(2rem, 3.3vw, 2.9rem);
   }
 
   .text-leaf-bright {
@@ -161,27 +173,54 @@ import TarLogo from "./TarLogo.astro";
   }
 
   .hero-lead {
-    font-size: clamp(1.15rem, 1.6vw, 1.35rem);
-    line-height: 1.85;
+    font-size: clamp(0.98rem, 1.25vw, 1.1rem);
+    line-height: 1.55;
     color: rgba(255, 255, 255, 0.92);
-    max-width: 700px;
+    max-width: 560px;
   }
 
-  /* Inline Channel Badges with Pixel-Perfect Alignment */
+  /* Organized Channel Groups */
+  .hero-channel-groups {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 4px;
+  }
+
+  .channel-group {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .group-label {
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    line-height: 1.5;
+    color: rgba(255, 255, 255, 0.55);
+  }
+
+  .group-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 20px;
+  }
+
+  /* Inline Channel Badges — no container, just icon chip + name */
   .hero-channel-badge {
     display: inline-flex;
     align-items: center;
-    gap: 6.5px;
+    gap: 7px;
     vertical-align: middle;
-    margin: 2px 2px 2px 3px;
     color: #ffffff;
-    font-weight: 700;
   }
 
   .badge-icon {
-    width: 28px;
-    height: 28px;
-    border-radius: 7px;
+    width: 22px;
+    height: 22px;
+    border-radius: 6px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -192,34 +231,57 @@ import TarLogo from "./TarLogo.astro";
 
   .badge-name {
     color: #ffffff;
-    font-size: 1.2rem;
-    font-weight: 700;
+    font-size: 0.88rem;
+    font-weight: 600;
     line-height: 1;
     letter-spacing: -0.01em;
+    white-space: nowrap;
+  }
+
+  @media (max-width: 600px) {
+    .hero-channel-groups {
+      gap: 14px;
+    }
+
+    .group-badges {
+      gap: 8px 16px;
+    }
   }
 
   .bg-android { background-color: #072e1b; color: #3ddc84; }
   .bg-ios { background-color: #000000; color: #ffffff; }
   .bg-websites { background-color: #0284c7; }
+  .bg-mail { background-color: #ffffff; color: #111827; }
   .bg-whatsapp { background-color: #25d366; }
   .bg-telegram { background-color: #24a1de; }
+  .bg-messenger { background-color: #a033ff; }
+  .bg-instagram { background: linear-gradient(45deg, #f9ce34, #ee2a7b 48%, #6228d7); }
+  .bg-widget { background-color: #ffffff; color: #111827; }
   .bg-discord { background-color: #5865f2; }
   .bg-slack { background-color: #ffffff; }
   .bg-gchat { background-color: #ffffff; }
   .bg-teams { background-color: #5059c9; }
-
-  /* Light BG & Outlined POS */
-  .bg-pos-light {
-    background-color: #ffffff;
-    color: #111827;
-  }
-
-  .bg-voice { background-color: #e11d48; }
+  .bg-linkedin { background-color: #0a66c2; }
+  .bg-facebook { background-color: #1877f2; }
+  .bg-tiktok { background-color: #111111; }
+  .bg-youtube { background-color: #ff0000; }
+  .bg-pinterest { background-color: #e60023; }
+  .bg-reddit { background-color: #ff4500; }
+  .bg-bluesky { background-color: #1185fe; }
+  .bg-threads { background-color: #111111; }
+  .bg-store { background-color: #ffffff; color: #111827; }
 
   /* Right Visual: Clean Dark Window Container */
   .hero-visual-col {
     display: flex;
     justify-content: center;
+  }
+
+  /* Phones: hide mockup */
+  @media (max-width: 599px) {
+    .hero-visual-col {
+      display: none;
+    }
   }
 
   .dark-window-frame {
@@ -308,5 +370,17 @@ import TarLogo from "./TarLogo.astro";
 
   .wa-btn-icon {
     font-size: 13px;
+  }
+
+  /* Tablets: smaller mockup, two cards */
+  @media (min-width: 600px) and (max-width: 719px) {
+    .dark-window-frame {
+      max-width: 250px;
+      padding: 10px 12px 14px 12px;
+    }
+
+    .wa-bubble-card:nth-child(3) {
+      display: none;
+    }
   }
 </style>

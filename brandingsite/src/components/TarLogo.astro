@@ -23,29 +23,10 @@ const height = Math.round(((size * 7.1) / 7) * 10) / 10;
   style="display: inline-block; vertical-align: middle; flex-shrink: 0;"
   aria-label="TAR Logo"
 >
-  <!-- Row 0: Ear tips (Cols 0..1 and 5..6) -->
-  <rect x="0" y="0" width="2" height="1" />
-  <rect x="5" y="0" width="2" height="1" />
-
-  <!-- Row 1: Head top (Cols 1..5) -->
-  <rect x="1" y="1" width="5" height="1" />
-
-  <!-- Row 2: Forehead (Cols 0..6) -->
-  <rect x="0" y="2" width="7" height="1" />
-
-  <!-- Row 3: Eyes Row (Cols 0..1, Col 3 nose bridge, Cols 5..6, with transparent eye cutouts at Col 2 & 4) -->
-  <rect x="0" y="3" width="2" height="1" />
-  <rect x="3" y="3" width="1" height="1" />
-  <rect x="5" y="3" width="2" height="1" />
-
-  <!-- Row 4: Cheeks (Cols 0..6) -->
-  <rect x="0" y="4" width="7" height="1.1" />
-
-  <!-- Row 5: Jaw/Mouth (Cols 0..6) -->
-  <rect x="0" y="5.1" width="7" height="1.1" />
-
-  <!-- Row 6 & 7: Feet & Center Extension -->
-  <rect x="0" y="6.2" width="1" height="0.55" />
-  <rect x="3" y="6.2" width="1" height="0.9" />
-  <rect x="6" y="6.2" width="1" height="0.55" />
+  <!-- Single seamless silhouette (same as footer bees) — no internal seams.
+       Eye cutouts are transparent holes via fill-rule evenodd. -->
+  <path
+    fill-rule="evenodd"
+    d="M0 0 H2 V1 H5 V0 H7 V1 H6 V2 H7 V6.75 H6 V6.2 H4 V7.1 H3 V6.2 H1 V6.75 H0 V2 H1 V1 H0 Z M2 3 H3 V4 H2 Z M4 3 H5 V4 H4 Z"
+  />
 </svg>

@@ -4,6 +4,7 @@ import * as SecureStore from "expo-secure-store";
 const SECURE_STORE_USER_KEY = "google_auth_user";
 let cachedUser: UserProfile | null | undefined;
 let userLoad: Promise<UserProfile | null> | null = null;
+let silentSignInLoad: Promise<UserProfile | null> | null = null;
 
 GoogleSignin.configure({
   webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || "226183831843-5sjvl1hsv4d04aucnqsqn19u83o4f5ku.apps.googleusercontent.com",
@@ -121,7 +122,14 @@ export async function getValidIdToken(): Promise<string | null> {
   return refreshed?.idToken || null;
 }
 
-export async function trySilentSignIn(): Promise<UserProfile | null> {
+export async function invalidateGoogleToken(): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) return;
+  cachedUser = { ...user, idToken: null };
+  await SecureStore.setItemAsync(SECURE_STORE_USER_KEY, JSON.stringify(cachedUser));
+}
+
+async function silentSignIn(): Promise<UserProfile | null> {
   const t0 = Date.now();
   try {
     console.log(`[Auth] ${Date.now() - t0}ms — trySilentSignIn START`);
@@ -130,10 +138,11 @@ export async function trySilentSignIn(): Promise<UserProfile | null> {
     if (!hasPrevious) return null;
 
     console.log(`[Auth] ${Date.now() - t0}ms — signInSilently START`);
+    let timeout: ReturnType<typeof setTimeout> | undefined;
     const response = await Promise.race([
       GoogleSignin.signInSilently(),
-      new Promise<never>((_, rej) => setTimeout(() => rej(new Error("silent sign-in timeout")), 5000)),
-    ]);
+      new Promise<never>((_, reject) => { timeout = setTimeout(() => reject(new Error("silent sign-in timeout")), 15_000); }),
+    ]).finally(() => { if (timeout) clearTimeout(timeout); });
     console.log(`[Auth] ${Date.now() - t0}ms — signInSilently DONE`);
 
     const signInResult = response as any;
@@ -161,4 +170,10 @@ export async function trySilentSignIn(): Promise<UserProfile | null> {
     console.warn(`[Auth] ${Date.now() - t0}ms — trySilentSignIn FAILED:`, error);
     return null;
   }
+}
+
+export function trySilentSignIn(): Promise<UserProfile | null> {
+  if (silentSignInLoad) return silentSignInLoad;
+  silentSignInLoad = silentSignIn().finally(() => { silentSignInLoad = null; });
+  return silentSignInLoad;
 }

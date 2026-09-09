@@ -7,6 +7,7 @@ import { findAction, type ActionId } from '../registry/catalog.ts';
 import { directoryDefinitionIds, findDirectoryBot } from '../registry/directory.ts';
 import { executePos, POS_INDEXES } from '../pos/store.ts';
 import { draftProduct, saveProductContent } from '../pos/content.ts';
+import { canExecute, canReadRecord } from '../access.ts';
 
 type GatewayError = ReturnType<typeof badRequest> | ReturnType<typeof conflict> | ReturnType<typeof forbidden> | ReturnType<typeof notFound> | ReturnType<typeof unavailable>;
 export interface GatewayRequest { readonly idempotencyKey: string; readonly actionId: ActionId; readonly input: Record<string, unknown>; }
@@ -48,13 +49,13 @@ export function executeGateway(client: Client, context: AccessContext, request: 
       if (!request.idempotencyKey || request.idempotencyKey.length > 200) throw badRequest('Idempotency-Key is required.');
       const registeredAction = findAction(request.actionId);
       if (!registeredAction) throw notFound('Action is not registered.');
-      if (!registeredAction.roles.includes(context.member.role)) throw forbidden();
+      if (!canExecute(context.member, request.actionId)) throw forbidden();
       for (const field of registeredAction.fields) {
         const value = request.input[field.key];
         if (field.required && (value === undefined || value === null || (typeof value === 'string' && !value.trim()))) throw badRequest(`${field.label} is required.`);
         if (field.kind === 'number' && value !== undefined && (!Number.isFinite(Number(value)))) throw badRequest(`${field.label} must be a number.`);
       }
-      const hash = await fingerprint({ action: request.actionId, input: request.input });
+      const hash = await fingerprint({ actor: context.identity.id, action: request.actionId, input: request.input });
       const replay = await existing(client, request.idempotencyKey, hash);
       if (replay) return object(replay.result);
       const at = stamp();
@@ -163,6 +164,7 @@ export function executeGateway(client: Client, context: AccessContext, request: 
         const taskId = text(request.input.taskId, 160); if (!taskId) throw badRequest('Task ID is required.');
         const records = await query<Record<string, unknown>>(client, { sql: 'SELECT * FROM records WHERE id=? AND type=\'task\' AND archived_at IS NULL', args: [taskId] }).pipe(Effect.runPromise);
         const task = records[0]; if (!task) throw notFound('Task not found.');
+        if (!canReadRecord(context.member, rowToRecord(task))) throw forbidden();
         if (task.assignee_id && task.assignee_id !== context.identity.id && context.member.role !== 'owner' && context.member.role !== 'admin') throw forbidden();
         if (task.state === 'completed') throw conflict('Task is already complete.');
         const transaction = await client.transaction('write');

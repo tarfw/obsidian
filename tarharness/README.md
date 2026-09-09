@@ -2,6 +2,10 @@
 
 Production Worker for TAR's Records, Actions and Flows model. Effect v4 runs the typed Action Gateway; Cloudflare supplies HTTP, D1 control data, Queues and scheduled recovery; Turso stores one operational database per workspace.
 
+## Members and team chat
+
+TAR manages members once. Canvas is the main workspace view; Inbox shows eligible work. Slack, Discord and Google Chat use verified identity links and the same TAR permissions. See [setup, supported commands and deployment requirements](docs/team-chat.md). Apply D1 migration `0003_team_chat.sql` before deploying this version.
+
 ## What is implemented
 
 - Google OIDC verification and workspace membership checks.

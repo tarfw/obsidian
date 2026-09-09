@@ -5,8 +5,8 @@ import { useState, useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
-import { signInWithGoogle, getCurrentUser, trySilentSignIn } from '@/lib/auth';
-import { setUserId, tar } from '@/lib/tar';
+import { signInWithGoogle, getCurrentUser, getValidIdToken, trySilentSignIn } from '@/lib/auth';
+import { setUserId } from '@/lib/tar';
 import { TarLogo } from '@/components/TarLogo';
 import { TarLogoLoader } from '@/components/TarLogoLoader';
 
@@ -39,13 +39,12 @@ export default function AuthScreen() {
         const user = await getCurrentUser();
         console.log(`[AUTH] ${Date.now() - t}ms — getCurrentUser: ${user ? user.email : 'null'}`);
         if (user) {
-          setUserId(user.id);
-          try {
-            await tar.listWorkspaces();
-            console.log(`[AUTH] ${ms()} — personal workspace checked`);
-            router.replace('/(tabs)/workspaces');
-          } catch {
-            router.replace('/(tabs)/workspaces');
+          const token = await getValidIdToken();
+          if (token) {
+            setUserId(user.id);
+            router.replace('/(tabs)/canvas');
+          } else {
+            console.log(`[AUTH] ${ms()} — saved Google session needs sign-in`);
           }
           return;
         }
@@ -55,12 +54,7 @@ export default function AuthScreen() {
         console.log(`[AUTH] ${Date.now() - t2}ms — trySilentSignIn: ${silent ? silent.email : 'null'}`);
         if (silent) {
           setUserId(silent.id);
-          try {
-            await tar.listWorkspaces();
-            router.replace('/(tabs)/workspaces');
-          } catch {
-            router.replace('/(tabs)/workspaces');
-          }
+          router.replace('/(tabs)/canvas');
         } else {
           console.log(`[AUTH] ${ms()} — no silent sign-in, staying on auth screen`);
         }
@@ -76,12 +70,7 @@ export default function AuthScreen() {
     try {
       const user = await signInWithGoogle();
       setUserId(user.id);
-      try {
-        await tar.listWorkspaces();
-        router.replace('/(tabs)/workspaces');
-      } catch {
-        router.replace('/(tabs)/workspaces');
-      }
+      router.replace('/(tabs)/canvas');
     } catch (e: any) {
       console.warn('[Auth] Google sign-in failed:', e.message);
       Alert.alert('Google Sign-In Error', e.message || 'Failed to sign in with Google');

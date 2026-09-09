@@ -15,7 +15,7 @@ function workspace(value: Record<string, unknown>): Workspace {
 }
 
 function member(value: Record<string, unknown>): Member {
-  return { workspaceId: String(value.workspace_id), userId: String(value.user_id), role: String(value.role) as Role, state: String(value.state) as Member['state'] };
+  return { workspaceId: String(value.workspace_id), userId: String(value.user_id), role: String(value.role) as Role, workRole: value.work_role === 'cook' || value.work_role === 'cashier' ? value.work_role : 'general', state: String(value.state) as Member['state'] };
 }
 
 export class ControlStore {
@@ -29,9 +29,9 @@ export class ControlStore {
         await this.database.batch([
           this.database.prepare(`INSERT INTO users (id,email,name,created_at,updated_at) VALUES (?,?,?,?,?)
             ON CONFLICT(id) DO UPDATE SET email=excluded.email,name=excluded.name,updated_at=excluded.updated_at`).bind(identity.id, email, identity.name, stamp, stamp),
-          this.database.prepare(`INSERT INTO members (workspace_id,user_id,role,state,created_at,updated_at)
-            SELECT workspace_id,?,role,'active',?,? FROM workspace_invites WHERE email=? AND state='pending'
-            ON CONFLICT(workspace_id,user_id) DO UPDATE SET role=excluded.role,state='active',updated_at=excluded.updated_at`).bind(identity.id, stamp, stamp, email),
+          this.database.prepare(`INSERT INTO members (workspace_id,user_id,role,state,created_at,updated_at,work_role)
+            SELECT workspace_id,?,role,'active',?,?,work_role FROM workspace_invites WHERE email=? AND state='pending'
+            ON CONFLICT(workspace_id,user_id) DO UPDATE SET role=excluded.role,work_role=excluded.work_role,state='active',updated_at=excluded.updated_at WHERE members.role!='owner'`).bind(identity.id, stamp, stamp, email),
           this.database.prepare(`UPDATE workspace_invites SET state='accepted',updated_at=? WHERE email=? AND state='pending'`).bind(stamp, email),
         ]);
       },
@@ -128,12 +128,12 @@ export class ControlStore {
   access(identity: Identity, slug: string): Effect.Effect<AccessContext, ReturnType<typeof forbidden> | ReturnType<typeof notFound> | ReturnType<typeof unavailable>> {
     return Effect.tryPromise({
       try: async () => {
-        const found = row(await this.database.prepare(`SELECT w.*,m.user_id,m.role,m.state AS member_state FROM workspaces w
+        const found = row(await this.database.prepare(`SELECT w.*,m.user_id,m.role,m.work_role,m.state AS member_state FROM workspaces w
           LEFT JOIN members m ON m.workspace_id=w.id AND m.user_id=? WHERE w.slug=?`).bind(identity.id, slug).all<Record<string, unknown>>());
         if (!found) throw notFound('Workspace not found.');
         if (found.member_state !== 'active') throw forbidden();
         const current = workspace(found); if (current.state !== 'active' || !current.databaseHost) throw notFound('Workspace is not ready.');
-        return { identity, workspace: current, member: member({ workspace_id: current.id, user_id: identity.id, role: found.role, state: found.member_state }) };
+        return { identity, workspace: current, member: member({ workspace_id: current.id, user_id: identity.id, role: found.role, work_role: found.work_role, state: found.member_state }) };
       },
       catch: (cause) => cause instanceof HarnessError ? cause : unavailable('Could not resolve workspace access.', cause),
     });

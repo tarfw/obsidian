@@ -16,6 +16,8 @@ Google sign-in -> Personal workspace -> Records + Inbox
 - Sign-in creates one Personal workspace once and reuses it on every device.
 - Work workspaces are created only when shared work needs them; invitations activate when that Google email signs in.
 - D1 stores Google identity, membership and routing. Each workspace has one isolated Turso database.
+- Manage members and business roles once in TAR; Canvas, Inbox and chat enforce the same access. Owners retain control; revocation blocks future requests.
+- Connect one team destination: Slack, Discord or Google Chat. Members join through the provider and verify their chat identity once; channel roles grant no business authority.
 
 ## 1. Records — information
 
@@ -65,9 +67,10 @@ Action [Gateway checks -> execute -> validate result -> commit] -> saved result
 
 | Part | Place in the architecture |
 |---|---|
-| Channels / connectors | Adapters behind Actions and incoming triggers. |
+| Channels / connectors | Verified adapters behind Actions and triggers; link a destination and member identity, never duplicate business roles. |
 | Models / MCP / skills / sandboxes / subagents | Approved Action implementations. |
 | Inbox / Queue | Views of assigned / unassigned open Tasks. |
+| Canvas | Main workspace view: permitted cards, blocks, data and Flow shortcuts; not a Bot or an execution engine. |
 | Forms / screens | Fixed Action inputs and Record views. |
 | Outbox / queues / databases | Internal delivery, recovery and storage infrastructure. |
 
@@ -87,7 +90,7 @@ Verified trigger -> Run -> Action -> saved result -> next Action -> outcome
 | Recovery | Resume durable progress; bounded safe retries end in visible work or failure. |
 | Schedule | Each recurring occurrence starts a distinct, deduplicated Run. |
 | Cancellation | Stop new work; compensate committed effects separately when needed. |
-| Bot | Named Flow bindings and guidance. |
+| Bot | Optional named Flow bindings and guidance; no separate members or data. |
 | Kit | Versioned Record types, views, Action dependencies, templates and policy. |
 
 ### Creation
@@ -105,10 +108,10 @@ Describe -> reuse Records/Actions -> draft Flow -> preview -> approve -> publish
 ### Everyday use
 
 ~~~text
-Work  = Records + Inbox
+Work  = Canvas + Inbox + Records
 Build = Flows + Actions + settings
 ~~~
 
-Show the next action, owner, status and relevant due date. Keep technical traces in Run details.
+Show the next action, owner, status and due date. Flow access controls starting/monitoring; Action and Record policy controls work/data. Keep traces in Run details.
 
 **Reuse first. Add only what the work needs.**

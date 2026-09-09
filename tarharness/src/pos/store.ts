@@ -1,6 +1,7 @@
 import type { Client, Transaction } from '@libsql/client/web';
 import { badRequest, conflict, forbidden, notFound } from '../errors.ts';
 import type { AccessContext } from '../types.ts';
+import { isCook } from '../access.ts';
 
 type DB = Pick<Client, 'execute'>;
 type Data = Record<string, unknown>;
@@ -59,6 +60,7 @@ export async function posSummary(db: DB) {
   return { sales: Number(result.rows[0].sales), orders: Number(orders.rows[0].count), lowStock: Number(stock.rows[0].count), currency: String(settings?.data.currency || 'INR'), businessDate: today };
 }
 export async function readPos(db: DB, context: AccessContext, section: string, search = '', offset = 0) {
+  if (isCook(context.member)) throw forbidden();
   await requirePos(db);
   if (section === 'products' || section === 'orders' || section === 'customers') {
     const types = { products: 'pos.product', orders: 'pos.order', customers: 'pos.customer' };

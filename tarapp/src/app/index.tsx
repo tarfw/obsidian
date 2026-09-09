@@ -1,20 +1,17 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'expo-router';
-import { getCurrentUser } from '@/lib/auth';
-import { tar } from '@/lib/tar';
+import { getValidIdToken } from '@/lib/auth';
 
 export default function Index() {
   const router = useRouter();
   const [target, setTarget] = useState<string | null>(null);
 
   useEffect(() => {
-    getCurrentUser().then(async (user) => {
-      if (!user) {
-        setTarget('/auth');
-        return;
-      }
-      setTarget('/(tabs)/workspaces');
-    });
+    let active = true;
+    void getValidIdToken()
+      .then((token) => { if (active) setTarget(token ? '/(tabs)/canvas' : '/auth'); })
+      .catch(() => { if (active) setTarget('/auth'); });
+    return () => { active = false; };
   }, []);
 
   useEffect(() => {

@@ -11,8 +11,13 @@ import { buildWorkspaceCanvas } from './registry/canvas.ts';
 import { botDirectory, directoryDefinitionIds } from './registry/directory.ts';
 import { posSummary, readPos, readPosInbox } from './pos/store.ts';
 import { readProductContent } from './pos/content.ts';
+import { canExecute, canReadRecord, isCook, kitchenOrder, managesMembers } from './access.ts';
+import { inviteMember, listMembers, updateMember } from './team.ts';
+import { providers, providerStatus, verifyEvent, chatResponse, type ChannelEnv, type Provider } from './channels/providers.ts';
+import { beginLink, channelState, confirmLink, disconnect, proveLink, resolveSender } from './channels/store.ts';
+import { enqueueCommand, processCommand } from './channels/jobs.ts';
 
-type RuntimeEnv = Env & { readonly TURSO_PLATFORM_TOKEN?: string };
+type RuntimeEnv = Env & ChannelEnv & { readonly TURSO_PLATFORM_TOKEN?: string };
 const jsonHeaders = { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' };
 const corsHeaders = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Authorization, Content-Type, Idempotency-Key', 'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS' };
 const now = () => Date.now();
@@ -89,7 +94,8 @@ async function listDefinitions(client: Client) {
   return rows.map((item) => ({ id: String(item.id), kind: String(item.kind), name: String(item.name), version: Number(item.version), state: String(item.state), data: object(JSON.parse(String(item.data))) }));
 }
 
-async function workspaceCanvas(client: Client, role: AccessContext['member']['role']) {
+async function workspaceCanvas(client: Client, member: AccessContext['member']) {
+  if (isCook(member)) return [{ id: 'kitchen', kind: 'data', title: 'Kitchen', display: 'value', value: 'Open Inbox', caption: 'Prepare assigned orders in Inbox' }];
   const [definitions, counts] = await Promise.all([
     listDefinitions(client),
     Effect.runPromise(query<Record<string, unknown>>(client, { sql: `SELECT COUNT(*) AS records,
@@ -98,12 +104,41 @@ async function workspaceCanvas(client: Client, role: AccessContext['member']['ro
   ]);
   const count = counts[0] || {};
   const pos = definitions.some((item) => item.id === 'directory.pos.bot' && item.state === 'published') ? await posSummary(client) : undefined;
-  return buildWorkspaceCanvas(definitions, { records: Number(count.records || 0), openTasks: Number(count.open_tasks || 0), pos }, role);
+  return buildWorkspaceCanvas(definitions, { records: Number(count.records || 0), openTasks: Number(count.open_tasks || 0), pos }, member.role)
+    .filter((card) => card.kind === 'data' ? member.workRole !== 'cashier' || !['pos-sales','records-total'].includes(card.id)
+      : canExecute(member, card.kind === 'action' ? card.actionId : card.actionId || 'flow.start'));
 }
 
-async function handle(request: Request, env: RuntimeEnv): Promise<Response> {
+async function channelRequest(request: Request, env: RuntimeEnv, provider: Provider, ctx: ExecutionContext) {
+  const verified = await verifyEvent(request, provider, env);
+  if (verified.ping) return Response.json({ type: 1 });
+  const event = verified.event!;
+  if (!event.userId || !event.tenantId || !event.channelId || !event.eventId) throw badRequest('A team channel and verified sender are required.');
+  try {
+    const link = /^link\s+([a-f0-9]{32})$/i.exec(event.text.trim());
+    if (link) return chatResponse(provider, await proveLink(env.CONTROL, event, link[1]), event.userId);
+    const sender = await resolveSender(env.CONTROL, event);
+    const current = await Effect.runPromise(new ControlStore(env.CONTROL).access(sender.identity, sender.slug));
+    if (/^(help|hi|hello)?$/i.test(event.text.trim())) return chatResponse(provider, 'Use TAR for your Canvas and Inbox. Commands: done <task-id>, start <order-id> <product-id>, ready <order-id> <product-id>. Your TAR role applies here.', event.userId);
+    if (event.text.trim().toLowerCase() === 'status') {
+      const result = await env.CONTROL.prepare('SELECT state,result FROM channel_commands WHERE workspace_id=? AND user_id=? ORDER BY created_at DESC LIMIT 1').bind(current.workspace.id, current.identity.id).first<{ state: string; result: string | null }>();
+      return chatResponse(provider, result ? `${result.state}: ${result.result || 'Your request is being processed.'}` : 'No chat requests yet.', event.userId);
+    }
+    const id = await enqueueCommand(env.CONTROL, current, event);
+    ctx.waitUntil(env.OUTBOX.send({ kind: 'chat.command', id }).catch(() => { console.error(JSON.stringify({ event: 'chat.queue.unavailable', id })); }));
+    return chatResponse(provider, 'Request saved. Use “status” to check the result, or open TAR → Members & chat.', event.userId);
+  } catch (error) {
+    // Never post business payloads, provider roles, or private details to the room.
+    const message = error instanceof HarnessError ? error.message : 'Could not complete this request. Check TAR before trying again.';
+    return chatResponse(provider, message, event.userId);
+  }
+}
+
+async function handle(request: Request, env: RuntimeEnv, ctx: ExecutionContext): Promise<Response> {
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders });
   const url = new URL(request.url); const path = url.pathname;
+  const channelMatch = /^\/v1\/channels\/(slack|discord|google-chat)\/events$/.exec(path);
+  if (request.method === 'POST' && channelMatch) return channelRequest(request, env, channelMatch[1] as Provider, ctx);
   if (request.method === 'GET' && path === '/health') return response({ ok: true, service: 'tarharness', now: new Date().toISOString(), tursoProvisioning: Boolean(env.TURSO_PLATFORM_TOKEN && env.TURSO_ORG && !env.TURSO_ORG.startsWith('REPLACE_')) });
   if (request.method === 'GET' && path === '/v1/actions') return response({ actions: actionCatalog, interfaces: interfaceCatalog });
   if (request.method === 'GET' && path === '/v1/workspaces') {
@@ -114,17 +149,32 @@ async function handle(request: Request, env: RuntimeEnv): Promise<Response> {
   const match = /^\/v1\/workspaces\/([a-z0-9-]+)(?:\/(.*))?$/.exec(path);
   if (!match) throw notFound('Route not found.');
   const slug = match[1]; const nested = match[2] || '';
-  const { access: current, control } = await access(request, env, slug);
+  const { access: current } = await access(request, env, slug);
+  if (request.method === 'GET' && nested === 'members') return response({ members: await listMembers(env.CONTROL, current), currentUserId: current.identity.id });
   if (request.method === 'POST' && nested === 'members') {
-    if (current.member.role !== 'owner' && current.member.role !== 'admin') throw forbidden();
-    const body = await Effect.runPromise(parseJson(request)); const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : ''; const role = body.role === 'admin' || body.role === 'guest' ? body.role : 'member';
-    if (!/^\S+@\S+\.\S+$/.test(email)) throw badRequest('A valid email is required.');
-    await Effect.runPromise(control.inviteMember({ workspaceId: current.workspace.id, email, role, invitedBy: current.identity.id }));
-    return response({ invitation: { email, role, state: 'pending' } }, 201);
+    return response({ invitation: await inviteMember(env.CONTROL, current, await Effect.runPromise(parseJson(request))) }, 201);
   }
+  if (request.method === 'PUT' && nested.startsWith('members/')) return response(await updateMember(env.CONTROL, current, decodeURIComponent(nested.slice(8)), await Effect.runPromise(parseJson(request))));
+  if (request.method === 'GET' && nested === 'team-chat') return response({ ...await channelState(env.CONTROL, current), providers: providerStatus(env), canManage: managesMembers(current.member), role: current.member.role, workRole: current.member.workRole || 'general' });
+  if (request.method === 'POST' && nested === 'team-chat/link') {
+    const body = await Effect.runPromise(parseJson(request)); const provider = body.provider as Provider;
+    if (!providers.includes(provider)) throw badRequest('Choose Slack, Discord or Google Chat.');
+    if (!providerStatus(env).find((item) => item.id === provider)?.configured) throw unavailable('Provider setup is required before linking.');
+    return response(await beginLink(env.CONTROL, current, provider, String(body.purpose)), 201);
+  }
+  if (request.method === 'POST' && nested === 'team-chat/confirm') {
+    const body = await Effect.runPromise(parseJson(request));
+    return response(await confirmLink(env.CONTROL, current, String(body.id), body.joinUrl));
+  }
+  if (request.method === 'POST' && nested === 'team-chat/disconnect') {
+    const body = await Effect.runPromise(parseJson(request));
+    return response(await disconnect(env.CONTROL, current, body.destination === true));
+  }
+  if (request.method === 'GET' && nested === 'actions') return response({ actions: actionCatalog.filter((action) => canExecute(current.member, action.id)), interfaces: interfaceCatalog });
   return withWorkspace(env, current, async (client) => {
     const productContentMatch = /^pos\/products\/([^/]+)\/content$/.exec(nested);
     if (request.method === 'GET' && productContentMatch) {
+      if (isCook(current.member)) throw forbidden();
       if (current.member.role === 'guest') throw forbidden();
       return response({ content: await readProductContent(client, env.PRODUCT_CONTENT, current, decodeURIComponent(productContentMatch[1])) });
     }
@@ -138,14 +188,14 @@ async function handle(request: Request, env: RuntimeEnv): Promise<Response> {
       const type = url.searchParams.get('type');
       if (current.member.role === 'guest' && type?.startsWith('pos.')) throw forbidden();
       const rows = await Effect.runPromise(query<Record<string, unknown>>(client, type ? { sql: 'SELECT * FROM records WHERE type=? AND archived_at IS NULL ORDER BY updated_at DESC LIMIT 100', args: [type] } : { sql: 'SELECT * FROM records WHERE archived_at IS NULL ORDER BY updated_at DESC LIMIT 100' }));
-      return response({ records: rows.filter((row) => current.member.role !== 'guest' || !String(row.type).startsWith('pos.')).map(record) });
+      return response({ records: rows.map(record).filter((item) => canReadRecord(current.member, item)) });
     }
     if (request.method === 'GET' && nested === 'inbox') {
       const rows = await Effect.runPromise(query<Record<string, unknown>>(client, { sql: 'SELECT * FROM records WHERE type=\'task\' AND state=\'open\' AND (assignee_id=? OR assignee_id IS NULL) AND archived_at IS NULL ORDER BY updated_at DESC LIMIT 100', args: [current.identity.id] }));
       const pos = current.member.role === 'guest' ? { orders: [] } : await readPosInbox(client).catch(() => ({ orders: [] }));
-      return response({ tasks: rows.map(record), orders: pos.orders });
+      return response({ tasks: rows.map(record).filter((item) => canReadRecord(current.member, item)), orders: isCook(current.member) ? pos.orders.map(kitchenOrder) : pos.orders, permissions: { prepare: canExecute(current.member, 'pos.order.item.update'), collect: canExecute(current.member, 'pos.checkout'), completeTask: canExecute(current.member, 'task.complete'), openOrder: canExecute(current.member, 'pos.open') } });
     }
-    if (request.method === 'GET' && nested === 'canvas') return response({ cards: await workspaceCanvas(client, current.member.role) });
+    if (request.method === 'GET' && nested === 'canvas') return response({ cards: await workspaceCanvas(client, current.member) });
     if (request.method === 'GET' && nested === 'directory') {
       const definitions = await listDefinitions(client);
       const published = new Set(definitions.filter((item) => item.state === 'published').map((item) => item.id));
@@ -181,11 +231,21 @@ async function handle(request: Request, env: RuntimeEnv): Promise<Response> {
 }
 
 export default {
-  fetch(request: Request, env: RuntimeEnv): Promise<Response> { return handle(request, env).catch(errorResponse); },
-  async queue(_batch: MessageBatch<unknown>, _env: RuntimeEnv): Promise<void> {
-    // Only approved connector Actions enqueue work. No connector is installed in the foundation release.
+  fetch(request: Request, env: RuntimeEnv, ctx: ExecutionContext): Promise<Response> { return handle(request, env, ctx).catch(errorResponse); },
+  async queue(batch: MessageBatch<unknown>, env: RuntimeEnv): Promise<void> {
+    for (const message of batch.messages) {
+      const body = object(message.body);
+      if (body.kind !== 'chat.command' || typeof body.id !== 'string') { message.ack(); continue; }
+      try {
+        await processCommand(env.CONTROL, body.id, (current, work) => withWorkspace(env, current, work), { productContent: env.PRODUCT_CONTENT, ai: env.AI });
+        message.ack();
+      } catch { message.retry({ delaySeconds: 60 }); }
+    }
   },
-  async scheduled(_controller: ScheduledController, _env: RuntimeEnv): Promise<void> {
-    // Due-work recovery is enabled when the first connector or schedule Action is installed.
+  async scheduled(_controller: ScheduledController, env: RuntimeEnv): Promise<void> {
+    await env.CONTROL.prepare('DELETE FROM channel_link_requests WHERE expires_at<=?').bind(Date.now()).run();
+    await env.CONTROL.prepare("UPDATE channel_commands SET state='failed',result='Processing interrupted. Check TAR before retrying.' WHERE state='processing' AND attempts>=5 AND due_at<=?").bind(Date.now()).run();
+    const due = await env.CONTROL.prepare("SELECT id FROM channel_commands WHERE state IN ('pending','processing') AND due_at<=? AND attempts<5 ORDER BY due_at LIMIT 100").bind(Date.now()).all<{id: string}>();
+    if (due.results.length) await env.OUTBOX.sendBatch(due.results.map((item) => ({ body: { kind: 'chat.command', id: item.id } })));
   },
 } satisfies ExportedHandler<RuntimeEnv>;

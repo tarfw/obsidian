@@ -27,10 +27,16 @@ Gateway sits inside every hop. It cannot be skipped, removed or bypassed by a bu
 
 ## 3. One table
 
+**Two stores, and only one of them carries a `workspace_id`.**
+
+| Store | Holds | `workspace_id`? |
+|---|---|---|
+| **Control** (shared) | identity, membership, workspace routing | **yes** — Control spans all workspaces |
+| **Workspace** (one DB per workspace) | business data | **no** — the database is the tenant |
+
 ```
 record
   id            text pk
-  workspace_id  text
   type          text      -- contact | task | order | flow | run | channel | card ...
   title         text
   state         text      -- open | active | done | failed ...
@@ -43,6 +49,15 @@ record
 - One table per workspace. Every feature is a `type` + a JSON shape.
 - Definitions (flows, bots, canvases) are rows too — no separate definition store.
 - New capability = a new `type`, never a new table.
+
+**Why no `workspace_id` here:** the connection already decides the tenant. A row cannot belong to a second workspace, so the column would be a constant on every row — and a second, competing source of tenancy truth.
+
+| If you… | Then |
+|---|---|
+| keep one database per workspace | no `workspace_id`; enforce tenancy at the connection |
+| ever pool several workspaces into one database | add `workspace_id`, make it the first column of every index and unique key, and filter on it in every query |
+
+Never both at once. Moving between these two models is a migration, not a column you carry "just in case".
 
 Reserved system types:
 
@@ -58,6 +73,32 @@ Reserved system types:
 | `event` | append-only audit entry |
 
 Everything else is yours: `contact`, `task`, `order`, `product`, `document`, `interaction`, `payment`, …
+
+## 3.1 Where data shape and quantity live
+
+`data` carries the fields for a type. Quantities are the part people get wrong, so there are exactly three homes and one rule each.
+
+| Quantity | Home | Rule |
+|---|---|---|
+| Price and tax | `product.data` | integers only: minor units for money, basis points for tax |
+| Line quantity | `order.data.items[]` | copied at sale time — editing the menu never rewrites history |
+| Stock on hand | `movement` records + a cached number | movements are truth; the number is a cache |
+
+```
+product.data   = { price, cost, taxBps, stock, lowStock, sku, barcode, unit, station, available }
+order.data     = { number, service, items[], totals, kitchen_state, payment_state }
+  items[]      = { productId, title, quantity, price, tax, total, status }
+movement.data  = { itemId, delta, balance, reason, reference }
+```
+
+Stock rules:
+
+1. Never edit `stock` directly. Every change is a `movement` with a reason.
+2. One Gateway transaction writes both the movement (truth) and the cached number (speed).
+3. `sum(deltas)` must equal the cache — re-derive to reconcile, and reconcile on any doubt.
+4. Availability is a state, not a number; crossing the threshold creates a task, never a silent edit.
+5. Quantity is checked inside the transaction: stale `version` or insufficient stock rejects the whole action.
+6. Integers everywhere. No floats for money, tax or counts.
 
 ## 4. Actions — the only execution
 

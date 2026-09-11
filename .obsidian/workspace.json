@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "tar-harness.md",
+                "file": "tarv2.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "tar-harness"
+              "title": "tarv2"
             }
           }
         ]
@@ -191,6 +191,8 @@
   },
   "active": "d968b3f7343f4ecb",
   "lastOpenFiles": [
+    "celld.md",
+    "tarv2.md",
     "tarharness/migrations/0002_workspace_invites.sql",
     "tarharness/node_modules/effect/package.json",
     "tarharness/package-lock.json",
@@ -201,7 +203,6 @@
     "tarharness/node_modules/@cloudflare/unenv-preset/package.json",
     "tarharness/node_modules/wrangler/node_modules/@esbuild/win32-x64/esbuild.exe",
     "tarharness/node_modules/wrangler/node_modules/@esbuild/win32-x64/package.json",
-    "tarharness/node_modules/undici/package.json",
     "tarharness/node_modules/@libsql/isomorphic-fetch/README.md",
     "tarharness/node_modules/@libsql/isomorphic-ws/README.md",
     "tarharness/node_modules/promise-limit/README.md",
@@ -226,7 +227,6 @@
     "tarharness/node_modules/effect/ai-docs/src/01_effect/01_basics/index.md",
     "tarharness/node_modules/effect/ai-docs/src/60_child-process/index.md",
     "tarharness/node_modules/effect/ai-docs/src/80_cluster/index.md",
-    "tarharness/node_modules/effect/ai-docs/src/51_http-server/index.md",
     "tarharness/node_modules/miniflare/dist/local-explorer-ui/favicon.svg",
     "brandingsite/public/icons/whatsapp.png",
     "brandingsite/public/icons/telegram.png",

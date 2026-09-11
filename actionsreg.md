@@ -2,7 +2,7 @@
 
 **Canonical capability standard**
 
-**Terminology:** [TAR Harness](tar-harness.md) owns the architecture. Flow is the product term; existing `workflow.*` IDs remain compatibility names. Existing `step.*` IDs refer to Action-occurrence lifecycle operations reserved for the engine, not a separate Step entity or builder layer. Listed capabilities are a catalog, not first-release scope.
+**Terminology:** [TAR v3](tarv3.md) owns the architecture. Flow is the product term; existing `workflow.*` IDs remain compatibility names. Existing `step.*` IDs refer to Action-occurrence lifecycle operations reserved for the engine, not a separate Step entity or builder layer. Listed capabilities are a catalog, not first-release scope.
 
 TAR uses **Actions** to perform work inside Flows. An Action is a registered, versioned capability with a declared input, output, authority, risk and audit contract.
 

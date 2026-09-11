@@ -24,7 +24,7 @@ installs:
   optional_records: [Bookings, Inventory Items, Locations, Payments, Expenses]
 ~~~
 
-This Kit follows tar-harness.md and actionsreg.md:
+This Kit follows [TAR v3](tarv3.md) and [the Action registry](actionsreg.md):
 
 ~~~text
 Records hold truth.

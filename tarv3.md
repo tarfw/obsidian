@@ -1,666 +1,864 @@
-# TAR v3 — Final
+# TAR v3 — Architecture
 
-> **Records hold truth. Actions do work. Flows order work. Cards show work by role. Channels carry it. The Gateway is the only writer.**
-
-```
-1  Four primitives      6  Canvas and Cards
-2  Storage              7  Channels
-3  Actions              8  Bots, space, access
-4  Flows and Runs       9  Cost
-5  Gateway             10  Forever rules
-```
+> Records hold truth. Actions do work. Flows order work. Blocks show work. Channels carry it. Gateway commits.
 
 ============================================================
-## 1. THE FOUR PRIMITIVES
+# PART A — THE SYSTEM
 ============================================================
 
-| Primitive | Is | Does |
+~~~text
+USER                 ENGINE                       STORAGE
+Space                Record = stored fact         D1 = identity + access
+  Home = Blocks      Action = capability          Turso = business facts
+  Inbox = tasks      Flow = ordered steps         R2 = large content
+  Orders, Customers  Gateway = authority          Device = cache + drafts
+  Flows              Agent = bounded executor     Runtime = checkpoints
+~~~
+
+Use business labels such as Orders and Customers in the app. Record is the internal term; artifact means a generated document, image or other output. Execution details appear when needed for investigation.
+
+~~~text
+1 Core + business types   4 Flows + customization   7 Templates + access
+2 Records + storage      5 Home + Inbox            8 Local first + sync
+3 Actions + AI           6 Channels                9 Delivery + proof
+~~~
+
+Target = easy daily use + low cost + reliable completion. This is the target architecture; implementation gaps and rollout are in §9.
+
+============================================================
+## 1. ONE CORE FOR EVERY BUSINESS
+============================================================
+
+~~~text
+App / channel / schedule
+  -> Action or Flow -> code / agent / human
+  -> Gateway -> business Records + saved result + committed intents
+  -> next step / human task / provider delivery / done
+~~~
+
+- All business writes and external effects use the same authorized path.
+- One logical writer means one commit contract, not a global lock.
+- Canvas, Blocks, tasks, messages and runtime history reuse Records.
+- A template configures the core; it does not create a separate application.
+
+| Business | Typical Records | Typical Flow |
 |---|---|---|
-| **Record** | any unit of truth | stores |
-| **Action** | any executable capability | does one thing |
-| **Flow** | ordered Actions + trigger | orchestrates |
-| **Gateway** | the single writer | authorizes + commits |
+| Retail / food | product, order, payment | sell -> prepare -> deliver |
+| SaaS / sales | account, lead, deal, subscription | qualify -> sell -> onboard -> renew |
+| Services | client, project, task | request -> quote -> deliver -> invoice |
+| Appointments / rentals | resource, booking, contact | reserve -> attend / return |
+| Education / membership | course, enrolment, subscription | join -> participate -> renew |
+| Field work / production | job, asset, material | assign -> execute -> inspect |
+| Internal operations | request, employee, expense | submit -> review -> fulfil |
 
-Everything else is a Record or a query over Records.
-Canvas, Cards, Channels, Bots, Runs, Events, Messages, Links — all Records.
+| Extension | Configuration or implementation? |
+|---|---|
+| Labels, fields, forms, ordinary states | user/AI drafts a versioned schema |
+| Home, routing, timing, Flows | compose existing registered capabilities |
+| Lists, boards, calendars, reports | registered views + typed settings over the same Records |
+| New business invariant, provider or computation | reviewed pack/adapter code + registered Action/query + tests |
 
-```
-        Trigger
-           |
-        Run ── Action ──> Gateway ──> Record
-         ^                              |
-         └──────── next Action ─────────┘
-```
-
-Gateway sits inside every hop. It cannot be skipped, removed or bypassed.
+Start blank, describe the business, or combine compatible templates. Reuse contact/product/task types; check dependencies and schema versions before installation. Custom definitions are workspace-scoped. Inventory, booking capacity, payroll and accounting require their domain rules; generic fields alone do not implement them.
 
 ============================================================
-## 2. STORAGE — TWO STORES
+## 2. RECORDS + STORAGE
 ============================================================
 
-| Store | Holds | Size |
+| Store | Holds | Authority |
 |---|---|---|
-| **Control** | identity, membership, workspace routing | tiny, few tables |
-| **Workspace** | the one `record` table | one per workspace |
+| Control / D1 | identity, membership, grants, workspace routing | access; rows carry `workspace` |
+| Workspace / Turso | transactions, searchable facts, relations, pending work | one isolated business database per workspace |
+| Objects / R2 | media, documents, large outputs, optional history archives | immutable content referenced by DB |
+| Device / local Turso | permitted cache, drafts, commands, preferences | local experience; server confirms business effects |
+| Durable runtime | execution checkpoints, sleeps, retries | scheduling; business state stays in Turso |
 
-**Control** (`users`, `workspaces`, `members`) is shared and small. It never holds business data — it is the **only** store with a `workspace_id`, because it spans all workspaces.
+The workspace connection determines its tenant; its business rows need no `workspace`. Existing tables may remain behind adapters during migration. Start with one `records` table; add physical structures only for a demonstrated query, sync or retention need.
 
-**Workspace** is one isolated database per workspace with **one table**.
+### 2.1. SCHEMA + NAMING
 
-```
-record
-  id            text pk
-  type          text
-  title         text
-  state         text
-  data          json
-  assignee      text null
-  due_at        int null      -- runs, tasks, schedules
-  version       int
-  created_at / updated_at / archived_at
-```
+~~~text
+records
+  id        text primary key
+  type      text
+  title     text
+  state     text
+  data      json
+  owner     text null
+  assignee  text null
+  due       integer null
+  version   integer
+  created   integer
+  updated   integer
+  archived  integer null
+~~~
 
-Rules:
-- The database is the tenant. No `workspace_id` in workspace tables — the connection decides.
-- New capability = a new `type`, never a new table.
-- Definitions (flows, bots, canvases, cards) are rows, not a separate store.
-- `version` gives optimistic concurrency; `archived_at` gives soft delete.
-- Pooling several workspaces into one database is the only reason to add `workspace_id` back — and then it leads every index and every query.
-
-**Hot filters are columns; everything else is `data`.**
-Only `type`, `state`, `assignee`, `due_at` and the timestamps get filtered constantly, so they stay columns and every index stays small.
-
-```
-CREATE INDEX records_by_type   ON records(type, state, updated_at DESC) WHERE archived_at IS NULL
-CREATE INDEX tasks_by_assignee ON records(assignee, state, updated_at DESC) WHERE type='task' AND archived_at IS NULL
-CREATE INDEX runs_due          ON records(state, due_at) WHERE type='run' AND state IN ('ready','waiting')
-CREATE INDEX records_by_day    ON records(json_extract(data,'$.business_date')) WHERE type='order'
-CREATE UNIQUE INDEX one_open_register ON records(type) WHERE type='register' AND state='open'
-```
-
-Index what you filter, nothing else. A new Card or Flow that needs a new filter adds an index — never a table.
-
-Reserved system types:
-
-| type | meaning |
+| Rule | Meaning |
 |---|---|
-| `flow` | process: trigger + ordered Action ids |
-| `run` | one execution: pinned flow version + cursor |
-| `bot` | installable bundle: title + flow ids |
-| `canvas` | home screen: ordered Card ids |
-| `card` | one Canvas unit + roles |
-| `channel` | a connection: family + provider + account |
-| `message` | one inbound/outbound channel item |
-| `link` | a relation: `{ from, to, relation }` |
-| `event` | append-only audit entry |
+| Names | every TAR column and JSON key = one semantic lowercase ASCII word |
+| Examples | `owner`, `created`, `price`, `contact`; no underscores, hyphens or joined suffixes |
+| Notation | `data.contact` is a path; `roles[]` means an array; neither punctuation belongs to the key |
+| Units | money = integer minor units + currency; rates = basis points; time = UTC milliseconds |
+| Identity | `contact` stores a contact ID; `owner` is business ownership; `assignee` is human task assignment |
+| Extension | small type-specific facts go in `data`; hot common filters remain columns |
+| Validation | type schema defines fields, transitions, references and writable scope |
+| Concurrency | expected version checked inside transaction; require the intended affected rows |
+| Removal | archive business Records; protected definitions/audit follow their own retention rules |
 
-Everything else is yours: `contact`, `task`, `order`, `product`, `payment`, …
+Action IDs such as `order.place` are namespaced identifiers, not column names. Display labels may be normal language. All example people use pure Tamil names.
+
+| System type | Purpose |
+|---|---|
+| `schema`, `flow` | versioned definitions; published revisions immutable |
+| `run` | pinned definition, business cursor, required outputs, execution identity |
+| `operation` | stable key, input hash, saved outcome |
+| `delivery` | external intent, destination, retry/reconciliation state |
+| `event` | immutable audit facts |
+| `canvas`, `block` | Home layout and its units |
+| `channel`, `message` | connection and conversation items |
+| `link` | additional relation: `{ from, to, relation }` |
+| `bot` | existing internal installation metadata; UI calls it a business template |
+| `archive` | verified batch manifest; only when archival is introduced |
+
+Use direct references for ordinary relations; do not also create a Link for every reference. Generic CRUD cannot alter protected history or bypass domain rules. Occurrence, operation and delivery keys must be non-null and uniquely constrained.
+
+Reviewed indexes cover type/state, task assignment, pending delivery due time and domain uniqueness. Packs own indexes/migrations; creating a Block never runs DDL.
+
+### 2.2. DB FACTS + R2 CONTENT
+
+| Keep in DB | Put in R2 |
+|---|---|
+| Prices, units, stock, reservations, order lines, payment facts | images, video, receipts, attachments |
+| Assignment, status, short messages, searchable metadata | long documents, large message bodies |
+| Flow definitions, required Run outputs, replay keys, compact audit | large traces/tool results; old history batches when justified |
+
+~~~text
+product.data.image = { object, hash, bytes, mime }
+
+List products -> local/DB facts
+Open image    -> authorize reference -> R2 content
+Change stock  -> DB transaction
+~~~
+
+Small text/JSON stays inline. Review large payloads around 32 KB; this is not an automatic cutoff. Transaction-critical facts stay in DB, with related rows if needed. Keep searchable excerpts/metadata when content moves to R2. Credentials remain in secret storage.
+
+~~~text
+authorize upload -> reserve ownership -> immutable upload -> verify hash/size/type
+                 -> Gateway commits reference -> visible
+
+failed commit -> unattached object -> grace period + reference check -> cleanup
+replacement   -> new object + new reference; retain old content while needed
+~~~
+
+DB and R2 have no shared transaction. Cleanup must not race attachment; uncertain commits are checked before deletion. Private reads require authorization; public media requires explicit publication. Prefixes organize objects, not permissions.
+
+A missing receipt PDF never rolls back a sale: a committed job generates, verifies and attaches it later.
+
+### 2.3. OPTIONAL ARCHIVAL
+
+~~~text
+terminal immutable history at stable cutoff
+  -> compressed batch -> verify hash + count + schema
+  -> commit manifest + lookup references -> prune eligible payloads
+~~~
+
+Keep active work, replay evidence and operational reconciliation facts in DB. Retain keys for the promised replay window; expired keys are rejected or checked against history, never treated as new. Keep referenced objects for active Runs, recovery and retention holds. Archives preserve original evidence; they are not backups. Test DB restoration together with object retention.
 
 ============================================================
-## 2.1 QUANTITY — WHERE NUMBERS LIVE
+## 3. ACTIONS + AI + GATEWAY
 ============================================================
 
-| Quantity | Home | Rule |
+~~~text
+Action = id + version + kind + input + output
+       + roles + scope + effect + approval
+       + retry + timeout + cost + offline?
+
+kind    = app | agent | human
+effect  = read | internal | external
+offline = draft | queue | online       -- legacy default = online
+
+execute(action, input, key)
+~~~
+
+| Executor | Role |
+|---|---|
+| Code / adapter | calculations, validation, transactions, integrations |
+| Agent | interpret ambiguity, propose permitted tool calls, observe results |
+| Human | judgement, missing facts, required approval through Inbox |
+
+Schemas drive tools and default forms; custom interfaces call the same Action. Generic CRUD is limited to approved fields/types. Trusted handlers own SQL and credentials.
+
+~~~text
+record.get / search / create / update / archive / link
+task.create / complete        approval.request
+flow.start / publish          bot.install / remove
+channel.reply / send / publish
+agent.extract / draft / summarize / resolve
+~~~
+
+These are catalog families; business packs add meaningful Actions such as `order.place`. Existing IDs remain supported through versioned adapters.
+
+### 3.1. COMMIT + REPLAY
+
+~~~text
+authenticate -> authorize -> validate -> check versions -> commit
+                                                 |
+                       one workspace transaction:
+                       business changes + Run transition
+                       + operation result + audit + intents
+~~~
+
+| Boundary | Rule |
+|---|---|
+| Replay | workspace + key + actor/Action identity + canonical input hash; same request returns saved result after access check |
+| Conflict | same key with different input fails; unique key and checked writes prevent duplicate business effects |
+| Approval | bind Action version, input hash, affected versions and expiry; recheck authority at execution |
+| Reads | project permitted rows/fields; Block visibility and device filtering are not access control |
+| Retry | bounded transient retries; stale input requires a new decision |
+| External effect | committed delivery intent; stable provider key where supported; reconcile uncertain outcomes |
+| Separate stores | D1, Turso, R2 and providers have no common transaction; bridge with durable intent and saved results |
+
+~~~text
+delivery: pending -> sending -> confirmed
+                       +-> retry -> sending
+                       +-> unknown -> reconcile -> confirmed / failed
+~~~
+
+A timeout does not prove failure; never promise universal exactly-once external delivery. Control changes such as access grants save an idempotent result in D1, then reconcile workspace progress. Automatic callbacks run under restricted service grants.
+
+### 3.2. ONE CONTEXTUAL ASSISTANT
+
+~~~text
+deterministic work -> code / saved template
+interpretation     -> one structured model call
+uncertain sequence -> bounded agent + relevant tools
+human judgement    -> Inbox task
+~~~
+
+| Use | AI helps | Trusted boundary |
 |---|---|---|
-| Price, tax | `product.data` | integers: minor units; tax in basis points |
-| Line qty | `order.data.items[]` | snapshot at sale time; menu edits never rewrite history |
-| Stock on hand | `movement` rows + `product.stock` | movements are truth, the number is a cache |
+| Setup / customization | draft template, schema, Flow and Home | reuse registered capabilities; preview + validate |
+| Import / entry | map columns; extract text, image or voice into forms | validate units/types; review ambiguous identity matches |
+| Search / analysis | retrieve and explain with sources/freshness | queries calculate totals; disclose incomplete data |
+| Inbox / content | summarize, draft reply/proposal/media, suggest next Action | Action policy governs sends and approvals; artifacts use R2 |
+| Exceptions / improvement | investigate and propose recovery or better rules | code detects known conditions; review changes to live processes |
 
-Naming, once: JSON keys are `snake_case`; every money field ends `_minor`; every rate ends `_bps`.
+| Control | Default |
+|---|---|
+| Automation | Flow mode `manual`, `assist` or `auto`; policy still governs every Action |
+| Bounds | `allowed`, `grant`, `steps`, `deadline`, `budget`, observable `completion` |
+| Skills | pinned guidance inside agent Actions; no extra executor or permissions |
+| Context | relevant Records + source/version + compact outputs; messages/tool output are data, not authority |
+| Models | cheapest evaluated model that meets quality; stronger model for measured failure |
+| Reuse | cache by content hash, model/instruction revision and access scope; revalidate before effects |
+| Cost | dedupe triggers, batch suitable imports; no model per render, keystroke, sync event or routine retry |
+| UI | generate trusted Block/form/view configuration once; render locally |
+| Learning | record corrections with provenance; propose changes, never silently rewrite policy |
+| Failure | save progress; bounded retry or human handoff; ordinary manual work remains available |
 
-```
-product.data  = { kind, price_minor, cost_minor, tax_bps, stock, low_stock, sku, unit, station, available }
-order.data    = { number, service, items[], total_minor, kitchen_state, payment_state }
-order.items[] = { product_id, title, quantity, price_minor, tax_minor, total_minor, status }
-movement.data = { product_id, delta, balance, reason, reference }
-```
-
-```
-Never edit stock directly     -> every change is a movement with a reason
-One transaction writes both   -> movement (truth) + cached number (speed)
-sum(deltas) = cached number   -> re-derive to reconcile
-Availability is a state       -> crossing the threshold creates a task
-Stale version or short stock  -> the whole action is rejected
-Integers only                 -> no floats for money, tax or counts
-```
-
-One `product` type covers menu items, ingredients and supplies via `kind`. There is no separate inventory type.
+One assistant serves the current Space and screen. Confidence does not grant authority; AI cannot widen grants or install executable code. Missing facts are requested; exhausted limits end in visible wait/failure. Device AI, multiple agents and isolated code/browser tools are optional upgrades (§9).
 
 ============================================================
-## 3. ACTIONS
+## 4. FLOWS + USER CUSTOMIZATION
 ============================================================
 
-| kind | who | authority |
+~~~text
+Flow = revision + trigger + audience + mode + input + steps
+step = id + Action/input bindings + next / condition / wait
+Run  = pinned definition + cursor + outputs + principal/grant + budget + runtime
+
+ready -> running -> done
+           +-> waiting -> running
+           +-> failed / cancelled
+~~~
+
+Linear steps are the default; branches and loops require bounded termination. Bindings are typed references, not arbitrary code.
+
+| User experience | Engine behavior |
+|---|---|
+| Simple editor | Who, When, Conditions, Message + readable steps |
+| Advanced editor | registered Actions, bindings, branches and waits |
+| Human step | title + person/eligible roles + source + required Action + optional due time |
+| Both editors / AI drafts | same Flow definition, validator and publishing path |
+
+~~~text
+draft -> configure -> validate -> simulate -> publish -> run
+                           |                   |
+              schemas, references, grants   immutable revision
+~~~
+
+- Simulation uses test data and preview deliveries; it performs no real external effect.
+- Public or sensitive publication requires the appropriate owner/admin authority.
+- New publications affect new Runs; active Runs retain their definition and Action versions.
+- A human step creates/reuses its task and waits for committed completion; no extra Inbox integration.
+- Automatic steps need no Home Block. Publishing may optionally add a Block.
+
+| Audience | Entry and authority |
+|---|---|
+| `team` | member -> role/grant checks -> permitted Actions |
+| `customer` | public form/channel -> validation, consent, rate limits -> restricted service grant |
+| `both` | limited customer entry -> explicitly authorized team handoff |
+
+User Flows compose existing capabilities. New trusted code, providers or domain invariants require a reviewed implementation (§1).
+
+### 4.1. ONE DURABLE RUNNER
+
+~~~text
+Cloudflare Workflows = target prototype for sleep / retry / wakeup
+TAR Run              = business progress + pinned inputs/outputs
+Gateway              = commits business transitions
+Delivery worker      = sends committed intents
+~~~
+
+| Requirement | Rule |
+|---|---|
+| Resume | complete task + business transition + resume intent atomically |
+| Dedupe | stable key per trigger and step occurrence/tool call |
+| Recovery | replay saved results; reconcile missed starts/signals; an uncommitted model call may repeat |
+| Concurrency | checked Run cursor; lease/fencing where work is claimed |
+| Cancellation | stop future steps; reconcile in-flight effects; compensation is a new Action |
+| Template removal | stop its new triggers; preserve active Runs and history |
+
+Wakeups may repeat: read saved state before advancing. Runtime checkpoints are not a second business database. Operate one Run scheduler.
+
+============================================================
+## 5. HOME + INBOX
+============================================================
+
+~~~text
+Space
+  Home  = Canvas of Blocks: overview + start work + open views
+  Inbox = existing tasks: handle work needing attention
+  Detail = source Record + context + available Actions
+~~~
+
+### 5.1. BLOCKS
+
+| Internal kind | Target | Opens |
 |---|---|---|
-| `app` | deterministic code / connector | commits via Gateway |
-| `agent` | AI | proposes only |
-| `human` | a person | answers via Inbox |
+| `metric` | registered query + parameters | result and permitted source Records |
+| `entry` | exactly one Action, Flow or query | form, new Run, or existing view/Inbox |
 
-```
-Action = id · kind · input schema · output · roles[] · effects
-```
+~~~text
+Block = { kind, title, target, roles[] }
+Query = id + input + output + access + implementation
 
-Gateway adds the rest automatically: idempotency, version check, audit, retry.
+eligible = owner/admin OR role match
+visible  = eligible + selected role default/member preference
+data     = query policy + row scope + permitted fields
+~~~
 
-Core catalog:
+One shared Canvas; member preferences store ordered Block references. Owners can choose all eligible Blocks but start with a few relevant ones. Edit Home in place: add, remove, reorder. Operational staff may land directly in their Inbox view.
 
-```
-record.create · record.update · record.archive · record.link
-task.create   · task.complete
-flow.start    · flow.install
-channel.reply · channel.send · channel.publish
-agent.classify · agent.extract · agent.draft · agent.summarize
-```
+Queries own joins, filters, aggregation and reviewed indexes. Blocks store typed parameters. Reports reuse queries; new computations need implementations. Opening a query Block does not start a Run.
 
-Verticals add packs (`pos.*`, `restaurant.*`). Everything else is a Flow composed of these.
-No Action needs SQL, credentials or its own table.
+### 5.2. TASKS ARE THE INBOX
 
-============================================================
-## 4. FLOWS AND RUNS
-============================================================
+~~~text
+task = title + assignee + state + due
+     + data { record?, roles[], action, run?, step? }
 
-A Flow is a Record:
+record = source Record ID
+run/step = present when work belongs to a Flow
+~~~
 
-```yaml
-type: flow
-title: Onboard member
-data:
-  trigger: manual | schedule | channel
-  actions: [record.create, task.create, task.complete, access.grant]
-```
-
-A Run is a Record that pins the flow version.
-
-```
-ready ──> running ──> waiting ──> done
-                        |
-                   failed | cancelled
-```
-
-| Rule | Behavior |
+| Concern | One rule |
 |---|---|
-| Sequence | linear by default; branch only when needed |
-| Human wait | one `task` Record waiting in the Inbox |
-| Resume | `task.complete` resumes the Run exactly once |
-| Dedupe | one stable key per occurrence; repeats return the saved result |
-| Concurrency | one lease per Run; each occurrence advances once |
-| Edit | new publications affect new Runs; migrate active Runs explicitly |
+| Storage | Inbox queries existing tasks; no separate inbox Record or duplicate queue |
+| Filters | Mine = assigned to me; Unassigned = eligible/unclaimed; Team = permitted team work |
+| Views | Kitchen, Sales, Support are saved filters; layouts may be list or large task tiles |
+| Claim | atomically assign eligible unclaimed work; concurrent claim has one winner |
+| Complete | required domain Action commits the outcome; reading/dismissing is not completion |
+| Ownership | task owns human assignment; ticket owns case lifecycle; conversation owns messages |
+| Dedupe | one task per human step occurrence or handling responsibility, not one per message |
+| Notifications | point to existing work; routine events/retries remain in history |
+
+~~~text
+Flow -> automatic steps -> human needed -> task -> Inbox
+                                             -> authorized Action
+                                             -> commit + resume same Run
+~~~
+
+Conversation handlers derive from open tasks. New messages update the linked response task; automated handling creates a human task only on handoff. A reply resolves only the messages it covers, so a later message remains actionable. Case closure reconciles remaining tasks.
+
+Standalone tasks need no Run. Approval tasks retain §3.1 bindings. Failures create a task only when someone can act. Queries/counts are authorized, indexed and paginated; AI is unnecessary for routine listing and routing.
 
 ============================================================
-## 5. GATEWAY
+## 6. CHANNELS
 ============================================================
 
-Four verbs. One path each.
-
-| verb | does |
-|---|---|
-| `create` | new Record |
-| `update` | change data with a version check |
-| `transition` | change state and resume a Run |
-| `link` | connect two Records |
-
-```
-authorize -> validate -> version-check -> commit -> saved result
-                                (record + run + event, one transaction)
-```
-
-| Guarantee | Rule |
-|---|---|
-| Authority | membership, role, scope, schema, version, approval |
-| Idempotency | same key + same input = same result, no second effect |
-| Atomicity | record, run, audit and delivery intent commit together |
-| Delivery | external effects commit intent, then deliver and confirm |
-| Retry | bounded safe retries, then visible work or failure |
-| Uncertainty | reconcile an unclear result; never blindly resend |
-| Agents | no direct commits, no SQL, no credentials |
-
-============================================================
-## 6. CANVAS AND CARDS
-============================================================
-
-**Canvas** is the home screen. **Card** is its only unit.
-One name only — never block, tile, widget or view.
-
-| Card kind | shows | tapping it |
+| Family | Purpose | Target adapters |
 |---|---|---|
-| `metric` | a number | opens the Records behind it |
-| `action` | one Action | runs it |
-| `flow` | one Flow | starts or continues it |
+| Team | staff requests and notifications | Slack, Discord, Google Chat, Telegram |
+| Customer | private conversations and requests | website/chat, email, supported messaging adapters |
+| Social | public comments, mentions and publishing | Zernio where supported |
 
-```
-Card = { kind, title, target, roles[] }
+~~~text
+Channel = { family, provider, account, direction, capabilities[], credential }
+Message = { channel, provider, conversation, contact,
+            direction, body?, content?, attachments[] }
 
-metric   target = { type, where }   Gateway computes the count
-action   target = actionId
-flow     target = flowId
-```
+verify webhook -> dedupe(provider + account + event)
+  -> save Message + trigger intent -> acknowledge -> execute
+~~~
 
-`where` is one comparison — field, operator, value. No query language, no joins.
-
-```
-field    a column (state, assignee, due_at) or a data key (total_minor)
-op       = != < <= > >=
-value    a literal, or a word: today | this_week | this_month   (workspace timezone)
-```
-
-**Role-based, one rule:**
-
-```
-viewer sees a Card  <=>  viewer.roles intersects card.roles
-```
-
-- One Canvas serves everyone; the server filters, the app renders.
-- Owner and admin see every Card.
-- Build is the same Canvas in edit mode: add, remove, reorder.
+- Adapters advertise verified capabilities/limits; listed providers are intended coverage, not guaranteed parity.
+- One shared team destination per workspace initially; verified identity still needs membership.
+- Family belongs to the connection. Contacts use verified handles; never merge guessed identities.
+- `channel.reply` answers a conversation; `channel.send` contacts an allowed recipient; `channel.publish` creates an intent per destination.
+- Check recipient, content, attachments and capability before delivery. Save required input before webhook acknowledgement and enforce payload limits.
+- Human attention appears through Inbox tasks (§5.2); short bodies stay inline and large content follows §2.2.
 
 ============================================================
-## 7. CHANNELS — THREE FAMILIES, ONE SHAPE
+## 7. TEMPLATES + ACCESS
 ============================================================
 
-```
-Channel = { family, provider, account, direction: in | out | both }
-```
+~~~text
+Google sign-in -> Personal Space (free)
+              -> Work Space -> members + shared Records
 
-| family | who | providers | in | out |
-|---|---|---|---|---|
-| **team** | your people | Slack · Discord · Google Chat · Telegram (native) | a message becomes a request | notifications |
-| **customer** | buyers & contacts | Zernio: WhatsApp, Telegram, Instagram DM, Messenger · native: Website & on-site chat, Email | message, comment, review, form | `channel.reply` / `channel.send` |
-| **social** | the world | Zernio: Instagram, LinkedIn, Facebook, TikTok, YouTube, Pinterest, Reddit, Bluesky, Threads, Google Business | comment, review, mention | `channel.publish` |
+template = schemas + Flows + Blocks + role defaults
+install  = resolve dependencies + pin revisions + configure once
+edit     = customize Flows/Home
+upgrade  = preview; preserve customizations unless adopted
+remove   = disable triggers + archive installation; preserve work/history
+~~~
 
-| Action | does |
+Choose one business template, connect channels, assign team, and begin. AI is an optional step within Flows; users need no separate Kitchen/Stock/Shift Bot setup. Templates reuse registered packs and existing installation contracts.
+
+| Access | Rule |
 |---|---|
-| `channel.reply` | answer where the conversation already is |
-| `channel.send` | start an outbound message on one channel |
-| `channel.publish` | post to one or more social channels |
-
-Rules:
-- One integration, one shape. Adding a platform is one provider entry.
-- A linked channel identity never grants business authority — membership does.
-- One Contact is one person with many handles; every message is a `message` Record linked to that Contact.
-- Team channels are workspace-wide: **one shared destination** (Slack, Discord, Google Chat or Telegram). Each member verifies their chat identity once; that link grants no business authority.
-- Customer channels are conversation queues: a guest message lands in the Inbox, and `roles[]` decide who may reply.
-- A platform can serve two families: Telegram as a group is a team channel; Telegram as a DM is a customer channel. Family is a property of the connection, not the platform.
+| Workspace | isolated database + membership + timezone, currency and business-day settings |
+| Base roles | `owner`, `admin`, `member`, `guest` |
+| Work roles | additional labels such as kitchen/sales/support; member holds `roles[]` |
+| Scope | own = ownership; team = explicitly permitted roles; all = permitted workspace data |
+| Assignment | permits defined task access, not unrestricted source-record access |
+| Fields | Gateway projects allowed fields for app, query and agent |
+| Delegation | bounded by delegator and workspace policy |
+| Revocation | subsequent access denied; in-flight effects reconciled; offline cache rules in §8 |
 
 ============================================================
-## 8. BOTS, SPACE, ACCESS
+## 8. LOCAL FIRST + SYNC
 ============================================================
 
-```
-Bot     = { title, category, flowIds[] }
-Install = create the Flow Records it lists
-Remove  = archive those Flow Records
-```
+### 8.1. DEVICE EXPERIENCE
 
-```
-Google sign-in -> Personal workspace (free, always there)
-                    `-> Work workspace -> members + shared Records
-```
+~~~text
+UI -> local Turso -> render known data immediately
+       |
+       +-> confirmed cache <--- authorized sync <--- Gateway
+       +-> draft + command ---> Gateway Action ---> confirmed result
 
-| Item | Rule |
+cloud  = business truth + rules + agent/Flow execution
+device = permitted working set + drafts + pending intent
+~~~
+
+| Local first | Online authority |
 |---|---|
-| Workspace | one isolated database + one membership list |
-| Base roles | `owner · admin · member · guest` |
-| Vertical roles | a vertical may add labels (`kitchen`, `cashier`, `stock`); a member holds `roles[]` |
-| Action access | `roles[]` gate who may execute |
-| Record access | `scope: own | team | all` gates which Records |
-| Card access | `roles[]` gate what appears on a Canvas |
+| Home, forms, registry, Inbox summaries | current definitions, permissions and queue membership |
+| Assigned/recent/pinned Records + local search | uncached detail, broad search, complete reports |
+| Drafts, cart preparation, notes, preferences | accepted business mutations |
+| Cached metrics + freshness | authoritative totals over complete data |
+| Thumbnails/downloaded files | authorized R2 access |
+| AI input and draft capture | cloud inference and its resulting Actions |
+
+- One repository serves all screens; one coordinator manages sync. Scope cache, commands and drafts by account + workspace.
+- Keep drafts/commands in the mutable device database, separate from replaceable cache/native replicas. Cache reset never erases pending work.
+- Default download = Home + active Inbox + linked summaries + recent/pinned Records. Bound rows/bytes; preserve unsent drafts and pending-command dependencies.
+- Render local changes reactively; preserve scroll and typed input. Fetch inactive Spaces/history lazily. Optional All Spaces Inbox combines permitted summaries only.
+- New/missing data shows setup or online-required state. Downloaded search results are marked partial; an empty cache is not an empty business.
+- Lazy-load models, embeddings and large content only when used.
+
+### 8.2. DEFAULT = SCOPED GATEWAY SYNC
+
+~~~text
+open / foreground / reconnect / invalidation
+  -> authorize -> snapshot OR scoped delta
+  -> { revision, cursor, records, removed, more }
+  -> local transaction: rows + removals + cursor
+  -> notify affected views
+~~~
+
+Start with bounded snapshots/revision checks. Add incremental sync through the existing harness as needed; no new Worker or per-member remote database is required.
+
+| Correctness requirement | Implementation |
+|---|---|
+| Bootstrap | consistent snapshot + matching committed watermark across pages |
+| Change order | compact indexed `changes` log: `sequence`, `record`, `version`, `kind`; commit with business writes in committed visibility order |
+| Cursor | bind to workspace, principal, permission/schema/query revisions and parameters; timestamps alone are insufficient |
+| Membership | include deletions/reassignment/view exits; track membership or replace the bounded view atomically |
+| Projection | recheck access; replace obsolete fields; share cached rows only across compatible projections |
+| Dependencies | joins/metrics invalidate registered views; refresh bounded results |
+| Expiry/access change | reset affected confirmed scope; preserve drafts, quarantine unauthorized commands |
+| Scheduling | one in-flight sync per dataset; coalesce, back off with jitter, modest foreground polling fallback |
+| Recovery | persisted cursor survives missed notifications; background delivery is not guaranteed |
+
+Retain the change log for the supported offline window; older devices bootstrap. Evict a Record only when no other authorized cached view/detail needs it. Invalidation notifications are hints, not business truth.
+
+### 8.3. TURSO NATIVE PARTIAL SYNC = OPTIONAL
+
+Verified on 2026-09-11: partial sync fetches database **pages** lazily, with prefix/query bootstrap; missing pages need network. It is experimental and does not provide TAR row/field filtering. Turso's documented write conflict default is last push wins. [Partial sync](https://docs.turso.tech/sync/partial), [conflicts](https://docs.turso.tech/sync/conflict-resolution)
+
+| Use it only when | Required check |
+|---|---|
+| Entire physical dataset is allowed to every recipient | safe dedicated projection, e.g. sanitized catalog; no raw workspace `records` replica |
+| It improves measured cost/startup | compare with scoped deltas; avoid one projection database per member |
+| SDK/native build/cloud engine are compatible | test together; existing `libsql://` connection does not prove compatibility |
+| Server enforces read-only access | hiding/disabling push in the app is insufficient |
+| Offline screens are hydrated | preload exact queries/dependencies and verify after updates |
+
+One transport per dataset: never write scoped deltas into the same tables as a native replica. Rebuild projections from committed canonical changes, show freshness, and keep drafts elsewhere. Tune query bootstrap, batching and prefetch only after measurement; retain scoped Gateway sync if these checks fail.
+
+### 8.4. COMMANDS + CONFLICTS
+
+~~~text
+command = { key, action, input, base, state, created, expires, after? }
+base = expected Record versions
+after = prerequisite command key
+
+edit -> persist draft/command -> Pending preview
+  -> send when allowed -> Gateway revalidates -> confirmed / Needs attention
+~~~
+
+| Offline policy | Behavior |
+|---|---|
+| `draft` | prepare locally; explicitly submit online |
+| `queue` | durable intent; retry and show Pending until accepted |
+| `online` | live confirmation needed; legacy default |
+
+Notes and eligible task updates may queue. Stock reservation, shared claims, booking, payment confirmation, access changes and approval execution require current validation. Offline carts are drafts; guaranteed offline sale acceptance needs a separately designed inventory allocation capability.
+
+| Rule | Guarantee |
+|---|---|
+| Identity | persist random operation key + exact payload before first attempt; unknown outcome retries the same key |
+| Changed intent | new key after editing an attempted command; never coalesce already attempted work |
+| Ordering | serialize dependent commands; independent work may proceed; failed prerequisite pauses dependents |
+| Confirmation | atomically apply permitted result and acknowledge/remove preview; never let older sync overwrite newer confirmed versions |
+| Delayed facts | keep preview until required confirmed versions arrive if result lacks changed facts |
+| Conflict | preserve draft, show server facts; merge only independent fields through a newly validated Action |
+| User feedback | Saved on device / Pending / Needs attention; business labels such as Paid require confirmation |
+| Device protection | OS-protected storage, secure credentials, tested encryption where required, finite offline-access policy |
+
+Already downloaded data cannot be recalled from a disconnected device. On revocation/reconnect or logout, purge unauthorized cache, files and search derivatives; explicitly handle unsent private drafts. Reauthorization applies to every queued effect. Money, stock and assignment never use blind last-write-wins.
 
 ============================================================
-## 9. COST
+## 9. DELIVERY + COST + PROOF
 ============================================================
 
-```
-Monthly = 100 credits per active owned work workspace
-Usage   = chargeable registered Action executions
-Total   = monthly + usage
-```
+### 9.1. BUILD NOW / ADD WHEN MEASURED
 
-Manual reads and ordinary record edits cost 0. Declare cost before publishing an Action; preview it before a consequential run.
+| Build as the baseline | Defer until it earns its cost |
+|---|---|
+| Existing harness + shared Action contracts | new infrastructure/service boundaries |
+| One task Inbox + small role-based Home | multiple specialized agent installations |
+| Local repository + scoped snapshots + durable commands | native partial projections and device AI |
+| Deterministic logic + one bounded agent | multiple agents for independent research/content |
+| DB facts + R2 attachments | compressed history archival |
+| Indexed queries + bounded views | daily summary caches and broader sync machinery |
+
+Summary caches remain rebuildable: exact totals update with the business transaction; asynchronous totals expose freshness. Optional isolated code/browser tools retain scoped tools/network and Gateway effects. None of these optimizations adds a business primitive.
+
+| Phase | Deliver | Verify |
+|---|---|---|
+| 1 | local cache/command repository over existing endpoints | warm Home/Inbox offline; restart preserves drafts/keys |
+| 2 | change cursor, removals, view invalidation | no missed updates/access leaks; less transfer than snapshots |
+| 3 | composable templates, custom schema, AI-assisted configuration | third business without rewriting core |
+| 4 | selected optional upgrades | measurable benefit on supported devices/workloads |
+
+Evolve `tarharness` and reuse `tarapp`. Preserve Action IDs, Gateway authority, replay and Run ownership behind versioned adapters. Migrate old card/task fields to `block`/`data.record` without duplicating work. Keep destructive legacy cleanup away from replicas and draft/command storage; retire old fetch loops after repository coverage.
+
+**Implementation baseline checked 2026-09-11:** app SDK `@tursodatabase/sync-react-native` is installed at `0.6.1` (declared `^0.6.1`). Its types expose sync/experimental partial sync, but `src/lib/db.ts` opens local-only databases and its sync helpers are empty. Workspace screens use harness HTTP reads; functioning workspace sync remains to be built. Harness storage uses `@libsql/client/web`.
+
+### 9.2. COST
+
+~~~text
+Monthly TAR = 100 credits per active owned Work Space
+Usage       = declared chargeable Action executions
+Manual reads / ordinary edits = 0 usage credits
+Provider charges = disclosed separately
+~~~
+
+Show charges before consequential work; reserve budget for chargeable execution. Retries of the same operation do not duplicate user charges. Budget exhaustion must not block already accepted manual work.
+
+Reuse scoped valid Turso tokens instead of minting each request. Measure complete cost: DB storage/indexes/operations + sync bytes + R2 storage/requests + processing + model calls. Moving tiny hot items to R2 can increase cost.
+
+### 9.3. ACCEPTANCE CHECKS
+
+| Scenario | Must hold |
+|---|---|
+| Duplicate webhook, double tap, reconnect retry | one committed effect and saved result |
+| Concurrent stock, booking or claim | invariants hold; conflict is visible |
+| Crash, missed signal, cancelled Run | saved progress recovers; only intended future work proceeds |
+| Provider timeout / receipt failure | reconcile; no duplicate payment or business rollback |
+| Revoked role / stale approval / injected input | no wider access, tools or authority |
+| Missing facts / AI budget or service failure | preserve progress; ask, stop or hand off |
+| Offline launch / missing pages | downloaded screens work; gaps/totals are not misrepresented |
+| Snapshot, cursor expiry, reassignment | no missed changes; removals work; drafts survive rebuild |
+| Account switch / field revocation | no cache leakage; unauthorized fields/files are removed |
+| Generated schema / Flow / UI | valid capabilities and bounded execution |
+| Object/archival failure | no dangling committed reference or premature source deletion |
+
+Track completed jobs, human corrections/interruptions, cost/job, cold/warm render, p95 query/Action latency, sync delay/bytes, conflicts and disk/battery use. Test on representative devices and data. Optimize against these measures rather than promising zero complexity or universal savings.
 
 ============================================================
-## 10. FOREVER RULES
-============================================================
-
-```
-1. One table. New capability = new type.
-2. One writer. Every effect goes through the Gateway.
-3. One name per thing. Card, not block.
-4. Agents propose. Only Gateway commits.
-5. Archive over delete.
-6. Same key, same result.
-7. Records hold truth; runs and events are history.
-8. Reuse a Flow before adding one.
-9. Index what you filter.
-10. Integers for money, tax and counts.
-```
-
-============================================================
-
 # PART B — A PIZZA STORE, END TO END
-
 ============================================================
 
-## B1. THE STORE
+## B1. SETUP
 
-```
-Slice House — one Work workspace
-  People : owner, manager, cashier, kitchen
-           Muthu · Malar · Iniya · Velan
-  Sell   : dine-in, takeaway, delivery
-  Channels: Website chat + WhatsApp (customer)
-            Slack (team)
-            Instagram + Google Business (social)
-```
+~~~text
+Slice House = one Work Space
+Muthu = owner | Malar = admin/cashier/stock
+Iniya = cashier | Velan = kitchen
+sell = dine-in / takeaway / delivery
+settings = Asia/Kolkata + INR + business-day cutoff
 
-============================================================
-## B2. INSTALL
-============================================================
+Pizza Store template
+  -> order.take + kitchen.prepare + stock.receive/count + shift.close
+  -> products + opening movements + one Canvas + seven available Blocks
+  -> connect customer, team and social channels with supported adapters
+~~~
 
-One setup pass. No new tables, no new engine.
+Customer intake grant = public menu, order acceptance and conversation reply; no price changes, access grants or payment confirmation.
 
-| Step | Result |
+## B2. RECORDS + CONTENT
+
+Common fields are columns; remaining facts live in `data` (§2). Each type instance is its own Record.
+
+| Type | Key facts |
 |---|---|
-| Create work workspace | one isolated database + membership |
-| Install Bot: **Order** | flows `order.take`, `order.complete` |
-| Install Bot: **Kitchen** | flow `kitchen.prepare` |
-| Install Bot: **Stock** | flow `stock.receive`, `stock.count` |
-| Install Bot: **Shift** | flow `shift.close` |
-| Connect channels | 2 customer, 1 team, 2 social |
-| Seed records | 12 `product`, 1 `canvas`, 7 `card` |
+| `product` | kind, price, currency, tax, stock, reserved, low, unit, scale |
+| `contact` | name, verified handles |
+| `order` | number, contact, items, total, currency, service, kitchen, payment |
+| `task` | record, roles, action; assignee/state/due are common columns |
+| `payment` | order, amount, method, reference; state |
+| `reservation` | order, items, expires; state |
+| `movement` | product, delta, balance, reason, reference |
+| `register` | opened, opening, expected, counted, variance |
+| `message`, `run`, `operation`, `delivery`, `event` | shared system types |
 
-Members and their roles:
+~~~text
+order.data.contact         -> contact
+order.data.items[].product -> product
+task.data.record           -> order
+payment.data.order         -> order
+reservation.data.order     -> order
+movement.data.product      -> product
 
-| Person | roles[] |
-|---|---|
-| Muthu (owner) | `owner` |
-| Malar (manager) | `admin`, `cashier`, `stock` |
-| Iniya (cashier) | `member`, `cashier` |
-| Velan (kitchen) | `member`, `kitchen` |
+order line = { line, product, title, quantity, unit, scale, price, tax, total, status }
+photo / receipt PDF -> R2 reference
+order lines / stock / payment facts -> DB
+~~~
 
-============================================================
-## B3. RECORDS AND LINKS
-============================================================
+Pin price, tax, units and rounding at acceptance. Use integer base quantities and safe arithmetic bounds. Ingredients and supplies reuse product `kind`; recipes, when used, are pinned at acceptance.
 
-Record types in use:
+## B3. HOME + INBOX
 
-| type | key fields |
-|---|---|
-| `product` | title, kind (menu / ingredient / supply), price_minor, stock, low_stock, station, available |
-| `contact` | name, handles[] |
-| `order` | number, service, items[], total_minor, kitchen_state, payment_state |
-| `task` | title, roles[], state |
-| `payment` | order_id, kind, amount_minor, method, state |
-| `movement` | product_id, delta, balance, reason |
-| `shift` | opened_by, expected_minor, counted_minor, variance_minor |
-| `message` | channel_id, direction, body, contact_id |
-| `channel` | family, provider, account |
-| `flow` · `run` · `bot` · `canvas` · `card` · `event` · `link` | system |
-
-```
-order    ──placed_by──> contact
-order    ──contains───> product
-order    ──paid_by────> payment
-task     ──for────────> order
-movement ──affects────> product
-message  ──from───────> contact
-```
-
-Links are Records (`type=link`). Nothing else connects anything.
-
-============================================================
-## B4. CANVAS BY ROLE
-============================================================
-
-One Canvas. Three views, filtered by `roles[]`.
-
-| Card | kind | target | roles[] |
+| Available Block | Kind | Target | Roles |
 |---|---|---|---|
-| Sales today | `metric` | `{ type: order, where: state=completed }` | owner, admin |
-| New sale | `action` | `pos.open` | owner, admin, cashier |
-| Kitchen queue | `flow` | `kitchen.prepare` | owner, admin, kitchen |
-| Low stock | `metric` | `{ type: product, where: stock<=low_stock }` | owner, admin, stock |
-| Close shift | `flow` | `shift.close` | owner, admin, cashier |
-| Post special | `action` | `channel.publish` | owner, admin |
-| Today's payments | `metric` | `{ type: payment, where: state=confirmed }` | owner, admin |
+| Sales today | metric | `sales.today` | owner/admin |
+| New sale | entry | `pos.open` Action | owner/admin/cashier |
+| Kitchen queue | entry | `kitchen.queue` query -> Inbox | owner/admin/kitchen |
+| Low stock | metric | `stock.low` | owner/admin/stock |
+| Close shift | entry | `shift.close` Flow | owner/admin/cashier |
+| Post special | entry | `channel.publish` Action | owner/admin |
+| Today's payments | metric | `payments.today` | owner/admin |
 
-```
-              owner/admin            cashier              kitchen
-            ┌──────────────┐    ┌──────────────┐    ┌──────────────┐
-            │ Sales today  │    │ New sale     │    │ Kitchen queue│
-            │ Low stock    │    │ Close shift  │    │ (only card)  │
-            │ Kitchen queue│    └──────────────┘    └──────────────┘
-            │ Post special │
-            └──────────────┘
-```
+| Person | Home defaults | Inbox |
+|---|---|---|
+| Muthu | Sales today, Low stock, Today's payments | approvals, reorder |
+| Malar | Sales today, New sale, Low stock | reorder, shift review |
+| Iniya | New sale, Close shift | handover, shift work |
+| Velan | Kitchen queue | preparation tasks; default landing |
 
-Same Canvas record. The server returns three different lists.
+Kitchen Block opens the same Inbox tasks. Velan receives items/quantities/service details, not prices or customer phone numbers. Sales/payment queries use the business day and group by currency.
 
-============================================================
-## B5. FLOWS
-============================================================
+Local set = permitted menu + active tasks/order summaries + Home values. Velan reads downloaded work offline; claims need connection and eligible Ready updates may remain Pending. Iniya prepares carts offline; accepted stock/payment still requires the server.
 
-```
-order.take      channel message -> order -> kitchen task
-kitchen.prepare accept -> preparing -> ready
-order.complete  payment -> receipt -> close
-stock.receive   supplier delivery -> movement -> availability
-shift.close     count cash -> variance -> approval if needed
-```
+## B4. FLOWS + INVENTORY
 
-`order.take`:
+~~~text
+order.take = interpret -> quote -> customer confirms -> order.place
+           -> wait kitchen/payment -> cashier handover -> order.fulfill -> receipt
 
-```
-[channel] message.received
-   -> run starts (key = provider message id)
-   -> agent.classify        -> intent = order
-   -> contact find or create
-   -> order create (draft, kitchen_state=not_sent)
-   -> task create           -> kitchen ticket, roles=[kitchen]
-   -> waiting
-```
+kitchen.prepare = existing task -> claim/start -> ready -> task done
+stock.receive   = delivery -> movements -> stock cache -> low-stock check
+stock.count     = physical count -> explained adjustment movement
+shift.close     = count -> compare -> approval if needed -> close
+~~~
 
-`order.complete`:
-
-```
-[human] kitchen marks ready  -> task.complete -> run resumes
-   -> pos.checkout        -> payment confirmed
-   -> movement create     -> stock down
-   -> channel.reply       -> receipt on WhatsApp
-   -> order state=completed
-```
-
-============================================================
-## B6. A REAL ORDER, TRACED
-============================================================
-
-**11:42 — guest messages the WhatsApp number**
-
-```
-message (m_01)  direction: in   channel: whatsapp   body: "2 margherita + 1 coke"
-```
-
-Gateway: `channel.reply` intent queued, `message` saved, run started with key `wa:8842`.
-
-**11:42 — agent classifies (proposes only)**
-
-```
-agent.classify -> { intent: "order", items: [margherita x2, coke x1] }
-```
-
-**11:42 — order created**
-
-```
-order (o_17)
-  number          1042
-  service         takeaway
-  kitchen_state   queued
-  payment_state   unpaid
-  items           [{product_id: p_marg, quantity: 2, price_minor: 24900},
-                   {product_id: p_coke, quantity: 1, price_minor:  6000}]
-  total_minor     55800
-  version         1
-```
-
-**11:42 — kitchen ticket born**
-
-```
-task (t_88)  title "Order 1042"  roles=[kitchen]  state=open
-link  t_88 ──for──> o_17
-```
-
-Velan opens TAR. Kitchen queue shows one Card. Tap → he sees only ticket contents: items, quantities, service type. No prices, no customer phone.
-
-**11:51 — Velan taps Start, then Ready**
-
-```
-transition task t_88 -> state=done
-transition order o_17 -> kitchen_state=ready     version 2
-```
-
-The run resumes once. `task.complete` is idempotent — a double tap changes nothing.
-
-**11:52 — Iniya takes payment**
-
-```
-pos.checkout -> payment (pay_31)
-  order o_17   amount_minor 55800  method upi  state confirmed
-transition o_17 -> payment_state=paid  state=completed  version 3
-```
-
-**11:52 — stock moves (deterministic, no agent)**
-
-```
-movement mv_11  product p_marg  delta -2  reason: sale
-movement mv_12  product p_coke  delta -1  reason: sale
-```
-
-`p_marg.stock` drops below `low_stock` → a reorder task is created for Malar.
-
-**11:52 — receipt sent where the guest already is**
-
-```
-channel.reply -> WhatsApp -> contact c_44
-```
-
-**Result**
-
-```
-o_17  completed  55800 paid  took 10 min
-```
-
-One `record` table. `order`, `task`, `payment` and `movement` are rows, not tables. One run, six links, one full event trail.
-
-============================================================
-## B7. WHAT EACH PERSON SEES
-============================================================
-
-Two different things. They must never be mixed up:
-
-```
-TEAM CHANNEL       ONE per workspace — Slack, Discord, Google Chat or Telegram.
-                   Everybody shares it. Nobody has a personal team channel.
-
-CUSTOMER CHANNEL   Guest conversations — WhatsApp, Website chat, Email.
-                   They land in the Inbox. roles[] decide who may reply.
-```
-
-**Why a cashier is never "on WhatsApp for the team":** WhatsApp is a *customer* channel. It carries guest conversations, and Iniya answers them from the Inbox. The team itself talks in the one workspace team channel. Joining that channel verifies identity only — it grants no business authority.
-
-| Person | Canvas | Inbox | Team channel | Customer channels they work |
-|---|---|---|---|---|
-| Muthu (owner) | all 7 Cards | approvals, reorder | the one workspace channel | all |
-| Malar (manager) | all 7 Cards | reorder, shift review | the one workspace channel | all |
-| Iniya (cashier) | New sale, Close shift | her tasks | the one workspace channel | WhatsApp, Website chat |
-| Velan (kitchen) | Kitchen queue only | kitchen tickets | the one workspace channel | none — kitchen sees no guest data |
-
-One dataset. Three `roles[]` checks. One shared team channel.
-
-============================================================
-## B8. STOCK AND SHIFT
-============================================================
-
-**Stock**
-
-```
-delivery arrives -> stock.receive
-  -> movement rows written
-  -> product.stock cached in the same transaction
-  -> availability derived; low stock creates a task, never a silent edit
-```
-
-**Close shift**
-
-```
-shift.close
-  -> expected_minor = opening + cash sales - refunds
-  -> human counts cash (human Action)
-  -> variance_minor = counted_minor - expected_minor
-  -> within policy -> close
-  -> above policy -> approval.request -> owner approves in Inbox
-  -> shift record closed, report generated
-```
-
-============================================================
-## B9. SOCIAL
-============================================================
-
-Muthu posts the Friday special.
-
-```
-channel.publish -> Zernio
-  channels: instagram, google-business
-  content:  "Friday: 2 for 1 margherita"
-```
-
-```
-channel.publish result
-  instagram        published
-  google-business  published
-```
-
-One request, several destinations, each succeeds or fails alone. A caption too long for one network fails on that entry only — the others still publish.
-
-============================================================
-## B10. FAILURE CASES
-============================================================
-
-| Situation | Behavior |
+| Transition | Atomic business changes |
 |---|---|
-| WhatsApp resends the same webhook | same key → same order, no duplicate ticket |
-| Payment times out | state stays pending, reconcile, never blind resend |
-| Guest changes order mid-prep | new order version or a delta ticket, priced by snapshot |
-| Margherita sold out | kitchen marks it; flow pauses and asks replace / remove |
-| Kitchen offline | ticket waits in Inbox; nothing is lost |
-| Cashier double-taps Pay | one payment; repeat returns saved result |
-| Staff member removed | future Gateway calls rejected immediately; audit kept |
-| Overnight crash | runs resume from saved cursor; retries are bounded |
+| Accept | validate availability + reserve + order + kitchen task |
+| Prepare | checked order/task transitions; ready commits task outcome + resume intent |
+| Fulfil | consume reservation + movements + stock caches + completed order + receipt intent |
+| Cancel | release unconsumed reservation; prepared waste is an explicit movement |
+| Low stock | one open reorder task per product/threshold occurrence |
+| Reconcile | sum movements = on-hand; active reservations = reserved |
+
+Available = stock - reserved. Reject insufficient acceptance atomically. Pack policy defines consumption at preparation or fulfilment; payment alone never consumes stock. Reservation expiry follows work state and policy.
+
+Kitchen and payment may finish in either order. The Run checks saved facts before waiting; ready + paid still requires actual handover.
+
+## B5. ONE ORDER
+
+~~~text
+11:42  customer: "2 margherita + 1 coke, takeaway"
+       verify/dedupe -> save Message + Run-start intent -> acknowledge
+       agent.extract -> code resolves menu and quote -> customer confirms
+
+       order o17: total=55800, currency=INR, kitchen=queued, payment=unpaid
+       items: pmarg x2 at 24900 + pcoke x1 at 6000 (tax-inclusive)
+       reservation r17: pmarg=2, pcoke=1
+       task t88: record=o17, roles=[kitchen], state=open
+       acceptance commits together
+
+11:45  Velan: kitchen.start -> claimed task + preparing order
+11:51  Velan: kitchen.ready -> ready order + done task + resume intent
+11:52  pos.checkout -> pending payment -> verified provider confirmation
+       Iniya hands over -> order.fulfill -> stock/movements/order/receipt intent
+       channel.reply -> confirmed receipt delivery
+~~~
+
+A duplicate tap returns the saved result. A payment timeout reconciles with the provider. Receipt failure retries delivery only; an optional PDF is generated and attached using §2.2. Mid-preparation amendments use checked reservation changes and a kitchen delta task.
+
+## B6. SHIFT + SOCIAL
+
+~~~text
+expected cash = opening + confirmed cash sales - cash refunds
+variance      = counted - expected
+within policy -> close register
+otherwise     -> approval bound to count/register version -> recheck -> close
+
+Muthu -> channel.publish("Friday: 2 for 1 margherita")
+      -> one intent per permitted destination
+      -> confirmed / retry / unknown; reconcile each independently
+~~~
+
+One open register is enforced for this store model. Agent-written promotions obey publishing policy. Shared reliability checks and billing are in §9.
 
 ============================================================
-## B11. WHAT THE STORE COST
+# PART C — A SAAS SALES + CRM TEAM, END TO END
 ============================================================
 
-```
-Slice House        1 work workspace   100 credits / month
-Manual work        reads, edits, kitchen, cashier   0
-Agent use          classify + summaries             billed per run
-Total              monthly + agent usage
-```
+## C1. SETUP + RECORDS
+
+~~~text
+Orbit = one Work Space
+Thenmozhi = owner | Marudhan = sales
+Kayalvizhi = success | Vetrivel = support
+SaaS CRM template -> assign team -> connect website/email + team chat
+sell = selfserve + demo + annual contract
+~~~
+
+| Type | Key facts |
+|---|---|
+| `account` | name, domain, stage, plan, renewal; owner |
+| `contact` | name, email, account, role, consent |
+| `lead` | contact, source, score, stage, next; owner |
+| `deal` | account, contacts, value, currency, stage, close; owner |
+| `ticket` | account, contact, priority, category; owner/state |
+| `subscription` | account, plan, seats, start, renewal; state |
+| `task` | shared §5.2 contract; source in `data.record` |
+
+~~~text
+lead.data.contact      -> contact
+contact.data.account   -> account
+deal.data.account      -> account
+deal.data.contacts[]   -> contact
+ticket.data.account    -> account
+subscription.data.account -> account
+task.data.record       -> lead / deal / ticket / conversation
+~~~
+
+## C2. HOME + INBOX
+
+| Person | Home defaults | Inbox |
+|---|---|---|
+| Thenmozhi | revenue, pipeline, renewals | approvals, escalations |
+| Marudhan | leads, deals, New deal | qualification, followups, proposal review |
+| Kayalvizhi | customers, onboarding, renewals | setup, kickoff, renewal reviews |
+| Vetrivel | tickets, customer lookup | unassigned tickets, assigned replies |
+
+Metrics use registered queries; entry Blocks open Actions, Flows or existing views. Account/deal screens reuse their linked tasks and conversations. No duplicate support queue or separate response assignment.
+
+Local set = assigned tasks + recent accounts/deals + selected conversations + Home summaries. Marudhan writes notes offline; Vetrivel drafts replies. Queued work revalidates on reconnect. Company-wide totals come from confirmed queries, not one person's cached deals.
+
+## C3. BUSINESS FLOWS
+
+~~~text
+form/email -> lead.capture -> lead.qualify
+                              +-> nurture / disqualify
+                              +-> deal.progress -> won / lost
+                                                    |
+                                             won -> customer.onboard
+
+customer message -> support.resolve
+renewal due      -> renewal.manage
+~~~
+
+| Flow | Steps / outcomes |
+|---|---|
+| `lead.capture` | validate -> match/create contact/account -> lead -> route task |
+| `lead.qualify` | review facts -> qualified deal / nurture / disqualified |
+| `deal.progress` | discovery -> proposal draft -> approved send -> contract -> won/lost |
+| `customer.onboard` | won -> subscription/setup -> owner -> kickoff -> success tasks |
+| `support.resolve` | conversation -> ticket/response task -> reply -> case resolution |
+| `renewal.manage` | schedule -> usage/risk review -> quote -> renew/expand/churn |
+
+Packs supply the corresponding registered Actions. Qualification and pricing use validated facts. Subscription activation and paid status follow billing evidence; a won deal alone does not prove payment.
+
+## C4. ONE LEAD
+
+~~~text
+Poongodi submits demo request
+  -> Gateway validates public input and dedupes
+  -> optional extraction -> code creates/routes lead to Marudhan
+  -> qualification task -> qualified deal
+  -> AI drafts proposal -> Marudhan approves -> permitted channel send
+  -> signed/won -> onboarding + Kayalvizhi's tasks
+~~~
+
+This Flow requires proposal approval. Another Flow may allow routine sends under its grant. Changing the draft invalidates an approval that was bound to the previous input.
+
+## C5. CUSTOM INTERNAL + CUSTOMER FLOWS
+
+Users customize Who, When, Conditions and Message, or open Advanced for steps (§4). A human step automatically appears in the correct Inbox; customer inputs remain in their form/channel.
+
+| Example | Audience | Configuration |
+|---|---|---|
+| Expense review | team | amount threshold -> manager task -> finance Action |
+| Demo request | customer | form -> validated lead -> sales task |
+| Trial followup | both | signup -> timed draft -> approval/send -> reply handoff |
+| Onboarding | both | customer checklist -> internal setup -> progress reply |
+
+~~~text
+trial.followup
+  audience = both
+  trigger  = form
+
+  validate/capture lead
+    -> wait 1 day
+    -> agent.draft
+    -> sales approval
+    -> channel.send
+    -> wait for reply, maximum 3 days
+    -> interested: qualification task
+       otherwise: sales review task
+    -> end after committed handoff
+~~~
+
+No background loop without a limit. Draft, review, send and reply handling use the same Records, Actions and task model as the rest of TAR.
 
 ============================================================
-## B12. WHY IT STAYS SIMPLE
+## DESIGN REFERENCES
 ============================================================
 
-```
-Add a pizza      -> one product record
-Add a channel    -> one channel record
-Add a promo      -> one channel.publish
-Add a report     -> one card with a metric target
-Add a process    -> one flow record
-Add a permission -> one role label in a roles[] array
-```
+| Topic | Sources |
+|---|---|
+| Agents and context | [Effective agents](https://www.anthropic.com/engineering/building-effective-agents), [context engineering](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents), [tool discovery](https://www.anthropic.com/engineering/advanced-tool-use) |
+| Durable execution | [Workflow rules](https://developers.cloudflare.com/workflows/build/rules-of-workflows/), [events](https://developers.cloudflare.com/workflows/build/events-and-parameters/) |
+| Storage | [SQLite partial indexes](https://sqlite.org/partialindex.html), [Turso pricing](https://turso.tech/pricing), [usage](https://docs.turso.tech/help/usage-and-billing), [R2 pricing](https://developers.cloudflare.com/r2/pricing/), [S3 compatibility](https://developers.cloudflare.com/r2/api/s3/api/) |
+| Sync | [Usage](https://docs.turso.tech/sync/usage), [partial sync](https://docs.turso.tech/sync/partial), [conflicts](https://docs.turso.tech/sync/conflict-resolution) |
+| Optional agents / evaluation | [Multi-agent research](https://www.anthropic.com/engineering/multi-agent-research-system), [agent evaluations](https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents) |
 
-No new table. No new engine. No new builder concept.
-
-============================================================
-
-> **Records hold truth. Actions do work. Flows order work. Cards show work by role. Channels carry it. The Gateway is the only writer.**
+Sources inform the design. TAR policies are architectural decisions; the document does not claim all capabilities are implemented.

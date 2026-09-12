@@ -115,6 +115,59 @@ export const actionCatalog = [
     ],
     output: ['flowId', 'published'], roles: ['owner', 'admin'], effects: ['definition_publish', 'canvas_update'],
   },
+  {
+    id: 'site.generate', version: 1, type: 'agent', title: 'Generate site draft',
+    description: 'Create a website draft from business facts and prompt.', interfaceKey: 'form',
+    fields: [
+      { key: 'prompt', label: 'Prompt or description', kind: 'textarea' },
+      { key: 'title', label: 'Site title', kind: 'text' },
+      { key: 'theme', label: 'Theme direction', kind: 'text' },
+    ],
+    output: ['siteId', 'version', 'site', 'preview'], roles: ['owner', 'admin'], effects: ['record_create'],
+  },
+  {
+    id: 'site.update', version: 1, type: 'app', title: 'Update site',
+    description: 'Apply validated operations to site draft without second AI charge.', interfaceKey: 'form',
+    fields: [
+      { key: 'siteId', label: 'Site', kind: 'record', required: true },
+      { key: 'baseVersion', label: 'Version', kind: 'number', required: true },
+    ],
+    output: ['siteId', 'version'], roles: ['owner', 'admin'], effects: ['record_update'],
+  },
+  {
+    id: 'site.compile', version: 1, type: 'app', title: 'Compile site candidate',
+    description: 'Compile frozen site definition into release candidate manifest.', interfaceKey: 'confirmation',
+    fields: [
+      { key: 'siteId', label: 'Site', kind: 'record', required: true },
+    ],
+    output: ['releaseId', 'manifest', 'hash'], roles: ['owner', 'admin'], effects: ['record_update'],
+  },
+  {
+    id: 'site.publish', version: 1, type: 'app', title: 'Publish site',
+    description: 'Promote release candidate to live website routing.', interfaceKey: 'confirmation',
+    fields: [
+      { key: 'siteId', label: 'Site', kind: 'record', required: true },
+      { key: 'subdomain', label: 'Subdomain', kind: 'text' },
+    ],
+    output: ['siteId', 'releaseId', 'liveUrl', 'generation'], roles: ['owner', 'admin'], effects: ['record_update'],
+  },
+  {
+    id: 'site.rollback', version: 1, type: 'app', title: 'Rollback site release',
+    description: 'Revert live website to a previous release manifest.', interfaceKey: 'confirmation',
+    fields: [
+      { key: 'siteId', label: 'Site', kind: 'record', required: true },
+      { key: 'releaseId', label: 'Release ID', kind: 'text', required: true },
+    ],
+    output: ['siteId', 'releaseId', 'rolledBack'], roles: ['owner', 'admin'], effects: ['record_update'],
+  },
+  {
+    id: 'site.refresh', version: 1, type: 'app', title: 'Refresh public facts',
+    description: 'Recompute live catalog and hours into site without AI re-inference.', interfaceKey: 'confirmation',
+    fields: [
+      { key: 'siteId', label: 'Site', kind: 'record', required: true },
+    ],
+    output: ['refreshed', 'itemCount'], roles: ['owner', 'admin'], effects: ['record_update'],
+  },
 ] as const satisfies readonly ActionDefinition[];
 
 export type ActionId = typeof actionCatalog[number]['id'];

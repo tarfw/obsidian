@@ -60,6 +60,17 @@ export const botDirectory: readonly BotDirectoryItem[] = [
       { id: 'request-review', title: 'Request and review', description: 'Assign a request, then close it after review.', records: ['Task'], actions: [{ id: 'task.create' }, { id: 'task.complete' }] },
     ],
   },
+  {
+    id: 'site',
+    title: 'Site Bot',
+    description: 'Public website and visitor journeys created and changed by prompt.',
+    category: 'Commerce & Web',
+    guidance: 'Create a website with prompts, preview your design, and publish through TAR.',
+    flows: [
+      { id: 'site-build', title: 'Site builder', description: 'Create and update public website from business facts and prompts', records: ['Site'], actions: [{ id: 'site.generate' }, { id: 'site.update' }, { id: 'site.publish' }] },
+      { id: 'site-preview', title: 'Site preview & review', description: 'Compile a preview candidate and refresh public facts', records: ['Site'], actions: [{ id: 'site.compile' }, { id: 'site.refresh' }] },
+    ],
+  },
 ];
 
 export function findDirectoryBot(botId: string) {

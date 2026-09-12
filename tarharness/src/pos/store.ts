@@ -11,30 +11,30 @@ export const POS_INDEXES = [
   "CREATE INDEX IF NOT EXISTS pos_payment_register ON records(json_extract(data,'$.registerId')) WHERE type='pos.payment'",
   "CREATE INDEX IF NOT EXISTS pos_customer_orders ON records(json_extract(data,'$.customerId')) WHERE type='pos.order'",
   "CREATE UNIQUE INDEX IF NOT EXISTS pos_unique_reference ON records(json_extract(data,'$.reference')) WHERE type='pos.payment' AND json_extract(data,'$.reference') IS NOT NULL",
-  "CREATE UNIQUE INDEX IF NOT EXISTS pos_unique_barcode ON records(json_extract(data,'$.barcode')) WHERE type='pos.product' AND json_extract(data,'$.barcode')!='' AND archived_at IS NULL",
-  "CREATE UNIQUE INDEX IF NOT EXISTS pos_unique_sku ON records(json_extract(data,'$.sku')) WHERE type='pos.product' AND json_extract(data,'$.sku')!='' AND archived_at IS NULL",
+  "CREATE UNIQUE INDEX IF NOT EXISTS pos_unique_barcode ON records(json_extract(data,'$.barcode')) WHERE type='pos.product' AND json_extract(data,'$.barcode')!='' AND archived IS NULL",
+  "CREATE UNIQUE INDEX IF NOT EXISTS pos_unique_sku ON records(json_extract(data,'$.sku')) WHERE type='pos.product' AND json_extract(data,'$.sku')!='' AND archived IS NULL",
   "CREATE UNIQUE INDEX IF NOT EXISTS pos_one_open_register ON records(type) WHERE type='pos.register' AND state='open'",
-  "CREATE UNIQUE INDEX IF NOT EXISTS pos_unique_draft_key ON records(owner_id,json_extract(data,'$.draftKey')) WHERE type='pos.order' AND json_extract(data,'$.draftKey') IS NOT NULL",
+  "CREATE UNIQUE INDEX IF NOT EXISTS pos_unique_draft_key ON records(owner,json_extract(data,'$.draftKey')) WHERE type='pos.order' AND json_extract(data,'$.draftKey') IS NOT NULL",
 ];
 export interface PosRecord { id: string; title: string; state: string; data: Data; version: number; createdAt: number }
 const object = (value: unknown): Data => value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Data : {};
 const text = (value: unknown, max = 200) => typeof value === 'string' ? value.trim().slice(0, max) : '';
-const decode = (row: Data): PosRecord => ({ id: String(row.id), title: String(row.title), state: String(row.state), data: object(JSON.parse(String(row.data))), version: Number(row.version), createdAt: Number(row.created_at) });
+const decode = (row: Data): PosRecord => ({ id: String(row.id), title: String(row.title), state: String(row.state), data: object(JSON.parse(String(row.data))), version: Number(row.version), createdAt: Number(row.created) });
 export function integer(value: unknown, label: string, min = 0, max = 100_000_000): number {
   if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < min || value > max) throw badRequest(label + ' is invalid.');
   return value;
 }
 async function get(db: DB, id: string, type: string) {
-  const result = await db.execute({ sql: 'SELECT * FROM records WHERE id=? AND type=? AND archived_at IS NULL', args: [id, type] });
+  const result = await db.execute({ sql: 'SELECT * FROM records WHERE id=? AND type=? AND archived IS NULL', args: [id, type] });
   return result.rows[0] ? decode(result.rows[0]) : null;
 }
 async function list(db: DB, type: string, search = '', offset = 0) {
-  const result = await db.execute({ sql: "SELECT * FROM records WHERE type=? AND archived_at IS NULL AND (title LIKE ? OR id LIKE ? OR json_extract(data,'$.barcode')=? OR json_extract(data,'$.customerId')=? OR json_extract(data,'$.phone') LIKE ?) ORDER BY updated_at DESC,id LIMIT 100 OFFSET ?", args: [type, '%' + search + '%', '%' + search + '%', search, search, '%' + search + '%', offset] });
+  const result = await db.execute({ sql: "SELECT * FROM records WHERE type=? AND archived IS NULL AND (title LIKE ? OR id LIKE ? OR json_extract(data,'$.barcode')=? OR json_extract(data,'$.customerId')=? OR json_extract(data,'$.phone') LIKE ?) ORDER BY updated DESC,id LIMIT 100 OFFSET ?", args: [type, '%' + search + '%', '%' + search + '%', search, search, '%' + search + '%', offset] });
   return result.rows.map(decode);
 }
 async function put(db: DB, type: string, title: string, data: Data, actor: string, id = 'pos_' + crypto.randomUUID(), state = 'active') {
   const at = Date.now();
-  await db.execute({ sql: "INSERT INTO records(id,type,title,state,data,owner_id,version,created_at,updated_at) VALUES(?,?,?,?,?,?,1,?,?) ON CONFLICT(id) DO UPDATE SET title=excluded.title,state=excluded.state,data=excluded.data,version=records.version+1,updated_at=excluded.updated_at",
+  await db.execute({ sql: "INSERT INTO records(id,type,title,state,data,owner,version,created,updated) VALUES(?,?,?,?,?,?,1,?,?) ON CONFLICT(id) DO UPDATE SET title=excluded.title,state=excluded.state,data=excluded.data,version=records.version+1,updated=excluded.updated",
     args: [id, type, title, state, JSON.stringify(data), actor, at, at] });
   return (await get(db, id, type))!;
 }
@@ -43,7 +43,7 @@ export async function requirePos(db: DB) {
   if (!installed.rows.length) throw forbidden();
 }
 async function register(db: DB) {
-  const rows = await db.execute("SELECT * FROM records WHERE type='pos.register' AND state='open' AND archived_at IS NULL LIMIT 1");
+  const rows = await db.execute("SELECT * FROM records WHERE type='pos.register' AND state='open' AND archived IS NULL LIMIT 1");
   return rows.rows[0] ? decode(rows.rows[0]) : null;
 }
 async function balance(db: DB, session: PosRecord) {
@@ -56,7 +56,7 @@ export async function posSummary(db: DB) {
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
   const result = await db.execute({ sql: "SELECT COALESCE(SUM(json_extract(data,'$.amount')),0) AS sales FROM records WHERE type='pos.payment' AND json_extract(data,'$.businessDate')=?", args: [today] });
   const orders = await db.execute({ sql: "SELECT COUNT(*) AS count FROM records WHERE type='pos.order' AND json_extract(data,'$.businessDate')=?", args: [today] });
-  const stock = await db.execute("SELECT COUNT(*) AS count FROM records WHERE type='pos.product' AND archived_at IS NULL AND json_extract(data,'$.stock')<=json_extract(data,'$.lowStock')");
+  const stock = await db.execute("SELECT COUNT(*) AS count FROM records WHERE type='pos.product' AND archived IS NULL AND json_extract(data,'$.stock')<=json_extract(data,'$.lowStock')");
   return { sales: Number(result.rows[0].sales), orders: Number(orders.rows[0].count), lowStock: Number(stock.rows[0].count), currency: String(settings?.data.currency || 'INR'), businessDate: today };
 }
 export async function readPos(db: DB, context: AccessContext, section: string, search = '', offset = 0) {
@@ -73,7 +73,7 @@ export async function readPos(db: DB, context: AccessContext, section: string, s
 
 export async function readPosInbox(db: DB) {
   await requirePos(db);
-  const result = await db.execute({ sql: "SELECT * FROM records WHERE type='pos.order' AND state='open' AND archived_at IS NULL ORDER BY updated_at DESC,id LIMIT 100" });
+  const result = await db.execute({ sql: "SELECT * FROM records WHERE type='pos.order' AND state='open' AND archived IS NULL ORDER BY updated DESC,id LIMIT 100" });
   return { orders: result.rows.map(decode) };
 }
 
@@ -142,7 +142,7 @@ async function mutate(db: Transaction, context: AccessContext, action: string, i
     const barcode = text(input.barcode);
     const sku = text(input.sku);
     if (barcode || sku) {
-      const duplicates = await db.execute({ sql: "SELECT id,json_extract(data,'$.barcode') AS barcode,json_extract(data,'$.sku') AS sku FROM records WHERE type='pos.product' AND ((?!='' AND json_extract(data,'$.barcode')=?) OR (?!='' AND json_extract(data,'$.sku')=?)) AND id!=? AND archived_at IS NULL", args: [barcode, barcode, sku, sku, id] });
+      const duplicates = await db.execute({ sql: "SELECT id,json_extract(data,'$.barcode') AS barcode,json_extract(data,'$.sku') AS sku FROM records WHERE type='pos.product' AND ((?!='' AND json_extract(data,'$.barcode')=?) OR (?!='' AND json_extract(data,'$.sku')=?)) AND id!=? AND archived IS NULL", args: [barcode, barcode, sku, sku, id] });
       if (duplicates.rows.length) throw conflict(barcode && duplicates.rows[0].barcode === barcode ? 'Barcode already belongs to another product.' : 'SKU already belongs to another product.');
     }
     const stock = current ? Number(current.data.stock) : integer(input.stock, 'Opening stock');
@@ -181,7 +181,7 @@ async function mutate(db: Transaction, context: AccessContext, action: string, i
     const clientDraftKey = text(input.draftKey);
     let current = orderId ? await get(db, orderId, 'pos.order') : null;
     if (!current && clientDraftKey) {
-      const existing = await db.execute({ sql: "SELECT * FROM records WHERE type='pos.order' AND owner_id=? AND json_extract(data,'$.draftKey')=? AND archived_at IS NULL LIMIT 1", args: [actor, clientDraftKey] });
+      const existing = await db.execute({ sql: "SELECT * FROM records WHERE type='pos.order' AND owner=? AND json_extract(data,'$.draftKey')=? AND archived IS NULL LIMIT 1", args: [actor, clientDraftKey] });
       current = existing.rows[0] ? decode(existing.rows[0]) : null;
     }
     if (orderId && (!current || current.state !== 'open')) throw conflict('This order is no longer open.');

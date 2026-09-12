@@ -1,47 +1,183 @@
-/** Site Studio is an authenticated Tarai client; it has no site-worker credentials. */
+/** Site Studio is an authenticated TAR Harness client. */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Linking, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { tar, taraiUrl, type AgentRunResult } from '@/lib/tar';
+import { harness, HARNESS_URL } from '@/lib/harness';
 
 type Phase = 'idle' | 'generating' | 'publishing' | 'error';
 interface SiteSection { id: string; kind: string; title?: string; }
 export interface SiteScreenProps { visible: boolean; onClose: () => void; workspaceName: string; subdomain: string; scope: string; products?: Array<{ title?: string; name?: string }>; }
 
-function resultData(value: AgentRunResult['result']): Record<string, any> { return value?.data && typeof value.data === 'object' ? value.data as Record<string, any> : {}; }
-function errorText(error: unknown): string { return error instanceof Error ? error.message : 'Tarai could not complete this site action.'; }
+function errorText(error: unknown): string { return error instanceof Error ? error.message : 'TAR Harness could not complete this site action.'; }
 
-export default function SiteScreen({ visible, onClose, workspaceName, scope, products = [] }: SiteScreenProps) {
+export default function SiteScreen({ visible, onClose, workspaceName, subdomain, scope, products = [] }: SiteScreenProps) {
   const insets = useSafeAreaInsets();
-  const [phase, setPhase] = useState<Phase>('idle'); const [message, setMessage] = useState(''); const [prompt, setPrompt] = useState('');
-  const [sections, setSections] = useState<SiteSection[]>([]); const [draftJob, setDraftJob] = useState<string | null>(null); const [liveUrl, setLiveUrl] = useState<string | null>(null);
+  const [phase, setPhase] = useState<Phase>('idle');
+  const [message, setMessage] = useState('');
+  const [prompt, setPrompt] = useState('');
+  const [sections, setSections] = useState<SiteSection[]>([]);
+  const [siteId, setSiteId] = useState<string | null>(null);
+  const [liveUrl, setLiveUrl] = useState<string | null>(null);
   const closed = useRef(false);
-  const defaultDescription = useMemo(() => { const items = products.slice(0, 8).map((item) => item.title || item.name).filter(Boolean); return `${workspaceName || 'This workspace'}${items.length ? ` offers ${items.join(', ')}` : ''}.`; }, [products, workspaceName]);
+
+  const slug = useMemo(() => scope.replace(/^w:/, '').trim(), [scope]);
+  const defaultDescription = useMemo(() => {
+    const items = products.slice(0, 8).map((item) => item.title || item.name).filter(Boolean);
+    return `${workspaceName || 'This workspace'}${items.length ? ` offers ${items.join(', ')}` : ''}.`;
+  }, [products, workspaceName]);
+
   useEffect(() => { closed.current = !visible; }, [visible]);
-  const waitForRun = useCallback(async (id: string): Promise<AgentRunResult> => {
-    for (let attempt = 0; attempt < 40; attempt += 1) { const status = await tar.site.getRun(scope, id); if (status.run.state === 'done') return status; if (status.run.state === 'failed' || status.run.state === 'refunded') throw new Error('The site action failed. Any reserved credits were refunded.'); await new Promise((resolve) => setTimeout(resolve, 1500)); }
-    throw new Error('The site is still being prepared. Reopen Site Studio in a moment to try again.');
-  }, [scope]);
+
+  // Load existing site status when opened
+  useEffect(() => {
+    if (!visible || !slug) return;
+    let active = true;
+    (async () => {
+      try {
+        const res = await harness.site.get(slug);
+        if (!active || closed.current) return;
+        if (res.site && res.site.data) {
+          const cards = res.site.data.pages[0]?.cards || [];
+          setSections(cards.map((c) => ({ id: c.id, kind: c.kind, title: c.title })));
+          setSiteId(res.site.id);
+          if (res.site.state === 'live') {
+            setLiveUrl(`${HARNESS_URL}/v1/sites/${encodeURIComponent(subdomain || slug)}`);
+            setMessage('Your site is live.');
+          } else {
+            setMessage('Draft ready. Review its structure, then publish when you are ready.');
+          }
+        }
+      } catch (err) {
+        // Non-blocking initial fetch
+      }
+    })();
+    return () => { active = false; };
+  }, [visible, slug, subdomain]);
+
   const generate = useCallback(async (instruction?: string) => {
-    if (!scope) return; setPhase('generating'); setMessage('Preparing a verified site draft…');
-    try { const started = await tar.site.generate(scope, { title: workspaceName || 'Workspace', description: instruction?.trim() || defaultDescription }); const completed = await waitForRun(started.run.id); if (closed.current) return; const data = resultData(completed.result); const plan = data.plan as { sections?: SiteSection[] } | undefined; setDraftJob(String(data.job || started.run.id)); setSections(Array.isArray(plan?.sections) ? plan.sections : []); setMessage('Draft is ready. Review its structure, then publish when you are ready.'); setPhase('idle'); }
-    catch (error) { if (!closed.current) { setMessage(errorText(error)); setPhase('error'); } }
-  }, [defaultDescription, scope, waitForRun, workspaceName]);
+    if (!slug) return;
+    setPhase('generating');
+    setMessage('Preparing a verified site draft…');
+    try {
+      const res = await harness.site.generate(slug, {
+        title: workspaceName || 'Workspace',
+        prompt: instruction?.trim() || defaultDescription,
+      });
+      if (closed.current) return;
+      setSiteId(res.siteId);
+      const cards = res.site.pages[0]?.cards || [];
+      setSections(cards.map((c) => ({ id: c.id, kind: c.kind, title: c.title })));
+      setMessage('Draft is ready. Review its structure, then publish when you are ready.');
+      setPhase('idle');
+    } catch (error) {
+      if (!closed.current) {
+        setMessage(errorText(error));
+        setPhase('error');
+      }
+    }
+  }, [defaultDescription, slug, workspaceName]);
+
   const publish = useCallback(async () => {
-    if (!draftJob || !scope) { await generate(); return; } setPhase('publishing'); setMessage('Verifying and publishing your site…');
-    try { const started = await tar.site.publish(scope, draftJob); const completed = await waitForRun(started.run.id); if (closed.current) return; const path = resultData(completed.result).url; setLiveUrl(typeof path === 'string' ? `${taraiUrl}${path}` : null); setMessage('Your verified site is live.'); setPhase('idle'); }
-    catch (error) { if (!closed.current) { setMessage(errorText(error)); setPhase('error'); } }
-  }, [draftJob, generate, scope, waitForRun]);
+    if (!slug) return;
+    if (!siteId) {
+      await generate();
+      return;
+    }
+    setPhase('publishing');
+    setMessage('Verifying and publishing your site…');
+    try {
+      const res = await harness.site.publish(slug, siteId, subdomain || slug);
+      if (closed.current) return;
+      const targetUrl = res.liveUrl.startsWith('http') ? res.liveUrl : `${HARNESS_URL}${res.liveUrl}`;
+      setLiveUrl(targetUrl);
+      setMessage('Your verified site is live.');
+      setPhase('idle');
+    } catch (error) {
+      if (!closed.current) {
+        setMessage(errorText(error));
+        setPhase('error');
+      }
+    }
+  }, [generate, siteId, slug, subdomain]);
+
   const busy = phase === 'generating' || phase === 'publishing';
-  return <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}><View style={[styles.container, { paddingTop: Math.max(insets.top, 16) }]}>
-    <View style={styles.header}><View style={styles.headerCopy}><Text style={styles.title}>Site Studio</Text><Text style={styles.subtitle}>Generated and published securely by Tarai</Text></View><TouchableOpacity accessibilityLabel="Close Site Studio" onPress={onClose} style={styles.closeButton}><Ionicons name="close" size={20} color="#0f172a" /></TouchableOpacity></View>
-    <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled"><View style={styles.card}><Text style={styles.eyebrow}>BUSINESS BRIEF</Text><Text style={styles.cardTitle}>{workspaceName || 'Your workspace'}</Text><Text style={styles.body}>Tarai uses verified workspace facts to build a versioned, sanitized site. This device never receives publishing credentials.</Text></View>
-      <View style={styles.card}><Text style={styles.eyebrow}>SITE STRUCTURE</Text>{sections.length ? sections.map((section, index) => <View key={`${section.id}-${index}`} style={styles.row}><Text style={styles.index}>{index + 1}</Text><View style={styles.rowCopy}><Text style={styles.rowTitle}>{section.title || titleize(section.kind)}</Text><Text style={styles.rowMeta}>{section.kind}</Text></View><Ionicons name="checkmark-circle" size={17} color="#16a34a" /></View>) : <Text style={styles.body}>Create a draft to let Tarai choose a useful structure from your workspace data.</Text>}</View>
-      {!!message && <View style={[styles.status, phase === 'error' && styles.statusError]}>{busy && <ActivityIndicator size="small" color="#0f172a" />}<Text style={styles.statusText}>{message}</Text></View>}
-      {liveUrl && <TouchableOpacity style={styles.liveLink} onPress={() => Linking.openURL(liveUrl)}><Ionicons name="globe-outline" size={16} color="#166534" /><Text style={styles.liveLinkText}>Open live site</Text></TouchableOpacity>}</ScrollView>
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.composer}><TextInput value={prompt} onChangeText={setPrompt} placeholder="Describe your business or a change…" placeholderTextColor="#94a3b8" style={styles.input} multiline editable={!busy} /><TouchableOpacity disabled={busy} onPress={() => { const instruction = prompt; setPrompt(''); generate(instruction); }} style={[styles.action, busy && styles.disabled]}><Text style={styles.actionText}>{draftJob ? 'Regenerate' : 'Create draft'}</Text></TouchableOpacity><TouchableOpacity disabled={busy} onPress={publish} style={[styles.publish, busy && styles.disabled]}><Text style={styles.publishText}>Publish</Text></TouchableOpacity></KeyboardAvoidingView>
-  </View></Modal>;
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <View style={[styles.container, { paddingTop: Math.max(insets.top, 16) }]}>
+        <View style={styles.header}>
+          <View style={styles.headerCopy}>
+            <Text style={styles.title}>Site Studio</Text>
+            <Text style={styles.subtitle}>Generated and published cleanly by TAR Site Bot</Text>
+          </View>
+          <TouchableOpacity accessibilityLabel="Close Site Studio" onPress={onClose} style={styles.closeButton}>
+            <Ionicons name="close" size={20} color="#0f172a" />
+          </TouchableOpacity>
+        </View>
+        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+          <View style={styles.card}>
+            <Text style={styles.eyebrow}>BUSINESS BRIEF</Text>
+            <Text style={styles.cardTitle}>{workspaceName || 'Your workspace'}</Text>
+            <Text style={styles.body}>TAR uses verified workspace facts to build a versioned, sanitized site with 12 semantic Card families and zero client-side JavaScript.</Text>
+          </View>
+          <View style={styles.card}>
+            <Text style={styles.eyebrow}>SITE STRUCTURE</Text>
+            {sections.length ? (
+              sections.map((section, index) => (
+                <View key={`${section.id}-${index}`} style={styles.row}>
+                  <Text style={styles.index}>{index + 1}</Text>
+                  <View style={styles.rowCopy}>
+                    <Text style={styles.rowTitle}>{section.title || titleize(section.kind)}</Text>
+                    <Text style={styles.rowMeta}>{section.kind}</Text>
+                  </View>
+                  <Ionicons name="checkmark-circle" size={17} color="#16a34a" />
+                </View>
+              ))
+            ) : (
+              <Text style={styles.body}>Create a draft to let TAR Site Bot construct a useful structure from your workspace data.</Text>
+            )}
+          </View>
+          {!!message && (
+            <View style={[styles.status, phase === 'error' && styles.statusError]}>
+              {busy && <ActivityIndicator size="small" color="#0f172a" />}
+              <Text style={styles.statusText}>{message}</Text>
+            </View>
+          )}
+          {liveUrl && (
+            <TouchableOpacity style={styles.liveLink} onPress={() => Linking.openURL(liveUrl)}>
+              <Ionicons name="globe-outline" size={16} color="#166534" />
+              <Text style={styles.liveLinkText}>Open live site</Text>
+            </TouchableOpacity>
+          )}
+        </ScrollView>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.composer}>
+          <TextInput
+            value={prompt}
+            onChangeText={setPrompt}
+            placeholder="Describe your business or a change…"
+            placeholderTextColor="#94a3b8"
+            style={styles.input}
+            multiline
+            editable={!busy}
+          />
+          <TouchableOpacity
+            disabled={busy}
+            onPress={() => {
+              const instruction = prompt;
+              setPrompt('');
+              generate(instruction);
+            }}
+            style={[styles.action, busy && styles.disabled]}
+          >
+            <Text style={styles.actionText}>{siteId ? 'Regenerate' : 'Create draft'}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity disabled={busy} onPress={publish} style={[styles.publish, busy && styles.disabled]}>
+            <Text style={styles.publishText}>Publish</Text>
+          </TouchableOpacity>
+        </KeyboardAvoidingView>
+      </View>
+    </Modal>
+  );
 }
 function titleize(value: string): string { return (value || 'section').split(/[-_]/).map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(' '); }
 const styles = StyleSheet.create({

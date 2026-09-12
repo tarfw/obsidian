@@ -23,7 +23,7 @@ export async function saveProductContent(client: Client, bucket: R2Bucket | unde
   if (!bucket) throw unavailable('Product content storage is not configured.');
   const productId = text(input.productId, 200);
   const version = Number(input.version);
-  const rows = await client.execute({ sql: "SELECT title,data,version FROM records WHERE id=? AND type='pos.product' AND archived_at IS NULL", args: [productId] });
+  const rows = await client.execute({ sql: "SELECT title,data,version FROM records WHERE id=? AND type='pos.product' AND archived IS NULL", args: [productId] });
   if (!rows.rows[0]) throw notFound('Product not found.');
   if (!Number.isSafeInteger(version) || Number(rows.rows[0].version) !== version) throw conflict('Product changed. Reload before saving content.');
   const payload = content(input);
@@ -37,9 +37,9 @@ export async function saveProductContent(client: Client, bucket: R2Bucket | unde
   const result = { productId, version: version + 1, contentKey: key, contentBytes: new TextEncoder().encode(body).byteLength };
   const tx = await client.transaction('write');
   try {
-    const latest = await tx.execute({ sql: "SELECT version FROM records WHERE id=? AND type='pos.product' AND archived_at IS NULL", args: [productId] });
+    const latest = await tx.execute({ sql: "SELECT version FROM records WHERE id=? AND type='pos.product' AND archived IS NULL", args: [productId] });
     if (Number(latest.rows[0]?.version) !== version) throw conflict('Product changed. Reload before saving content.');
-    await tx.execute({ sql: 'UPDATE records SET data=?,version=version+1,updated_at=? WHERE id=? AND version=?', args: [JSON.stringify({ ...current, contentKey: key, contentBytes: result.contentBytes, contentSummary: summary }), at, productId, version] });
+    await tx.execute({ sql: 'UPDATE records SET data=?,version=version+1,updated=? WHERE id=? AND version=?', args: [JSON.stringify({ ...current, contentKey: key, contentBytes: result.contentBytes, contentSummary: summary }), at, productId, version] });
     await tx.execute({ sql: `INSERT INTO events(id,kind,record_id,action_id,state,actor_id,input_hash,idempotency_key,data,created_at,updated_at) VALUES(?,'action',?,'pos.product.content.save','accepted',?,?,?,?,?,?)`, args: ['evt_' + crypto.randomUUID(), productId, context.identity.id, event.hash, event.key, JSON.stringify({ result }), at, at] });
     await tx.commit();
   } catch (cause) { await tx.rollback().catch(() => undefined); throw cause; }
@@ -50,7 +50,7 @@ export async function saveProductContent(client: Client, bucket: R2Bucket | unde
 
 export async function readProductContent(client: Client, bucket: R2Bucket | undefined, context: AccessContext, productId: string) {
   if (!bucket) throw unavailable('Product content storage is not configured.');
-  const rows = await client.execute({ sql: "SELECT data FROM records WHERE id=? AND type='pos.product' AND archived_at IS NULL", args: [productId] });
+  const rows = await client.execute({ sql: "SELECT data FROM records WHERE id=? AND type='pos.product' AND archived IS NULL", args: [productId] });
   if (!rows.rows[0]) throw notFound('Product not found.');
   const key = object(JSON.parse(String(rows.rows[0].data))).contentKey;
   if (typeof key !== 'string' || !key) return {};

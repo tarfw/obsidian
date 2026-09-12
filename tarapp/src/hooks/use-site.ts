@@ -1,166 +1,251 @@
+/**
+ * TAR Site Bot React Hook (parv2.md §13, §16)
+ *
+ * Workspace-isolated state management for Site Studio.
+ * Routes all operations through Harness Gateway actions:
+ * - site.get
+ * - site.generate
+ * - site.update
+ * - site.publish
+ * - site.rollback
+ * - site.refresh
+ *
+ * Fully removes legacy matter queries and unverified *.tarai.space endpoints.
+ */
+
 import { useState, useEffect, useCallback } from 'react';
-import { useDb } from '@/db/provider';
+import { harness } from '@/lib/harness';
 import {
-  DEFAULT_LAYOUT,
-  parseLayout,
+  type CardDefinition,
+  type ReleaseManifest,
+  type SiteDefinition,
   type SiteLayout,
+  type SitePatchOperation,
+  siteDefinitionToLayout,
+  layoutToSiteDefinition,
 } from '@/lib/site-schema';
 
-interface LayoutRow {
-  id: string;
-  data: string;
+export interface UseSiteState {
+  site: SiteDefinition | null;
+  siteId: string | null;
+  version: number;
+  state: 'idle' | 'draft' | 'live' | 'error';
+  loading: boolean;
+  error: string | null;
+  liveUrl: string | null;
+  preview: { html: string; css: string; hash: string } | null;
+  releases: ReleaseManifest[];
+  cards: CardDefinition[];
+
+  // Legacy compatibility fields
+  draft: SiteLayout | null;
+  published: SiteLayout | null;
+
+  // Actions
+  refresh: () => Promise<void>;
+  generate: (input: { title?: string; prompt?: string; theme?: string }) => Promise<void>;
+  updateCards: (operations: SitePatchOperation[]) => Promise<void>;
+  publish: (subdomainOverride?: string) => Promise<void>;
+  rollback: (releaseId: string) => Promise<void>;
+  refreshPosCatalog: () => Promise<{ itemCount: number }>;
+  saveDraft: (layout: SiteLayout) => Promise<void>;
 }
 
-let dbRef: any = null;
-function getDb() {
-  if (!dbRef) {
-    throw new Error('DB not initialized');
-  }
-  return dbRef;
-}
+export function useSite(slugOrScope?: string): UseSiteState {
+  const slug = (slugOrScope || '').replace(/^w:/, '').trim();
 
-async function publishToWorker(subdomain: string, layout: SiteLayout, workspaceName?: string): Promise<void> {
-  try {
-    const cleanSub = subdomain.replace(/^w:/, '');
-    const res = await fetch(`https://${cleanSub}.tarai.space/publish`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ subdomain: cleanSub, workspaceName: workspaceName || cleanSub, layout }),
-    });
-
-    if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      console.error(`[Site] Worker publish failed (${res.status}):`, body.slice(0, 200));
-    } else {
-      console.log(`[Site] Published to Worker: ${cleanSub}.tarai.space`);
-    }
-  } catch (err: any) {
-    console.error('[Site] Worker publish error:', err?.message);
-  }
-}
-
-async function pushDraftToWorker(subdomain: string, layout: SiteLayout): Promise<void> {
-  if (!subdomain) return;
-  const cleanSub = subdomain.replace(/^w:/, '');
-  try {
-    await fetch(`https://${cleanSub}.tarai.space/draft`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ subdomain: cleanSub, layout }),
-    });
-  } catch (err: any) {
-    console.error('[Site] Draft push error:', err?.message);
-  }
-}
-
-export function useSite(storeIdInput?: string) {
-  const db = useDb();
-  dbRef = db;
-  const storeId = (storeIdInput || 'default').trim();
-  const [draft, setDraft] = useState<SiteLayout | null>(null);
-  const [published, setPublished] = useState<SiteLayout | null>(null);
-  const [draftId, setDraftId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  const scope = storeId.startsWith('w:') ? storeId : `w:${storeId}`;
-  const cleanId = storeId.replace(/^w:/, '');
+  const [site, setSite] = useState<SiteDefinition | null>(null);
+  const [siteId, setSiteId] = useState<string | null>(null);
+  const [version, setVersion] = useState<number>(1);
+  const [siteState, setSiteState] = useState<'idle' | 'draft' | 'live' | 'error'>('idle');
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+  const [liveUrl, setLiveUrl] = useState<string | null>(null);
+  const [preview, setPreview] = useState<{ html: string; css: string; hash: string } | null>(null);
 
   const refresh = useCallback(async () => {
+    if (!slug) {
+      setSite(null);
+      setSiteId(null);
+      setSiteState('idle');
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
     try {
-      let d = await db.getFirstAsync<LayoutRow>(
-        "SELECT id, data FROM matter WHERE (scope = ? OR scope = ?) AND type IN ('site_draft', 'storefront_draft', 6) AND deleted_at IS NULL ORDER BY rowid DESC LIMIT 1",
-        scope, `s:${cleanId}`
-      );
-      if (!d) {
-        d = await db.getFirstAsync<LayoutRow>(
-          "SELECT id, data FROM matter WHERE type IN ('site_draft', 'storefront_draft', 6) AND deleted_at IS NULL ORDER BY rowid DESC LIMIT 1"
-        );
+      const res = await harness.site.get(slug);
+      if (res.site && res.site.data) {
+        const data = res.site.data;
+        setSite(data);
+        setSiteId(res.site.id);
+        setVersion(res.site.version);
+        setSiteState(res.site.state === 'live' ? 'live' : 'draft');
+        if (res.site.state === 'live') {
+          setLiveUrl(`/v1/sites/${encodeURIComponent(slug)}`);
+        }
+      } else {
+        // Explicit empty state (no cross-workspace fallback)
+        setSite(null);
+        setSiteId(null);
+        setSiteState('idle');
+        setLiveUrl(null);
       }
-
-      let p = await db.getFirstAsync<LayoutRow>(
-        "SELECT id, data FROM matter WHERE (scope = ? OR scope = ?) AND type IN ('site_published', 'storefront_published', 6) AND deleted_at IS NULL ORDER BY rowid DESC LIMIT 1",
-        scope, `s:${cleanId}`
-      );
-      if (!p) {
-        p = await db.getFirstAsync<LayoutRow>(
-          "SELECT id, data FROM matter WHERE type IN ('site_published', 'storefront_published', 6) AND deleted_at IS NULL ORDER BY rowid DESC LIMIT 1"
-        );
-      }
-
-      setDraftId(d?.id ?? null);
-      
-      let parsedDraft = null;
-      if (d?.data) {
-        try { parsedDraft = JSON.parse(d.data); } catch (err) { console.warn('[useSite] Failed to parse draft JSON:', err); }
-      }
-      setDraft(parseLayout(parsedDraft));
-
-      let parsedPub = null;
-      if (p?.data) {
-        try { parsedPub = JSON.parse(p.data); } catch (err) { console.warn('[useSite] Failed to parse published JSON:', err); }
-      }
-      setPublished(parseLayout(parsedPub));
-    } catch (err) {
-      console.warn('[useSite] Refresh error:', err);
+    } catch (err: any) {
+      console.warn('[useSite] Refresh error:', err?.message || err);
+      setError(err?.message || 'Failed to fetch site.');
+      setSiteState('error');
     } finally {
       setLoading(false);
     }
-  }, [storeId, cleanId, scope]);
+  }, [slug]);
 
   useEffect(() => {
     refresh();
-  }, [storeId, cleanId, scope]);
+  }, [slug, refresh]);
 
-  const saveDraft = useCallback(async (layout: SiteLayout) => {
-    const json = JSON.stringify(layout);
-    let currentId = draftId;
-    if (!currentId) {
-      const existing = await db.getFirstAsync<LayoutRow>(
-        "SELECT id FROM matter WHERE (scope = ? OR scope = ?) AND type IN ('site_draft', 'storefront_draft', 6) AND deleted_at IS NULL LIMIT 1",
-        scope, cleanId
-      );
-      if (existing?.id) currentId = existing.id;
-    }
+  const generate = useCallback(
+    async (input: { title?: string; prompt?: string; theme?: string }) => {
+      if (!slug) return;
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await harness.site.generate(slug, input);
+        setSite(res.site);
+        setSiteId(res.siteId);
+        setVersion(res.version);
+        setSiteState('draft');
+        setPreview(res.preview);
+      } catch (err: any) {
+        setError(err?.message || 'Site generation failed.');
+        setSiteState('error');
+        throw err;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [slug]
+  );
 
-    if (currentId) {
-      await db.runAsync('UPDATE matter SET data = ? WHERE id = ?', json, currentId);
-    } else {
-      const newId = `matter_${Date.now()}`;
-      await db.runAsync(
-        "INSERT INTO matter (id, type, scope, data) VALUES (?, 6, ?, ?)",
-        newId, scope, json
-      );
-      setDraftId(newId);
-    }
-    setDraft(layout);
-    pushDraftToWorker(cleanId, layout);
-  }, [storeId, cleanId, scope, draftId]);
+  const updateCards = useCallback(
+    async (operations: SitePatchOperation[]) => {
+      if (!slug || !siteId) return;
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await harness.site.update(slug, siteId, version, operations);
+        setSite(res.site);
+        setVersion(res.version);
+      } catch (err: any) {
+        setError(err?.message || 'Site update failed.');
+        throw err;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [slug, siteId, version]
+  );
 
-  const publish = useCallback(async (subdomainOverride?: string, workspaceName?: string) => {
-    const activeLayout = draft || DEFAULT_LAYOUT;
-    const json = JSON.stringify(activeLayout);
-    const existing = await db.getFirstAsync<LayoutRow>(
-      "SELECT id FROM matter WHERE (scope = ? OR scope = ?) AND type IN ('site_published', 'storefront_published', 6) AND deleted_at IS NULL LIMIT 1",
-      scope, cleanId
-    );
-    if (existing?.id) {
-      await db.runAsync('UPDATE matter SET data = ? WHERE id = ?', json, existing.id);
-    } else {
-      const id = `matter_${Date.now()}`;
-      await db.runAsync(
-        "INSERT INTO matter (id, type, scope, data) VALUES (?, 6, ?, ?)",
-        id, scope, json
-      );
-    }
-    setPublished(activeLayout);
+  const publish = useCallback(
+    async (subdomainOverride?: string) => {
+      if (!slug) return;
+      if (!siteId) {
+        // Auto-generate draft first if publishing without existing site
+        await generate({ title: slug });
+        return;
+      }
 
-    // Always prefer explicit subdomain override (from site.tsx or workspace card).
-    // cleanId may be an internal scope ID (e.g. "abc123") not the URL slug (e.g. "velvet-brew").
-    const sub = subdomainOverride || cleanId;
-    if (sub) {
-      await publishToWorker(sub, activeLayout, workspaceName);
-    }
-  }, [storeId, cleanId, scope, draft]);
+      setLoading(true);
+      setError(null);
+      try {
+        const sub = subdomainOverride || slug;
+        const res = await harness.site.publish(slug, siteId, sub);
+        setSiteState('live');
+        setLiveUrl(res.liveUrl);
+        await refresh();
+      } catch (err: any) {
+        setError(err?.message || 'Site publication failed.');
+        throw err;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [slug, siteId, generate, refresh]
+  );
 
-  return { draft, published, loading, refresh, saveDraft, publish };
+  const rollback = useCallback(
+    async (releaseId: string) => {
+      if (!slug || !siteId) return;
+      setLoading(true);
+      setError(null);
+      try {
+        await harness.site.rollback(slug, siteId, releaseId);
+        await refresh();
+      } catch (err: any) {
+        setError(err?.message || 'Site rollback failed.');
+        throw err;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [slug, siteId, refresh]
+  );
+
+  const refreshPosCatalog = useCallback(async () => {
+    if (!slug || !siteId) return { itemCount: 0 };
+    const res = await harness.site.refresh(slug, siteId);
+    await refresh();
+    return { itemCount: res.itemCount };
+  }, [slug, siteId, refresh]);
+
+  // Compatibility adapters for existing UI
+  const draft: SiteLayout | null = site ? siteDefinitionToLayout(site) : null;
+  const published: SiteLayout | null = siteState === 'live' && site ? siteDefinitionToLayout(site) : null;
+
+  const saveDraft = useCallback(
+    async (layout: SiteLayout) => {
+      const converted = layoutToSiteDefinition(layout, slug);
+      if (!siteId) {
+        await generate({ title: slug, theme: layout.template });
+      } else {
+        const ops: SitePatchOperation[] = [
+          { op: 'set_theme', value: converted.design.theme },
+          ...(converted.pages[0]?.cards || []).map(
+            (c): SitePatchOperation => ({
+              op: 'update_card',
+              value: c,
+            })
+          ),
+        ];
+        await updateCards(ops);
+      }
+    },
+    [slug, siteId, generate, updateCards]
+  );
+
+  const cards = site?.pages[0]?.cards || [];
+  const releases = site?.releases || [];
+
+  return {
+    site,
+    siteId,
+    version,
+    state: siteState,
+    loading,
+    error,
+    liveUrl,
+    preview,
+    releases,
+    cards,
+    draft,
+    published,
+    refresh,
+    generate,
+    updateCards,
+    publish,
+    rollback,
+    refreshPosCatalog,
+    saveDraft,
+  };
 }

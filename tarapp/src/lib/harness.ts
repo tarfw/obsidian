@@ -1,6 +1,7 @@
 import { getValidIdToken, invalidateGoogleToken } from './auth';
+import type { ReleaseManifest, SiteDefinition, SitePatchOperation } from './site-schema';
 
-const HARNESS_URL = (process.env.EXPO_PUBLIC_TARHARNESS_URL || 'https://tarharness.tar-54d.workers.dev').replace(/\/$/, '');
+export const HARNESS_URL = (process.env.EXPO_PUBLIC_TARHARNESS_URL || 'https://tarharness.tar-54d.workers.dev').replace(/\/$/, '');
 
 export type HarnessRole = 'owner' | 'admin' | 'member' | 'guest';
 export type WorkRole = 'general' | 'cook' | 'cashier';
@@ -82,4 +83,32 @@ export const harness = {
   createRecord: (slug: string, input: { type: string; title: string; data?: Record<string, unknown> }) => request<{ record: HarnessRecord }>(workspacePath(slug, 'actions/record.create'), { method: 'POST', body: input, key: createOperationKey('record.create') }),
   createTask: (slug: string, title: string) => request<{ record: HarnessRecord }>(workspacePath(slug, 'actions/task.create'), { method: 'POST', body: { title }, key: createOperationKey('task.create') }),
   completeTask: (slug: string, taskId: string) => request<{ taskId: string; state: 'completed' }>(workspacePath(slug, 'actions/task.complete'), { method: 'POST', body: { taskId }, key: createOperationKey(`task.complete:${taskId}`) }),
+  site: {
+    get: (slug: string) => request<{ site: { id: string; version: number; state: string; data: SiteDefinition } | null }>(workspacePath(slug, 'site')),
+    generate: (slug: string, input: { title?: string; prompt?: string; theme?: string }, operationKey?: string) =>
+      request<{ siteId: string; version: number; state: string; site: SiteDefinition; preview: { html: string; css: string; hash: string } }>(
+        workspacePath(slug, 'actions/site.generate'),
+        { method: 'POST', body: input, key: operationKey || createOperationKey('site.generate') }
+      ),
+    update: (slug: string, siteId: string, baseVersion: number, operations: SitePatchOperation[], operationKey?: string) =>
+      request<{ siteId: string; version: number; site: SiteDefinition }>(
+        workspacePath(slug, 'actions/site.update'),
+        { method: 'POST', body: { siteId, baseVersion, operations }, key: operationKey || createOperationKey('site.update') }
+      ),
+    publish: (slug: string, siteId: string, subdomain?: string, operationKey?: string) =>
+      request<{ siteId: string; releaseId: string; liveUrl: string; generation: number; state: string }>(
+        workspacePath(slug, 'actions/site.publish'),
+        { method: 'POST', body: { siteId, subdomain }, key: operationKey || createOperationKey('site.publish') }
+      ),
+    rollback: (slug: string, siteId: string, releaseId: string, operationKey?: string) =>
+      request<{ siteId: string; releaseId: string; rolledBack: boolean }>(
+        workspacePath(slug, 'actions/site.rollback'),
+        { method: 'POST', body: { siteId, releaseId }, key: operationKey || createOperationKey('site.rollback') }
+      ),
+    refresh: (slug: string, siteId: string, operationKey?: string) =>
+      request<{ refreshed: boolean; itemCount: number }>(
+        workspacePath(slug, 'actions/site.refresh'),
+        { method: 'POST', body: { siteId }, key: operationKey || createOperationKey('site.refresh') }
+      ),
+  },
 };

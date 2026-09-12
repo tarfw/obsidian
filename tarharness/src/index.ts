@@ -41,7 +41,14 @@ function tursoEnv(env: RuntimeEnv) {
   return { TURSO_ORG: env.TURSO_ORG, TURSO_PLATFORM_TOKEN: env.TURSO_PLATFORM_TOKEN, TURSO_GROUP: env.TURSO_GROUP || 'default' };
 }
 function record(row: Record<string, unknown>): RecordItem {
-  return { id: String(row.id), type: String(row.type), title: String(row.title), state: String(row.state), data: object(JSON.parse(String(row.data))), owner: typeof row.owner_id === 'string' ? row.owner_id : null, assignee: typeof row.assignee_id === 'string' ? row.assignee_id : null, version: Number(row.version), createdAt: Number(row.created_at), updatedAt: Number(row.updated_at) };
+  return {
+    id: String(row.id), type: String(row.type), title: String(row.title), state: String(row.state), data: object(JSON.parse(String(row.data))),
+    owner: typeof row.owner === 'string' ? row.owner : null,
+    assignee: typeof row.assignee === 'string' ? row.assignee : null,
+    version: Number(row.version),
+    createdAt: Number(row.created),
+    updatedAt: Number(row.updated)
+  };
 }
 
 async function identity(request: Request, env: RuntimeEnv) {
@@ -100,7 +107,7 @@ async function workspaceCanvas(client: Client, member: AccessContext['member']) 
     listDefinitions(client),
     Effect.runPromise(query<Record<string, unknown>>(client, { sql: `SELECT COUNT(*) AS records,
       SUM(CASE WHEN type='task' AND state='open' THEN 1 ELSE 0 END) AS open_tasks
-      FROM records WHERE archived_at IS NULL` })),
+      FROM records WHERE archived IS NULL` })),
   ]);
   const count = counts[0] || {};
   const pos = definitions.some((item) => item.id === 'directory.pos.bot' && item.state === 'published') ? await posSummary(client) : undefined;
@@ -146,6 +153,34 @@ async function handle(request: Request, env: RuntimeEnv, ctx: ExecutionContext):
     return response({ workspaces: workspaces.map(({ workspace, role }) => ({ id: workspace.id, name: workspace.name, slug: workspace.slug, scope: workspace.slug, role, mode: workspace.mode, state: workspace.state })) });
   }
   if (request.method === 'POST' && path === '/v1/workspaces') return createWorkspace(request, env);
+  const publicSiteMatch = /^\/v1\/sites\/([a-z0-9-]+)$/.exec(path);
+  if (request.method === 'GET' && publicSiteMatch) {
+    const siteSlug = publicSiteMatch[1];
+    const wsRow = await env.CONTROL.prepare("SELECT * FROM workspaces WHERE slug=? AND state='active' LIMIT 1").bind(siteSlug).first<Record<string, unknown>>();
+    if (!wsRow) throw notFound('Site not found.');
+    const ws = { id: String(wsRow.id), name: String(wsRow.name), slug: String(wsRow.slug), mode: wsRow.mode === 'personal' ? 'personal' as const : 'work' as const, databaseName: String(wsRow.database_name), databaseHost: typeof wsRow.database_host === 'string' ? wsRow.database_host : null, state: 'active' as const };
+    const client = await Effect.runPromise(openWorkspaceDatabase(tursoEnv(env), ws.databaseName, ws.databaseHost!));
+    try {
+      const siteRows = await client.execute("SELECT data FROM records WHERE type='site' AND state='live' AND archived IS NULL ORDER BY updated DESC LIMIT 1");
+      if (!siteRows.rows.length) throw notFound('No published site found.');
+      const siteData = object(JSON.parse(String(siteRows.rows[0].data)));
+      const releases = Array.isArray(siteData.releases) ? siteData.releases : [];
+      const currentReleaseId = String(siteData.currentRelease || '');
+      const release = releases.find((r: any) => r.id === currentReleaseId) || releases[releases.length - 1];
+      if (!release || !release.html) throw notFound('Site content unavailable.');
+      return new Response(String(release.html), {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/html; charset=utf-8',
+          'Cache-Control': 'public, max-age=60, s-maxage=300',
+          'X-Frame-Options': 'SAMEORIGIN',
+          'X-Content-Type-Options': 'nosniff',
+        },
+      });
+    } finally {
+      client.close();
+    }
+  }
   const match = /^\/v1\/workspaces\/([a-z0-9-]+)(?:\/(.*))?$/.exec(path);
   if (!match) throw notFound('Route not found.');
   const slug = match[1]; const nested = match[2] || '';
@@ -184,14 +219,20 @@ async function handle(request: Request, env: RuntimeEnv, ctx: ExecutionContext):
       if (current.member.role === 'guest') throw forbidden();
       return response(await readPos(client, current, nested.slice(4), url.searchParams.get('q') || '', offset));
     }
+    if (request.method === 'GET' && nested === 'site') {
+      const siteRows = await Effect.runPromise(query<Record<string, unknown>>(client, { sql: "SELECT * FROM records WHERE type='site' AND archived IS NULL ORDER BY updated DESC LIMIT 1" }));
+      if (!siteRows.length) return response({ site: null });
+      const row = siteRows[0];
+      return response({ site: { id: String(row.id), version: Number(row.version), state: String(row.state), data: object(typeof row.data === 'string' ? JSON.parse(row.data) : row.data) } });
+    }
     if (request.method === 'GET' && nested === 'records') {
       const type = url.searchParams.get('type');
       if (current.member.role === 'guest' && type?.startsWith('pos.')) throw forbidden();
-      const rows = await Effect.runPromise(query<Record<string, unknown>>(client, type ? { sql: 'SELECT * FROM records WHERE type=? AND archived_at IS NULL ORDER BY updated_at DESC LIMIT 100', args: [type] } : { sql: 'SELECT * FROM records WHERE archived_at IS NULL ORDER BY updated_at DESC LIMIT 100' }));
+      const rows = await Effect.runPromise(query<Record<string, unknown>>(client, type ? { sql: 'SELECT * FROM records WHERE type=? AND archived IS NULL ORDER BY updated DESC LIMIT 100', args: [type] } : { sql: 'SELECT * FROM records WHERE archived IS NULL ORDER BY updated DESC LIMIT 100' }));
       return response({ records: rows.map(record).filter((item) => canReadRecord(current.member, item)) });
     }
     if (request.method === 'GET' && nested === 'inbox') {
-      const rows = await Effect.runPromise(query<Record<string, unknown>>(client, { sql: 'SELECT * FROM records WHERE type=\'task\' AND state=\'open\' AND (assignee_id=? OR assignee_id IS NULL) AND archived_at IS NULL ORDER BY updated_at DESC LIMIT 100', args: [current.identity.id] }));
+      const rows = await Effect.runPromise(query<Record<string, unknown>>(client, { sql: 'SELECT * FROM records WHERE type=\'task\' AND state=\'open\' AND (assignee=? OR assignee IS NULL) AND archived IS NULL ORDER BY updated DESC LIMIT 100', args: [current.identity.id] }));
       const pos = current.member.role === 'guest' ? { orders: [] } : await readPosInbox(client).catch(() => ({ orders: [] }));
       return response({ tasks: rows.map(record).filter((item) => canReadRecord(current.member, item)), orders: isCook(current.member) ? pos.orders.map(kitchenOrder) : pos.orders, permissions: { prepare: canExecute(current.member, 'pos.order.item.update'), collect: canExecute(current.member, 'pos.checkout'), completeTask: canExecute(current.member, 'task.complete'), openOrder: canExecute(current.member, 'pos.open') } });
     }

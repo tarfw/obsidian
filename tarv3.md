@@ -18,7 +18,7 @@ Space                Record = stored fact         D1 = identity + access
 Use business labels such as Orders and Customers in the app. Record is the internal term; artifact means a generated document, image or other output. Execution details appear when needed for investigation.
 
 ~~~text
-1 Core + business types   4 Flows + customization   7 Templates + access
+1 Core + business types   4 Flows + customization   7 Marketplace + access
 2 Records + storage      5 Home + Inbox            8 Local first + sync
 3 Actions + AI           6 Channels                9 Delivery + proof
 ~~~
@@ -45,7 +45,7 @@ App / channel / schedule
 |---|---|---|
 | Retail / food | product, order, payment | sell -> prepare -> deliver |
 | SaaS / sales | account, lead, deal, subscription | qualify -> sell -> onboard -> renew |
-| Services | client, project, task | request -> quote -> deliver -> invoice |
+| Services | contact/account, project, task | request -> quote -> deliver -> invoice |
 | Appointments / rentals | resource, booking, contact | reserve -> attend / return |
 | Education / membership | course, enrolment, subscription | join -> participate -> renew |
 | Field work / production | job, asset, material | assign -> execute -> inspect |
@@ -59,6 +59,43 @@ App / channel / schedule
 | New business invariant, provider or computation | reviewed pack/adapter code + registered Action/query + tests |
 
 Start blank, describe the business, or combine compatible templates. Reuse contact/product/task types; check dependencies and schema versions before installation. Custom definitions are workspace-scoped. Inventory, booking capacity, payroll and accounting require their domain rules; generic fields alone do not implement them.
+
+### 1.1. CONTACTS + BUSINESS RECORDS + FLOWS
+
+~~~text
+Business feature = shared Records + relationships + Flows + useful view
+
+Contacts = shared relationship hub for people and organizations
+Record   = what is being handled
+Flow     = how it progresses
+View     = how users see it
+~~~
+
+| Combination | Feature |
+|---|---|
+| Contact + application + onboarding Flow | member signup |
+| Contact/organization + deal + sales Flow | CRM |
+| Contact + ticket + resolution Flow | help desk |
+| Contact + resource + booking Flow | appointments |
+| Supplier organization + purchase + purchasing Flow | procurement |
+| Asset + job + maintenance Flow | equipment maintenance |
+| Product + movement + replenishment Flow | inventory |
+
+Contacts is the UI hub: people use `contact` Records; organizations reuse `account` Records. Client, customer, supplier, applicant and technician describe relationships, not separate identity types. The same person can represent several organizations and participate in several processes.
+
+~~~text
+Kayalvizhi = one contact in this Space
+  +-> deal: annual subscription -> negotiating
+  +-> ticket: setup question    -> awaiting reply
+  +-> application: partner      -> under review
+~~~
+
+- Process state belongs to the deal, ticket, application or other business Record. Never overwrite one contact stage to represent unrelated work.
+- Business Records persist after a Flow finishes; Runs track execution. One Record may participate in multiple Runs without duplicating its identity.
+- Use direct references for simple relationships; use existing `link` Records for additional participants, roles or multiple organizations. Do not store the same relationship twice.
+- A shared contact means reuse within its authorized Space, not automatic cross-workspace identity merging. Resolve matches through verified identity rules; expose only permitted linked work in contact history.
+- Contact participation is optional: maintenance, stock and scheduled internal work need no invented customer.
+- Business membership (club member, subscriber, customer) is distinct from TAR workspace access. Onboarding grants access only through an explicit authorized invitation/grant; a contact or relationship alone grants nothing.
 
 ============================================================
 ## 2. RECORDS + STORAGE
@@ -114,12 +151,13 @@ Action IDs such as `order.place` are namespaced identifiers, not column names. D
 | `delivery` | external intent, destination, retry/reconciliation state |
 | `event` | immutable audit facts |
 | `canvas`, `block` | Home layout and its units |
-| `channel`, `message` | connection and conversation items |
+| `channel`, `conversation`, `message` | connection, stable thread, individual message |
 | `link` | additional relation: `{ from, to, relation }` |
-| `bot` | existing internal installation metadata; UI calls it a business template |
+| `bot` | versioned marketplace bundle + installation metadata; agent execution is separate |
 | `archive` | verified batch manifest; only when archival is introduced |
+| `site` | editable root, release references and published site manifest |
 
-Use direct references for ordinary relations; do not also create a Link for every reference. Generic CRUD cannot alter protected history or bypass domain rules. Occurrence, operation and delivery keys must be non-null and uniquely constrained.
+Generic CRUD cannot alter protected history or bypass domain rules. Occurrence, operation and delivery keys must be non-null and uniquely constrained.
 
 Reviewed indexes cover type/state, task assignment, pending delivery due time and domain uniqueness. Packs own indexes/migrations; creating a Block never runs DDL.
 
@@ -176,7 +214,7 @@ kind    = app | agent | human
 effect  = read | internal | external
 offline = draft | queue | online       -- legacy default = online
 
-execute(action, input, key)
+execute(action, input, key, version?)
 ~~~
 
 | Executor | Role |
@@ -197,6 +235,8 @@ agent.extract / draft / summarize / resolve
 
 These are catalog families; business packs add meaningful Actions such as `order.place`. Existing IDs remain supported through versioned adapters.
 
+Queued commands supply the selected Action version. For legacy calls without one, Gateway resolves and persists the version on first acceptance; retries use the saved binding.
+
 ### 3.1. COMMIT + REPLAY
 
 ~~~text
@@ -209,8 +249,8 @@ authenticate -> authorize -> validate -> check versions -> commit
 
 | Boundary | Rule |
 |---|---|
-| Replay | workspace + key + actor/Action identity + canonical input hash; same request returns saved result after access check |
-| Conflict | same key with different input fails; unique key and checked writes prevent duplicate business effects |
+| Replay | workspace + key binds actor, Action ID/version and canonical input hash; same request returns saved result after access check |
+| Conflict | same key with changed input or explicit Action version fails; unique key and checked writes prevent duplicate business effects |
 | Approval | bind Action version, input hash, affected versions and expiry; recheck authority at execution |
 | Reads | project permitted rows/fields; Block visibility and device filtering are not access control |
 | Retry | bounded transient retries; stale input requires a new decision |
@@ -236,7 +276,7 @@ human judgement    -> Inbox task
 
 | Use | AI helps | Trusted boundary |
 |---|---|---|
-| Setup / customization | draft template, schema, Flow and Home | reuse registered capabilities; preview + validate |
+| Setup / customization | suggest Bots; draft schema, relationships, Flow and Home | reuse registered capabilities; preview + validate |
 | Import / entry | map columns; extract text, image or voice into forms | validate units/types; review ambiguous identity matches |
 | Search / analysis | retrieve and explain with sources/freshness | queries calculate totals; disclose incomplete data |
 | Inbox / content | summarize, draft reply/proposal/media, suggest next Action | Action policy governs sends and approvals; artifacts use R2 |
@@ -394,12 +434,16 @@ Standalone tasks need no Run. Approval tasks retain §3.1 bindings. Failures cre
 
 ~~~text
 Channel = { family, provider, account, direction, capabilities[], credential }
+Conversation = { channel, reference, contacts[] }
 Message = { channel, provider, conversation, contact,
             direction, body?, content?, attachments[] }
 
 verify webhook -> dedupe(provider + account + event)
-  -> save Message + trigger intent -> acknowledge -> execute
+  -> resolve/create Conversation + save Message + trigger intent
+  -> acknowledge -> execute
 ~~~
+
+Conversation is a lightweight Record, unique by channel + adapter's stable thread reference. Messages store its internal ID; task sources point to that same Record. Validate message/channel consistency. The thread stores no duplicate messages or assignee; handlers derive from tasks. Related threads may link to the same contact or ticket without being merged automatically.
 
 - Adapters advertise verified capabilities/limits; listed providers are intended coverage, not guaranteed parity.
 - One shared team destination per workspace initially; verified identity still needs membership.
@@ -409,21 +453,43 @@ verify webhook -> dedupe(provider + account + event)
 - Human attention appears through Inbox tasks (§5.2); short bodies stay inline and large content follows §2.2.
 
 ============================================================
-## 7. TEMPLATES + ACCESS
+## 7. MARKETPLACE + TEMPLATES + ACCESS
 ============================================================
 
 ~~~text
 Google sign-in -> Personal Space (free)
               -> Work Space -> members + shared Records
 
-template = schemas + Flows + Blocks + role defaults
+Bot      = reusable business capability + starter configuration
+template = compatible Bots + business-specific defaults
 install  = resolve dependencies + pin revisions + configure once
 edit     = customize Flows/Home
 upgrade  = preview; preserve customizations unless adopted
-remove   = disable triggers + archive installation; preserve work/history
+remove   = disable owned triggers + archive installation; preserve work/history
 ~~~
 
-Choose one business template, connect channels, assign team, and begin. AI is an optional step within Flows; users need no separate Kitchen/Stock/Shift Bot setup. Templates reuse registered packs and existing installation contracts.
+| Layer | Supplies |
+|---|---|
+| Default Space | small Home, empty Inbox, team/access, basic Contacts/tasks/files/search, contextual assistant |
+| Marketplace Bot | required schemas, registered Actions/queries, starter Flows, Blocks and role defaults |
+| Business template | selects/configures compatible Bots together; Pizza Store or SaaS CRM is one setup |
+| Agent step | optional AI executor within a Flow; uses pinned skills and permitted Actions |
+
+~~~text
+Marketplace -> Add Sales Bot -> preview -> Add to Space
+  -> reuse Contacts
+  -> enable Deals + sales Actions
+  -> add starter sales Flow + Pipeline Block
+  -> human work appears in the existing Inbox
+~~~
+
+Users can add one Bot, choose a template, describe their business to the assistant, or start blank. Adding Support later reuses the same Contacts and adds ticket handling; it does not create another customer database. A template can install Sales, Inventory and Kitchen together without separate setup screens.
+
+- Bot is the marketplace package name, not a continuously running agent. Deterministic steps use code; installing a Bot does not make every operation an AI call.
+- Default tools are available without filling Home with unused Blocks, sample business data or active automations. Installation previews changes; users select triggers/automations to activate and connect channels when needed.
+- Trusted packs provide executable capabilities. Bots/templates configure them through existing installation contracts; missing dependencies or incompatible versions are reported before activation.
+- Repeated installation reuses stable definitions. Upgrades preserve customizations; removal cannot delete shared Contacts, break another installed Bot's dependencies, or erase active Runs and history.
+- AI drafts reusable configuration once, including relationships and views. Users review the setup; normal schema/Flow validation and Gateway policy govern activation and execution.
 
 | Access | Rule |
 |---|---|
@@ -435,6 +501,11 @@ Choose one business template, connect channels, assign team, and begin. AI is an
 | Fields | Gateway projects allowed fields for app, query and agent |
 | Delegation | bounded by delegator and workspace policy |
 | Revocation | subsequent access denied; in-flight effects reconciled; offline cache rules in §8 |
+
+### 7.1. SITE BOT
+
+> **Site Bot.** A workspace installs Site Bot to create and operate a public site through the TAR assistant. Owners describe changes by prompt, receive previews and publish through existing Actions. AI proposes typed compositions over reviewed Cards. Effect structures backend execution; Svelte server rendering produces HTML, while a replaceable json-render/Svelte adapter streams enabled live interfaces. Hybrid delivery keeps the base static and loads interactive regions only as needed. Scoped projections and checked Actions keep facts current. Publication uses immutable R2 artifacts, a durable intent and conditional D1 routing. Forms, conversations, external-agent adapters and handoffs reuse TAR Records, Flows, Gateway and Inbox. No visual builder, second business database or second Run scheduler is introduced.
+
 
 ============================================================
 ## 8. LOCAL FIRST + SYNC
@@ -511,7 +582,8 @@ One transport per dataset: never write scoped deltas into the same tables as a n
 ### 8.4. COMMANDS + CONFLICTS
 
 ~~~text
-command = { key, action, input, base, state, created, expires, after? }
+command = { key, action, version, input, base, state, created, expires, after? }
+version = selected Action revision
 base = expected Record versions
 after = prerequisite command key
 
@@ -529,7 +601,8 @@ Notes and eligible task updates may queue. Stock reservation, shared claims, boo
 
 | Rule | Guarantee |
 |---|---|
-| Identity | persist random operation key + exact payload before first attempt; unknown outcome retries the same key |
+| Identity | persist random operation key + Action version + exact payload before first attempt; unknown outcome retries the same key |
+| Upgrade | execute the pinned supported Action revision under current policy; unavailable/revoked revision needs review, never silent substitution |
 | Changed intent | new key after editing an attempted command; never coalesce already attempted work |
 | Ordering | serialize dependent commands; independent work may proceed; failed prerequisite pauses dependents |
 | Confirmation | atomically apply permitted result and acknowledge/remove preview; never let older sync overwrite newer confirmed versions |
@@ -540,6 +613,8 @@ Notes and eligible task updates may queue. Stock reservation, shared claims, boo
 
 Already downloaded data cannot be recalled from a disconnected device. On revocation/reconnect or logout, purge unauthorized cache, files and search derivatives; explicitly handle unsent private drafts. Reauthorization applies to every queued effect. Money, stock and assignment never use blind last-write-wins.
 
+A completed command still returns its authorized saved result if its implementation has since retired; it is not executed again. Adopting a replacement revision requires a reviewed new intent and key.
+
 ============================================================
 ## 9. DELIVERY + COST + PROOF
 ============================================================
@@ -549,7 +624,7 @@ Already downloaded data cannot be recalled from a disconnected device. On revoca
 | Build as the baseline | Defer until it earns its cost |
 |---|---|
 | Existing harness + shared Action contracts | new infrastructure/service boundaries |
-| One task Inbox + small role-based Home | multiple specialized agent installations |
+| One task Inbox + small role-based Home | dedicated runtime agent per installed Bot |
 | Local repository + scoped snapshots + durable commands | native partial projections and device AI |
 | Deterministic logic + one bounded agent | multiple agents for independent research/content |
 | DB facts + R2 attachments | compressed history archival |
@@ -586,6 +661,8 @@ Reuse scoped valid Turso tokens instead of minting each request. Measure complet
 | Scenario | Must hold |
 |---|---|
 | Duplicate webhook, double tap, reconnect retry | one committed effect and saved result |
+| Bot upgrade with offline commands | pinned version executes or needs review; completed commands replay without re-execution |
+| Repeated thread intake | one conversation per channel/reference; messages and response tasks use the same source |
 | Concurrent stock, booking or claim | invariants hold; conflict is visible |
 | Crash, missed signal, cancelled Run | saved progress recovers; only intended future work proceeds |
 | Provider timeout / receipt failure | reconcile; no duplicate payment or business rollback |
@@ -596,6 +673,9 @@ Reuse scoped valid Turso tokens instead of minting each request. Measure complet
 | Account switch / field revocation | no cache leakage; unauthorized fields/files are removed |
 | Generated schema / Flow / UI | valid capabilities and bounded execution |
 | Object/archival failure | no dangling committed reference or premature source deletion |
+| Publication interruption / retry | complete old or complete new release live; retry never overwrites newer release |
+| Public-data freshness & isolation | projections expose approved fields only; no customer cache cross-contamination; transactions hit authority |
+| Streamed live-UI failure | safe UTF-8 decode; rendering button never triggers action; graceful fallback to static base |
 
 Track completed jobs, human corrections/interruptions, cost/job, cold/warm render, p95 query/Action latency, sync delay/bytes, conflicts and disk/battery use. Test on representative devices and data. Optimize against these measures rather than promising zero complexity or universal savings.
 
@@ -612,7 +692,7 @@ Iniya = cashier | Velan = kitchen
 sell = dine-in / takeaway / delivery
 settings = Asia/Kolkata + INR + business-day cutoff
 
-Pizza Store template
+Pizza Store template = Sales + Inventory + Kitchen Bots
   -> order.take + kitchen.prepare + stock.receive/count + shift.close
   -> products + opening movements + one Canvas + seven available Blocks
   -> connect customer, team and social channels with supported adapters
@@ -746,14 +826,15 @@ One open register is enforced for this store model. Agent-written promotions obe
 Orbit = one Work Space
 Thenmozhi = owner | Marudhan = sales
 Kayalvizhi = success | Vetrivel = support
-SaaS CRM template -> assign team -> connect website/email + team chat
+SaaS CRM template = Sales + Onboarding + Support Bots
+  -> assign team -> connect website/email + team chat
 sell = selfserve + demo + annual contract
 ~~~
 
 | Type | Key facts |
 |---|---|
-| `account` | name, domain, stage, plan, renewal; owner |
-| `contact` | name, email, account, role, consent |
+| `account` | name, domain; owner |
+| `contact` | name, email, consent; organization/participation through references or Links |
 | `lead` | contact, source, score, stage, next; owner |
 | `deal` | account, contacts, value, currency, stage, close; owner |
 | `ticket` | account, contact, priority, category; owner/state |
@@ -762,13 +843,15 @@ sell = selfserve + demo + annual contract
 
 ~~~text
 lead.data.contact      -> contact
-contact.data.account   -> account
+contact --represents--> account   (link; supports multiple organizations)
 deal.data.account      -> account
 deal.data.contacts[]   -> contact
 ticket.data.account    -> account
 subscription.data.account -> account
 task.data.record       -> lead / deal / ticket / conversation
 ~~~
+
+Sales stages belong to leads/deals; support state belongs to tickets; plan/renewal belong to subscriptions. Contact/account screens show permitted related work without copying those process fields onto the person or organization.
 
 ## C2. HOME + INBOX
 
@@ -855,6 +938,7 @@ No background loop without a limit. Draft, review, send and reply handling use t
 
 | Topic | Sources |
 |---|---|
+| Contacts and related business work | [HubSpot object model](https://developers.hubspot.com/docs/api-reference/latest/crm/understanding-the-crm), [ERPNext contacts](https://docs.frappe.io/erpnext/contact) |
 | Agents and context | [Effective agents](https://www.anthropic.com/engineering/building-effective-agents), [context engineering](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents), [tool discovery](https://www.anthropic.com/engineering/advanced-tool-use) |
 | Durable execution | [Workflow rules](https://developers.cloudflare.com/workflows/build/rules-of-workflows/), [events](https://developers.cloudflare.com/workflows/build/events-and-parameters/) |
 | Storage | [SQLite partial indexes](https://sqlite.org/partialindex.html), [Turso pricing](https://turso.tech/pricing), [usage](https://docs.turso.tech/help/usage-and-billing), [R2 pricing](https://developers.cloudflare.com/r2/pricing/), [S3 compatibility](https://developers.cloudflare.com/r2/api/s3/api/) |

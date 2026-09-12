@@ -286,6 +286,18 @@ run.read_logs
 
 Access, secret and definition-management Actions are owner/admin-only and never Agent-controlled.
 
+### 3.13 Sites and visitor journeys
+
+```text
+site.generate          site.edit              site.update
+site.compile           site.preview           site.get
+site.publish           site.rollback          site.refresh
+site.ask
+```
+
+Site Bot actions manage public web interfaces and customer journeys. Prompt interpretation creates typed operations; applying valid operations (`site.update`) and refreshing live facts (`site.refresh`) incur no second AI charge. Public actions only compose installed Cards and execute allowlisted Gateway Actions.
+
+
 ## 4. Action contract
 
 Every versioned Action declares this minimum contract:

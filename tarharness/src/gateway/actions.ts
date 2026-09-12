@@ -8,6 +8,7 @@ import { directoryDefinitionIds, findDirectoryBot } from '../registry/directory.
 import { executePos, POS_INDEXES } from '../pos/store.ts';
 import { draftProduct, saveProductContent } from '../pos/content.ts';
 import { canExecute, canReadRecord } from '../access.ts';
+import { executeSiteGenerate, executeSiteUpdate, executeSiteCompile, executeSitePublish, executeSiteRollback, executeSiteRefresh } from '../site/store.ts';
 
 type GatewayError = ReturnType<typeof badRequest> | ReturnType<typeof conflict> | ReturnType<typeof forbidden> | ReturnType<typeof notFound> | ReturnType<typeof unavailable>;
 export interface GatewayRequest { readonly idempotencyKey: string; readonly actionId: ActionId; readonly input: Record<string, unknown>; }
@@ -19,8 +20,11 @@ const text = (value: unknown, max = 200): string => typeof value === 'string' ? 
 const json = (value: unknown) => JSON.stringify(value);
 const rowToRecord = (row: Record<string, unknown>): RecordItem => ({
   id: String(row.id), type: String(row.type), title: String(row.title), state: String(row.state), data: object(typeof row.data === 'string' ? JSON.parse(row.data) : row.data),
-  owner: typeof row.owner_id === 'string' ? row.owner_id : null, assignee: typeof row.assignee_id === 'string' ? row.assignee_id : null,
-  version: Number(row.version), createdAt: Number(row.created_at), updatedAt: Number(row.updated_at),
+  owner: typeof row.owner === 'string' ? row.owner : null,
+  assignee: typeof row.assignee === 'string' ? row.assignee : null,
+  version: Number(row.version),
+  createdAt: Number(row.created),
+  updatedAt: Number(row.updated),
 });
 
 async function fingerprint(value: unknown): Promise<string> {
@@ -66,6 +70,12 @@ export function executeGateway(client: Client, context: AccessContext, request: 
         return result;
       }
       if (request.actionId.startsWith('pos.')) return executePos(client, context, request.actionId, request.input, request.idempotencyKey, hash);
+      if (request.actionId === 'site.generate') return executeSiteGenerate(client, context, request.input, request.idempotencyKey, hash);
+      if (request.actionId === 'site.update') return executeSiteUpdate(client, context, request.input, request.idempotencyKey, hash);
+      if (request.actionId === 'site.compile') return executeSiteCompile(client, context, request.input, request.idempotencyKey, hash);
+      if (request.actionId === 'site.publish') return executeSitePublish(client, context, request.input, request.idempotencyKey, hash);
+      if (request.actionId === 'site.rollback') return executeSiteRollback(client, context, request.input, request.idempotencyKey, hash);
+      if (request.actionId === 'site.refresh') return executeSiteRefresh(client, context, request.input, request.idempotencyKey, hash);
 
       if (request.actionId === 'flow.publish') {
         const botId = text(request.input.botId, 80); const flowId = text(request.input.flowId, 160); const name = text(request.input.name, 100); const description = text(request.input.description, 400);
@@ -137,7 +147,7 @@ export function executeGateway(client: Client, context: AccessContext, request: 
         const assignee = request.actionId === 'task.create' ? text(request.input.assigneeId, 160) || context.identity.id : text(request.input.assigneeId, 160) || null;
         const record: RecordItem = { id: `rec_${crypto.randomUUID()}`, type, title, state: request.actionId === 'task.create' ? 'open' : 'active', data: object(request.input.data), owner: context.identity.id, assignee, version: 1, createdAt: at, updatedAt: at };
         await client.batch([
-          { sql: `INSERT INTO records (id,type,title,state,data,owner_id,assignee_id,version,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)`, args: [record.id, record.type, record.title, record.state, json(record.data), record.owner, record.assignee, 1, at, at] },
+          { sql: `INSERT INTO records (id,type,title,state,data,owner,assignee,due,version,created,updated) VALUES (?,?,?,?,?,?,?,?,1,?,?)`, args: [record.id, record.type, record.title, record.state, json(record.data), record.owner, record.assignee, null, at, at] },
           { sql: `INSERT INTO events (id,kind,record_id,action_id,state,actor_id,input_hash,idempotency_key,data,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`, args: [`evt_${crypto.randomUUID()}`, 'action', record.id, request.actionId, 'accepted', context.identity.id, hash, request.idempotencyKey, json({ result: { record } }), at, at] },
         ], 'write');
         return { record };
@@ -146,7 +156,7 @@ export function executeGateway(client: Client, context: AccessContext, request: 
       if (request.actionId === 'record.update') {
         const recordId = text(request.input.recordId, 160); const baseVersion = Number(request.input.baseVersion);
         if (!recordId || !Number.isInteger(baseVersion)) throw badRequest('Record ID and base version are required.');
-        const records = await query<Record<string, unknown>>(client, { sql: 'SELECT * FROM records WHERE id=? AND archived_at IS NULL', args: [recordId] }).pipe(Effect.runPromise);
+        const records = await query<Record<string, unknown>>(client, { sql: 'SELECT * FROM records WHERE id=? AND archived IS NULL', args: [recordId] }).pipe(Effect.runPromise);
         const current = records[0]; if (!current) throw notFound('Record not found.');
         if (String(current.type).startsWith('pos.')) throw forbidden();
         if (Number(current.version) !== baseVersion) throw conflict('Record changed. Refresh and try again.');
@@ -154,7 +164,7 @@ export function executeGateway(client: Client, context: AccessContext, request: 
         const nextData = { ...object(JSON.parse(String(current.data))), ...object(request.input.data) };
         const state = text(request.input.state, 80) || String(current.state);
         await client.batch([
-          { sql: 'UPDATE records SET title=?,state=?,data=?,version=version+1,updated_at=? WHERE id=? AND version=?', args: [title, state, json(nextData), at, recordId, baseVersion] },
+          { sql: 'UPDATE records SET title=?,state=?,data=?,version=version+1,updated=? WHERE id=? AND version=?', args: [title, state, json(nextData), at, recordId, baseVersion] },
           { sql: `INSERT INTO events (id,kind,record_id,action_id,state,actor_id,input_hash,idempotency_key,data,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`, args: [`evt_${crypto.randomUUID()}`, 'action', recordId, request.actionId, 'accepted', context.identity.id, hash, request.idempotencyKey, json({ result: { recordId, version: baseVersion + 1 } }), at, at] },
         ], 'write');
         return { recordId, version: baseVersion + 1 };
@@ -162,14 +172,14 @@ export function executeGateway(client: Client, context: AccessContext, request: 
 
       if (request.actionId === 'task.complete') {
         const taskId = text(request.input.taskId, 160); if (!taskId) throw badRequest('Task ID is required.');
-        const records = await query<Record<string, unknown>>(client, { sql: 'SELECT * FROM records WHERE id=? AND type=\'task\' AND archived_at IS NULL', args: [taskId] }).pipe(Effect.runPromise);
+        const records = await query<Record<string, unknown>>(client, { sql: 'SELECT * FROM records WHERE id=? AND type=\'task\' AND archived IS NULL', args: [taskId] }).pipe(Effect.runPromise);
         const task = records[0]; if (!task) throw notFound('Task not found.');
         if (!canReadRecord(context.member, rowToRecord(task))) throw forbidden();
-        if (task.assignee_id && task.assignee_id !== context.identity.id && context.member.role !== 'owner' && context.member.role !== 'admin') throw forbidden();
+        if (task.assignee && task.assignee !== context.identity.id && context.member.role !== 'owner' && context.member.role !== 'admin') throw forbidden();
         if (task.state === 'completed') throw conflict('Task is already complete.');
         const transaction = await client.transaction('write');
         try {
-          const update = await transaction.execute({ sql: 'UPDATE records SET state=\'completed\',version=version+1,updated_at=? WHERE id=? AND version=?', args: [at, taskId, Number(task.version)] });
+          const update = await transaction.execute({ sql: 'UPDATE records SET state=\'completed\',version=version+1,updated=? WHERE id=? AND version=?', args: [at, taskId, Number(task.version)] });
           if (update.rowsAffected !== 1) throw conflict('Task changed. Refresh and try again.');
           await transaction.execute({ sql: `INSERT INTO events (id,kind,record_id,action_id,state,actor_id,input_hash,idempotency_key,data,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`, args: [`evt_${crypto.randomUUID()}`, 'action', taskId, request.actionId, 'accepted', context.identity.id, hash, request.idempotencyKey, json({ result: { taskId, state: 'completed' } }), at, at] });
           await transaction.commit();

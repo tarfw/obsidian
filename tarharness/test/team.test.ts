@@ -141,7 +141,7 @@ describe('one member authority', () => {
     const client = createClient({ url: pathToFileURL(join(directory, 'workspace.db')).href });
     try {
       for (const statement of WORKSPACE_SCHEMA) await client.execute(statement);
-      await client.execute("INSERT INTO records(id,type,title,state,data,version,created_at,updated_at) VALUES('task1','task','Prepare','open','{}',1,0,0)");
+      await client.execute("INSERT INTO records(id,type,title,state,data,version,created,updated) VALUES('task1','task','Prepare','open','{}',1,0,0)");
       const message = { ...event, text: 'done task1' };
       const id = await enqueueCommand(db, owner, message);
       expect(await enqueueCommand(db, owner, message)).toBe(id);

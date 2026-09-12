@@ -10,6 +10,7 @@ const BOT_COLORS: Record<string, { color: string; background: string }> = {
   sales: { color: '#6846C7', background: '#EEE9FF' },
   team: { color: '#13795B', background: '#E3F6EE' },
   operations: { color: '#B45309', background: '#FFF0DA' },
+  site: { color: '#000BFA', background: '#EDEBE4' },
 };
 const defaultBotColor = { color: '#2463A7', background: '#E7F1FC' };
 
@@ -21,9 +22,10 @@ interface Props {
   onClose: () => void;
   onChanged: () => void;
   onCreateCustom: (botId: string, botTitle: string) => void;
+  onOpenSiteStudio?: () => void;
 }
 
-export default function BotDirectory({ visible, embedded = false, scope, canInstall, onClose, onChanged, onCreateCustom }: Props) {
+export default function BotDirectory({ visible, embedded = false, scope, canInstall, onClose, onChanged, onCreateCustom, onOpenSiteStudio }: Props) {
   const insets = useSafeAreaInsets();
   const [bots, setBots] = useState<HarnessDirectoryBot[]>([]);
   const [selected, setSelected] = useState<HarnessDirectoryBot | null>(null);
@@ -81,6 +83,7 @@ export default function BotDirectory({ visible, embedded = false, scope, canInst
             <Text style={styles.label}>Flows</Text>
             {templateFlows.map((flow) => { const active = flowIds.includes(flow.id); return <TouchableOpacity key={flow.id} disabled={!canInstall} style={styles.flowRow} onPress={() => toggleFlow(flow.id)}><View style={[styles.check, active && styles.checkActive]}>{active ? <Ionicons name="checkmark" size={15} color="#fff" /> : null}</View><View style={styles.rowCopy}><Text style={styles.flowTitle}>{flow.title}</Text><Text style={styles.steps}>{flow.actions.length} {flow.actions.length === 1 ? 'Action' : 'Actions'}</Text></View></TouchableOpacity>; })}
             {customFlows.map((flow) => <View key={flow.id} style={styles.flowRow}><View style={styles.customIcon}><Ionicons name="git-branch-outline" size={15} color="#172033" /></View><View style={styles.rowCopy}><Text style={styles.flowTitle}>{flow.title}</Text><Text style={styles.steps}>Custom Flow</Text></View></View>)}
+            {selected?.id === 'site' && onOpenSiteStudio ? <TouchableOpacity style={[styles.primary, { backgroundColor: '#000BFA', marginTop: 10 }]} onPress={() => { setSelected(null); onOpenSiteStudio(); }}><Text style={styles.primaryText}>Open Site Studio</Text></TouchableOpacity> : null}
             {canInstall ? <>{selected?.installed ? <TouchableOpacity style={styles.newFlow} onPress={() => { const bot = selected; setSelected(null); onCreateCustom(bot.id, bot.title); }}><Ionicons name="add" size={18} color="#68758c" /><Text style={styles.newFlowText}>New Flow</Text></TouchableOpacity> : null}<TouchableOpacity disabled={changing} style={styles.primary} onPress={() => void saveBot()}>{changing ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>{selected?.installed ? 'Save' : 'Add Bot'}</Text>}</TouchableOpacity>{selected?.installed ? <TouchableOpacity disabled={changing} style={styles.remove} onPress={() => void removeBot()}><Text style={styles.removeText}>Remove Bot</Text></TouchableOpacity> : null}</> : null}
           </ScrollView>
         </View>

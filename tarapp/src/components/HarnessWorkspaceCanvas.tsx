@@ -4,6 +4,8 @@ import { ActivityIndicator, Alert, AppState, Pressable, RefreshControl, ScrollVi
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ActionInterfaceHost from '@/action-interfaces/ActionInterfaceHost';
 import BotDirectory from '@/components/BotDirectory';
+import RecordDetailModal from '@/components/RecordDetailModal';
+import SiteScreen from '@/components/site';
 import WorkspaceTeam from '@/components/WorkspaceTeam';
 import { createOperationKey, harness, type HarnessAction, type HarnessCanvasCard, type HarnessInterfaceContract, type HarnessRecord, type HarnessWorkspace } from '@/lib/harness';
 
@@ -20,81 +22,680 @@ const titleCase = (value: string) => value.replace(/[_-]+/g, ' ').replace(/\b\w/
 const orderLines = (order: HarnessRecord) => Array.isArray(order.data.lines) ? order.data.lines as OrderLine[] : [];
 const orderState = (order: HarnessRecord): OrderState => { const states = orderLines(order).map((line) => line.status || 'pending'); if (states.some((state) => state === 'pending')) return 'pending'; if (states.some((state) => state === 'preparing')) return 'preparing'; return 'ready'; };
 const stateIcon = (state: OrderState): keyof typeof Ionicons.glyphMap => state === 'ready' ? 'checkmark-circle' : state === 'preparing' ? 'time' : 'ellipse-outline';
-const stateColor = (state: OrderState) => state === 'ready' ? colors.green : state === 'preparing' ? colors.amber : colors.muted;
+const stateColor = (state: string) => {
+  const s = state.toLowerCase();
+  if (s === 'ready' || s === 'active' || s === 'completed' || s === 'won' || s === 'paid' || s === 'live') return colors.green;
+  if (s === 'preparing' || s === 'pending' || s === 'open' || s === 'draft') return colors.amber;
+  if (s === 'failed' || s === 'cancelled' || s === 'lost' || s === 'archived') return '#D54F4F';
+  return colors.muted;
+};
 const workspaceTint = (workspace: HarnessWorkspace) => workspace.mode === 'personal' ? colors.personal : colors.blue;
 const scheduledAt = (record: HarnessRecord) => { const value = record.data.scheduledAt ?? record.data.dueAt ?? record.data.startsAt; if (typeof value === 'number') return value; if (typeof value === 'string') { const parsed = Date.parse(value); return Number.isNaN(parsed) ? null : parsed; } return null; };
 const entryPriority = (entry: InboxEntry, now: number) => { if (entry.kind === 'order' && orderState(entry.record) !== 'pending') return 0; const time = scheduledAt(entry.record); if (time !== null && time <= now + 30 * 60 * 1000) return 1; if (entry.kind === 'task' && time === null) return 2; return 3; };
 
 export default function HarnessWorkspaceCanvas({ tab, scope, workspaceName, role, workspaces, onSelectWorkspace, onCreateWorkspace }: Props) {
   const insets = useSafeAreaInsets();
-  const [areaFilter, setAreaFilter] = useState('all'); const [now, setNow] = useState(0);
+  const [areaFilter, setAreaFilter] = useState('all');
+  const [now, setNow] = useState(0);
   const [teamOpen, setTeamOpen] = useState(false);
-  const [cards, setCards] = useState<HarnessCanvasCard[]>([]); const [records, setRecords] = useState<HarnessRecord[]>([]); const [inboxSources, setInboxSources] = useState<InboxSource[]>([]);
-  const [actions, setActions] = useState<HarnessAction[]>([]); const [interfaces, setInterfaces] = useState<HarnessInterfaceContract[]>([]); const [openAction, setOpenAction] = useState<OpenAction | null>(null);
-  const [loading, setLoading] = useState(true); const [error, setError] = useState('');
-  const reload = useCallback(async () => { setError(''); try {
-    const [registry, nextCanvas, nextRecords, inboxes] = await Promise.all([
-      harness.workspaceRegistry(scope),
-      tab === 'canvas' ? harness.canvas(scope) : Promise.resolve(null),
-      tab === 'records' ? harness.records(scope) : Promise.resolve(null),
-      tab === 'inbox' ? Promise.all(workspaces.map((workspace) => harness.inbox(workspace.slug))) : Promise.resolve([]),
-    ]);
-    if (nextCanvas) setCards(nextCanvas.cards);
-    if (nextRecords) setRecords(nextRecords.records);
-    setActions(registry.actions); setInterfaces(registry.interfaces);
-    if (tab === 'inbox') setInboxSources(workspaces.map((workspace, index) => ({ workspace, tasks: Array.isArray(inboxes[index].tasks) ? inboxes[index].tasks : [], orders: Array.isArray(inboxes[index].orders) ? inboxes[index].orders : [], permissions: inboxes[index].permissions })));
-  } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not load this workspace.'); } finally { setLoading(false); } }, [scope, tab, workspaces]);
+  const [siteOpen, setSiteOpen] = useState(false);
+  const [selectedRecord, setSelectedRecord] = useState<HarnessRecord | null>(null);
+  const [cards, setCards] = useState<HarnessCanvasCard[]>([]);
+  const [records, setRecords] = useState<HarnessRecord[]>([]);
+  const [inboxSources, setInboxSources] = useState<InboxSource[]>([]);
+  const [actions, setActions] = useState<HarnessAction[]>([]);
+  const [interfaces, setInterfaces] = useState<HarnessInterfaceContract[]>([]);
+  const [openAction, setOpenAction] = useState<OpenAction | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  const reload = useCallback(async () => {
+    setError('');
+    try {
+      const [registry, nextCanvas, nextRecords, inboxes] = await Promise.all([
+        harness.workspaceRegistry(scope),
+        tab === 'canvas' ? harness.canvas(scope) : Promise.resolve(null),
+        tab === 'records' ? harness.records(scope) : Promise.resolve(null),
+        tab === 'inbox' ? Promise.all(workspaces.map((workspace) => harness.inbox(workspace.slug))) : Promise.resolve([]),
+      ]);
+      if (nextCanvas) setCards(nextCanvas.cards);
+      if (nextRecords) setRecords(nextRecords.records);
+      setActions(registry.actions);
+      setInterfaces(registry.interfaces);
+      if (tab === 'inbox') {
+        setInboxSources(workspaces.map((workspace, index) => ({
+          workspace,
+          tasks: Array.isArray(inboxes[index].tasks) ? inboxes[index].tasks : [],
+          orders: Array.isArray(inboxes[index].orders) ? inboxes[index].orders : [],
+          permissions: inboxes[index].permissions,
+        })));
+      }
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Could not load this workspace.');
+    } finally {
+      setLoading(false);
+    }
+  }, [scope, tab, workspaces]);
+
   useEffect(() => { const timer = setTimeout(() => { void reload(); }, 0); return () => clearTimeout(timer); }, [reload]);
   useEffect(() => { const subscription = AppState.addEventListener('change', (state) => { if (state === 'active') void reload(); }); return () => subscription.remove(); }, [reload]);
   useEffect(() => { const initial = setTimeout(() => setNow(Date.now()), 0); const timer = setInterval(() => setNow(Date.now()), 60_000); return () => { clearTimeout(initial); clearInterval(timer); }; }, []);
-  const suggestedSource = useMemo(() => { const entries: InboxEntry[] = inboxSources.flatMap((source) => [...source.tasks.map((record) => ({ kind: 'task' as const, record, source })), ...source.orders.map((record) => ({ kind: 'order' as const, record, source }))]); return entries.sort((a, b) => entryPriority(a, now) - entryPriority(b, now) || (scheduledAt(a.record) ?? a.record.updatedAt) - (scheduledAt(b.record) ?? b.record.updatedAt))[0]?.source; }, [inboxSources, now]);
-  useEffect(() => { if (tab === 'inbox' && !teamOpen && areaFilter === 'all' && suggestedSource && suggestedSource.workspace.slug !== scope) onSelectWorkspace(suggestedSource.workspace.slug); }, [areaFilter, onSelectWorkspace, scope, suggestedSource, tab, teamOpen]);
-  const open = (actionScope: string, actionId: string, input?: Record<string, unknown>, title?: string) => { void (async () => { try { const registry = actionScope === scope ? { actions } : await harness.workspaceRegistry(actionScope); const action = registry.actions.find((item) => item.id === actionId); if (!action) { Alert.alert('Action unavailable', 'Your role cannot perform this action.'); return; } setOpenAction({ action, scope: actionScope, input, title }); } catch (cause) { Alert.alert('Could not open action', cause instanceof Error ? cause.message : 'Try again.'); } })(); };
-  const openCard = (card: HarnessCanvasCard) => { if (card.kind === 'action') open(scope, card.actionId, card.initialInput, card.title); else if (card.kind === 'flow') open(scope, card.actionId || 'flow.start', card.initialInput || { flowId: card.flowId }, card.title); };
-  const openOrder = (source: InboxSource, order: HarnessRecord) => { onSelectWorkspace(source.workspace.slug); open(source.workspace.slug, 'pos.open', { section: 'sell', orderId: order.id }, `Order ${order.id.slice(-6).toUpperCase()}`); };
-  const updateOrderItem = async (source: InboxSource, order: HarnessRecord, productId: string, status: 'preparing' | 'ready') => { onSelectWorkspace(source.workspace.slug); try { await harness.executeAction(source.workspace.slug, 'pos.order.item.update', { orderId: order.id, version: order.version, productId, status }, createOperationKey(`pos.order.item:${order.id}:${productId}`)); await reload(); } catch (cause) { Alert.alert('Could not update item', cause instanceof Error ? cause.message : 'Reload the Inbox and try again.'); } };
+
+  const suggestedSource = useMemo(() => {
+    const entries: InboxEntry[] = inboxSources.flatMap((source) => [...source.tasks.map((record) => ({ kind: 'task' as const, record, source })), ...source.orders.map((record) => ({ kind: 'order' as const, record, source }))]);
+    return entries.sort((a, b) => entryPriority(a, now) - entryPriority(b, now) || (scheduledAt(a.record) ?? a.record.updatedAt) - (scheduledAt(b.record) ?? b.record.updatedAt))[0]?.source;
+  }, [inboxSources, now]);
+
+  useEffect(() => {
+    if (tab === 'inbox' && !teamOpen && areaFilter === 'all' && suggestedSource && suggestedSource.workspace.slug !== scope) {
+      onSelectWorkspace(suggestedSource.workspace.slug);
+    }
+  }, [areaFilter, onSelectWorkspace, scope, suggestedSource, tab, teamOpen]);
+
+  const open = (actionScope: string, actionId: string, input?: Record<string, unknown>, title?: string) => {
+    void (async () => {
+      try {
+        const registry = actionScope === scope ? { actions } : await harness.workspaceRegistry(actionScope);
+        const action = registry.actions.find((item) => item.id === actionId);
+        if (!action) {
+          Alert.alert('Action unavailable', 'Your role cannot perform this action.');
+          return;
+        }
+        setOpenAction({ action, scope: actionScope, input, title });
+      } catch (cause) {
+        Alert.alert('Could not open action', cause instanceof Error ? cause.message : 'Try again.');
+      }
+    })();
+  };
+
+  const openCard = (card: HarnessCanvasCard) => {
+    if (card.kind === 'action') open(scope, card.actionId, card.initialInput, card.title);
+    else if (card.kind === 'flow') open(scope, card.actionId || 'flow.start', card.initialInput || { flowId: card.flowId }, card.title);
+  };
+
+  const openOrder = (source: InboxSource, order: HarnessRecord) => {
+    onSelectWorkspace(source.workspace.slug);
+    open(source.workspace.slug, 'pos.open', { section: 'sell', orderId: order.id }, `Order ${order.id.slice(-6).toUpperCase()}`);
+  };
+
+  const updateOrderItem = async (source: InboxSource, order: HarnessRecord, productId: string, status: 'preparing' | 'ready') => {
+    onSelectWorkspace(source.workspace.slug);
+    try {
+      await harness.executeAction(source.workspace.slug, 'pos.order.item.update', { orderId: order.id, version: order.version, productId, status }, createOperationKey(`pos.order.item:${order.id}:${productId}`));
+      await reload();
+    } catch (cause) {
+      Alert.alert('Could not update item', cause instanceof Error ? cause.message : 'Reload the Inbox and try again.');
+    }
+  };
+
+  const handleCreateRecord = (category?: string) => {
+    if (category === 'orders') open(scope, 'pos.open', { section: 'sell' }, 'New Order / Sale');
+    else if (category === 'tasks') open(scope, 'task.create', {}, 'New Task');
+    else if (category === 'contacts') open(scope, 'record.create', { type: 'contact' }, 'New Contact');
+    else if (category === 'products') open(scope, 'pos.product.create', {}, 'New Product');
+    else open(scope, 'record.create', {}, 'New Record');
+  };
+
   const chooseArea = (slug: string) => { setAreaFilter(slug); if (slug !== 'all') onSelectWorkspace(slug); };
   const activeWorkspace = workspaces.find((item) => item.slug === scope) || workspaces[0];
-  return <View style={styles.page}>
-    {teamOpen ? <WorkspaceTeam key={scope} scope={scope} name={workspaceName} onClose={() => setTeamOpen(false)} onChanged={() => { void reload(); }} /> : null}
-    {tab === 'bots' ? <View style={[styles.tabBody, { paddingTop: insets.top }]}>{activeWorkspace ? <View style={styles.botContext}><ContextLabel workspace={activeWorkspace} name={workspaceName} /></View> : null}<BotDirectory visible embedded scope={scope} canInstall={role === 'owner' || role === 'admin'} onClose={() => undefined} onChanged={() => { void reload(); }} onCreateCustom={(botId, botTitle) => open(scope, 'flow.publish', { botId }, botTitle)} /></View> : <ScrollView refreshControl={<RefreshControl refreshing={loading} onRefresh={() => { setLoading(true); void reload(); }} />} style={styles.scroll} contentContainerStyle={[styles.content, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 24 }]}>
-      {tab === 'inbox' ? <AreaRail sources={inboxSources} value={areaFilter} onChange={chooseArea} onCreate={onCreateWorkspace} /> : null}
-      {tab !== 'inbox' && activeWorkspace ? <><AreaRail sources={workspaces.map((workspace) => ({ workspace, tasks: [], orders: [] }))} value={scope} onChange={chooseArea} onCreate={onCreateWorkspace} showAllWorkspaces /><ContextLabel workspace={activeWorkspace} name={workspaceName} /></> : null}
-      {activeWorkspace?.mode === 'work' ? <Pressable accessibilityRole="button" onPress={() => setTeamOpen(true)} style={{ minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start' }}><Text style={{ color: colors.blue, fontWeight: '600' }}>Members & chat · {workspaceName}</Text></Pressable> : null}
-      {error ? <Pressable style={styles.error} onPress={() => { setLoading(true); void reload(); }}><Text style={styles.errorText}>{error} Tap to retry.</Text></Pressable> : null}
-      {loading ? <View style={styles.center}><ActivityIndicator color={colors.blue} /></View> : <>{tab === 'canvas' ? <Canvas cards={cards} onOpen={openCard} /> : null}{tab === 'inbox' ? <UnifiedInbox sources={inboxSources} filter={areaFilter} now={now} onOpenOrder={openOrder} onUpdateOrder={(source, order, productId, status) => void updateOrderItem(source, order, productId, status)} onOpenTask={(source, task) => { onSelectWorkspace(source.workspace.slug); open(source.workspace.slug, 'task.complete', { taskId: task.id }, task.title); }} /> : null}{tab === 'records' ? <>{records.length ? records.map((record) => <View key={record.id} style={styles.record}><View style={styles.recordCopy}><Text style={styles.recordTitle}>{record.title}</Text><Text style={styles.recordDetail}>{titleCase(record.type)} · {titleCase(record.state)}</Text></View></View>) : <Empty text="No records yet." />}</> : null}</>}
-    </ScrollView>}
-    <ActionInterfaceHost action={openAction?.action || null} contracts={interfaces} scope={openAction?.scope || scope} initialInput={openAction?.input} contextTitle={openAction?.title} onClose={() => setOpenAction(null)} onSuccess={() => { setOpenAction(null); void reload(); }} />
-  </View>;
+  const canManageSite = role === 'owner' || role === 'admin';
+
+  return (
+    <View style={styles.page}>
+      {teamOpen ? <WorkspaceTeam key={scope} scope={scope} name={workspaceName} onClose={() => setTeamOpen(false)} onChanged={() => { void reload(); }} /> : null}
+      {tab === 'bots' ? (
+        <View style={[styles.tabBody, { paddingTop: insets.top }]}>
+          {activeWorkspace ? <View style={styles.botContext}><ContextLabel workspace={activeWorkspace} name={workspaceName} /></View> : null}
+          <BotDirectory
+            visible
+            embedded
+            scope={scope}
+            canInstall={role === 'owner' || role === 'admin'}
+            onClose={() => undefined}
+            onChanged={() => { void reload(); }}
+            onCreateCustom={(botId, botTitle) => open(scope, 'flow.publish', { botId }, botTitle)}
+            onOpenSiteStudio={() => setSiteOpen(true)}
+          />
+        </View>
+      ) : (
+        <ScrollView refreshControl={<RefreshControl refreshing={loading} onRefresh={() => { setLoading(true); void reload(); }} />} style={styles.scroll} contentContainerStyle={[styles.content, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 24 }]}>
+          {tab === 'inbox' ? <AreaRail sources={inboxSources} value={areaFilter} onChange={chooseArea} onCreate={onCreateWorkspace} /> : null}
+          {tab !== 'inbox' && activeWorkspace ? (
+            <>
+              <AreaRail sources={workspaces.map((workspace) => ({ workspace, tasks: [], orders: [] }))} value={scope} onChange={chooseArea} onCreate={onCreateWorkspace} showAllWorkspaces />
+              <ContextLabel workspace={activeWorkspace} name={workspaceName} />
+            </>
+          ) : null}
+
+          {activeWorkspace?.mode === 'work' ? (
+            <View style={styles.headerBar}>
+              <Pressable accessibilityRole="button" onPress={() => setTeamOpen(true)} style={styles.headerLink}>
+                <Text style={styles.headerLinkText}>Members & chat · {workspaceName}</Text>
+              </Pressable>
+              {canManageSite ? (
+                <Pressable accessibilityRole="button" onPress={() => setSiteOpen(true)} style={styles.headerSiteLink}>
+                  <Ionicons name="globe-outline" size={15} color={colors.blue} />
+                  <Text style={styles.headerSiteText}>Site Studio</Text>
+                </Pressable>
+              ) : null}
+            </View>
+          ) : null}
+
+          {error ? <Pressable style={styles.error} onPress={() => { setLoading(true); void reload(); }}><Text style={styles.errorText}>{error} Tap to retry.</Text></Pressable> : null}
+
+          {loading ? (
+            <View style={styles.center}><ActivityIndicator color={colors.blue} /></View>
+          ) : (
+            <>
+              {tab === 'canvas' ? <Canvas cards={cards} onOpen={openCard} onOpenSite={() => setSiteOpen(true)} canManageSite={canManageSite} /> : null}
+              {tab === 'inbox' ? (
+                <UnifiedInbox
+                  sources={inboxSources}
+                  filter={areaFilter}
+                  now={now}
+                  onOpenOrder={openOrder}
+                  onUpdateOrder={(source, order, productId, status) => void updateOrderItem(source, order, productId, status)}
+                  onOpenTask={(source, task) => {
+                    onSelectWorkspace(source.workspace.slug);
+                    open(source.workspace.slug, 'task.complete', { taskId: task.id }, task.title);
+                  }}
+                />
+              ) : null}
+              {tab === 'records' ? (
+                <RecordsSection
+                  records={records}
+                  onSelectRecord={(r) => setSelectedRecord(r)}
+                  onCreateRecord={handleCreateRecord}
+                />
+              ) : null}
+            </>
+          )}
+        </ScrollView>
+      )}
+
+      <ActionInterfaceHost
+        action={openAction?.action || null}
+        contracts={interfaces}
+        scope={openAction?.scope || scope}
+        initialInput={openAction?.input}
+        contextTitle={openAction?.title}
+        onClose={() => setOpenAction(null)}
+        onSuccess={() => { setOpenAction(null); void reload(); }}
+      />
+
+      <RecordDetailModal
+        visible={Boolean(selectedRecord)}
+        record={selectedRecord}
+        scope={scope}
+        onClose={() => setSelectedRecord(null)}
+        onAction={(actId, inp, tit) => open(scope, actId, inp, tit)}
+      />
+
+      <SiteScreen
+        visible={siteOpen}
+        onClose={() => { setSiteOpen(false); void reload(); }}
+        workspaceName={workspaceName}
+        subdomain={scope}
+        scope={scope}
+      />
+    </View>
+  );
 }
 
 function AreaRail({ sources, value, onChange, onCreate, showAllWorkspaces = false }: { sources: InboxSource[]; value: string; onChange: (slug: string) => void; onCreate: () => void; showAllWorkspaces?: boolean }) {
-  const [open, setOpen] = useState(false); const relevant = sources.filter((source) => showAllWorkspaces || source.tasks.length || source.orders.length); const selected = relevant.find((source) => source.workspace.slug === value); const label = selected ? selected.workspace.mode === 'personal' ? 'Personal' : selected.workspace.name : 'All areas';
+  const [open, setOpen] = useState(false);
+  const relevant = sources.filter((source) => showAllWorkspaces || source.tasks.length || source.orders.length);
+  const selected = relevant.find((source) => source.workspace.slug === value);
+  const label = selected ? selected.workspace.mode === 'personal' ? 'Personal' : selected.workspace.name : 'All areas';
   const choose = (slug: string) => { onChange(slug); setOpen(false); };
-  return <View style={styles.areaPicker}><TouchableOpacity onPress={() => setOpen((current) => !current)} style={styles.areaTrigger} accessibilityRole="button" accessibilityState={{ expanded: open }}><Text numberOfLines={1} style={styles.areaTriggerText}>{label}</Text><Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={14} color={colors.muted} /></TouchableOpacity>{open ? <View style={styles.areaMenu}><TouchableOpacity onPress={() => choose('all')} style={styles.areaOption}><Text style={[styles.areaOptionText, value === 'all' && styles.areaOptionActive]}>All areas</Text>{value === 'all' ? <Ionicons name="checkmark" size={16} color={colors.blue} /> : null}</TouchableOpacity>{relevant.map(({ workspace }) => <TouchableOpacity key={workspace.id} onPress={() => choose(workspace.slug)} style={styles.areaOption}><View style={styles.areaOptionLabel}><View style={[styles.areaOptionDot, { backgroundColor: workspaceTint(workspace) }]} /><Text numberOfLines={1} style={[styles.areaOptionText, value === workspace.slug && styles.areaOptionActive]}>{workspace.mode === 'personal' ? 'Personal' : workspace.name}</Text></View>{value === workspace.slug ? <Ionicons name="checkmark" size={16} color={colors.blue} /> : null}</TouchableOpacity>)}<TouchableOpacity onPress={() => { setOpen(false); onCreate(); }} style={styles.areaOption}><Text style={styles.newAreaText}>New area</Text><Ionicons name="add" size={16} color={colors.muted} /></TouchableOpacity></View> : null}</View>;
-}
-function ContextLabel({ workspace, name }: { workspace: HarnessWorkspace; name: string }) { return <View style={styles.contextLabel}><View style={[styles.contextDot, { backgroundColor: workspaceTint(workspace) }]} /><Text numberOfLines={1} style={styles.contextText}>{name}</Text></View>; }
 
-function UnifiedInbox({ sources, filter, now, onOpenOrder, onUpdateOrder, onOpenTask }: { sources: InboxSource[]; filter: string; now: number; onOpenOrder: (source: InboxSource, order: HarnessRecord) => void; onUpdateOrder: (source: InboxSource, order: HarnessRecord, productId: string, status: 'preparing' | 'ready') => void; onOpenTask: (source: InboxSource, task: HarnessRecord) => void; }) {
-  const visibleSources = useMemo(() => filter === 'all' ? sources : sources.filter((source) => source.workspace.slug === filter), [filter, sources]); const showWorkspace = filter === 'all' && visibleSources.filter((source) => source.tasks.length || source.orders.length).length > 1;
-  const groups = useMemo(() => { const entries: InboxEntry[] = visibleSources.flatMap((source) => [...source.tasks.map((record) => ({ kind: 'task' as const, record, source })), ...source.orders.map((record) => ({ kind: 'order' as const, record, source }))]).sort((a, b) => entryPriority(a, now) - entryPriority(b, now) || (scheduledAt(a.record) ?? a.record.updatedAt) - (scheduledAt(b.record) ?? b.record.updatedAt)); return [{ label: 'NOW', entries: entries.filter((entry) => entryPriority(entry, now) < 3) }, { label: 'NEXT', entries: entries.filter((entry) => entryPriority(entry, now) === 3) }].filter((group) => group.entries.length); }, [now, visibleSources]);
+  return (
+    <View style={styles.areaPicker}>
+      <TouchableOpacity onPress={() => setOpen((current) => !current)} style={styles.areaTrigger} accessibilityRole="button" accessibilityState={{ expanded: open }}>
+        <Text numberOfLines={1} style={styles.areaTriggerText}>{label}</Text>
+        <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={14} color={colors.muted} />
+      </TouchableOpacity>
+      {open ? (
+        <View style={styles.areaMenu}>
+          <TouchableOpacity onPress={() => choose('all')} style={styles.areaOption}>
+            <Text style={[styles.areaOptionText, value === 'all' && styles.areaOptionActive]}>All areas</Text>
+            {value === 'all' ? <Ionicons name="checkmark" size={16} color={colors.blue} /> : null}
+          </TouchableOpacity>
+          {relevant.map(({ workspace }) => (
+            <TouchableOpacity key={workspace.id} onPress={() => choose(workspace.slug)} style={styles.areaOption}>
+              <View style={styles.areaOptionLabel}>
+                <View style={[styles.areaOptionDot, { backgroundColor: workspaceTint(workspace) }]} />
+                <Text numberOfLines={1} style={[styles.areaOptionText, value === workspace.slug && styles.areaOptionActive]}>
+                  {workspace.mode === 'personal' ? 'Personal' : workspace.name}
+                </Text>
+              </View>
+              {value === workspace.slug ? <Ionicons name="checkmark" size={16} color={colors.blue} /> : null}
+            </TouchableOpacity>
+          ))}
+          <TouchableOpacity onPress={() => { setOpen(false); onCreate(); }} style={styles.areaOption}>
+            <Text style={styles.newAreaText}>New area</Text>
+            <Ionicons name="add" size={16} color={colors.muted} />
+          </TouchableOpacity>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function ContextLabel({ workspace, name }: { workspace: HarnessWorkspace; name: string }) {
+  return (
+    <View style={styles.contextLabel}>
+      <View style={[styles.contextDot, { backgroundColor: workspaceTint(workspace) }]} />
+      <Text numberOfLines={1} style={styles.contextText}>{name}</Text>
+    </View>
+  );
+}
+
+function UnifiedInbox({
+  sources,
+  filter,
+  now,
+  onOpenOrder,
+  onUpdateOrder,
+  onOpenTask,
+}: {
+  sources: InboxSource[];
+  filter: string;
+  now: number;
+  onOpenOrder: (source: InboxSource, order: HarnessRecord) => void;
+  onUpdateOrder: (source: InboxSource, order: HarnessRecord, productId: string, status: 'preparing' | 'ready') => void;
+  onOpenTask: (source: InboxSource, task: HarnessRecord) => void;
+}) {
+  const visibleSources = useMemo(() => filter === 'all' ? sources : sources.filter((source) => source.workspace.slug === filter), [filter, sources]);
+  const showWorkspace = filter === 'all' && visibleSources.filter((source) => source.tasks.length || source.orders.length).length > 1;
+  const groups = useMemo(() => {
+    const entries: InboxEntry[] = visibleSources.flatMap((source) => [
+      ...source.tasks.map((record) => ({ kind: 'task' as const, record, source })),
+      ...source.orders.map((record) => ({ kind: 'order' as const, record, source })),
+    ]).sort((a, b) => entryPriority(a, now) - entryPriority(b, now) || (scheduledAt(a.record) ?? a.record.updatedAt) - (scheduledAt(b.record) ?? b.record.updatedAt));
+    return [
+      { label: 'NOW', entries: entries.filter((entry) => entryPriority(entry, now) < 3) },
+      { label: 'NEXT', entries: entries.filter((entry) => entryPriority(entry, now) === 3) },
+    ].filter((group) => group.entries.length);
+  }, [now, visibleSources]);
+
   if (!groups.length) return <Empty text="Nothing needs your attention here." />;
-  return <>{groups.map((group) => <View key={group.label} style={styles.inboxGroup}><Text style={styles.inboxGroupLabel}>{group.label}</Text>{group.entries.map((entry) => entry.kind === 'order' ? <OrderRow key={`${entry.source.workspace.id}:${entry.record.id}`} source={entry.source} order={entry.record} showWorkspace={showWorkspace} onOpen={() => onOpenOrder(entry.source, entry.record)} onUpdate={(productId, status) => onUpdateOrder(entry.source, entry.record, productId, status)} /> : <TaskRow key={`${entry.source.workspace.id}:${entry.record.id}`} source={entry.source} task={entry.record} showWorkspace={showWorkspace} onOpen={() => onOpenTask(entry.source, entry.record)} />)}</View>)}</>;
+  return (
+    <>
+      {groups.map((group) => (
+        <View key={group.label} style={styles.inboxGroup}>
+          <Text style={styles.inboxGroupLabel}>{group.label}</Text>
+          {group.entries.map((entry) => entry.kind === 'order' ? (
+            <OrderRow
+              key={`${entry.source.workspace.id}:${entry.record.id}`}
+              source={entry.source}
+              order={entry.record}
+              showWorkspace={showWorkspace}
+              onOpen={() => onOpenOrder(entry.source, entry.record)}
+              onUpdate={(productId, status) => onUpdateOrder(entry.source, entry.record, productId, status)}
+            />
+          ) : (
+            <TaskRow
+              key={`${entry.source.workspace.id}:${entry.record.id}`}
+              source={entry.source}
+              task={entry.record}
+              showWorkspace={showWorkspace}
+              onOpen={() => onOpenTask(entry.source, entry.record)}
+            />
+          ))}
+        </View>
+      ))}
+    </>
+  );
 }
 
-function Canvas({ cards, onOpen }: { cards: HarnessCanvasCard[]; onOpen: (card: HarnessCanvasCard) => void }) { const data = cards.filter((card) => card.kind === 'data'); const work = cards.filter((card) => card.kind !== 'data'); const icons: Record<string, keyof typeof Ionicons.glyphMap> = { sell: 'bag-outline', orders: 'receipt-outline', stock: 'cube-outline', customers: 'people-outline', register: 'cash-outline' }; return <><View style={styles.metricGrid}>{data.map((card) => <View key={card.id} style={[styles.metric, card.id.startsWith('pos-') && styles.posMetric]}><Text numberOfLines={1} style={styles.metricTitle}>{card.title}</Text><Text numberOfLines={1} adjustsFontSizeToFit style={[styles.metricValue, card.id.startsWith('pos-') && styles.posMetricValue]}>{card.value}</Text></View>)}</View>{work.map((card) => <TouchableOpacity key={card.id} style={styles.workCard} onPress={() => onOpen(card)}><View style={styles.workIcon}><Ionicons name={icons[String(card.initialInput?.section)] || (card.kind === 'flow' ? 'git-branch-outline' : 'flash-outline')} size={21} color="#536174" /></View><Text style={styles.canvasRowTitle}>{card.title}</Text><Ionicons name="chevron-forward" size={17} color="#9aa3b1" /></TouchableOpacity>)}</>; }
-function WorkspaceLabel({ workspace }: { workspace: HarnessWorkspace }) { return <View style={styles.workspaceLabel}><View style={[styles.workspaceLabelDot, { backgroundColor: workspaceTint(workspace) }]} /><Text numberOfLines={1} style={styles.workspaceLabelText}>{workspace.mode === 'personal' ? 'Personal' : workspace.name}</Text></View>; }
-function TaskRow({ source, task, showWorkspace, onOpen }: { source: InboxSource; task: HarnessRecord; showWorkspace: boolean; onOpen: () => void }) { return <View style={styles.parentBlock}><View style={styles.parentRow}><View style={styles.parentCopy}><Text numberOfLines={2} style={styles.parentTitle}>{task.title}</Text>{showWorkspace ? <WorkspaceLabel workspace={source.workspace} /> : null}</View><Pressable onPress={onOpen} disabled={!source.permissions?.completeTask} hitSlop={8} style={styles.rowAction} accessibilityLabel={`Complete ${task.title}`}><Text style={styles.rowActionText}>Done</Text><Ionicons name="ellipse-outline" size={16} color={colors.blue} /></Pressable></View></View>; }
-function OrderRow({ source, order, showWorkspace, onOpen, onUpdate }: { source: InboxSource; order: HarnessRecord; showWorkspace: boolean; onOpen: () => void; onUpdate: (productId: string, status: 'preparing' | 'ready') => void }) {
-  const lines = orderLines(order); const type = String(order.data.orderType || 'counter').toLowerCase(); const table = String(order.data.table || '').trim(); const typeCode = type === 'delivery' ? 'D' : type === 'table' || table ? `T${table || ''}` : 'C'; const orderKey = `#${typeCode}-${order.id.slice(-6).toUpperCase()}`; const total = Number(order.data.total || 0); const currency = String(order.data.currency || 'INR'); const amount = new Intl.NumberFormat('en-IN', { style: 'currency', currency }).format(total / 100);
-  return <View style={styles.parentBlock}><Pressable onPress={onOpen} disabled={!source.permissions?.openOrder} accessibilityRole="button" style={({ pressed }) => [styles.parentRow, pressed && styles.orderPressed]}><View style={styles.parentCopy}><Text style={styles.parentTitle}>{orderKey}</Text>{showWorkspace ? <WorkspaceLabel workspace={source.workspace} /> : null}</View></Pressable>{lines.map((line) => { const status = line.status || 'pending'; const next = status === 'pending' ? 'preparing' as const : status === 'preparing' ? 'ready' as const : null; const label = status === 'pending' ? 'Start' : status === 'preparing' ? 'Ready' : 'Ready'; return <View key={line.productId} style={styles.childRow}><View style={styles.childCopy}><Text numberOfLines={2} style={styles.childTitle}>{line.quantity} × {line.title}</Text></View><Pressable disabled={!next || !source.permissions?.prepare} onPress={() => { if (next) onUpdate(line.productId, next); }} hitSlop={6} style={styles.childAction}><Text style={[styles.childStatus, { color: stateColor(status) }]}>{label}</Text><Ionicons name={stateIcon(status)} size={16} color={stateColor(status)} /></Pressable></View>; })}{total > 0 && source.permissions?.collect ? <Pressable onPress={onOpen} style={styles.childRow} accessibilityLabel={`Collect ${amount}`}><View style={styles.childCopy}><Text style={styles.childTitle}>Payment · {amount}</Text></View><View style={styles.childAction}><Text style={styles.collectText}>Collect</Text><Ionicons name="arrow-forward" size={14} color={colors.blue} /></View></Pressable> : null}</View>;
+function Canvas({
+  cards,
+  onOpen,
+  onOpenSite,
+  canManageSite,
+}: {
+  cards: HarnessCanvasCard[];
+  onOpen: (card: HarnessCanvasCard) => void;
+  onOpenSite: () => void;
+  canManageSite: boolean;
+}) {
+  const data = cards.filter((card) => card.kind === 'data');
+  const work = cards.filter((card) => card.kind !== 'data');
+  const icons: Record<string, keyof typeof Ionicons.glyphMap> = { sell: 'bag-outline', orders: 'receipt-outline', stock: 'cube-outline', customers: 'people-outline', register: 'cash-outline' };
+
+  return (
+    <>
+      <View style={styles.metricGrid}>
+        {data.map((card) => (
+          <View key={card.id} style={[styles.metric, card.id.startsWith('pos-') && styles.posMetric]}>
+            <Text numberOfLines={1} style={styles.metricTitle}>{card.title}</Text>
+            <Text numberOfLines={1} adjustsFontSizeToFit style={[styles.metricValue, card.id.startsWith('pos-') && styles.posMetricValue]}>{card.value}</Text>
+          </View>
+        ))}
+      </View>
+      {canManageSite ? (
+        <TouchableOpacity style={styles.workCard} onPress={onOpenSite}>
+          <View style={[styles.workIcon, { backgroundColor: '#EDEBE4', borderRadius: 8 }]}>
+            <Ionicons name="globe-outline" size={19} color="#000BFA" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.canvasRowTitle}>Site Studio</Text>
+            <Text style={{ fontSize: 11, color: colors.muted }}>Draft, preview & publish website</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={17} color="#9aa3b1" />
+        </TouchableOpacity>
+      ) : null}
+      {work.map((card) => (
+        <TouchableOpacity key={card.id} style={styles.workCard} onPress={() => onOpen(card)}>
+          <View style={styles.workIcon}>
+            <Ionicons name={icons[String(card.initialInput?.section)] || (card.kind === 'flow' ? 'git-branch-outline' : 'flash-outline')} size={21} color="#536174" />
+          </View>
+          <Text style={styles.canvasRowTitle}>{card.title}</Text>
+          <Ionicons name="chevron-forward" size={17} color="#9aa3b1" />
+        </TouchableOpacity>
+      ))}
+    </>
+  );
 }
+
+function RecordsSection({
+  records,
+  onSelectRecord,
+  onCreateRecord,
+}: {
+  records: HarnessRecord[];
+  onSelectRecord: (record: HarnessRecord) => void;
+  onCreateRecord: (type?: string) => void;
+}) {
+  const [filter, setFilter] = useState<'all' | 'orders' | 'contacts' | 'products' | 'tasks' | 'other'>('all');
+
+  const categories = [
+    { id: 'all' as const, label: 'All' },
+    { id: 'orders' as const, label: 'Orders' },
+    { id: 'contacts' as const, label: 'Contacts' },
+    { id: 'products' as const, label: 'Products' },
+    { id: 'tasks' as const, label: 'Tasks' },
+    { id: 'other' as const, label: 'Other' },
+  ];
+
+  const matchesCategory = (record: HarnessRecord, cat: string) => {
+    const t = record.type.toLowerCase();
+    if (cat === 'all') return true;
+    if (cat === 'orders') return t === 'order' || t.startsWith('pos.order');
+    if (cat === 'contacts') return t === 'contact' || t === 'customer' || t === 'account' || t === 'lead';
+    if (cat === 'products') return t === 'product' || t.startsWith('pos.product');
+    if (cat === 'tasks') return t === 'task';
+    if (cat === 'other') return !['order', 'contact', 'customer', 'account', 'lead', 'product', 'task'].some((k) => t === k || t.startsWith(`pos.${k}`));
+    return true;
+  };
+
+  const filtered = useMemo(() => records.filter((r) => matchesCategory(r, filter)), [records, filter]);
+
+  const counts = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const c of categories) {
+      map[c.id] = records.filter((r) => matchesCategory(r, c.id)).length;
+    }
+    return map;
+  }, [records]);
+
+  const recordIcon = (type: string): keyof typeof Ionicons.glyphMap => {
+    const t = type.toLowerCase();
+    if (t === 'order' || t.startsWith('pos.order')) return 'receipt-outline';
+    if (t === 'contact' || t === 'customer' || t === 'account') return 'people-outline';
+    if (t === 'product' || t.startsWith('pos.product')) return 'cube-outline';
+    if (t === 'task') return 'checkbox-outline';
+    if (t === 'lead' || t === 'deal') return 'trending-up-outline';
+    if (t === 'site') return 'globe-outline';
+    return 'folder-outline';
+  };
+
+  const recordIconColor = (type: string): string => {
+    const t = type.toLowerCase();
+    if (t === 'order' || t.startsWith('pos.order')) return colors.blue;
+    if (t === 'contact' || t === 'customer' || t === 'account') return colors.green;
+    if (t === 'product' || t.startsWith('pos.product')) return colors.amber;
+    if (t === 'task') return '#7C3AED';
+    if (t === 'lead' || t === 'deal') return '#2563EB';
+    return colors.muted;
+  };
+
+  return (
+    <View style={styles.recordsWrapper}>
+      {/* Category filter rail */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRail}>
+        {categories.map((cat) => {
+          const active = filter === cat.id;
+          return (
+            <TouchableOpacity
+              key={cat.id}
+              style={[styles.filterChip, active && styles.filterChipActive]}
+              onPress={() => setFilter(cat.id)}
+            >
+              <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>
+                {cat.label} {counts[cat.id] != null ? `(${counts[cat.id]})` : ''}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+
+      {/* Action Header */}
+      <View style={styles.recordsHeader}>
+        <Text style={styles.recordsHeaderTitle}>
+          {filter === 'all' ? 'All Records' : categories.find((c) => c.id === filter)?.label} ({filtered.length})
+        </Text>
+        <TouchableOpacity style={styles.createButton} onPress={() => onCreateRecord(filter === 'all' ? undefined : filter)}>
+          <Ionicons name="add" size={16} color="#fff" />
+          <Text style={styles.createButtonText}>New</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Records list */}
+      {filtered.length ? (
+        filtered.map((record) => {
+          const total = record.data?.total != null ? Number(record.data.total) : record.data?.price != null ? Number(record.data.price) : null;
+          const currency = String(record.data?.currency || 'INR');
+          const formattedAmount = total !== null ? new Intl.NumberFormat('en-IN', { style: 'currency', currency, maximumFractionDigits: 0 }).format(total / 100) : null;
+
+          return (
+            <TouchableOpacity
+              key={record.id}
+              style={styles.recordCard}
+              onPress={() => onSelectRecord(record)}
+              accessibilityLabel={`Open ${record.title}`}
+            >
+              <View style={[styles.recordIconBox, { backgroundColor: `${recordIconColor(record.type)}15` }]}>
+                <Ionicons name={recordIcon(record.type)} size={18} color={recordIconColor(record.type)} />
+              </View>
+              <View style={styles.recordCopy}>
+                <View style={styles.recordTitleRow}>
+                  <Text numberOfLines={1} style={styles.recordTitle}>{record.title}</Text>
+                  {formattedAmount ? <Text style={styles.recordAmount}>{formattedAmount}</Text> : null}
+                </View>
+                <View style={styles.recordMetaRow}>
+                  <Text style={styles.recordTypeTag}>{titleCase(record.type.replace(/^pos\./, ''))}</Text>
+                  <Text style={styles.recordMetaDot}>·</Text>
+                  <View style={[styles.recordStateTag, { backgroundColor: `${stateColor(record.state)}18` }]}>
+                    <Text style={[styles.recordStateText, { color: stateColor(record.state) }]}>{titleCase(record.state)}</Text>
+                  </View>
+                </View>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={colors.faint} />
+            </TouchableOpacity>
+          );
+        })
+      ) : (
+        <Empty text={filter === 'all' ? 'No records in this workspace yet.' : `No ${filter} found.`} />
+      )}
+    </View>
+  );
+}
+
+function WorkspaceLabel({ workspace }: { workspace: HarnessWorkspace }) {
+  return (
+    <View style={styles.workspaceLabel}>
+      <View style={[styles.workspaceLabelDot, { backgroundColor: workspaceTint(workspace) }]} />
+      <Text numberOfLines={1} style={styles.workspaceLabelText}>{workspace.mode === 'personal' ? 'Personal' : workspace.name}</Text>
+    </View>
+  );
+}
+
+function TaskRow({ source, task, showWorkspace, onOpen }: { source: InboxSource; task: HarnessRecord; showWorkspace: boolean; onOpen: () => void }) {
+  return (
+    <View style={styles.parentBlock}>
+      <View style={styles.parentRow}>
+        <View style={styles.parentCopy}>
+          <Text numberOfLines={2} style={styles.parentTitle}>{task.title}</Text>
+          {showWorkspace ? <WorkspaceLabel workspace={source.workspace} /> : null}
+        </View>
+        <Pressable onPress={onOpen} disabled={!source.permissions?.completeTask} hitSlop={8} style={styles.rowAction} accessibilityLabel={`Complete ${task.title}`}>
+          <Text style={styles.rowActionText}>Done</Text>
+          <Ionicons name="ellipse-outline" size={16} color={colors.blue} />
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+function OrderRow({
+  source,
+  order,
+  showWorkspace,
+  onOpen,
+  onUpdate,
+}: {
+  source: InboxSource;
+  order: HarnessRecord;
+  showWorkspace: boolean;
+  onOpen: () => void;
+  onUpdate: (productId: string, status: 'preparing' | 'ready') => void;
+}) {
+  const lines = orderLines(order);
+  const type = String(order.data.orderType || 'counter').toLowerCase();
+  const table = String(order.data.table || '').trim();
+  const typeCode = type === 'delivery' ? 'D' : type === 'table' || table ? `T${table || ''}` : 'C';
+  const orderKey = `#${typeCode}-${order.id.slice(-6).toUpperCase()}`;
+  const total = Number(order.data.total || 0);
+  const currency = String(order.data.currency || 'INR');
+  const amount = new Intl.NumberFormat('en-IN', { style: 'currency', currency }).format(total / 100);
+
+  return (
+    <View style={styles.parentBlock}>
+      <Pressable onPress={onOpen} disabled={!source.permissions?.openOrder} accessibilityRole="button" style={({ pressed }) => [styles.parentRow, pressed && styles.orderPressed]}>
+        <View style={styles.parentCopy}>
+          <Text style={styles.parentTitle}>{orderKey}</Text>
+          {showWorkspace ? <WorkspaceLabel workspace={source.workspace} /> : null}
+        </View>
+      </Pressable>
+      {lines.map((line) => {
+        const status = line.status || 'pending';
+        const next = status === 'pending' ? 'preparing' as const : status === 'preparing' ? 'ready' as const : null;
+        const label = status === 'pending' ? 'Start' : status === 'preparing' ? 'Ready' : 'Ready';
+        return (
+          <View key={line.productId} style={styles.childRow}>
+            <View style={styles.childCopy}>
+              <Text numberOfLines={2} style={styles.childTitle}>{line.quantity} × {line.title}</Text>
+            </View>
+            <Pressable disabled={!next || !source.permissions?.prepare} onPress={() => { if (next) onUpdate(line.productId, next); }} hitSlop={6} style={styles.childAction}>
+              <Text style={[styles.childStatus, { color: stateColor(status) }]}>{label}</Text>
+              <Ionicons name={stateIcon(status)} size={16} color={stateColor(status)} />
+            </Pressable>
+          </View>
+        );
+      })}
+      {total > 0 && source.permissions?.collect ? (
+        <Pressable onPress={onOpen} style={styles.childRow} accessibilityLabel={`Collect ${amount}`}>
+          <View style={styles.childCopy}>
+            <Text style={styles.childTitle}>Payment · {amount}</Text>
+          </View>
+          <View style={styles.childAction}>
+            <Text style={styles.collectText}>Collect</Text>
+            <Ionicons name="arrow-forward" size={14} color={colors.blue} />
+          </View>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
 function Empty({ text }: { text: string }) { return <Text style={styles.empty}>{text}</Text>; }
 
 const styles = StyleSheet.create({
-  page:{flex:1,backgroundColor:'#fff'},scroll:{flex:1},tabBody:{flex:1},botContext:{paddingHorizontal:18,paddingTop:8},content:{paddingHorizontal:18},contextLabel:{height:24,flexDirection:'row',alignItems:'center',gap:5,marginBottom:8},contextDot:{width:5,height:5,borderRadius:3},contextText:{maxWidth:160,fontSize:10,fontWeight:'600',color:colors.muted},
-  areaPicker:{alignItems:'flex-start',marginBottom:18},areaTrigger:{height:32,maxWidth:180,paddingHorizontal:10,borderRadius:8,borderWidth:1,borderColor:colors.line,flexDirection:'row',alignItems:'center',gap:7,backgroundColor:'#fff'},areaTriggerText:{fontSize:12,fontWeight:'700',color:colors.ink},areaMenu:{alignSelf:'stretch',marginTop:6,borderWidth:1,borderColor:colors.line,borderRadius:10,backgroundColor:'#fff',overflow:'hidden'},areaOption:{minHeight:42,paddingHorizontal:12,flexDirection:'row',alignItems:'center',justifyContent:'space-between',borderBottomWidth:StyleSheet.hairlineWidth,borderBottomColor:colors.line},areaOptionLabel:{flex:1,flexDirection:'row',alignItems:'center',gap:7},areaOptionDot:{width:6,height:6,borderRadius:3},areaOptionText:{flexShrink:1,fontSize:13,color:colors.muted},areaOptionActive:{fontWeight:'700',color:colors.ink},newAreaText:{fontSize:13,color:colors.muted},
-  inboxGroup:{marginBottom:22},inboxGroupLabel:{fontSize:10,fontWeight:'800',letterSpacing:1.2,color:colors.faint,marginBottom:7},parentBlock:{borderTopWidth:StyleSheet.hairlineWidth,borderTopColor:colors.line},parentRow:{minHeight:48,flexDirection:'row',alignItems:'center',paddingHorizontal:4},orderPressed:{backgroundColor:colors.wash},parentCopy:{flex:1,minWidth:0,paddingRight:10},parentTitle:{fontSize:14,lineHeight:19,fontWeight:'700',color:colors.ink},workspaceLabel:{marginTop:2,flexDirection:'row',alignItems:'center',gap:5},workspaceLabelDot:{width:5,height:5,borderRadius:3},workspaceLabelText:{maxWidth:140,fontSize:10,fontWeight:'600',color:colors.muted},rowAction:{minHeight:38,flexDirection:'row',alignItems:'center',gap:5,paddingLeft:10},rowActionText:{fontSize:12,fontWeight:'700',color:colors.blue},
-  childRow:{minHeight:42,paddingLeft:16,flexDirection:'row',alignItems:'stretch',borderTopWidth:StyleSheet.hairlineWidth,borderTopColor:colors.line},childCopy:{flex:1,minWidth:0,justifyContent:'center',paddingVertical:8,paddingRight:8},childTitle:{fontSize:13,lineHeight:18,color:'#59606C'},childAction:{width:88,minHeight:41,flexDirection:'row',justifyContent:'flex-end',alignItems:'center',gap:5},childStatus:{fontSize:11,fontWeight:'700',textAlign:'right'},collectText:{fontSize:11,fontWeight:'700',color:colors.blue},
-  center:{minHeight:180,justifyContent:'center',alignItems:'center'},record:{minHeight:64,borderBottomWidth:StyleSheet.hairlineWidth,borderColor:colors.line,justifyContent:'center'},recordCopy:{flex:1},recordTitle:{fontSize:15,fontWeight:'700',color:colors.ink},recordDetail:{fontSize:12,lineHeight:17,color:colors.muted,marginTop:2},empty:{color:colors.muted,fontSize:14,paddingVertical:24},error:{backgroundColor:'#FFF1F0',borderRadius:10,padding:12,marginBottom:14},errorText:{color:'#B42318'},metricGrid:{flexDirection:'row',flexWrap:'wrap',gap:8,marginBottom:16},metric:{flexGrow:1,flexBasis:'45%',minHeight:132,borderWidth:1,borderColor:colors.line,borderRadius:16,padding:16,justifyContent:'space-between',backgroundColor:'#fff'},posMetric:{minHeight:76,flexBasis:'27%',padding:10,borderRadius:10},metricTitle:{fontSize:13,fontWeight:'700',color:colors.muted},metricValue:{fontSize:34,fontWeight:'800',color:colors.ink},posMetricValue:{fontSize:21},workCard:{minHeight:56,borderBottomWidth:StyleSheet.hairlineWidth,borderColor:colors.line,flexDirection:'row',alignItems:'center',gap:12},workIcon:{width:28,height:36,alignItems:'center',justifyContent:'center'},canvasRowTitle:{flex:1,fontSize:15,fontWeight:'600',color:colors.ink}
+  page: { flex: 1, backgroundColor: '#fff' },
+  scroll: { flex: 1 },
+  tabBody: { flex: 1 },
+  botContext: { paddingHorizontal: 18, paddingTop: 8 },
+  content: { paddingHorizontal: 18 },
+  headerBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+  headerLink: { minHeight: 40, justifyContent: 'center' },
+  headerLinkText: { color: colors.blue, fontWeight: '700', fontSize: 13 },
+  headerSiteLink: { minHeight: 40, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, backgroundColor: '#EFF6FF' },
+  headerSiteText: { color: colors.blue, fontWeight: '700', fontSize: 13 },
+  contextLabel: { height: 24, flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 8 },
+  contextDot: { width: 5, height: 5, borderRadius: 3 },
+  contextText: { maxWidth: 160, fontSize: 10, fontWeight: '600', color: colors.muted },
+  areaPicker: { alignItems: 'flex-start', marginBottom: 18 },
+  areaTrigger: { height: 32, maxWidth: 180, paddingHorizontal: 10, borderRadius: 8, borderWidth: 1, borderColor: colors.line, flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: '#fff' },
+  areaTriggerText: { fontSize: 12, fontWeight: '700', color: colors.ink },
+  areaMenu: { alignSelf: 'stretch', marginTop: 6, borderWidth: 1, borderColor: colors.line, borderRadius: 10, backgroundColor: '#fff', overflow: 'hidden' },
+  areaOption: { minHeight: 42, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
+  areaOptionLabel: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 7 },
+  areaOptionDot: { width: 6, height: 6, borderRadius: 3 },
+  areaOptionText: { flexShrink: 1, fontSize: 13, color: colors.muted },
+  areaOptionActive: { fontWeight: '700', color: colors.ink },
+  newAreaText: { fontSize: 13, color: colors.muted },
+  inboxGroup: { marginBottom: 22 },
+  inboxGroupLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 1.2, color: colors.faint, marginBottom: 7 },
+  parentBlock: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },
+  parentRow: { minHeight: 48, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 4 },
+  orderPressed: { backgroundColor: colors.wash },
+  parentCopy: { flex: 1, minWidth: 0, paddingRight: 10 },
+  parentTitle: { fontSize: 14, lineHeight: 19, fontWeight: '700', color: colors.ink },
+  workspaceLabel: { marginTop: 2, flexDirection: 'row', alignItems: 'center', gap: 5 },
+  workspaceLabelDot: { width: 5, height: 5, borderRadius: 3 },
+  workspaceLabelText: { maxWidth: 140, fontSize: 10, fontWeight: '600', color: colors.muted },
+  rowAction: { minHeight: 38, flexDirection: 'row', alignItems: 'center', gap: 5, paddingLeft: 10 },
+  rowActionText: { fontSize: 12, fontWeight: '700', color: colors.blue },
+  childRow: { minHeight: 42, paddingLeft: 16, flexDirection: 'row', alignItems: 'stretch', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },
+  childCopy: { flex: 1, minWidth: 0, justifyContent: 'center', paddingVertical: 8, paddingRight: 8 },
+  childTitle: { fontSize: 13, lineHeight: 18, color: '#59606C' },
+  childAction: { width: 88, minHeight: 41, flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 5 },
+  childStatus: { fontSize: 11, fontWeight: '700', textAlign: 'right' },
+  collectText: { fontSize: 11, fontWeight: '700', color: colors.blue },
+  center: { minHeight: 180, justifyContent: 'center', alignItems: 'center' },
+  empty: { color: colors.muted, fontSize: 14, paddingVertical: 24 },
+  error: { backgroundColor: '#FFF1F0', borderRadius: 10, padding: 12, marginBottom: 14 },
+  errorText: { color: '#B42318' },
+  metricGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 },
+  metric: { flexGrow: 1, flexBasis: '45%', minHeight: 132, borderWidth: 1, borderColor: colors.line, borderRadius: 16, padding: 16, justifyContent: 'space-between', backgroundColor: '#fff' },
+  posMetric: { minHeight: 76, flexBasis: '27%', padding: 10, borderRadius: 10 },
+  metricTitle: { fontSize: 13, fontWeight: '700', color: colors.muted },
+  metricValue: { fontSize: 34, fontWeight: '800', color: colors.ink },
+  posMetricValue: { fontSize: 21 },
+  workCard: { minHeight: 56, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: colors.line, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  workIcon: { width: 28, height: 36, alignItems: 'center', justifyContent: 'center' },
+  canvasRowTitle: { flex: 1, fontSize: 15, fontWeight: '600', color: colors.ink },
+  recordsWrapper: { marginTop: 4 },
+  filterRail: { flexDirection: 'row', gap: 8, paddingBottom: 14 },
+  filterChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, backgroundColor: colors.wash, borderWidth: 1, borderColor: colors.line },
+  filterChipActive: { backgroundColor: colors.ink, borderColor: colors.ink },
+  filterChipText: { fontSize: 12, fontWeight: '700', color: colors.muted },
+  filterChipTextActive: { color: '#fff' },
+  recordsHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  recordsHeaderTitle: { fontSize: 12, fontWeight: '800', color: colors.muted, letterSpacing: 0.6, textTransform: 'uppercase' },
+  createButton: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.blue, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
+  createButtonText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+  recordCard: { minHeight: 64, flexDirection: 'row', alignItems: 'center', gap: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: colors.line, paddingVertical: 10 },
+  recordIconBox: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  recordCopy: { flex: 1, minWidth: 0 },
+  recordTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  recordTitle: { flex: 1, fontSize: 15, fontWeight: '700', color: colors.ink },
+  recordAmount: { fontSize: 14, fontWeight: '800', color: colors.ink },
+  recordMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
+  recordTypeTag: { fontSize: 11, fontWeight: '700', color: colors.muted },
+  recordMetaDot: { fontSize: 11, color: colors.faint },
+  recordStateTag: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  recordStateText: { fontSize: 10, fontWeight: '800' },
 });

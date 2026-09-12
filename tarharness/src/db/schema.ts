@@ -6,9 +6,10 @@ export const WORKSPACE_SCHEMA = [
   )`,
   `CREATE TABLE IF NOT EXISTS records (
     id TEXT PRIMARY KEY, type TEXT NOT NULL, title TEXT NOT NULL, state TEXT NOT NULL,
-    data TEXT NOT NULL CHECK(json_valid(data)), source TEXT, external_ref TEXT,
-    owner_id TEXT, assignee_id TEXT, version INTEGER NOT NULL,
-    created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, archived_at INTEGER
+    data TEXT NOT NULL CHECK(json_valid(data)),
+    owner TEXT, assignee TEXT, due INTEGER, version INTEGER NOT NULL,
+    created INTEGER NOT NULL, updated INTEGER NOT NULL, archived INTEGER,
+    source TEXT, externalref TEXT
   )`,
   `CREATE TABLE IF NOT EXISTS links (
     id TEXT PRIMARY KEY, source_id TEXT NOT NULL, target_id TEXT NOT NULL, relation TEXT NOT NULL,
@@ -35,9 +36,17 @@ export const WORKSPACE_SCHEMA = [
     attempts INTEGER NOT NULL DEFAULT 0, due_at INTEGER NOT NULL, lease_owner TEXT, lease_until INTEGER,
     created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
   )`,
-  'CREATE INDEX IF NOT EXISTS records_by_type ON records(type, state, updated_at DESC) WHERE archived_at IS NULL',
-  'CREATE INDEX IF NOT EXISTS tasks_by_assignee ON records(assignee_id, state, updated_at DESC) WHERE type = \'task\' AND archived_at IS NULL',
+  `CREATE TABLE IF NOT EXISTS changes (
+    sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+    record TEXT NOT NULL,
+    version INTEGER NOT NULL,
+    kind TEXT NOT NULL,
+    created INTEGER NOT NULL
+  )`,
+  'CREATE INDEX IF NOT EXISTS records_by_type ON records(type, state, updated DESC) WHERE archived IS NULL',
+  'CREATE INDEX IF NOT EXISTS tasks_by_assignee ON records(assignee, state, updated DESC) WHERE type = \'task\' AND archived IS NULL',
   'CREATE INDEX IF NOT EXISTS runs_due ON runs(state, due_at) WHERE state IN (\'ready\', \'waiting\')',
   'CREATE INDEX IF NOT EXISTS events_by_run ON events(run_id, created_at DESC)',
   'CREATE INDEX IF NOT EXISTS outbox_due ON outbox(state, due_at) WHERE state IN (\'pending\', \'retry\')',
+  'CREATE INDEX IF NOT EXISTS changes_by_record ON changes(record, sequence DESC)',
 ];

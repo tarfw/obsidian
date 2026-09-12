@@ -1,0 +1,301 @@
+{
+  "version": "1.0.0",
+  "name": "TAR Core Catalog",
+  "components": [
+    {
+      "name": "navigation",
+      "title": "Navigation bar",
+      "category": "Navigation",
+      "description": "Top-level site navigation, persistent across pages.",
+      "props": [
+        { "name": "brand", "type": "text", "required": true },
+        { "name": "logo", "type": "media" },
+        { "name": "links", "type": "list", "required": true },
+        { "name": "cta", "type": "action" }
+      ],
+      "variants": ["simple", "centered", "mega"],
+      "slots": ["brand", "links", "actions"],
+      "tokens": { "surface": "{colors.neutral}", "text": "{colors.on-surface}" },
+      "responsive": { "mobile": "menu", "desktop": "row" },
+      "a11y": { "landmarks": ["navigation"], "contrast": "AA", "focusOrder": ["cta"] }
+    },
+    {
+      "name": "hero",
+      "title": "Hero",
+      "category": "Hero",
+      "description": "Opening section that states the offer and the primary action.",
+      "props": [
+        { "name": "eyebrow", "type": "text" },
+        { "name": "headline", "type": "text", "required": true },
+        { "name": "body", "type": "rich" },
+        { "name": "media", "type": "media" },
+        { "name": "align", "type": "text", "enum": ["left", "center"], "default": "left" },
+        { "name": "tone", "type": "token", "token": "{colors.neutral}" }
+      ],
+      "variants": ["split", "centered", "media-led", "compact"],
+      "slots": ["eyebrow", "headline", "body", "media", "actions"],
+      "tokens": { "headline": "{typography.display}", "surface": "{colors.neutral}" },
+      "responsive": { "mobile": "stack", "desktop": "2col" },
+      "a11y": { "headingLevel": 1, "contrast": "AA", "focusOrder": ["cta"] }
+    },
+    {
+      "name": "rich-text",
+      "title": "Rich text",
+      "category": "Content",
+      "description": "Editorial prose section for story, policy or detail.",
+      "props": [
+        { "name": "heading", "type": "text" },
+        { "name": "body", "type": "rich", "required": true },
+        { "name": "width", "type": "text", "enum": ["narrow", "wide"], "default": "narrow" }
+      ],
+      "variants": ["prose", "two-column", "pull-quote"],
+      "slots": ["heading", "body"],
+      "tokens": { "body": "{typography.body}", "text": "{colors.on-surface}" },
+      "a11y": { "headingLevel": 2, "contrast": "AA" }
+    },
+    {
+      "name": "feature-steps",
+      "title": "Feature steps",
+      "category": "Features",
+      "description": "Benefits or a numbered process.",
+      "props": [
+        { "name": "heading", "type": "text" },
+        { "name": "items", "type": "list", "required": true },
+        { "name": "ordered", "type": "boolean", "default": false }
+      ],
+      "variants": ["grid", "steps", "alternating"],
+      "slots": ["heading", "items"],
+      "tokens": { "heading": "{typography.heading}", "gap": "{spacing.lg}" },
+      "a11y": { "headingLevel": 2, "contrast": "AA" }
+    },
+    {
+      "name": "collection-grid",
+      "title": "Collection grid",
+      "category": "Collection",
+      "description": "Products, services or approved people in a responsive grid.",
+      "props": [
+        { "name": "heading", "type": "text" },
+        { "name": "columns", "type": "number", "default": 3 },
+        { "name": "card", "type": "text", "enum": ["photo", "compact", "priced"], "default": "photo" }
+      ],
+      "variants": ["grid", "featured", "carousel"],
+      "slots": ["heading", "items"],
+      "tokens": { "card-padding": "{spacing.md}", "radius": "{rounded.lg}" },
+      "responsive": { "mobile": 1, "tablet": 2, "desktop": 3 },
+      "a11y": { "headingLevel": 2, "contrast": "AA" },
+      "binds": ["slot.items -> registered product/service query"]
+    },
+    {
+      "name": "collection-list",
+      "title": "Collection list",
+      "category": "Collection",
+      "description": "A scannable list of records with metadata.",
+      "props": [
+        { "name": "heading", "type": "text" },
+        { "name": "showMeta", "type": "boolean", "default": true }
+      ],
+      "variants": ["list", "rows", "menu"],
+      "slots": ["heading", "items"],
+      "tokens": { "divider": "{colors.secondary}", "gap": "{spacing.sm}" },
+      "a11y": { "headingLevel": 2, "contrast": "AA" },
+      "binds": ["slot.items -> registered query"]
+    },
+    {
+      "name": "product-detail",
+      "title": "Product detail",
+      "category": "Commerce",
+      "description": "Single item with price, media and an order action.",
+      "props": [
+        { "name": "media", "type": "media", "required": true },
+        { "name": "title", "type": "text", "required": true },
+        { "name": "body", "type": "rich" },
+        { "name": "price", "type": "text" }
+      ],
+      "variants": ["gallery-left", "gallery-top", "compact"],
+      "slots": ["media", "title", "body", "price", "actions"],
+      "tokens": { "title": "{typography.heading}", "price": "{typography.label}" },
+      "a11y": { "headingLevel": 1, "contrast": "AA", "focusOrder": ["cta"] },
+      "actions": [{ "slot": "add", "target": "order.create" }]
+    },
+    {
+      "name": "pricing",
+      "title": "Pricing",
+      "category": "Commerce",
+      "description": "Plans or tiers with a comparison and a conversion action.",
+      "props": [
+        { "name": "heading", "type": "text" },
+        { "name": "plans", "type": "list", "required": true },
+        { "name": "highlight", "type": "text" }
+      ],
+      "variants": ["tiers", "table", "toggle"],
+      "slots": ["heading", "plans", "actions"],
+      "tokens": { "surface": "{colors.surface}", "accent": "{colors.tertiary}" },
+      "a11y": { "headingLevel": 2, "contrast": "AA", "focusOrder": ["cta"] },
+      "actions": [{ "slot": "select", "target": "subscription.create" }]
+    },
+    {
+      "name": "gallery",
+      "title": "Gallery",
+      "category": "Content",
+      "description": "Media collection with reserved dimensions.",
+      "props": [
+        { "name": "heading", "type": "text" },
+        { "name": "media", "type": "list", "required": true },
+        { "name": "layout", "type": "text", "enum": ["masonry", "grid", "strip"], "default": "grid" }
+      ],
+      "variants": ["grid", "masonry", "strip"],
+      "slots": ["heading", "media"],
+      "tokens": { "radius": "{rounded.lg}", "gap": "{spacing.sm}" },
+      "responsive": { "mobile": 2, "desktop": 4 },
+      "a11y": { "headingLevel": 2, "contrast": "AA" }
+    },
+    {
+      "name": "proof-quote",
+      "title": "Testimonial",
+      "category": "Proof",
+      "description": "A sourced quote or review.",
+      "props": [
+        { "name": "quote", "type": "rich", "required": true },
+        { "name": "author", "type": "text" },
+        { "name": "source", "type": "text" }
+      ],
+      "variants": ["large", "card", "inline"],
+      "slots": ["quote", "author", "source"],
+      "tokens": { "quote": "{typography.heading}", "text": "{colors.on-surface}" },
+      "a11y": { "contrast": "AA" }
+    },
+    {
+      "name": "proof-metrics",
+      "title": "Metrics",
+      "category": "Proof",
+      "description": "A small set of sourced numbers.",
+      "props": [
+        { "name": "heading", "type": "text" },
+        { "name": "metrics", "type": "list", "required": true }
+      ],
+      "variants": ["row", "grid"],
+      "slots": ["heading", "metrics"],
+      "tokens": { "value": "{typography.display}", "label": "{typography.label}" },
+      "a11y": { "headingLevel": 2, "contrast": "AA" }
+    },
+    {
+      "name": "faq",
+      "title": "FAQ",
+      "category": "FAQ",
+      "description": "Accessible questions and answers.",
+      "props": [
+        { "name": "heading", "type": "text" },
+        { "name": "items", "type": "list", "required": true },
+        { "name": "open", "type": "boolean", "default": false }
+      ],
+      "variants": ["accordion", "columns"],
+      "slots": ["heading", "items"],
+      "tokens": { "divider": "{colors.secondary}", "gap": "{spacing.sm}" },
+      "a11y": { "headingLevel": 2, "contrast": "AA", "landmarks": ["region"] }
+    },
+    {
+      "name": "hours",
+      "title": "Hours",
+      "category": "Hours",
+      "description": "Opening hours with a bound current status.",
+      "props": [
+        { "name": "heading", "type": "text" },
+        { "name": "showStatus", "type": "boolean", "default": true }
+      ],
+      "variants": ["table", "compact"],
+      "slots": ["heading", "hours"],
+      "tokens": { "open": "{colors.tertiary}", "closed": "{colors.secondary}" },
+      "a11y": { "headingLevel": 2, "contrast": "AA" },
+      "binds": ["slot.hours -> registered hours query"]
+    },
+    {
+      "name": "contact",
+      "title": "Contact",
+      "category": "Contact",
+      "description": "Approved public location and contact details.",
+      "props": [
+        { "name": "heading", "type": "text" },
+        { "name": "showMap", "type": "boolean", "default": false }
+      ],
+      "variants": ["details", "split-map", "card"],
+      "slots": ["heading", "details", "map"],
+      "tokens": { "text": "{colors.on-surface}", "gap": "{spacing.md}" },
+      "a11y": { "headingLevel": 2, "contrast": "AA" }
+    },
+    {
+      "name": "form",
+      "title": "Form",
+      "category": "Form",
+      "description": "Accessible enquiry or request form that starts a journey.",
+      "props": [
+        { "name": "heading", "type": "text" },
+        { "name": "fields", "type": "list", "required": true },
+        { "name": "submitLabel", "type": "text", "default": "Send" }
+      ],
+      "variants": ["stacked", "inline", "card"],
+      "slots": ["heading", "fields", "actions"],
+      "tokens": { "radius": "{rounded.md}", "accent": "{colors.tertiary}" },
+      "a11y": { "headingLevel": 2, "contrast": "AA", "focusOrder": ["submit"] },
+      "actions": [{ "slot": "submit", "target": "lead.capture" }]
+    },
+    {
+      "name": "booking",
+      "title": "Booking",
+      "category": "Booking",
+      "description": "Availability and reservation for a resource or appointment.",
+      "props": [
+        { "name": "heading", "type": "text" },
+        { "name": "resource", "type": "record" }
+      ],
+      "variants": ["calendar", "slots"],
+      "slots": ["heading", "availability", "actions"],
+      "tokens": { "selected": "{colors.tertiary}", "gap": "{spacing.sm}" },
+      "a11y": { "headingLevel": 2, "contrast": "AA", "focusOrder": ["cta"] },
+      "actions": [{ "slot": "reserve", "target": "booking.create" }]
+    },
+    {
+      "name": "cta",
+      "title": "Call to action",
+      "category": "CTA",
+      "description": "Closing action band.",
+      "props": [
+        { "name": "headline", "type": "text", "required": true },
+        { "name": "body", "type": "rich" },
+        { "name": "tone", "type": "text", "enum": ["light", "dark", "accent"], "default": "light" }
+      ],
+      "variants": ["banner", "card", "split"],
+      "slots": ["headline", "body", "actions"],
+      "tokens": { "surface": "{colors.primary}", "text": "{colors.neutral}" },
+      "a11y": { "headingLevel": 2, "contrast": "AA", "focusOrder": ["cta"] }
+    },
+    {
+      "name": "footer",
+      "title": "Footer",
+      "category": "Footer",
+      "description": "Navigation, contact and policy links.",
+      "props": [
+        { "name": "columns", "type": "list", "required": true },
+        { "name": "legal", "type": "text" }
+      ],
+      "variants": ["columns", "simple"],
+      "slots": ["columns", "legal"],
+      "tokens": { "surface": "{colors.neutral}", "text": "{colors.secondary}" },
+      "responsive": { "mobile": "stack", "desktop": "row" },
+      "a11y": { "landmarks": ["contentinfo"], "contrast": "AA" }
+    },
+    {
+      "name": "generated-view",
+      "title": "Generated view",
+      "category": "Escape",
+      "description": "Sandboxed open-ended region for genuinely one-off output. Omit from a catalog to disable open-ended generation.",
+      "props": [
+        { "name": "html", "type": "text", "required": true },
+        { "name": "height", "type": "text", "default": "auto" }
+      ],
+      "variants": ["inline", "full"],
+      "slots": ["html"],
+      "responsive": { "mobile": "fit", "desktop": "fit" },
+      "a11y": { "contrast": "AA" }
+    }
+  ]
+}

@@ -1,0 +1,173 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tar.app/schemas/site-spec.schema.json",
+  "title": "TAR Site Spec",
+  "description": "The canonical declarative model the Harness reads and writes for one site. Bindings, journeys and actions resolve to registered queries, Actions or Flows; they never carry arbitrary code.",
+  "type": "object",
+  "required": ["design", "pages"],
+  "additionalProperties": false,
+  "properties": {
+    "design": {
+      "type": "string",
+      "description": "Record ID or revision of the site's DESIGN.md contract."
+    },
+    "pages": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/page" }
+    },
+    "journeys": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/journey" }
+    },
+    "variants": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/variant" }
+    },
+    "surfaces": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/surface" }
+    },
+    "policy": { "$ref": "#/$defs/policy" }
+  },
+  "$defs": {
+    "page": {
+      "type": "object",
+      "required": ["id", "path", "sections"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+        "path": { "type": "string", "pattern": "^/[a-z0-9/_-]*$" },
+        "title": { "type": "string" },
+        "meta": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "sections": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/section" }
+        }
+      }
+    },
+    "section": {
+      "type": "object",
+      "required": ["id", "component"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "component": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+        "variant": { "type": "string" },
+        "props": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "bindings": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/binding" }
+        },
+        "actions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/actionRef" }
+        },
+        "slots": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    },
+    "binding": {
+      "type": "object",
+      "required": ["slot", "query"],
+      "additionalProperties": false,
+      "properties": {
+        "slot": { "type": "string" },
+        "query": { "$ref": "#/$defs/registeredRef" },
+        "params": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "access": { "enum": ["public", "own", "assigned", "team"] },
+        "freshness": { "enum": ["published", "refreshable", "live"] },
+        "empty": { "type": "string" }
+      }
+    },
+    "actionRef": {
+      "type": "object",
+      "required": ["slot", "target"],
+      "additionalProperties": false,
+      "properties": {
+        "slot": { "type": "string" },
+        "target": { "$ref": "#/$defs/registeredRef" }
+      }
+    },
+    "journey": {
+      "type": "object",
+      "required": ["id", "target", "outcome"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "target": { "$ref": "#/$defs/registeredRef" },
+        "input": { "type": "object", "additionalProperties": true },
+        "outcome": { "enum": ["enquiry", "order", "booking", "support", "handoff"] }
+      }
+    },
+    "variant": {
+      "type": "object",
+      "required": ["id", "when", "patch"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "when": { "type": "string", "description": "Deterministic condition over intent, locale or time." },
+        "priority": { "type": "integer", "minimum": 0 },
+        "patch": { "type": "object", "additionalProperties": true }
+      }
+    },
+    "surface": {
+      "type": "object",
+      "required": ["id", "catalog"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "catalog": { "type": "string" },
+        "scope": { "type": "string" },
+        "budget": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "tokens": { "type": "integer", "minimum": 0 },
+            "seconds": { "type": "number", "minimum": 0 },
+            "nodes": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "fallback": { "type": "string" }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "publishRoles": {
+          "type": "array",
+          "items": { "enum": ["owner", "admin", "member"] }
+        },
+        "approval": { "type": "boolean" },
+        "claims": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Material generated claims that require an approved source or owner confirmation."
+        },
+        "retention": { "type": "string" }
+      }
+    },
+    "registeredRef": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(\\.[a-z0-9-]+)+$",
+      "description": "A namespaced identifier such as order.place or sales.today."
+    }
+  }
+}

@@ -1,676 +1,1380 @@
-# TAR v4 - Architecture
+# TAR v4 — Architecture
 
-> One record. One Authority. Three surfaces: Space, Inbox, Bots.
+> Records hold business facts. Actions change them. The Action Gateway checks them. Atomic Save makes them permanent.
 
-TAR is one execution Authority over one record table, with three screens. This document describes the system as built; Section 12 marks what is still target.
+| Product | Meaning |
+|---|---|
+| **Space** | What matters now and what this member can do |
+| **Inbox** | Work that needs attention |
+| **Bots** | Capability that can be installed or configured |
+
+**Status language:** `Built` = works now · `Partial` = works with stated limits · `Planned` = design only.
 
 ===============================================================================
-# PART A - THE SYSTEM
+
+## 0. SCREEN CONCEPTS
+
+### Space
+
+```text
++=============================================================================+
+| Scope: [ Slice House v ]                   SPACE | Inbox | Bots             |
++=============================================================================+
+| Today                                                                       |
+|                                                                             |
+| Sales                    Low stock                  Open work               |
+| ₹12,400                  3 items                    6                       |
+|                                                                             |
+| Actions: [ New sale ] [ Add product ] [ Close shift ]                      |
+|                                                                             |
+| Recent: Order #1042 accepted · Stock delivery recorded                     |
++=============================================================================+
+```
+
+### Inbox
+
+```text
++=============================================================================+
+| Scope: [ Slice House v ]                    Space | INBOX | Bots            |
++=============================================================================+
+| [ Mine ] [ Unassigned ] [ Team ] [ Approvals ]                             |
+|                                                                             |
+| Prepare order #1042       Kitchen       Due now       [ Start ]             |
+| Approve refund #1031      Owner         10:30         [ Review ]            |
+| Reply to customer         Support       Today         [ Open ]              |
+|                                                                             |
+| One view over Tasks, Orders, conversations, approvals, and failures.        |
++=============================================================================+
+```
+
+### Bots
+
+```text
++=============================================================================+
+| Scope: [ Slice House v ]                    Space | Inbox | BOTS            |
++=============================================================================+
+| Search Bots...                                                              |
+|                                                                             |
+| POS Bot          Installed     Customers · Orders · Stock · Register        |
+| Sales Bot        Add           Leads · Deals · Follow-up                    |
+| Team Bot         Add           Members · Onboarding · Assigned work         |
+| Site Bot         Installed     Draft · Preview · Publish · History          |
+|                                                                             |
+| Selecting a Bot opens its features and configuration.                       |
++=============================================================================+
+```
+
+| Scope rule | Decision |
+|---|---|
+| Personal vs work | Compact selector, such as `Personal / Slice House` |
+| Personal in Bots | No; Personal is a data scope, not installable capability |
+| Workspace switcher | No separate full-screen switcher required |
+
 ===============================================================================
 
-Everything TAR does follows one path.
+## 1. SYSTEM MODEL
 
-~~~text
-intent   human / channel / schedule
+```text
+intent: person / channel / schedule
+                   |
+                   +---------------- direct Action ------------------+
+                   |                                                 |
+                   v                                                 |
++=============================================================================+
+| RUNNER                                                                      |
+| the agentic harness                                                        |
+|                                                                             |
+| Skills    instructions and methods loaded for this kind of work            |
+| Context   permitted Records, messages, and previous results                |
+| Model     interprets intent and chooses the next step                       |
+| Code      executes known deterministic rules                               |
+| Tools     read permitted data or request registered Actions                |
+| Limits    allowed tools, turns, time, cost, and stopping condition          |
++=============================================================================+
+                   |
+                   +--> Read Tool --> permitted data --> Runner
+                   |
+                   +--> Action Tool --> registered Action -----------+
+                                                                     |
+                                                                     v
++=============================================================================+
+| ACTION GATEWAY                                                              |
+| authenticate -> authorize -> validate -> replay -> version check            |
++=============================================================================+
+                   |
+                   | one workspace transaction
+                   v
++=============================================================================+
+| ATOMIC SAVE                                                                 |
+| all changes succeed together, or none are saved                            |
+| business Records + Event/result + optional Task/Run change                  |
++=============================================================================+
+                   |
+                   +--> Inbox projection when a person is needed
+                   |
+                   +--> Delivery intent for an external effect       PLANNED
+```
+
+### Design rules
+
+| # | Rule | Meaning |
+|---:|---|---|
+| 1 | One safe write path | Shared changes pass through the Action Gateway |
+| 2 | Deterministic first | Use code for known rules; models interpret or draft |
+| 3 | One work surface | Inbox presents everything requiring attention |
+| 4 | One installation concept | Users install Bots; package mechanics remain internal |
+| 5 | Runs only for durable process | A single Action needs an Event, not a duplicate Run |
+| 6 | Large content in R2 | Records hold metadata and immutable object keys |
+| 7 | Device cache, Gateway save | Offline work remains pending until accepted |
+| 8 | Planned means planned | Future behavior is labeled where it is described |
+
+### Vocabulary
+
+| Term | Meaning | Visible to users? |
+|---|---|---|
+| **Record** | Business fact: contact, order, task, message, site | Yes |
+| **Action** | Registered operation over Records or an integration | Yes |
+| **Bot** | Installable business capability | Yes |
+| **Flow** | Process spanning multiple Actions, people, or time | As Automation |
+| **Run** | One durable occurrence of a Flow | As progress/history |
+| **Channel** | Verified inbound or outbound connection | In settings |
+| **Runner** | Agentic harness that supplies context and executes bounded steps | Internal |
+| **Skill** | Instructions and methods the Runner loads for a kind of work | Internal |
+| **Tool** | Callable capability exposed to the Runner | Internal |
+| **Read Tool** | Returns permitted data without changing shared truth | Internal |
+| **Action Tool** | Converts a tool request into a registered Action | Internal |
+| **Action Gateway** | Permission, validation, replay, and safe-write boundary | Internal |
+| **Atomic Save** | Makes related database changes permanent together | Internal |
+| **Event** | Audit entry plus compact replay result | Internal/history |
+
+```text
+Runner proposes.
+Skills guide the Runner.
+Tools read data or request Actions.
+Action Gateway validates.
+Atomic Save makes the accepted change permanent.
+Records hold truth.
+Events preserve history.
+```
+
+===============================================================================
+
+## 2. ACTION GATEWAY
+
+### Action request
+
+| Required input | Purpose |
+|---|---|
+| Action ID + version | Select a registered contract |
+| Workspace | Select the isolated business database |
+| Actor | Apply membership, job, scope, and field rules |
+| Input | Validate business data |
+| Idempotency key | Return the original result for a repeated request |
+| Expected version | Reject stale changes |
+
+### Atomic Save path
+
+```text
+request
   |
-  |  executor: code | model proposal | human task
-  v
-+---------------------------------------------------------------+
-| AUTHORITY   the only writer                                   |
-| authenticate -> authorize -> validate -> versions             |
-+---------------------------------------------------------------+
-  |
-  |  one workspace transaction
-  v
-+---------------------------------------------------------------+
-| COMMIT   Records + Run transition + Event + Delivery intent   |
-+---------------------------------------------------------------+
-  |
-  +--> Inbox task      when a person is needed
-  |
-  +--> Delivery        when the outside world is touched
-~~~
+  +--> authenticate actor
+  +--> authorize workspace + Action + Record type
+  +--> validate input + protected lifecycle rules
+  +--> fingerprint input + check saved replay
+  +--> open workspace transaction
+  |      +--> recheck replay/current state
+  |      +--> require expected versions and affected rows
+  |      +--> write business changes
+  |      +--> write compact Event/result
+  |      +--> write Task/Run/Delivery intent when required
+  +--> ATOMIC SAVE succeeds -> return saved result
+  +--> any write fails      -> save nothing
+```
 
-**Design rules**
-
-1. One writer - every official workspace effect goes through the Authority.
-2. One record table - every business fact is a `records` row; the workspace database is the tenant.
-3. Deterministic first - code unless interpretation is genuinely needed.
-4. One human queue - all human work is an Inbox task.
-5. Three destinations - Space, Inbox, Bots.
-6. Bots are packages, not processes - installing one configures; it does not start an agent.
-7. Blobs stay out of the database - R2 holds large content; a Record holds its key.
-8. Local-first is a client concern - the device caches permitted data; only the Authority commits shared truth.
-
-**The three screens**
-
-~~~text
-+---------------------------------------------------------------+
-|  [ Space ]   [ Inbox ]   [ Bots ]                             |
-+---------------------------------------------------------------+
-| SPACE   the role workbench                                    |
-|    Sales today    12,400   metric                             |
-|    New sale       open     entry                              |
-|    Low stock      3        metric                             |
-|    Kitchen queue  open     view                               |
-|                                                               |
-| INBOX   all human work                                        |
-|    Prepare order o17   kitchen   due now                      |
-|    Approve refund o17  owner     due 10:30                    |
-|    filters: Mine, Unassigned, Team, Approvals                 |
-|                                                               |
-| BOTS    capabilities                                          |
-|    [ Search bots ]                                            |
-|    [ME]  Personal        pinned, on device                    |
-|          Your private space; no members, no credits           |
-|    [PO]  POS Bot         installed, 5 flows                   |
-|          Sell, take payments and keep stock in sync           |
-|    [SA]  Sales Bot       add                                  |
-|          Capture customers, follow up and keep deals moving   |
-|    [TE]  Team Bot        add                                  |
-|          Onboard people and keep assigned work clear          |
-|    [OP]  Operations Bot  add                                  |
-|          Handle requests and routine operational work         |
-|    [SI]  Site Bot        add                                  |
-|          Public website and visitor journeys by prompt        |
-+---------------------------------------------------------------+
-~~~
-
-Space shows what the role can do, Inbox is the one human queue, and Bots is where capability arrives: a chat-style list, each row opening its Flows or offering `add`. **Personal** is pinned at the top like saved messages - not a Bot, not a workspace you switch to, but a private on-device scope with its own screen.
-
-## 1. VOCABULARY
-
-Three primitives, one execution model, one package, three surfaces. Nothing else is user-facing.
-
-| Kind | Concept | Meaning | Internal name |
-|---|---|---|---|
-| Primitive | **Record** | Any stored fact - contact, order, task, message, run, site | `records` row |
-| Primitive | **Action** | A registered, versioned capability: `app` or `human` | action registry |
-| Primitive | **Authority** | The policy + commit boundary for shared Records and external effects | `executeGateway` |
-| Model | **Harness** | How a step is executed: context + policy + tools | gateway + executors |
-| Package | **Bot** | Capability pack: records + Actions + Flows + cards + Inbox work + roles | `definitions` rows |
-| Definition | **Flow** | A Bot's ordered Run template | `definitions` kind=`flow` |
-| Surface | **Space** | The role's workbench of cards | `canvas` over `definitions` |
-| Surface | **Inbox** | Every task a person must act on | view over `type='task'` |
-| Surface | **Bots** | Installed capability and the directory | view over `definitions` |
-| Connection | **Channel** | An inbound/outbound link with a verified sender | channel link + control ledger |
-
-A Run, a site, a message and a Bot install are all Records. The **Authority** is TAR's policy-enforcement point (a PEP) plus its unit of work - the only writer. `artifact`, tool, skill, model, MCP and sandbox are engineering terms; users see Records, Flows, Actions, Bots.
-
-- **An Action is `app` or `human`.** Model work is a Harness step, not a fourth Action type.
-- **A Channel is a connection, not a view.** It is a Record plus a verified adapter, not a third screen.
-
-## 2. AUTHORITY - ONE COMMIT CONTRACT
-
-~~~text
-+---------------------------------------------------------------+
-| AUTHORITY   the only writer                                   |
-| authenticate -> authorize -> validate -> versions             |
-+---------------------------------------------------------------+
-  |
-  |  one workspace transaction
-  v
-+---------------------------------------------------------------+
-| COMMIT   one atomic write                                     |
-|   business changes   Records                                  |
-|   Run transition     Runs                                     |
-|   Event              audit + replay result                    |
-|   Delivery intent    external effect                          |
-+---------------------------------------------------------------+
-~~~
-
-Every registered Action passes the same gate: registered ID, role check, required fields, input fingerprint, replay lookup, then one transaction that writes business state and the audit Event together.
-
-**Runtime.** The Authority runs on Cloudflare Workers with Effect v4 (`effect@4.0.0-rc.112`) and `@libsql/client` for remote Turso access. Cloudflare supplies HTTP, D1 control data, Queues and scheduled recovery; Turso stores one operational database per workspace; R2 stores large content.
+### Guarantees
 
 | Boundary | Rule |
 |---|---|
-| Replay | workspace + key binds actor, Action ID/version and input hash; returns the saved result without re-executing |
-| Conflict | same key with changed input or explicit version fails; unique key and checked writes prevent duplicate effects |
-| Concurrency | expected version checked inside the transaction; require the intended affected rows |
-| Reads | project permitted rows and fields; screen visibility is not access control |
-| Retry | re-invokes execution, bounded; a legitimate re-run takes a new occurrence key; stale input needs a new decision |
-| External effect | commit a Delivery intent; use a stable provider key; reconcile uncertain outcomes |
-| Separate stores | D1, Turso, R2 and providers share no transaction - bridge with a durable intent and a saved result |
+| Replay | Same workspace, actor, Action/version, key, and input return one result |
+| Key conflict | Same key with different input fails |
+| Concurrency | Expected version is checked inside the transaction; affected rows must match |
+| Protected types | Generic editing cannot bypass Order, Payment, Task, Site, or access rules |
+| Retry | Bounded retry uses the same key; a legitimate new occurrence uses a new key |
+| Reads | Server projects permitted rows and fields; screen visibility is not access control |
+| Numeric facts | Money and counts are integers; rates use basis points |
 
-Money, stock, assignment and approvals never use last-write-wins; money and counts are integers. Access and definition-management Actions are owner/admin-only and never model-controlled.
+### Runtime
 
-## 3. RECORDS + STORAGE
-
-| Store | Holds | Authority |
-|---|---|---|
-| Control / D1 | identity, membership, invites, channel links, chat command ledger | access; rows carry `workspace` |
-| Workspace / Turso | business Records, definitions, Runs, Events | one isolated database per workspace |
-| Objects / R2 | media, product content, site releases | immutable content referenced by DB |
-| Device / local SQLite | permitted cache, drafts, pending Actions | local persistence; shared changes require the Authority |
-
-One table holds everything; the workspace connection is the tenant, so business rows carry no `workspace`.
-
-~~~text
-+---------------------------------------------------------------+
-| records   one row per business fact                           |
-|   id        text pk                                           |
-|   type      text    contact|order|task|message|run|pos.*|site |
-|   title     text                                              |
-|   state     text                                              |
-|   data      json    type-specific facts                       |
-|   owner     text?   business ownership                        |
-|   assignee  text?   human task assignment                     |
-|   due       int?    due time (UTC ms)                         |
-|   version   int     optimistic concurrency                    |
-|   created   int     UTC ms                                    |
-|   updated   int     UTC ms                                    |
-|   archived  int?    archive marker                            |
-+---------------------------------------------------------------+
-| definitions   Bots, Flows and workspace kits                  |
-|   id, kind ('flow'|'bot'|'kit'), name, version, state, data   |
-+---------------------------------------------------------------+
-| runs   pinned Flow occurrences                                |
-|   id, flow_id, flow_version, occurrence, state, action_id,    |
-|   context json, version                                       |
-+---------------------------------------------------------------+
-| events   audit + replay ledger                                |
-|   id, kind, run_id, record_id, action_id, state, actor_id,    |
-|   input_hash, idempotency_key UNIQUE, data json               |
-+---------------------------------------------------------------+
-~~~
-
-| Rule | Meaning |
+| Layer | Current choice |
 |---|---|
-| Names | physical columns are single lowercase ASCII words |
-| Notation | `data.contact` is a path; `roles[]` is an array |
-| Units | money = integer minor units + currency; rates = basis points; time = UTC milliseconds |
-| Identity | `contact` stores a contact ID; `owner` is business ownership; `assignee` is human assignment |
-| Extension | type-specific facts live in `data`; hot common filters stay columns |
-| Concurrency | expected version checked inside the transaction; require the intended affected rows |
-| Removal | archive Records; protected definitions and audit keep their own retention |
+| API and Action Gateway | Cloudflare Workers |
+| Effects and errors | Effect v4 |
+| Workspace SQL client | `@libsql/client` |
+| Control data | Cloudflare D1 |
+| Workspace data | Turso, one database per work workspace |
+| Large objects/releases | Cloudflare R2 |
+| Async wake-up | Cloudflare Queues and scheduled recovery |
 
-Action IDs such as `order.place` are namespaced identifiers, not column names.
+### External effects — Planned
 
-| Keep in DB | Put in R2 |
+```text
+workspace transaction                  delivery worker
++-----------------------------+        +------------------------------+
+| business change             |        | claim pending intent         |
+| delivery intent             | -----> | call provider with stable ID |
+| Event                       |        | save result / reconcile      |
++-----------------------------+        +------------------------------+
+```
+
+| Situation | Rule |
 |---|---|
-| prices, stock, reservations, order lines, payment facts | images, video, receipts, attachments |
-| assignment, status, short messages, searchable metadata | long documents, large message bodies |
-| Flow definitions, compact audit | site releases, large traces and tool results |
+| Payment/message/provider call | Save a durable intent with the business change before delivery |
+| Queue duplicate | Consumer and provider operation must be idempotent |
+| Lost queue wake-up | Recovery scan finds pending intents |
+| Unknown provider outcome | Reconcile before another attempt |
+| Current implementation | External effects are synchronous; durable delivery is not built |
 
-Small text and JSON stay inline; review payloads around 32 KB. Blobs never enter the replicated database; devices fetch them on demand. DB and R2 share no transaction: authorize upload, verify hash/size/type, then commit the reference. Cleanup never races attachment. Credentials live in secret storage, never in Records.
+### Immutable object write
 
-## 4. HARNESS - HOW A STEP RUNS
+```text
+validate -> upload unique/content-hash key -> checked DB reference -> later cleanup
+```
 
-The Harness is the one execution path behind the assistant, every Flow, every Bot and every Channel.
+| Object rule | Reason |
+|---|---|
+| Never overwrite a version-derived key concurrently | Losing DB writer must not overwrite winning content |
+| Verify type, size, and hash | Record references only accepted content |
+| Delete old content after the new reference is saved | Cleanup must not race attachment |
 
-~~~text
-+---------------------------------------------------------------+
-| HARNESS    context + policy + tools for one step              |
-| EXECUTORS  what performs a step: code | model | human         |
-| AUTHORITY  policy + commit boundary: the only writer          |
-+---------------------------------------------------------------+
-~~~
+===============================================================================
 
-| Step mode | Used for | May commit? |
+## 3. RECORDS AND STORAGE
+
+```text
++==================+     +==================+     +==================+
+| D1 CONTROL       |     | TURSO WORKSPACE  |     | R2 OBJECTS       |
+| identity         |     | records          |     | media            |
+| membership       |     | definitions      |     | attachments      |
+| channel links    |     | runs             |     | site releases    |
+| command ledger   |     | events           |     | long content     |
++==================+     +==================+     +==================+
+                              |
+                              v permitted projections
+                       +==================+
+                       | DEVICE SQLITE    |
+                       | Personal         |
+                       | work cache       |
+                       | drafts/pending   |
+                       +==================+
+```
+
+### Store ownership
+
+| Store | Holds | Write boundary |
 |---|---|---|
-| **code** | calculations, validation, transactions, integrations, known rules | yes, through the Authority |
-| **model** | one structured call, or a bounded tool-using loop within a step budget | proposes only |
-| **human** | judgement, missing facts, required approval | replies through Inbox; the Authority validates |
+| D1 control | Identity, membership, invites, registry, Channel links and ledger | Control Actions |
+| Turso workspace | Business Records, definitions, Runs and Events | Action Gateway |
+| R2 | Immutable files and releases | Authorized object protocol |
+| Device SQLite | Personal, permitted cache, drafts, preferences, pending commands | Local app; shared commands still need Gateway acceptance |
 
-It picks the cheapest sufficient mode: `code -> model -> human`. Today the loop is **single-step**: one request drives one Action through the Authority. Multi-step Runs, waiting and resumption are the next increment (Section 12).
+### Workspace schema
+
+```text
++=============================================================================+
+| records   common business facts                                             |
+| id | type | title | state | data JSON | owner? | assignee? | due?           |
+| version | created | updated | archived?                                      |
++=============================================================================+
+| definitions   current Bot configuration and Flow definitions                |
+| id | kind | name | version | state | data JSON                               |
++=============================================================================+
+| runs   durable multi-step Flow occurrences                                  |
+| id | flow_id | flow_version | occurrence | state | action_id | context JSON  |
+| version | started_at? | finished_at?                                         |
++=============================================================================+
+| events   audit and replay ledger                                             |
+| id | kind | run_id? | record_id? | action_id | actor_id | input_hash        |
+| idempotency_key UNIQUE | state | compact data JSON                           |
++=============================================================================+
+```
+
+| Data rule | Decision |
+|---|---|
+| Tenant boundary | The workspace database; business rows need no workspace column |
+| Flexible fields | Type-specific facts live in `data` |
+| Indexed/common fields | Keep as columns when used for filters or invariants |
+| Time | UTC milliseconds; workspace stores timezone/business-day settings |
+| Removal | Archive business Records; definitions and audit follow retention rules |
+| Credentials | Secret storage only; never Records or Events |
+
+### Database vs R2
+
+| Keep in database | Put in R2 |
+|---|---|
+| Prices, stock, reservations, Order lines, payment facts | Images, video, receipts, attachments |
+| Assignment, state, short messages, searchable metadata | Long documents and message bodies |
+| Flow definitions and compact audit | Site releases, large traces and tool results |
+
+### Core identity Records
+
+| Record | Holds |
+|---|---|
+| `contact` | Person, handles, consent, business labels |
+| `organization` | Company or group |
+| `link` | Typed relationship between Records |
+
+| Bot | Contact labels used | Produces |
+|---|---|---|
+| Sales | lead, customer | Deal, quote, follow-up |
+| Support | customer | Ticket, conversation |
+| Hiring | candidate, employee | Application, offer, onboarding Task |
+| POS | customer | Order, payment |
+
+Business labels never grant login or workspace access. Bots reference one Contact identity. Orders and receipts may retain historical snapshots such as the customer name used at purchase.
+
+===============================================================================
+
+## 4. RUNNER
+
+The Runner is the agentic harness. It supplies context and executes one bounded step; every shared change is proposed as an Action to the Action Gateway.
+
+```text
++=============================================================================+
+| RUNNER                                                                      |
+| input -> permitted context -> executor -> schema-checked output             |
+|                                                                             |
+| executor: CODE | MODEL | HUMAN                                              |
+| limits: tools | turns | time | cost | stopping condition                    |
++=============================================================================+
+                           |
+                           +--> proposal/read result
+                           +--> Action Gateway for a shared effect
+```
+
+### Executors
+
+| Executor | Use | Shared-write ability |
+|---|---|---|
+| Code | Calculations, validation, known rules and integrations | Through Action Gateway |
+| Model | Classification, extraction, interpretation, editable drafts | Proposes only |
+| Human | Judgment, missing facts, required approval | Decision returns through Inbox and Gateway |
+
+A required approval is a declared business rule, not a fallback after code or a model fails.
+
+### Step contract
+
+| Field | Meaning |
+|---|---|
+| Input schema | Facts the step accepts |
+| Context sources | Permitted Records, messages, and tool results |
+| Executor | Code, model, or human |
+| Tools | Explicit allowlist |
+| Output schema | Result or proposed Action shape |
+| Limits | Turns, time, cost, retries, and stop condition |
 
 | Guarantee | Rule |
 |---|---|
-| One path | Assistant, Flows, Bots and Channels all call the same Authority |
-| Proposals | model output is a schema-validated proposal; a commit performs the effect |
-| Context is data | records, messages and tool output are data, never authority |
-| Durable | a completed Action returns its saved result even if its implementation has retired |
-| Failure | save progress; bounded retry or Inbox handoff; manual work stays available |
+| Context is data | Records, messages and tool output cannot grant authority |
+| Model output | Schema-validated proposal only |
+| Tool access | A prompt cannot widen its own tool list |
+| Completion | Saved Action results are replayable |
+| Failure | Bounded retry, saved progress, or human handoff |
 
-The only model call in the service today is `pos.product.draft` (`@cf/meta/llama-3.1-8b-instruct-fast`), which suggests catalog wording from facts the user entered. It never sets price, tax, barcode, SKU or stock, and every suggestion stays editable.
+### Current model use
 
-## 5. BOTS - THE CAPABILITY SYSTEM
-
-A Bot is a package of business capability: the records it owns, the Actions it adds, the Flows it ships, the cards it puts on Space, the work it puts in the Inbox and the roles it expects. It is not a running agent - installing it configures the workspace; deterministic steps stay code and only reasoning steps call a model.
-
-~~~yaml
-Bot:
-  id: pos
-  title: POS Bot
-  category: Retail
-  guidance: "Set up your store, add products, open the register."
-  flows:    [sell, orders, stock, customers, register]
-  records:  [product, order, payment, register, movement, customer]
-  actions:  [pos.open, pos.order.save, pos.checkout, pos.refund, pos.stock.adjust]
-  roles:    [cashier, kitchen, stock]
-~~~
-
-| Part | Means | Surfaces as |
-|---|---|---|
-| `flows` | template processes it ships, each a set of steps | Space cards, Run history |
-| `records` | types it introduces | records lists, forms, search |
-| `actions` | registered tools it adds | Space entries, Flow steps |
-| `roles` | work roles it expects | assignment, card visibility |
-| `guidance` | setup text | Bots screen |
-
-Installing a Bot writes `definitions` rows (bot + kit + flows) and changes all three surfaces at once, through the Authority: Space gets role-appropriate cards, Inbox gets human work templates, Bots shows installed state. Removing it archives those definitions while preserving Records, Runs and history.
-
-**Lifecycle.** `publish (immutable revision) -> install (resolve, pin, preview) -> configure -> remove (archive, keep work)`.
-
-**Four ways capability arrives**
-
-| Kind | What it is | Adds code? | Example |
+| Action | Model | May propose | May not set |
 |---|---|---|---|
-| Core | always present | built in | contacts, tasks, files, search, Inbox |
-| Directory Bot | reviewed pack + starter config | sometimes, via a pack | POS, Sales, Team, Operations, Site |
-| Custom Flow | user composes existing Actions into a new Flow | no | a house process built from Team + POS Actions |
-| Pack | reviewed code adding a new Action or invariant | yes | a payment provider adapter, a tax rule |
+| `pos.product.draft` | `@cf/meta/llama-3.1-8b-instruct-fast` | Editable catalog wording from entered facts | Price, tax, barcode, SKU, stock |
 
-A Custom Flow never writes code; a Pack is the only route to new executable capability, and it always goes through review.
+Current execution is single-step. Durable multi-step Runner behavior belongs to Flows and Runs and is still planned.
 
-**Creating a Bot - from prompt to pack**
+===============================================================================
 
-~~~text
-+---------------------------------------------------------------+
-| describe the business                                         |
-|   --> identify Records and relationships                      |
-|   --> discover registered Actions                             |
-|   --> draft Flows, Space cards and role defaults              |
-|   --> flag access, approvals and high-risk effects            |
-|   --> user reviews a compact preview                          |
-|   --> Authority publishes the Bot                             |
-+---------------------------------------------------------------+
-~~~
+## 5. BOTS AND CAPABILITY
 
-**Packaging rules.** User prompts and imported content are never executable code; only reviewed Packs add Actions; the Authority governs every effect whatever Bot requested it; cards, Flows and triggers bind to registered IDs, never arbitrary SQL or JavaScript; removal is archival by default and destructive deletion is a separate reviewed Action.
+### Bot manifest
 
-**Contacts - the one Core record every Bot shares**
+```yaml
+bot: pos
+title: POS Bot
+features: [customers, orders, stock, register]
+records: [product, order, payment, register, movement]
+actions: [pos.open, pos.order.save, pos.checkout, pos.refund]
+jobs: [cashier, kitchen, stock]
+automations: [shift-close]
+```
 
-Contacts and Organizations are **Core Records**: always present, owned by no Bot. There is **no Contacts Bot** - a Bot that owned contacts would fork the one customer record. What a business installs is a Bot that *operates on* Contacts.
+| Bot part | Meaning | Surface |
+|---|---|---|
+| Features | Business areas and views | Space and Bot detail |
+| Records | Types used by the capability | Lists, forms, search |
+| Actions | Registered operations | Forms, buttons, Runner tools |
+| Jobs | Operational defaults | Access, card visibility, assignment |
+| Automations | Real multi-step Flows | Space, Inbox, Run history |
+| Guidance | Setup instructions | Bot detail |
 
-~~~text
-+---------------------------------------------------------------+
-| CORE   contact + organization + link                          |
-|        always present; owned by no Bot                        |
-+---------------------------------------------------------------+
-~~~
+Customers, Orders, Stock, and Register are features. They are not Flows merely because they appear inside a Bot.
 
-| Core record | Holds |
+### Install lifecycle
+
+```text
+discover -> configure -> dependency check -> preview -> activate
+                                                   |
+                                                   v
+                Space cards + Inbox rules + Bot state + Flow definitions
+
+remove -> archive configuration -> preserve Records, Events, releases, active work
+```
+
+| Capability source | Adds executable code? | Example |
+|---|---:|---|
+| Core | Built in | Contacts, Tasks, files, search, Inbox |
+| Directory Bot | Only through reviewed internal extension | POS, Sales, Team, Site |
+| Workspace Automation | No; composes registered Actions | Shift close or lead follow-up |
+| Reviewed extension | Yes; internal packaging boundary | Payment adapter or tax rule |
+
+### Safety rules
+
+| Rule | Enforcement |
 |---|---|
-| `contact` | a person - `roles[]`, handles, consent |
-| `organization` | a company; contacts reference it |
-| `link` | a relationship: source, target, relation |
+| Prompt/import is data | Never executable code |
+| New executable capability | Reviewed extension only |
+| Cards and Flows | Bind to registered IDs, never arbitrary SQL/JavaScript |
+| Cross-Bot Automation | Dependencies shown before activation |
+| Removal | Archive by default; destructive deletion is a separate reviewed Action |
 
-A contact holds `roles[]` - `lead, customer, candidate, employee, vendor, partner`; a role never grants access (Section 10), membership does. A `link` is a relationship Record between two contacts or a contact and an organization (employment, referral, household) - not a side table.
+===============================================================================
 
-~~~text
-+---------------------------------------------------------------+
-| a contact   from a form, channel, import or Run               |
-| flow.start  the contact becomes the Run subject               |
-| Flow        lead-capture / qualify / follow-up                |
-| steps       Actions, human Inbox tasks, waits                 |
-| produces    deal | application | ticket | task                |
-| Inbox       a person decides                                  |
-+---------------------------------------------------------------+
-~~~
+## 6. SPACE
 
-**Who operates on Contacts.** Bots declare the contact roles they serve and contribute cards, Flows and Inbox work to the shared Contacts view; they never copy process fields onto the person.
+```text
+installed Bot definitions
+          + member Access/Job
+          + member pins/order
+          + permitted data fields
+                    |
+                    v
+                  SPACE
+```
 
-| Bot | Contact roles | Produces |
+| Card | Binds to | Opens |
 |---|---|---|
-| Sales | lead, customer | deal, quote, follow-up |
-| Support | customer | ticket, conversation |
-| Hiring | candidate, employee | application, offer, onboarding task |
-| POS | customer | order, payment |
-| Custom Flow | any permitted | any permitted Action + Record |
-
-- **Sales** is a Directory Bot that owns the *deal* process, never the contact.
-- **Hiring** is a Directory Bot over the same contacts with roles `candidate` and `employee`; its onboarding Flow may propose membership, but only owner/admin Actions grant access.
-- **Custom sales** is a Custom Flow inside the installed Sales Bot - compose the existing Actions (`lead.capture` -> `qualify` -> an approval task -> `quote.send`); no code, no new Bot.
-- **Relationship flows** (referral, renewal, win-back, check-in) are Flows whose subject is a contact or a `link`, triggered by schedule or channel.
-
-## 6. SPACE - THE ROLE-BASED SCREEN
-
-Space answers one question: given my role and the installed Bots, what can I see and do here?
-
-~~~text
-+---------------------------------------------------------------+
-| eligible = owner/admin OR role match                          |
-| visible  = eligible + the member's pinned selection           |
-| data     = query policy + scope + permitted fields            |
-+---------------------------------------------------------------+
-~~~
-
-| Card kind | Binds to | Opens |
-|---|---|---|
-| **data (metric)** | a registered metric + parameters | the value and its permitted source Records |
-| **view** | a registered view over a Record type | the filtered records |
-| **action** | exactly one Action | a form or a confirmation |
-| **flow** | a published Flow | a new Run, or an existing one |
+| Metric | Registered metric + typed parameters | Value and permitted source Records |
+| View | Registered Record view | Filtered permitted Records |
+| Action | One registered Action | Form or confirmation |
+| Automation | Published Flow | New Run or existing progress |
 
 | Rule | Meaning |
 |---|---|
-| One resolver | Role decides eligibility; the member pins/reorders within it |
-| No new execution | opening a query card never starts a Run |
-| Registered queries | queries own joins, filters, aggregation and indexes; cards store typed parameters |
-| In-place edit | owners add, remove and reorder cards directly |
-| Operational landing | staff roles such as kitchen or support may land in their Inbox instead |
+| Eligibility | Access/Job and server policy decide available cards |
+| Personalization | Member pins and reorders eligible cards |
+| Read behavior | Opening a Metric or View never starts a Run |
+| Query safety | Cards contain typed parameters, not SQL |
+| Operational landing | Kitchen/support may land in Inbox |
 
-A published `kit` definition may contain `data.canvas.cards`. Cards contain no execution logic; they bind to registered data, Actions or published Flows. Without a published kit, TAR supplies a minimal canvas.
+===============================================================================
 
-## 7. INBOX - ALL HUMAN WORK
+## 7. INBOX
 
-Inbox is the single queue for everything that needs a person: every human step becomes an Inbox task, whatever produced it.
+Inbox is one view over actionable work. Storage remains owned by the business object unless an independent Task is needed.
 
-~~~text
-+---------------------------------------------------------------+
-| task = title + assignee + state + due                         |
-| data = record?, roles[], action, run?, step?, kind            |
-+---------------------------------------------------------------+
-~~~
+```text
+Task -----------+
+Order ----------+
+Conversation ---+--> common Inbox item --> permitted domain Action
+Approval -------+
+Failure --------+
+Flow wait ------+
+```
 
-| Becomes an Inbox task when | Source |
+### Sources
+
+| Appears when | Source | Task Record required? |
+|---|---|---:|
+| Work has its own assignee, due date, or claim | Task | Yes |
+| Order needs preparation | Order projection | No, unless separately assignable |
+| Action needs human approval | Approval Task | Yes |
+| Conversation needs a reply | Conversation projection or Task | Only when assigned/tracked separately |
+| Failure requires judgment | Failure/recovery Task | Usually |
+| Flow waits for a person | Human-step Task | Yes |
+
+### Common Inbox item
+
+```text
+title + source + state + permitted next Action
+optional: assignee + eligible Job + due time + Run/step reference
+```
+
+| Rule | Meaning |
 |---|---|
-| a Run reaches a human step | Flow |
-| an Action requires approval before its effect | approval |
-| work failed and a person can act | failure recovery |
-| a conversation needs a reply | Channel |
-| code detected a condition a person must judge | review / exception |
+| Claim | Atomically assign eligible unclaimed work; one winner |
+| Complete | Execute the required domain Action; hiding is not completion |
+| Assignment | Grants work access, not unrestricted source-Record access |
+| Deduplication | One item per responsibility, not per notification/message |
+| Notifications | Point to existing work; routine retries stay in history |
 
-| Concern | One rule |
+**Current:** Inbox returns Task Records and POS Order projections. `task.complete` currently changes only Task state. Claiming, approval Actions, and Run resumption are planned.
+
+===============================================================================
+
+## 8. FLOWS AND RUNS — PLANNED
+
+```text
++=============================================================================+
+| FLOW                                                                        |
+| revision + trigger + audience + input schema + ordered steps               |
++=============================================================================+
+                                  |
+                                  | start
+                                  v
++=============================================================================+
+| RUN                                                                         |
+| pinned Flow/Action versions + subject + cursor + context + checkpoints      |
++=============================================================================+
+
+ready -> running -> waiting -> running -> done
+            |           |          |
+            +-----------+----------+--> failed / cancelled
+```
+
+| Step kind | Behavior |
 |---|---|
-| Storage | Inbox queries existing `type='task'` records; no separate queue |
-| Filters | Mine = assigned to me; Unassigned = eligible/unclaimed; Team = permitted team work; Approvals |
-| Claim | atomically assign eligible unclaimed work; one winner |
-| Complete | the required domain Action commits the outcome; dismissing is not completion |
-| Ownership | the task owns assignment; the case owns its lifecycle |
-| Dedupe | one task per human responsibility, not one per message |
-| Notifications | point to existing work; routine events and retries stay in history |
+| Action | Invoke a registered Action through the Gateway |
+| Human | Create one Inbox Task and wait |
+| Wait | Resume on time or a verified external event |
+| Condition | Choose a declared next step from saved facts |
 
-Standalone tasks need no Run.
-
-## 8. FLOWS + RUNS - ORDERED WORK
-
-~~~text
-+---------------------------------------------------------------+
-| Flow   revision + trigger + audience + input + steps          |
-| step   id + Action bindings + next / condition / wait         |
-| Run    pinned Flow + cursor + principal + checkpoints         |
-+---------------------------------------------------------------+
-| ready --> running --> done                                    |
-|           |                                                   |
-|           +--> waiting --> running                            |
-|           +--> failed / cancelled                             |
-+---------------------------------------------------------------+
-~~~
-
-A Flow template is authored inside its Bot, then materialised on install:
-
-~~~text
-+---------------------------------------------------------------+
-| flows   in the Bot definition                                 |
-|   - id: sell                                                  |
-|     title: New sale                                           |
-|     steps: [pos.order.save, human: confirm, checkout]         |
-+---------------------------------------------------------------+
-  |
-  |  install
-  v
-+---------------------------------------------------------------+
-| definitions   workspace DB   kind='flow'   published          |
-+---------------------------------------------------------------+
-  |
-  |  flow.start
-  v
-+---------------------------------------------------------------+
-| run   a records row, when started                             |
-+---------------------------------------------------------------+
-~~~
-
-The title is the label; steps bind only to registered Actions. A human step creates an Inbox task and the Run waits. A Custom Flow is authored through `flow.publish` into the same `definitions` table.
-
-**Current scope.** `flow.start` creates a Run pinned to the Flow version and its first Action, and writes the audit Event. Advancing the cursor between steps, waiting on Inbox and resuming, budgets, strategies and checkpoints are the next increment (Section 12). Today a Run is a pinned record plus audit trail; multi-step work is composed by Actions that commit their own domain outcome.
-
-| User experience | Engine behavior |
+| Publication rule | Decision |
 |---|---|
-| Simple editor | Who, When, Conditions, Message + readable steps |
-| Advanced editor | registered Actions, bindings, branches and waits |
-| Human step | title + person/eligible roles + source + required Action + optional due time |
-| Draft | same Flow definition, validator and publishing path |
+| New revision | Applies only to new Runs |
+| Active Run | Keeps resolved Flow and Action versions |
+| Retention | Snapshot the small resolved definition in the Run, or store immutable revisions; choose one |
+| Single Action | Save an Event; do not create a duplicate completed Run |
 
-~~~text
-+---------------------------------------------------------------+
-| draft --> configure --> validate --> publish --> run          |
-|           schemas + refs             immutable                |
-+---------------------------------------------------------------+
-~~~
+**Current:** `flow.start` creates a ready Run and Event. It does not advance, wait, or resume. The first production Flow must prove retry, cancellation, permission recheck, human wait/resume, and exactly one accepted outcome before a general editor ships.
 
-New publications affect new Runs; active Runs keep their pinned Flow and Action versions.
-
-| Audience | Entry and authority |
-|---|---|
-| `team` | member -> role/grant checks -> permitted Actions |
-| `customer` | public form/channel -> validation, consent, rate limits -> restricted grant |
-| `both` | limited customer entry -> explicitly authorized team handoff |
+===============================================================================
 
 ## 9. CHANNELS
 
-Team chat is live: Slack, Discord and Google Chat.
+### Channel families
 
 | Family | Direction | Adapters | Status |
 |---|---|---|---|
-| Team | in + out | Slack, Discord, Google Chat | live |
-| Customer | in + out | website chat, email, messaging | future |
-| Social | out | Zernio | future |
+| Team | In + out | Slack, Discord, Google Chat | **Built** |
+| Customer | In + out | Website chat, email, messaging | **Planned** |
+| Social | Out | Zernio | **Planned** |
 
-~~~text
-+---------------------------------------------------------------+
-| verify webhook -> dedupe(provider + account + event)          |
-|   --> resolve verified sender                                 |
-|   --> allowlisted command through the Authority               |
-|   --> acknowledge -> reply with the result                    |
-+---------------------------------------------------------------+
-~~~
+A Channel is a verified connection, not a fourth screen.
+
+```text
+provider webhook
+      |
+      +--> verify signature
+      +--> deduplicate provider + account + event
+      +--> resolve verified sender -> TAR member
+      +--> allowlisted command -> Action Gateway
+      +--> acknowledge -> reply with result
+```
 
 | Rule | Detail |
 |---|---|
-| Identity | a verified link binds a chat account to a TAR member; TAR permissions apply in the room |
-| Commands | an allowlist only (`done`, `start`, `ready`); everything else points to TAR |
-| Ledger | commands are durable in the control plane with bounded retry and a status reply |
-| Privacy | no business payloads, roles or private details are posted to the room |
+| Identity | Verified account link binds Channel sender to a TAR member |
+| Authorization | TAR workspace and Action permissions still apply |
+| Commands | Allowlist only: currently `done`, `start`, `ready` |
+| Ledger | Control database stores command state and bounded retries |
+| Privacy | Shared rooms receive no private business payload, role detail, or payment data |
+| Conversation | Lightweight Record keyed by Channel and stable provider thread reference |
 
-Conversation is a lightweight Record, unique by channel + the adapter's stable thread reference. Related threads may link to the same contact without merging automatically.
+===============================================================================
 
-## 10. MEMBERS + ACCESS
+## 10. MEMBERS, ACCESS, PERSONAL, AND HTTP
 
-~~~text
-+---------------------------------------------------------------+
-| Google sign-in                                                |
-|   --> Personal       (pinned, on device, free)                |
-|   --> Work Space     --> members + shared Records             |
-+---------------------------------------------------------------+
-~~~
+### Identity and scopes
 
-| Access | Rule |
+```text
+Google sign-in
+      |
+      +--> Personal scope     private, intended device-local
+      |
+      +--> Work workspace     membership + shared Records
+```
+
+### Access model
+
+| Layer | Values | Controls |
+|---|---|---|
+| Access | Owner, Admin, Member, Guest | Management authority |
+| Job | General, Cashier, Kitchen, Stock, Bot-defined later | Operational work and defaults |
+| Record scope | Own, Team, All | Which permitted Records may be read |
+| Fields | Type-policy projection | Which fields app/model may receive |
+| Assignment | Task-specific | Access to the work item, not every source field |
+
+| Access rule | Decision |
 |---|---|
-| Workspace | isolated database + membership + timezone, currency and business-day settings |
-| Base roles | `owner`, `admin`, `member`, `guest` |
-| Work roles | labels such as cashier, cook, stock; a member holds one `workRole` |
-| Scope | own = ownership; team = explicitly permitted roles; all = permitted workspace data |
-| Assignment | permits defined task access, not unrestricted source-record access |
-| Fields | the Authority projects allowed fields for app and model |
-| Revocation | subsequent access denied; in-flight effects reconciled |
+| Contact label | Never grants login or workspace access |
+| Secrets and access Actions | Owner/Admin only |
+| Revocation | Blocks later server access; device clears cached data after reconnect |
+| UI visibility | Convenience only; server policy is authoritative |
+| Multiple Jobs | Add only when a real staffing need requires it |
 
-A contact role never grants access: membership and access rules do. Access and secret Actions are owner/admin-only.
+### Personal decision
 
-**Personal is a pinned scope, not a Bot.** It is not a workspace to switch to and not a `definitions` Bot: a private, device-local scope shown as a fixed pinned entry in the Bots screen. It has no members, costs no credits, and never enters a work workspace database - an owner/admin can never read it. Work workspaces you belong to appear beside it; there is no full-screen workspace switcher.
+| Property | Intended behavior | Current alignment |
+|---|---|---|
+| Storage | Device-local SQLite | **Not aligned:** service still provisions remote Personal |
+| Members | None | Intended |
+| Owner/Admin access | None | Intended |
+| Work credits | None | Intended |
+| Backup/device replacement | Must be explicitly defined | Open decision |
+
+The remote Personal provisioning must be removed or this privacy contract must be revised before launch.
+
+### Offline work
+
+```text
+offline edit -> local pending command -> reconnect -> Action Gateway
+                                               |
+                                               +--> accepted + saved result
+                                               +--> stale/conflict/denied
+```
+
+| Offline capability | Rule |
+|---|---|
+| Reads | Permitted cached projections |
+| Writes | Pending commands with stable idempotency keys |
+| Reconnect | Recheck membership, fields, versions, stock, and business rules |
+| Online-only authority | Payment, refund, approval, access and authoritative stock change |
+| Cross-device outage | Not supported; one offline device cannot update another through server sync |
 
 ### HTTP surface
 
-| Route | Purpose |
-|---|---|
-| `GET /health` | liveness and provisioning status |
-| `GET /v1/actions` | registered Actions and interface contracts |
-| `GET+POST /v1/workspaces` | list (provisions Personal) or create a workspace |
-| `GET /v1/workspaces/:slug/canvas` | Space cards for the member's role |
-| `GET /v1/workspaces/:slug/inbox` | tasks + projections + permissions |
-| `GET /v1/workspaces/:slug/directory` | Bots, Flows, install state |
-| `GET+PUT /v1/workspaces/:slug/definitions` | workspace definitions |
-| `GET /v1/workspaces/:slug/{records,pos/*,site}` | permitted reads |
-| `POST /v1/workspaces/:slug/actions/:id` | the Authority (requires `Idempotency-Key`) |
-| `GET+POST+PUT .../members`, `.../team-chat` | membership and channel links |
-| `POST /v1/channels/{slack,discord,google-chat}/events` | verified inbound channel webhook |
-| `GET /v1/sites/:slug` | published site for a workspace |
-
-## 11. SITE BOT - PUBLISHED WEB
-
-The Site Bot turns workspace records into a public site. It is a Directory Bot - a package of Actions over one Record type - not a running agent, a second database or a visual builder.
-
-~~~yaml
-Site Bot:
-  records: [site]
-  actions: [site.generate, site.update, site.compile, site.publish, site.rollback, site.refresh]
-  roles:   [owner, admin]
-~~~
-
-| Action | Does |
-|---|---|
-| `site.generate` | build a draft `site` Record from a title, prompt and theme |
-| `site.update` | apply typed operations to the draft: `set_theme`, `set_locale`, `add_card`, `update_card`, `remove_card` |
-| `site.compile` | render a release candidate: hash and file metadata, no bytes stored |
-| `site.publish` | render, write an immutable release to R2, point the live release |
-| `site.rollback` | repoint the live release to an earlier manifest |
-| `site.refresh` | recompute collection items from workspace records, with no model call |
-
-**A page is a fixed catalog, not freeform output.** A site is pages of typed Cards, rendered to semantic HTML and CSS with zero client runtime.
-
-| Card family | Card family |
-|---|---|
-| navigation, hero, content, collection, features, proof | faq, hours, contact, form, cta, footer |
-
-Three reviewed themes ship with the Bot: `editorial-chalk`, `streetwear-dark` and `minimal-clean`. Design tokens render to CSS variables; the theme owns colour, type, radius and spacing.
-
-~~~text
-+---------------------------------------------------------------+
-| draft --> update (typed ops) --> compile (hash)               |
-|       --> publish (R2 + pointer) --> serve                    |
-|       |                                                       |
-|       +--> rollback repoints to an earlier manifest           |
-+---------------------------------------------------------------+
-~~~
-
-| Rule | Detail |
-|---|---|
-| Store | the `site` Record holds the definition, the live release id and manifest metadata - never page bytes |
-| Blobs | a release writes `.../releases/{releaseId}/index.html` and `/style.css` to R2 (Section 3) |
-| Deterministic | identical definition and tooling produce identical bytes |
-| Serve | `GET /v1/sites/:slug` resolves the live manifest and streams `index.html` from R2 |
-| Recovery | older releases stay in R2; rollback is a pointer change |
-| Removal | removing the Bot archives its definitions and preserves accepted work |
-
-**Boundaries.** Drafting uses a reviewed template today, not a model call - `site.generate` does not call the AI binding. This release has no variants, surfaces, journeys, policies or DESIGN.md contract: a site is pages of Cards, three themes and typed update operations. Anything more arrives later as a reviewed addition.
-
-## 12. BUILD STATUS - TARGET VS BUILT
-
-A capability is not real until it leaves this table.
-
-| Promise | Status | Note |
+| Route | Purpose | Write path |
 |---|---|---|
-| Single-writer Authority | built | every Action commits through the Gateway and the shared commit contract |
-| Replay, versions, audit Events | built | |
-| Bots: install / remove / Custom Flow | built | |
-| Space, Inbox, team chat | built | |
-| Site Bot: catalog, themes, compile, publish, rollback, refresh | built | |
-| R2 site releases | built | releases are written to R2; the Record keeps the manifest and hash |
-| Model steps | partial | only `pos.product.draft`; `site.generate` is a reviewed template, not a model call |
-| Advancing Runs (multi-step, wait/resume) | **not built** | `runs` rows are created and audited, never advanced |
-| Budgets, `strategy` (`single`/`verify`), `parallel` | **not built** | no behaviour |
-| Delivery intents + delivery state machine | **not built** | external effects are synchronous today |
-| Approvals | **not built** | no approval Action is registered |
-| Sandbox, learning / proposed corrections | **not built** | |
-| Local-first sync | client plan | lives in the app, not this service |
+| `GET /health` | Liveness and provisioning status | Read |
+| `GET /v1/actions` | Registered Action contracts | Read |
+| `GET+POST /v1/workspaces` | List/create workspaces | Control Actions |
+| `GET /v1/workspaces/:slug/canvas` | Space cards for member | Read projection |
+| `GET /v1/workspaces/:slug/inbox` | Actionable work and permissions | Read projection |
+| `GET /v1/workspaces/:slug/directory` | Bots and install state | Read |
+| `GET /v1/workspaces/:slug/definitions` | Current definitions | Read |
+| `PUT /v1/workspaces/:slug/definitions/:id` | Current direct definition mutation | **Must move behind Action Gateway** |
+| `GET /v1/workspaces/:slug/{records,pos/*,site}` | Permitted business reads | Read projection |
+| `POST /v1/workspaces/:slug/actions/:id` | Execute registered Action | Action Gateway + `Idempotency-Key` |
+| `GET+POST+PUT .../members` | Membership operations | Control Actions |
+| `GET+POST+PUT .../team-chat` | Channel links | Control Actions |
+| `POST /v1/channels/{slack,discord,google-chat}/events` | Verified inbound event | Ledger -> Gateway |
+| `GET /v1/sites/:slug` | Public site | Read R2 release |
 
-The workspace schema carries only what runs: `definitions`, `records`, `runs` and `events`.
+===============================================================================
 
-## 13. PRICING - A CREDIT PAYS FOR A MEASURED COST
+## 11. SITE BOT
 
-One wallet pays for everything. A credit is money, and every charge maps to a measured cost - inference, storage, sync. Deterministic work is free.
+### User journey
 
-| Rule | Meaning |
+```text
+Draft -> Preview -> Publish -> History -> Restore
+```
+
+### Internal Actions
+
+| Action | Behavior | User-facing operation |
+|---|---|---|
+| `site.generate` | Create typed draft from title, prompt and theme | Draft |
+| `site.update` | Apply typed Card/theme/locale changes | Edit Draft |
+| `site.compile` | Produce hash and release metadata | Preview, internal |
+| `site.publish` | Compile, write immutable R2 release, move live pointer | Publish |
+| `site.rollback` | Move live pointer to retained release | Restore |
+| `site.refresh` | Recompute permitted collection items without model | Automatic refresh |
+
+### Release model
+
+```text
+typed Site Record
+      |
+      +--> Preview: compile reviewed definition + public-data snapshot
+      |
+      +--> Publish: verify same version -> R2 immutable release
+                                      -> update live release pointer
+                                      -> serve semantic HTML + CSS
+```
+
+| Guarantee | Rule |
 |---|---|
-| One wallet | personal and work usage draw the same balance; no separate plans or workspace limits |
-| Cost, not margin | top-ups pass through at cost, with no expiry while the account is active |
-| Deterministic is free | the Authority, Actions, Flows, Bots, Space, Inbox, Channels and site rendering are code and database work, not inference |
-| Inference is the only variable | a model is charged only where one actually runs |
-| Unbuilt is unpriced | a capability enters this table only when it leaves Section 12 |
+| Typed pages | Fixed Card catalog, not arbitrary generated code |
+| Preview binding | Publish the same definition version and public-data snapshot reviewed |
+| Immutable release | Unique R2 keys for HTML and CSS |
+| Small DB state | Definition, manifest metadata and live release ID; no page bytes |
+| Restore | Checked pointer update to retained release |
+| Deterministic | Same definition, data snapshot and renderer produce same bytes |
 
-**The wallet.** Rs. 500 / month gives 1,000 credits at Rs. 0.10 each - the Rs. 100 cost envelope (see [techstack.md](techstack.md)); price and grant are both monthly. Top-ups: Rs. 100 = 1,000 credits, Rs. 500 = 5,000, Rs. 1,000 = 10,000, credited at cost.
+| Card families | Current themes |
+|---|---|
+| Navigation, hero, content, collection, features, proof | `editorial-chalk` |
+| FAQ, hours, contact, form, call-to-action, footer | `streetwear-dark`, `minimal-clean` |
 
-| Item | Credits | Basis |
+Site drafting currently uses reviewed templates, not a model. Preview HTML/CSS should use a read/preview path and stay out of saved Event results.
+
+===============================================================================
+
+## 12. BUILD STATUS
+
+| Capability | Status | Current limit / required correction |
+|---|---|---|
+| Runner: single code/model step | **Built** | Only `pos.product.draft` uses a model |
+| Action Gateway, replay, Events | **Built** | Feature Atomic Save implementations need consolidation |
+| Version checks | **Partial** | Some paths omit affected-row checks or version predicates |
+| Bot install/remove and custom definitions | **Built** | Direct definition PUT bypasses Gateway |
+| Space | **Built** | Role/Job card policy remains limited |
+| Inbox | **Built** | Claiming and approval behavior incomplete |
+| Team Channels | **Built** | Customer/social families planned |
+| POS | **Built** | Saved Orders check stock but do not reserve it |
+| Site | **Built** | Preview storage and concurrency need cleanup |
+| Multi-step Run advance/wait/resume | **Planned** | `flow.start` creates a ready Run only |
+| Approvals | **Planned** | No approval Action registered |
+| Durable delivery/reconciliation | **Planned** | External effects synchronous |
+| Authorized offline cache | **Partial** | No cross-device offline operation |
+| Device-local Personal | **Not aligned** | Remote Personal still provisioned |
+
+### Delivery order
+
+| Order | Change | Proof of completion |
+|---:|---|---|
+| 1 | Shared Gateway transaction helper + type policy | Races produce one accepted write/Event |
+| 2 | Move direct definition write behind Gateway | All official writes use one contract |
+| 3 | Immutable object keys + compact Event results | Losing write cannot overwrite winner's content |
+| 4 | One complete approval path | Duplicate/racing/stale decisions produce one valid result |
+| 5 | Durable delivery for first real provider | Lost wake-up, duplicate, and unknown outcome recover safely |
+| 6 | General Flow engine | Real process survives wait/resume and deployment changes |
+
+===============================================================================
+
+## 13. PRICING
+
+**Commercial model:** subscription + included usage. Credits are usage units, not currency or a literal copy of provider charges.
+
+| Item | Charge | Meaning |
 |---|---:|---|
-| Personal workspace | 0 | device-local SQLite |
-| Each active owned workspace | 100 / month | one Turso database: storage, operations and sync |
-| Joined workspace | 0 for the member | the owner's wallet |
-| Deterministic Actions - `record.*`, `task.*`, `pos.*` (except drafts), `flow.*`, `directory.*` | 0 | code through the Authority |
-| Site Actions - `site.generate`, `update`, `compile`, `publish`, `rollback`, `refresh` | 0 | reviewed template and deterministic renderer; no inference |
-| Keeping a site live | 0 extra | R2 release objects sit inside the workspace reservation |
-| Model step - `pos.product.draft` | 0.02 cr | the only model call in the service |
-| OCR, voice, research swarms, campaigns, lead batches, photo cleanup | - | not built; priced when they leave Section 12 |
-| WhatsApp, SMS, domains, payment processing | separate | third-party pass-through |
+| Subscription | ₹500/month | Platform + 1,000 usage credits |
+| Active owned work workspace | 100 credits/month | TAR commercial reservation from owner allowance |
+| Joined workspace | 0 direct member credits | Usage belongs to workspace owner |
+| Additional usage | ₹100 / 1,000 credits | Larger bundles use same rate |
+| Deterministic Actions/site rendering | Included | Infrastructure internally metered |
+| `pos.product.draft` | 0.02 credit/call | Current model Action |
+| SMS, WhatsApp, domains, payment processing | Separate | Third-party pass-through where applicable |
 
-A site's only recurring cost is storage, already inside the workspace reservation.
-
-===============================================================================
-# PART B - A PIZZA STORE, END TO END
-===============================================================================
-
-~~~text
-+---------------------------------------------------------------+
-| Slice House = one Work Space                                  |
-| Muthu = owner | Malar = admin/cashier | Iniya = cashier       |
-| Velan = cook                                                  |
-| Pizza Store = POS Bot (+ Inventory, Kitchen as they arrive)   |
-+---------------------------------------------------------------+
-~~~
-
-| Space card | Kind | Target | Roles |
-|---|---|---|---|
-| Sales today | metric | `pos.summary.sales` | owner/admin |
-| New sale | entry | `pos.open` | owner/admin/cashier |
-| Kitchen queue | view | open kitchen tasks | kitchen |
-| Low stock | metric | `pos.summary.lowStock` | owner/admin/stock |
-| Close shift | entry | `shift-close` Flow | owner/admin/cashier |
-
-| Person | Space defaults | Inbox |
-|---|---|---|
-| Muthu | Sales today, Low stock | approvals |
-| Malar | Sales today, New sale, Low stock | shift review |
-| Iniya | New sale, Close shift | handover |
-| Velan | Kitchen queue | preparation tasks; default landing |
-
-~~~text
-+---------------------------------------------------------------+
-| order-take      interpret -> quote -> order.save -> checkout  |
-| orders-returns  find sale -> refund                           |
-| stock-receive   delivery -> movements -> stock                |
-| shift-close     count -> compare -> close                     |
-| kitchen-prepare task -> start -> ready -> done                |
-|                                                               |
-| Accept    check stock + order + totals (one commit)           |
-| Prepare   kitchen ready -> order completes                    |
-| Fulfil    consume stock + payment -> receipt                  |
-| Cancel    release unconsumed lines                            |
-+---------------------------------------------------------------+
-~~~
-
-Available = stock. A duplicate tap returns the saved result; a UPI payment is recorded only after the cashier confirms receipt and supplies a unique reference. Velan receives items and quantities, not prices or phone numbers. Sales, Team, Operations and Site Bots have the same shape.
-
-===============================================================================
-# REFERENCES
-===============================================================================
-
-| Topic | Sources |
+| Billing rule | Decision |
 |---|---|
-| Agents and context | [Effective agents](https://www.anthropic.com/engineering/building-effective-agents), [context engineering](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents) |
-| Durable execution | [Workflow rules](https://developers.cloudflare.com/workflows/build/rules-of-workflows/), [events](https://developers.cloudflare.com/workflows/build/events-and-parameters/) |
-| Storage | [Turso pricing](https://turso.tech/pricing), [R2 pricing](https://developers.cloudflare.com/r2/pricing/) |
-| Sync + access | [Local-first guide](https://turso.tech/blog/building-local-first-apps-the-complete-guide-to-offline-first-database-sync), [sync](https://docs.turso.tech/sync/usage), [authorization](https://docs.turso.tech/sdk/authorization) |
-| Runtime | [Turso serverless](https://docs.turso.tech/sdk/ts/quickstart), [Effect](https://effect.website/), [Worker lifecycle](https://developers.cloudflare.com/workers/runtime-apis/context/) |
+| Payer | Workspace owner funds shared usage |
+| Expensive async work | Reserve credits, then settle/release idempotently |
+| New feature | Price only after implementation and measurement |
+| Workspace reservation | Commercial allowance, not exact Turso database cost |
+| Per-member alternative | Requires product copy and cost model to change together |
 
-> **The Authority commits truth. Bots package capability. Space shows the role what matters. Inbox holds human work. Runs make progress auditable.**
+===============================================================================
+
+## 14. PIZZA STORE — END TO END
+
+### 14.1 Workspace and members
+
+```text
++=============================================================================+
+| SLICE HOUSE                                                                 |
+| Currency: INR       Timezone: Asia/Kolkata       Bot: POS                  |
++=============================================================================+
+| Muthu     Owner                                                  manages all |
+| Malar     Admin  + Cashier                         sells and manages register |
+| Iniya     Member + Cashier                                      takes orders |
+| Velan     Member + Kitchen                                 prepares products |
++=============================================================================+
+```
+
+| Member | Access | Job | Default screen | Can see | Main Actions |
+|---|---|---|---|---|---|
+| Muthu | Owner | General | Space | Sales, stock, register, members | Configure, approve, refund |
+| Malar | Admin | Cashier | Space | Sales, Orders, stock, register | Sell, checkout, close register |
+| Iniya | Member | Cashier | Space | New Sale, permitted Orders | Save Order, checkout |
+| Velan | Member | Kitchen | Inbox | Items and quantities for open Orders | Start item, mark ready |
+
+### 14.2 Owner installs the POS Bot and Sales Bot
+
+```text
++=============================================================================+
+| Slice House                                  Space | Inbox | BOTS            |
++=============================================================================+
+| Search Bots...                                                              |
+|                                                                             |
+| POS Bot          Not installed                                              |
+| Retail sales, payments, stock, kitchen work and register                    |
+|                                                               [ View Bot ]  |
+|                                                                             |
+| Sales Bot        Not installed                                              |
+| Customer enquiries, leads, quotes and follow-up                             |
+|                                                               [ View Bot ]  |
+|                                                                             |
+| Team Bot         Add              Site Bot        Add                       |
++=============================================================================+
+```
+
+#### Secondary screen — POS Bot detail
+
+```text
++=============================================================================+
+| < Bots                              POS BOT                                 |
++=============================================================================+
+| Sell, take payments, manage products and keep stock current.                |
+|                                                                             |
+| FEATURES                                                                    |
+| [x] New Sale       [x] Orders & Returns       [x] Products & Stock         |
+| [x] Customers      [x] Register               [x] Kitchen queue            |
+|                                                                             |
+| JOBS: Cashier · Kitchen · Stock                                             |
+| SPACE: New Sale · Sales today · Low stock · Kitchen queue · Register        |
+|                                                                             |
+| Changes: 6 features · 5 Space cards · 3 Job defaults                       |
+|                                           [ Cancel ] [ Install POS Bot ]    |
++=============================================================================+
+```
+
+```text
+Install POS Bot
+      |
+      +--> dependency and permission check
+      +--> preview configuration
+      +--> Action Gateway validates owner
+      +--> Atomic Save: Bot definitions + Space cards + Event
+      +--> Bots shows Installed
+```
+
+#### Secondary screen — Sales Bot detail
+
+```text
++=============================================================================+
+| < Bots                             SALES BOT                                |
++=============================================================================+
+| Turn an enquiry into a customer, lead, quote or follow-up.                  |
+|                                                                             |
+| FEATURES                                                                    |
+| [x] Leads          [x] Deals and quotes       [x] Follow-up Inbox           |
+| [x] Customer view  [x] Channel reply drafts                                  |
+|                                                                             |
+| USE WHEN: "Do you cater a birthday party?" or "What is today's offer?"     |
+| NOT FOR: payment, stock deduction, kitchen preparation or register closing  |
+|                                                                             |
+| SPACE: New leads · Deals to follow up · Quotes awaiting reply                |
+|                                           [ Cancel ] [ Install Sales Bot ]  |
++=============================================================================+
+```
+
+| Bot | Primary purpose | Starts with | Produces | Does not own |
+|---|---|---|---|---|
+| Sales Bot | Turn interest into a sale opportunity | Enquiry or outbound campaign | Lead, Deal, quote, follow-up Task | Payment, stock, register, kitchen work |
+| POS Bot | Complete an in-store or confirmed retail sale | Cashier starts a sale | Order, Payment, stock movement, receipt | Lead nurturing or campaign follow-up |
+
+```text
+Install Sales Bot
+      |
+      +--> configure customer channels, reply style and follow-up owner
+      +--> Action Gateway validates owner
+      +--> Atomic Save: Bot definitions + Space cards + Inbox rules + Event
+      +--> Bots shows Installed
+```
+
+Sales Bot hands a qualified request to the cashier. The cashier creates the POS Order and POS Bot alone records payment and changes stock. This keeps one source of truth for each fact.
+
+### 14.2a How every Bot fits together
+
+The shared customer foundation is **Core**, not a Bot. A Contact, Organization, Link and permission record exist once. Bots add focused work on top of those facts.
+
+```text
++=============================================================================+
+| Slice House                                  Space | Inbox | BOTS            |
++=============================================================================+
+| CRM Bot          Add       Customer history, consent, segments, timeline    |
+| Sales Bot        Installed Lead, deal, quote, follow-up                     |
+| Support Bot      Add       Ticket, conversation, resolution                  |
+| POS Bot          Installed Order, payment, stock, receipt, register         |
+|                                                                             |
+| HR Bot           Add       Candidate, employee profile, onboarding           |
+| Finance Bot      Add       Invoice, expense, collection, reconciliation     |
+| Operations Bot   Add       Checklist, incident, recurring work               |
+| Team Bot         Add       Members, jobs, assignment                         |
+| Site Bot         Add       Website draft, preview, publish                   |
++=============================================================================+
+```
+
+```text
+                         CORE RECORDS
+        Contact · Organization · Link · Task · Event · Files
+                                  |
+          +-----------------------+------------------------+
+          |                       |                        |
+          v                       v                        v
+       CUSTOMER                 PEOPLE                  BUSINESS
+  CRM · Sales · Support · POS     HR · Team        Finance · Operations · Site
+```
+
+| Bot | What it owns | Pizza Store example | Must not own |
+|---|---|---|---|
+| CRM Bot | Customer timeline, consent, tags and segments | Priya's enquiries, quotes, purchases and support history in one view | Payment, deal stage, ticket resolution |
+| Sales Bot | Leads, deals, quotes and follow-up | Catering enquiry → quote → cashier handoff | Stock, payment, register |
+| Support Bot | Conversations, tickets and resolutions | "My order was wrong" → ticket → reply → resolved | Refund payment; it requests a POS refund Action |
+| POS Bot | Orders, payments, stock, register and receipt | Counter sale or approved catering order | Lead nurturing, campaigns |
+| HR Bot | Candidate and employee profiles, hiring and onboarding work | Hire a second kitchen worker | Workspace access; Team Bot assigns roles after approval |
+| Team Bot | Workspace members, jobs and assignments | Give Velan the Kitchen job and tasks | HR employment history |
+| Finance Bot | Invoices, expenses, collections and reconciliation | Supplier invoice and daily sales reconciliation | Directly alter POS payment facts |
+| Operations Bot | Checklists, incidents, recurring work and handoffs | Opening checklist, fridge issue, closing checklist | Product price or stock adjustment without a registered Action |
+| Site Bot | Website content, releases and publishing | Catering landing page and menu updates | Customer, order or payment records |
+
+| Shared question | Correct home |
+|---|---|
+| "Who is Priya and what has she done with us?" | Core Contact + CRM Bot timeline |
+| "Will Priya accept the catering quote?" | Sales Bot Deal |
+| "Has Priya paid and did stock change?" | POS Bot Order and Payment |
+| "Priya says garlic bread was missing." | Support Bot Ticket; POS Bot performs any approved refund |
+| "Can Velan prepare orders?" | Team Bot membership/job; permissions enforce it |
+| "Is the business profitable this week?" | Finance Bot reading POS facts; it does not rewrite them |
+
+```text
+Priya's journey across Bots
+
+Website / WhatsApp enquiry
+          |
+          v
+Sales Bot: Lead -> quote -> confirmed handoff
+          |
+          +--> CRM Bot: append relationship timeline
+          v
+POS Bot: Order -> payment -> stock -> receipt
+          |
+          +--> CRM Bot: append purchase history
+          v
+Support Bot: issue? -> Ticket -> resolution
+          |
+          +--> POS Bot: approved refund, if needed
+```
+
+**Planned:** CRM, Support, HR, Finance and Operations Bot workflows and their channel adapters. The diagram defines their boundaries so later Bot installs remain compatible with POS and Sales.
+
+### 14.3 Initial setup and register
+
+```text
++=============================================================================+
+| POS SETUP — Owner/Admin                                                     |
++=============================================================================+
+| Store name     [ Slice House                         ]                      |
+| Currency       [ INR v ]                                                    |
+| Timezone       [ Asia/Kolkata v ]                                           |
+| Location       [ Anna Nagar                          ]                      |
+| Receipt footer [ Thank you!                          ]                      |
+|                                                                             |
+|                                                [ Save store settings ]      |
++=============================================================================+
+```
+
+```text
++=============================================================================+
+| OPEN REGISTER — Owner/Admin/Cashier                                         |
++=============================================================================+
+| Opening cash       [ ₹2,000 ]                                               |
+| Opened by          Malar                                                    |
+|                                                                             |
+| Action             pos.register.open                                        |
+|                                         [ Cancel ] [ Open register ]         |
++=============================================================================+
+```
+
+### 14.4 Role-based Space screens
+
+#### Muthu — Owner
+
+```text
++=============================================================================+
+| Slice House                                  SPACE | Inbox | Bots            |
++=============================================================================+
+| Sales today       New leads          Low stock        Register              |
+| ₹12,400           6                  3                Open                 |
+|                                                                             |
+| [ New sale ] [ Leads ] [ Deals ] [ Products ] [ Register ] [ Members ]     |
+|                                                                             |
+| Needs attention: 1 refund request · 3 low-stock products                    |
++=============================================================================+
+```
+
+#### Malar — Admin / Cashier
+
+```text
++=============================================================================+
+| Slice House                                  SPACE | Inbox | Bots            |
++=============================================================================+
+| Sales today       Open Orders        New leads        Register              |
+| ₹12,400           4                  6                Open                 |
+|                                                                             |
+| [ New sale ] [ Leads ] [ Orders ] [ Products ] [ Close register ]          |
+|                                                                             |
+| Ready for pickup: Order #104                   Shift review due at closing  |
++=============================================================================+
+```
+
+#### Iniya — Cashier
+
+```text
++=============================================================================+
+| Slice House                                  SPACE | Inbox | Bots            |
++=============================================================================+
+| Register                    Open · Malar                                      |
+| My Orders                   5 today                                           |
+|                                                                             |
+|                       [ + NEW SALE ]                                         |
+|                                                                             |
+| Recent: #1041 Paid · #1040 Paid · #1039 Refunded                            |
++=============================================================================+
+```
+
+#### Velan — Kitchen
+
+```text
++=============================================================================+
+| Slice House                                  Space | INBOX | Bots            |
++=============================================================================+
+| Kitchen queue                                                               |
+|                                                                             |
+| #1042  2 Margherita · 1 Garlic Bread     New           [ Start ]            |
+| #1041  1 Farmhouse                        Preparing     [ Open ]             |
+| #1040  2 Pepperoni                        Ready         waiting pickup       |
+|                                                                             |
+| Customer, price, phone and payment fields are hidden.                       |
++=============================================================================+
+```
+
+### 14.5 Cashier starts a sale
+
+```text
+Iniya taps New Sale -> pos.open -> New Sale secondary screen
+```
+
+#### Secondary screen — New Sale
+
+```text
++=============================================================================+
+| < Space                              NEW SALE                               |
++=============================================================================+
+| Search or scan product [ margherita________________ ] [ Scan ]              |
+|                                                                             |
+| Margherita                         ₹250 x 2                    ₹500          |
+| Garlic Bread                       ₹120 x 1                    ₹120          |
+|                                                                             |
+| Customer       [ Walk-in v ]       Order type [ Takeaway v ]                |
+| Discount       [ 0% ]              Tax                  ₹31                 |
+| TOTAL                                                     ₹651              |
+|                                                                             |
+| [ Save Order ]                              [ Cash ] [ UPI ] [ Checkout ]   |
++=============================================================================+
+```
+
+| Button | Registered Action | Atomic Save |
+|---|---|---|
+| Save Order | `pos.order.save` | Open Order + Event |
+| Cash checkout | `pos.checkout` | Paid Order + Payment + stock movements + Event |
+| UPI checkout | `pos.checkout` | Same, after receipt confirmation and unique reference |
+
+Current `Save Order` checks product versions and stock but does not reserve stock. The saved state is `open` and payment status is `unpaid`.
+
+### 14.5a Sales Bot turns an enquiry into a cashier handoff
+
+Sales Bot is useful before a POS sale: it prevents customer enquiries, party orders and quote requests from being lost in chat. It does not create a paid POS sale by itself.
+
+```text
++=============================================================================+
+| < Leads                           NEW CATERING ENQUIRY                      |
++=============================================================================+
+| From            Priya · Website chat                                        |
+| Message         "Need pizza for 25 people this Saturday."                   |
+|                                                                             |
+| Customer        [ Create / match contact ]                                  |
+| Need            [ Catering v ]       Budget [ ₹8,000 ]                      |
+| Next step       [ Send quote v ]     Owner  [ Malar v ]                      |
+|                                                                             |
+| [ Save lead ] [ Draft reply ]                 [ Create POS sale when ready ]|
++=============================================================================+
+```
+
+| Sales Bot step | Result | POS Bot involvement |
+|---|---|---|
+| Save enquiry | Lead + customer link + Event | None |
+| Send or approve quote | Deal/quote + follow-up Task | None |
+| Customer confirms | Cashier receives a handoff in Inbox | Cashier starts `pos.open` |
+| Cashier checks out | Payment, Order and stock are saved together | `pos.checkout` |
+
+Channel intake, reply drafts, lead records and Inbox handoff are **Planned** until the Sales Bot and its channel adapters are implemented. The role boundary above applies now: a Sales Bot must never bypass POS checkout.
+
+### 14.6 Work appears in each Inbox
+
+#### Velan — Kitchen Inbox
+
+```text
++=============================================================================+
+| Slice House                                  Space | INBOX | Bots            |
++=============================================================================+
+| MINE (0)       UNASSIGNED (2)       TEAM (4)                                |
+|                                                                             |
+| ORDER #1042 · TAKEAWAY                                      Open            |
+| 2 x Margherita          pending                            [ Start ]         |
+| 1 x Garlic Bread        pending                            [ Start ]         |
+|                                                                             |
+| Details shown: product · quantity · preparation state                       |
++=============================================================================+
+```
+
+#### Malar / Iniya — Cashier Inbox
+
+```text
++=============================================================================+
+| Slice House                                  Space | INBOX | Bots            |
++=============================================================================+
+| [ Sales handoffs ] [ Open Orders ] [ Ready ] [ Handover ]                   |
+|                                                                             |
+| Priya catering · 25 people · Saturday             [ Create POS sale ]       |
+| #1042  Takeaway    Kitchen: preparing    Payment: unpaid   [ Open ]         |
+| #1041  Counter     Kitchen: ready        Payment: unpaid   [ Checkout ]     |
+| #1040  Takeaway    Paid                  Pickup pending    [ Hand over ]    |
++=============================================================================+
+```
+
+#### Muthu — Owner Inbox
+
+```text
++=============================================================================+
+| Slice House                                  Space | INBOX | Bots            |
++=============================================================================+
+| [ Mine ] [ Team ] [ Approvals ]                                             |
+|                                                                             |
+| Refund request #1031     ₹250     Duplicate item       [ Review ]           |
+| Low-stock review         3 items                        [ Open stock ]       |
+| Register difference      ₹-50     Malar                [ Review ]           |
++=============================================================================+
+```
+
+Refund approval and automatic register-difference Tasks are **Planned**. Current refunds use direct role-checked confirmation.
+
+### 14.7 Kitchen prepares the Order
+
+#### Secondary screen — Order preparation
+
+```text
++=============================================================================+
+| < Inbox                      ORDER #1042 · KITCHEN                           |
++=============================================================================+
+| TAKEAWAY                                                                    |
+|                                                                             |
+| Margherita             quantity 2                                          |
+| pending -> [ Start preparing ] -> [ Mark ready ]                            |
+|                                                                             |
+| Garlic Bread           quantity 1                                          |
+| pending -> [ Start preparing ] -> [ Mark ready ]                            |
+|                                                                             |
+| Order ready when every item is ready.                                       |
++=============================================================================+
+```
+
+```text
+Start item -> pos.order.item.update(status=preparing)
+Mark ready -> pos.order.item.update(status=ready)
+Each tap   -> Action Gateway -> version check -> Atomic Save -> Event
+```
+
+### 14.8 Cashier checks out and hands over
+
+#### Secondary screen — Checkout
+
+```text
++=============================================================================+
+| < Order #1042                         CHECKOUT                              |
++=============================================================================+
+| Kitchen               Ready                                                  |
+| Total                 ₹651                                                   |
+| Payment method        [ UPI v ]                                              |
+| UPI reference         [ 4312987654________________ ]                         |
+| [x] Payment received                                                           |
+|                                                                             |
+|                     [ Back ] [ Confirm payment and complete sale ]          |
++=============================================================================+
+```
+
+```text
+pos.checkout
+     |
+     +--> recheck Order/cart/product versions and total
+     +--> require unique UPI reference and cashier confirmation
+     +--> Atomic Save
+            +--> Order state = paid
+            +--> Payment Record
+            +--> stock movements and reduced stock
+            +--> Event/result
+     +--> show receipt
+```
+
+#### Secondary screen — Receipt / handover
+
+```text
++=============================================================================+
+| SALE COMPLETE                                             ORDER #1042       |
++=============================================================================+
+| 2 x Margherita                                                    ₹500      |
+| 1 x Garlic Bread                                                  ₹120      |
+| Tax                                                                ₹31      |
+| TOTAL                                                             ₹651      |
+| Payment: UPI · reference ending 7654                                        |
+|                                                                             |
+| [ Print receipt ] [ Share receipt ] [ Mark handed over ]                    |
++=============================================================================+
+```
+
+`Mark handed over` and a separate `fulfilled` Order state are target behavior. Current checkout finishes the implemented sale by setting the Order to `paid`.
+
+### 14.9 Refund path
+
+#### Secondary screen — Return and refund
+
+```text
++=============================================================================+
+| < Order #1031                       RETURN / REFUND                          |
++=============================================================================+
+| Margherita             sold 2       return [ 1 ]                            |
+| Reason                 [ Duplicate item v ]                                 |
+| Restock usable item    [x]                                                   |
+| Refund method          UPI                                                   |
+| Refund reference       [ 98213476__________________ ]                       |
+| [x] Money was returned to the customer                                      |
+|                                                                             |
+| Refund amount          ₹250                                                  |
+|                                      [ Cancel ] [ Record refund ]           |
++=============================================================================+
+```
+
+| Current refund | Planned approval path |
+|---|---|
+| Authorized operator confirms money was returned | Cashier submits request |
+| `pos.refund` validates quantities/reference | Owner receives Approval Inbox Task |
+| Atomic Save updates Order, negative Payment and optional restock | Approval revalidates current Order/version |
+| Manual confirmation is recorded honestly | Provider intent delivers/reconciles actual refund |
+
+### 14.10 Close register
+
+#### Secondary screen — Close Register
+
+```text
++=============================================================================+
+| < Register                         CLOSE REGISTER                           |
++=============================================================================+
+| Opened by             Malar                                                  |
+| Opening cash          ₹2,000                                                 |
+| Expected cash         ₹8,450                                                 |
+| Counted cash          [ ₹8,400 ]                                             |
+| Difference            ₹-50                                                   |
+|                                                                             |
+|                         [ Cancel ] [ Review and close register ]            |
++=============================================================================+
+```
+
+```text
+pos.register.close -> validate active register -> calculate difference
+                   -> Atomic Save closed Register + Event
+                   -> Owner review Task                         PLANNED
+```
+
+### 14.11 Complete cross-screen journey
+
+```text
+MUTHU · BOTS
+Install POS Bot + Sales Bot
+      |
+      v
+MUTHU/MALAR · POS SETUP
+Store settings -> products -> open register
+      |
+      v
+SALES BOT · CUSTOMER ENQUIRY                         PLANNED
+Priya asks for catering -> Lead -> quote -> cashier handoff
+      |
+      v
+INIYA · SPACE
+Open handoff -> New Sale -> save open Order
+      |
+      v
+VELAN · INBOX
+Start items -> mark items ready
+      |
+      v
+MALAR/INIYA · INBOX
+Open ready Order -> confirm Cash/UPI -> checkout
+      |
+      v
+ACTION GATEWAY · ATOMIC SAVE
+Paid Order + Payment + stock movements + Event
+      |
+      v
+CASHIER · RECEIPT
+Print/share -> hand over                              TARGET explicit fulfil
+      |
+      +--> MUTHU · INBOX                              TARGET approvals
+      |    review refund or register difference
+      |
+      +--> MALAR · CLOSE REGISTER
+           count -> compare -> close
+```
+
+### 14.12 State and stock rules
+
+| Model | Current implementation | Target business lifecycle |
+|---|---|---|
+| Order | `open -> paid` or `open -> cancelled` | `Draft -> Accepted -> Preparing -> Ready -> Fulfilled` |
+| Item preparation | `pending -> preparing -> ready` | Same |
+| Payment | `unpaid -> paid -> partially_refunded/refunded` | Separate Payment lifecycle |
+| Stock | Check on save; consume at checkout | Reserve at acceptance if acceptance promises availability |
+
+```text
+TARGET RESERVATION
+accept -> reserve stock
+cancel -> release unused reservation
+fulfil -> convert reservation to consumption
+
+available = on-hand - reserved
+```
+
+### 14.13 Safety and visibility
+
+| Concern | Rule |
+|---|---|
+| Duplicate tap/network retry | Same idempotency key returns saved result |
+| Concurrent update | Expected version allows one accepted change |
+| UPI sale | Require received confirmation and unique reference |
+| UPI refund | Require returned confirmation and unique refund reference |
+| Kitchen privacy | Product, quantity and preparation only |
+| Cashier privacy | Operational customer/payment fields only as permitted |
+| Owner access | Full permitted business view; never Personal scope |
+| Provider not integrated | Say “recorded manually,” never “provider completed” |
+
+===============================================================================
+
+## REFERENCES
+
+| Topic | Source |
+|---|---|
+| Runner terminology | [OpenAI Agents SDK — Running agents](https://openai.github.io/openai-agents-js/guides/running-agents/) |
+| Agent harness meaning | [Anthropic — Demystifying evals for AI agents](https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents) |
+| Simple agent patterns | [Anthropic — Building effective agents](https://www.anthropic.com/engineering/building-effective-agents) |
+| Policy enforcement | [NIST — Policy Enforcement Point](https://csrc.nist.gov/glossary/term/policy_enforcement_point) |
+| Durable steps and waits | [Cloudflare Workflows rules](https://developers.cloudflare.com/workflows/build/rules-of-workflows/), [events](https://developers.cloudflare.com/workflows/build/events-and-parameters/) |
+| Delivery guarantees | [Cloudflare Queues](https://developers.cloudflare.com/queues/reference/delivery-guarantees/) |
+| Transactional outbox | [AWS Prescriptive Guidance](https://docs.aws.amazon.com/prescriptive-guidance/latest/cloud-design-patterns/transactional-outbox.html) |
+| Sync and database access | [Turso Sync](https://docs.turso.tech/sync/usage), [authorization](https://docs.turso.tech/sdk/authorization) |
+| Storage pricing | [Turso](https://turso.tech/pricing), [Cloudflare R2](https://developers.cloudflare.com/r2/pricing/) |
+
+```text
+TAR keeps business facts simple.
+The Runner handles execution.
+The Action Gateway protects shared changes.
+Inbox keeps human work visible.
+Bots add capability without becoming autonomous processes.
+```

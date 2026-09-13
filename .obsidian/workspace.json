@@ -4,11 +4,11 @@
     "type": "split",
     "children": [
       {
-        "id": "df86329119f5c321",
+        "id": "455c134ff7b5c0b2",
         "type": "tabs",
         "children": [
           {
-            "id": "d968b3f7343f4ecb",
+            "id": "881e48a182c19624",
             "type": "leaf",
             "state": {
               "type": "empty",
@@ -185,8 +185,9 @@
       "bases:Create new base": false
     }
   },
-  "active": "d968b3f7343f4ecb",
+  "active": "881e48a182c19624",
   "lastOpenFiles": [
+    "tarv4.md",
     "tarv4.1.md",
     "sites/README.md",
     "sites/seeds/sweetgreen.DESIGN.md",
@@ -222,7 +223,6 @@
     "tarharness/node_modules/deep-eql/README.md",
     "tarharness/node_modules/@types/estree/README.md",
     "tarharness/node_modules/effect/ai-docs/src/01_effect/07_pubsub/index.md",
-    "tarharness/node_modules/effect/ai-docs/src/01_effect/05_resources/index.md",
     "tarharness/node_modules/miniflare/dist/local-explorer-ui/favicon.svg",
     "brandingsite/public/icons/whatsapp.png",
     "brandingsite/public/icons/telegram.png",

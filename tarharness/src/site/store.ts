@@ -15,6 +15,7 @@ import {
   type CardDefinition,
   type DesignTokens,
   type PageDefinition,
+  type ReleaseFile,
   type ReleaseManifest,
   type SiteDefinition,
   type SitePatchOperation,
@@ -26,6 +27,28 @@ type SiteError = ReturnType<typeof badRequest> | ReturnType<typeof conflict> | R
 
 const now = () => Date.now();
 const object = (val: unknown): Record<string, unknown> => (val !== null && typeof val === 'object' && !Array.isArray(val) ? (val as Record<string, unknown>) : {});
+
+function releasePrefix(context: AccessContext, siteId: string): string {
+  return `workspaces/${context.workspace.id}/sites/${siteId}/releases`;
+}
+
+function releaseFile(prefix: string, releaseId: string, path: string, mime: string, body: string, hash: string): ReleaseFile {
+  return { path, mime, bytes: body.length, hash, key: `${prefix}/${releaseId}${path}` };
+}
+
+async function storeRelease(bucket: R2Bucket, prefix: string, releaseId: string, rendered: { html: string; css: string; hash: string }): Promise<ReleaseFile[]> {
+  const entries = [
+    { path: '/index.html', mime: 'text/html; charset=utf-8', body: rendered.html },
+    { path: '/style.css', mime: 'text/css; charset=utf-8', body: rendered.css },
+  ];
+  const files: ReleaseFile[] = [];
+  for (const entry of entries) {
+    const file = releaseFile(prefix, releaseId, entry.path, entry.mime, entry.body, rendered.hash);
+    await bucket.put(file.key, entry.body, { httpMetadata: { contentType: entry.mime } });
+    files.push(file);
+  }
+  return files;
+}
 
 export function createDefaultSite(title: string, prompt: string, theme: ThemeName = 'editorial-chalk'): SiteDefinition {
   const design: DesignTokens = DEFAULT_DESIGN_TOKENS[theme] || DEFAULT_DESIGN_TOKENS['editorial-chalk'];
@@ -361,6 +384,7 @@ export async function executeSiteCompile(
   const rendered = await compileSiteHtml(existing.data);
   const stamp = now();
   const releaseId = `rel_${stamp}`;
+  const prefix = releasePrefix(context, existing.id);
 
   const manifest: ReleaseManifest = {
     id: releaseId,
@@ -368,12 +392,10 @@ export async function executeSiteCompile(
     version: existing.version,
     generation: (existing.data.releases?.length || 0) + 1,
     created: stamp,
-    html: rendered.html,
-    css: rendered.css,
     hash: rendered.hash,
     files: [
-      { path: '/index.html', mime: 'text/html; charset=utf-8', bytes: rendered.html.length, hash: rendered.hash },
-      { path: '/style.css', mime: 'text/css; charset=utf-8', bytes: rendered.css.length, hash: rendered.hash },
+      releaseFile(prefix, releaseId, '/index.html', 'text/html; charset=utf-8', rendered.html, rendered.hash),
+      releaseFile(prefix, releaseId, '/style.css', 'text/css; charset=utf-8', rendered.css, rendered.hash),
     ],
   };
 
@@ -394,11 +416,13 @@ export async function executeSiteCompile(
 
 export async function executeSitePublish(
   client: Client,
+  bucket: R2Bucket | undefined,
   context: AccessContext,
   input: Record<string, unknown>,
   key: string,
   hash: string
 ): Promise<Record<string, unknown>> {
+  if (!bucket) throw unavailable('Site release storage is not configured.');
   const siteId = String(input.siteId || '');
   const existing = await getSiteRecord(client, siteId || undefined);
   if (!existing) throw notFound('Site record not found.');
@@ -414,13 +438,8 @@ export async function executeSitePublish(
     version: existing.version + 1,
     generation,
     created: stamp,
-    html: rendered.html,
-    css: rendered.css,
     hash: rendered.hash,
-    files: [
-      { path: '/index.html', mime: 'text/html; charset=utf-8', bytes: rendered.html.length, hash: rendered.hash },
-      { path: '/style.css', mime: 'text/css; charset=utf-8', bytes: rendered.css.length, hash: rendered.hash },
-    ],
+    files: await storeRelease(bucket, releasePrefix(context, existing.id), releaseId, rendered),
   };
 
   const updatedDef: SiteDefinition = {

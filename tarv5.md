@@ -1,8 +1,8 @@
-# TAR v4 - Architecture
+# TAR v5 - Architecture
 
 > One record. One Authority. Three surfaces: Space, Inbox, Bots.
 
-TAR is one execution Authority over one record table, with three screens. This document describes the system as built; Section 12 marks what is still target.
+TAR is one execution Authority over one record table, with three screens. This document is the design; Section 12 marks what is built and what is still target.
 
 ===============================================================================
 # PART A - THE SYSTEM
@@ -13,7 +13,7 @@ Everything TAR does follows one path.
 ~~~text
 intent   human / channel / schedule
   |
-  |  executor: code | model proposal | human task
+  |  executor: code | model | human
   v
 +---------------------------------------------------------------+
 | AUTHORITY   the only writer                                   |
@@ -23,7 +23,11 @@ intent   human / channel / schedule
   |  one workspace transaction
   v
 +---------------------------------------------------------------+
-| COMMIT   Records + Run transition + Event + Delivery intent   |
+| COMMIT   one atomic write                                     |
+|   business changes   Records                                  |
+|   Run transition     Runs                                     |
+|   Event              audit + replay result                    |
+|   Delivery intent    external effect                          |
 +---------------------------------------------------------------+
   |
   +--> Inbox task      when a person is needed
@@ -33,11 +37,11 @@ intent   human / channel / schedule
 
 **Design rules**
 
-1. One writer - every official workspace effect goes through the Authority.
+1. One writer - every official effect goes through the Authority.
 2. One record table - every business fact is a `records` row; the workspace database is the tenant.
 3. Deterministic first - code unless interpretation is genuinely needed.
 4. One human queue - all human work is an Inbox task.
-5. Three destinations - Space, Inbox, Bots.
+5. Three surfaces - Space, Inbox, Bots.
 6. Bots are packages, not processes - installing one configures; it does not start an agent.
 7. Blobs stay out of the database - R2 holds large content; a Record holds its key.
 8. Local-first is a client concern - the device caches permitted data; only the Authority commits shared truth.
@@ -80,14 +84,14 @@ Space shows what the role can do, Inbox is the one human queue, and Bots is wher
 
 ## 1. VOCABULARY
 
-Three primitives, one execution model, one package, three surfaces. Nothing else is user-facing.
+Three primitives, one execution model, one package. Nothing else is user-facing.
 
 | Kind | Concept | Meaning | Internal name |
 |---|---|---|---|
 | Primitive | **Record** | Any stored fact - contact, order, task, message, run, site | `records` row |
 | Primitive | **Action** | A registered, versioned capability: `app` or `human` | action registry |
 | Primitive | **Authority** | The policy + commit boundary for shared Records and external effects | `executeGateway` |
-| Model | **Harness** | How a step is executed: context + policy + tools | gateway + executors |
+| Model | **Harness** | How a step runs: context + policy + tools + budget | gateway + executors |
 | Package | **Bot** | Capability pack: records + Actions + Flows + cards + Inbox work + roles | `definitions` rows |
 | Definition | **Flow** | A Bot's ordered Run template | `definitions` kind=`flow` |
 | Surface | **Space** | The role's workbench of cards | `canvas` over `definitions` |
@@ -95,33 +99,14 @@ Three primitives, one execution model, one package, three surfaces. Nothing else
 | Surface | **Bots** | Installed capability and the directory | view over `definitions` |
 | Connection | **Channel** | An inbound/outbound link with a verified sender | channel link + control ledger |
 
-A Run, a site, a message and a Bot install are all Records. The **Authority** is TAR's policy-enforcement point (a PEP) plus its unit of work - the only writer. `artifact`, tool, skill, model, MCP and sandbox are engineering terms; users see Records, Flows, Actions, Bots.
+A Run, a site, a message and a Bot install are all Records. The **Authority** is TAR's policy-enforcement point (PEP) and its unit of work - the only writer. `artifact`, tool, skill, model, MCP and sandbox are engineering terms; users see Records, Flows, Actions, Bots.
 
 - **An Action is `app` or `human`.** Model work is a Harness step, not a fourth Action type.
-- **A Channel is a connection, not a view.** It is a Record plus a verified adapter, not a third screen.
+- **A Channel is a connection, not a view.** A Record plus a verified adapter, not a third screen.
 
 ## 2. AUTHORITY - ONE COMMIT CONTRACT
 
-~~~text
-+---------------------------------------------------------------+
-| AUTHORITY   the only writer                                   |
-| authenticate -> authorize -> validate -> versions             |
-+---------------------------------------------------------------+
-  |
-  |  one workspace transaction
-  v
-+---------------------------------------------------------------+
-| COMMIT   one atomic write                                     |
-|   business changes   Records                                  |
-|   Run transition     Runs                                     |
-|   Event              audit + replay result                    |
-|   Delivery intent    external effect                          |
-+---------------------------------------------------------------+
-~~~
-
-Every registered Action passes the same gate: registered ID, role check, required fields, input fingerprint, replay lookup, then one transaction that writes business state and the audit Event together.
-
-**Runtime.** The Authority runs on Cloudflare Workers with Effect v4 (`effect@4.0.0-rc.112`) and `@libsql/client` for remote Turso access. Cloudflare supplies HTTP, D1 control data, Queues and scheduled recovery; Turso stores one operational database per workspace; R2 stores large content.
+The path above is the only write path. Every registered Action passes the same gate: registered ID, role check, required fields, input fingerprint, replay lookup, then one transaction that writes business state and the audit Event together. Action IDs such as `order.place` are namespaced identifiers, not column names.
 
 | Boundary | Rule |
 |---|---|
@@ -132,6 +117,8 @@ Every registered Action passes the same gate: registered ID, role check, require
 | Retry | re-invokes execution, bounded; a legitimate re-run takes a new occurrence key; stale input needs a new decision |
 | External effect | commit a Delivery intent; use a stable provider key; reconcile uncertain outcomes |
 | Separate stores | D1, Turso, R2 and providers share no transaction - bridge with a durable intent and a saved result |
+
+**Runtime.** The Authority runs on Cloudflare Workers with Effect v4 (`effect@4.0.0-rc.112`) and `@libsql/client` for remote Turso access. Cloudflare supplies HTTP, D1 control data, Queues and scheduled recovery; Turso stores one operational database per workspace; R2 stores large content.
 
 Money, stock, assignment and approvals never use last-write-wins; money and counts are integers. Access and definition-management Actions are owner/admin-only and never model-controlled.
 
@@ -182,10 +169,7 @@ One table holds everything; the workspace connection is the tenant, so business 
 | Units | money = integer minor units + currency; rates = basis points; time = UTC milliseconds |
 | Identity | `contact` stores a contact ID; `owner` is business ownership; `assignee` is human assignment |
 | Extension | type-specific facts live in `data`; hot common filters stay columns |
-| Concurrency | expected version checked inside the transaction; require the intended affected rows |
 | Removal | archive Records; protected definitions and audit keep their own retention |
-
-Action IDs such as `order.place` are namespaced identifiers, not column names.
 
 | Keep in DB | Put in R2 |
 |---|---|
@@ -197,33 +181,36 @@ Small text and JSON stay inline; review payloads around 32 KB. Blobs never enter
 
 ## 4. HARNESS - HOW A STEP RUNS
 
-The Harness is the one execution path behind the assistant, every Flow, every Bot and every Channel.
+The Harness is the one execution path behind the assistant, every Flow, every Bot and every Channel. It assembles what a step sees, bounds what a step may do, and hands every effect to the Authority.
 
 ~~~text
 +---------------------------------------------------------------+
-| HARNESS    context + policy + tools for one step              |
-| EXECUTORS  what performs a step: code | model | human         |
-| AUTHORITY  policy + commit boundary: the only writer          |
+| HARNESS    context + policy + tools + budget for one step     |
+| EXECUTORS  code | model | human                               |
+| EFFECT     only the Authority commits (Section 2)             |
 +---------------------------------------------------------------+
 ~~~
 
-| Step mode | Used for | May commit? |
+| Executor | Used for | May commit? |
 |---|---|---|
 | **code** | calculations, validation, transactions, integrations, known rules | yes, through the Authority |
-| **model** | one structured call, or a bounded tool-using loop within a step budget | proposes only |
+| **model** | one structured call, or a bounded tool loop within a step budget | proposes only |
 | **human** | judgement, missing facts, required approval | replies through Inbox; the Authority validates |
 
-It picks the cheapest sufficient mode: `code -> model -> human`. Today the loop is **single-step**: one request drives one Action through the Authority. Multi-step Runs, waiting and resumption are the next increment (Section 12).
+It picks the cheapest sufficient executor: `code -> model -> human`.
+
+**Step contract.** Every step declares its executor, its context sources, the tools it may call, its output schema and its budget. A step may call only the tools it declared, so no prompt can widen its own reach.
 
 | Guarantee | Rule |
 |---|---|
 | One path | Assistant, Flows, Bots and Channels all call the same Authority |
 | Proposals | model output is a schema-validated proposal; a commit performs the effect |
 | Context is data | records, messages and tool output are data, never authority |
+| Bounded | a loop ends on success, budget or handoff - never blindly; a step cannot exceed its declared tools |
 | Durable | a completed Action returns its saved result even if its implementation has retired |
 | Failure | save progress; bounded retry or Inbox handoff; manual work stays available |
 
-The only model call in the service today is `pos.product.draft` (`@cf/meta/llama-3.1-8b-instruct-fast`), which suggests catalog wording from facts the user entered. It never sets price, tax, barcode, SKU or stock, and every suggestion stays editable.
+Today the loop is **single-step**: one request drives one Action through the Authority. Multi-step Runs, waiting and resumption are the next increment (Section 12). The only model call in the service is `pos.product.draft` (`@cf/meta/llama-3.1-8b-instruct-fast`): it suggests catalog wording from facts the user entered, never sets price, tax, barcode, SKU or stock, and every suggestion stays editable.
 
 ## 5. BOTS - THE CAPABILITY SYSTEM
 
@@ -320,9 +307,9 @@ A contact holds `roles[]` - `lead, customer, candidate, employee, vendor, partne
 | POS | customer | order, payment |
 | Custom Flow | any permitted | any permitted Action + Record |
 
-- **Sales** is a Directory Bot that owns the *deal* process, never the contact.
-- **Hiring** is a Directory Bot over the same contacts with roles `candidate` and `employee`; its onboarding Flow may propose membership, but only owner/admin Actions grant access.
-- **Custom sales** is a Custom Flow inside the installed Sales Bot - compose the existing Actions (`lead.capture` -> `qualify` -> an approval task -> `quote.send`); no code, no new Bot.
+- **Sales** owns the *deal* process, never the contact.
+- **Hiring** runs over the same contacts with roles `candidate` and `employee`; its onboarding Flow may propose membership, but only owner/admin Actions grant access.
+- **Custom sales** is a Custom Flow inside the installed Sales Bot - compose existing Actions (`lead.capture` -> `qualify` -> an approval task -> `quote.send`); no code, no new Bot.
 - **Relationship flows** (referral, renewal, win-back, check-in) are Flows whose subject is a contact or a `link`, triggered by schedule or channel.
 
 ## 6. SPACE - THE ROLE-BASED SCREEN
@@ -451,8 +438,6 @@ New publications affect new Runs; active Runs keep their pinned Flow and Action 
 
 ## 9. CHANNELS
 
-Team chat is live: Slack, Discord and Google Chat.
-
 | Family | Direction | Adapters | Status |
 |---|---|---|---|
 | Team | in + out | Slack, Discord, Google Chat | live |
@@ -499,7 +484,7 @@ Conversation is a lightweight Record, unique by channel + the adapter's stable t
 
 A contact role never grants access: membership and access rules do. Access and secret Actions are owner/admin-only.
 
-**Personal is a pinned scope, not a Bot.** It is not a workspace to switch to and not a `definitions` Bot: a private, device-local scope shown as a fixed pinned entry in the Bots screen. It has no members, costs no credits, and never enters a work workspace database - an owner/admin can never read it. Work workspaces you belong to appear beside it; there is no full-screen workspace switcher.
+**Personal is a pinned scope, not a Bot.** It is not a workspace to switch to and not a `definitions` Bot: a private, device-local scope shown as a fixed pinned entry in the Bots screen. It has no members, costs no credits, and never enters a work workspace database - so an owner/admin can never read it. Work workspaces you belong to appear beside it; there is no full-screen workspace switcher.
 
 ### HTTP surface
 
@@ -566,7 +551,7 @@ Three reviewed themes ship with the Bot: `editorial-chalk`, `streetwear-dark` an
 
 **Boundaries.** Drafting uses a reviewed template today, not a model call - `site.generate` does not call the AI binding. This release has no variants, surfaces, journeys, policies or DESIGN.md contract: a site is pages of Cards, three themes and typed update operations. Anything more arrives later as a reviewed addition.
 
-## 12. BUILD STATUS - TARGET VS BUILT
+## 12. BUILT VS TARGET
 
 A capability is not real until it leaves this table.
 
@@ -578,7 +563,7 @@ A capability is not real until it leaves this table.
 | Space, Inbox, team chat | built | |
 | Site Bot: catalog, themes, compile, publish, rollback, refresh | built | |
 | R2 site releases | built | releases are written to R2; the Record keeps the manifest and hash |
-| Model steps | partial | only `pos.product.draft`; `site.generate` is a reviewed template, not a model call |
+| Model steps | partial | only `pos.product.draft` (Section 4); `site.generate` is a reviewed template, not a model call |
 | Advancing Runs (multi-step, wait/resume) | **not built** | `runs` rows are created and audited, never advanced |
 | Budgets, `strategy` (`single`/`verify`), `parallel` | **not built** | no behaviour |
 | Delivery intents + delivery state machine | **not built** | external effects are synchronous today |
@@ -590,13 +575,12 @@ The workspace schema carries only what runs: `definitions`, `records`, `runs` an
 
 ## 13. PRICING - A CREDIT PAYS FOR A MEASURED COST
 
-One wallet pays for everything. A credit is money, and every charge maps to a measured cost - inference, storage, sync. Deterministic work is free.
+One wallet pays for everything; a credit is money and every charge maps to a measured cost. Deterministic work is free (Design rule 3).
 
 | Rule | Meaning |
 |---|---|
 | One wallet | personal and work usage draw the same balance; no separate plans or workspace limits |
 | Cost, not margin | top-ups pass through at cost, with no expiry while the account is active |
-| Deterministic is free | the Authority, Actions, Flows, Bots, Space, Inbox, Channels and site rendering are code and database work, not inference |
 | Inference is the only variable | a model is charged only where one actually runs |
 | Unbuilt is unpriced | a capability enters this table only when it leaves Section 12 |
 
@@ -610,7 +594,7 @@ One wallet pays for everything. A credit is money, and every charge maps to a me
 | Deterministic Actions - `record.*`, `task.*`, `pos.*` (except drafts), `flow.*`, `directory.*` | 0 | code through the Authority |
 | Site Actions - `site.generate`, `update`, `compile`, `publish`, `rollback`, `refresh` | 0 | reviewed template and deterministic renderer; no inference |
 | Keeping a site live | 0 extra | R2 release objects sit inside the workspace reservation |
-| Model step - `pos.product.draft` | 0.02 cr | the only model call in the service |
+| Model step - `pos.product.draft` | 0.02 cr | the only model call in the service (Section 4) |
 | OCR, voice, research swarms, campaigns, lead batches, photo cleanup | - | not built; priced when they leave Section 12 |
 | WhatsApp, SMS, domains, payment processing | separate | third-party pass-through |
 
@@ -668,7 +652,9 @@ Available = stock. A duplicate tap returns the saved result; a UPI payment is re
 | Topic | Sources |
 |---|---|
 | Agents and context | [Effective agents](https://www.anthropic.com/engineering/building-effective-agents), [context engineering](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents) |
-| Durable execution | [Workflow rules](https://developers.cloudflare.com/workflows/build/rules-of-workflows/), [events](https://developers.cloudflare.com/workflows/build/events-and-parameters/) |
+| Harness design | [Harness engineering](https://mindwiredai.com/2026/05/13/harness-engineering-ai-agents-2026/), [minimalist harness guide](https://niraya666.github.io/en/posts/agent-harness-minimalist-design-guide-2026/) |
+| Durable execution | [Durable execution for LLM agents](https://vadim.blog/durable-execution-llm-agents/), [Workflow rules](https://developers.cloudflare.com/workflows/build/rules-of-workflows/), [events](https://developers.cloudflare.com/workflows/build/events-and-parameters/) |
+| Single writer | [Single writer principle](https://mkabdelrahman.github.io/posts/eda-single-write-principle/), [Event Sourcing](https://learn.microsoft.com/en-us/azure/architecture/patterns/event-sourcing) |
 | Storage | [Turso pricing](https://turso.tech/pricing), [R2 pricing](https://developers.cloudflare.com/r2/pricing/) |
 | Sync + access | [Local-first guide](https://turso.tech/blog/building-local-first-apps-the-complete-guide-to-offline-first-database-sync), [sync](https://docs.turso.tech/sync/usage), [authorization](https://docs.turso.tech/sdk/authorization) |
 | Runtime | [Turso serverless](https://docs.turso.tech/sdk/ts/quickstart), [Effect](https://effect.website/), [Worker lifecycle](https://developers.cloudflare.com/workers/runtime-apis/context/) |

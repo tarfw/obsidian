@@ -536,9 +536,8 @@ last two are two different ways of removing the same Turso line.
 
 **Note:** D1 + Workers would be ~40% cheaper than Turso — but Turso is only ₹0.67/user/mo, so
 the saving is ~₹0.27/user. Offline is now a **capability** decision, not a cost one. Confirm
-offline is needed for **writes**, not just reads. Separately, `pricingplan.md` and
-`brandingsite/pricing.md` still describe ₹500 as a **one-time** activation fee with at-cost
-top-ups; this document assumes ₹500 is **recurring**. Reconcile before publishing a price.
+offline is needed for **writes**, not just reads. Pricing is reconciled: ₹500 is a **recurring
+monthly** price, defined in `tarv4.md` §13 and matched by `brandingsite/pricing.md`.
 
 ============================================================
 ## 15. SCALE SUMMARY

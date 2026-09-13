@@ -13,6 +13,15 @@ afterEach(() => {
   while (clients.length) clients.pop()?.close();
 });
 
+function releaseBucket(): R2Bucket & { objects: Map<string, string> } {
+  const objects = new Map<string, string>();
+  return {
+    objects,
+    put: async (key: string, value: string) => { objects.set(key, value); return {} as R2Object; },
+    get: async (key: string) => { const value = objects.get(key); return value === undefined ? null : ({ text: async () => value } as unknown as R2ObjectBody); },
+  } as unknown as R2Bucket & { objects: Map<string, string> };
+}
+
 async function createTestWorkspace() {
   const client = createClient({ url: 'file::memory:' });
   clients.push(client);
@@ -161,16 +170,18 @@ describe('TAR Site Bot & Pure HTML/CSS Static Compiler (PAR v2)', () => {
     const siteId = String(gen.siteId);
 
     // Publish
+    const bucket = releaseBucket();
     const pub = await Effect.runPromise(
       executeGateway(client, ownerAccess, {
         actionId: 'site.publish',
         idempotencyKey: 'site-pub-1',
         input: { siteId, subdomain: 'slice-house' },
-      })
+      }, { siteReleases: bucket })
     );
     expect(pub.state).toBe('live');
     expect(pub.liveUrl).toBe('/v1/sites/slice-house');
     expect(pub.releaseId).toBeDefined();
+    expect([...bucket.objects.values()].some((body) => body.includes('Slice House'))).toBe(true);
 
     const firstReleaseId = String(pub.releaseId);
 
@@ -192,7 +203,7 @@ describe('TAR Site Bot & Pure HTML/CSS Static Compiler (PAR v2)', () => {
         actionId: 'site.publish',
         idempotencyKey: 'site-pub-2',
         input: { siteId },
-      })
+      }, { siteReleases: bucket })
     );
     expect(pub2.generation).toBe(2);
 

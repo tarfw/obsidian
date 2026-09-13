@@ -1,6 +1,6 @@
 Tar Pricing
 Simple credit pricing
-Base activation is ₹500 (includes ₹100 pre-loaded usage credits). Top up anytime on demand at 100% direct at-cost pass-through.
+The Work Pack is ₹500/month and includes 1,000 monthly credits (₹100 usage value). Top up anytime on demand at 100% direct at-cost pass-through.
 
 1. Workspaces and Credits
 Monthly workspace credits are reserved first. AI automation inside a workspace uses its owner's wallet.
@@ -38,10 +38,9 @@ Voice note to order (Whisper Groq @ $0.04/hr + Gemma)	0.3 cr	~₹0.03 / order
 Quote or proposal (DeepSeek-V4 @ $0.08 in / $0.18 out)	0.25 cr	~₹0.025 / doc
 Customer retention campaign (DeepSeek-V4)	0.5 cr	~₹0.05 / batch
 Sites & Publishing
-Publish or update a site	0.5 cr / run	~₹0.05 / run
-Edit a site section	0.25 cr / run	~₹0.025 / run
-Keep a public site active	50 cr / month	₹5.00 / month
-Generate a site draft (Multi-turn DeepSeek-V4)	3 cr / draft	~₹0.30 / draft
+Generate or edit a site	0	Reviewed template, no model call
+Publish or roll back a site	0	Deterministic compile + R2 write
+Keep a public site active	0	R2 storage inside the workspace reservation
 Intelligence & Swarms
 Competitor price check (Gemma-4)	0.02 cr / product	~₹0.002 / check
 Operations workflow (DeepSeek-V4)	0.5 cr / pipeline	~₹0.05 / run
@@ -49,10 +48,10 @@ Product photo cleanup (Vision model)	1 cr / image	~₹0.10 / image
 Verified lead batch (DeepSeek-V4)	2 cr / batch	~₹0.20 / batch
 Deep research swarm (Autonomous multi-agent loop)	12 cr / dossier	~₹1.20 / task
 3. Credits and Cost
-Initial activation costs ₹500 (includes ₹100 direct credit wallet value). All top-ups pass through 100% at-cost credit value without expiration.
+The Work Pack costs ₹500/month and includes 1,000 credits per month (₹100 usage value). All top-ups pass through 100% at-cost credit value without expiration.
 
 Pack	Price	Credits Included	Structure	Best for
-Base Credit Pack	₹500	1,000 credits (₹100 wallet value)	₹400 platform fee + ₹100 usage credits	Initial account activation — pre-loaded with ₹100 credit wallet
+Work Pack	₹500 / month	1,000 credits / month (₹100 value)	Platform + ₹100 monthly usage credits	Cloud sync, messaging and sites for an active business
 Top-Up: Starter	₹100	1,000 credits (100% wallet value)	Pure at-cost usage top-up	Flexible on-demand top-up whenever balance runs low
 Top-Up: Growth	₹500	5,000 credits (100% wallet value)	Pure at-cost usage top-up	Active businesses running daily CRM, OCR & proposals
 Top-Up: Scale	₹1,000	10,000 credits (100% wallet value)	Pure at-cost usage top-up	High-volume stores, large lead batches & research swarms
@@ -107,9 +106,9 @@ WhatsApp Customer Replies	Gemma-4-E4B-it ($0.02 in / $0.10 out)	500 replies	150k
 Invoice / Receipt OCR Scans	DeepSeek-OCR 2 ($0.03 in/out / 1M)	100 pages	140k vision in / 60k text out	5 cr	₹0.52
 Quotes & Commercial Proposals	DeepSeek-V4-Flash-0731	20 quotes	30k in / 16k out	5 cr	₹0.50
 Total Monthly Need	~121.6 cr	~₹12.18 / mo
-The pre-loaded ₹100 wallet credits (1,000 cr) from the Base Pack covers 8+ months of active operations
+The ₹100 of monthly credits included in the Work Pack (1,000 cr) covers an active business's typical operations
 Subsequent top-ups (₹100 = 1,000 cr) refill 100% of payment directly into your credit wallet with 0% token profit markup.
-* Prices are localized worldwide using purchasing power, taxes, and store costs. Purchased credits do not expire while the account is active. Third-party charges such as WhatsApp, SMS, domains, and payment processing are separate. The ₹500 base pack includes ₹400 platform onboarding fee and ₹100 pre-loaded credit balance (1,000 credits @ ₹0.10/credit). Subsequent top-ups are credited 100% directly to the wallet at zero token profit margin.
+* Prices are localized worldwide using purchasing power, taxes, and store costs. Purchased credits do not expire while the account is active. Third-party charges such as WhatsApp, SMS, domains, and payment processing are separate. The Work Pack is ₹500/month and includes ₹100 of usage credits (1,000 credits @ ₹0.10/credit). Subsequent top-ups are credited 100% directly to the wallet at zero token profit margin.
 
 
 Business Type,Primary AI Task,Est. Users/Mo,Est. Msgs/Mo,Est. Total Cost (Incl. 18% GST)

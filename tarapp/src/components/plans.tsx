@@ -68,9 +68,9 @@ const PLAN_AGENT_GROUPS = [
   {
     id: 'agents_sites',
     name: 'Site Builder & Stores',
-    cost: '5–100 credits / run',
-    description: 'Generate full website drafts from prompts, edit individual sections via plain language, and publish updates live.',
-    actions: ['Publish or update site (5 cr)', 'Edit a site section (10 cr)', 'Keep site active (50 cr / mo)', 'Generate site draft (100 cr)'],
+    cost: '0 credits',
+    description: 'Generate, edit and publish a site from prompts. Reviewed templates and a deterministic renderer mean no model calls and no credit charge.',
+    actions: ['Generate or edit a site (0 cr)', 'Publish or roll back a site (0 cr)', 'Keep a site live (0 cr)'],
     color: '#0891B2',
   },
   {
@@ -91,7 +91,7 @@ const PLAN_AGENTS: PlanAgentItem[] = [
     title: 'Credits',
     description: '1 credit = ₹0.10. Pure pass-through rates with 0% token markup.',
     features: () => [
-      { title: 'Base Activation', value: '₹500 (1,000 credits)' },
+      { title: 'Work Pack', value: '₹500 / month (1,000 credits/mo)' },
       { title: 'Top-Up: Starter', value: '₹100 (1,000 credits)' },
       { title: 'Top-Up: Growth', value: '₹500 (5,000 credits)' },
       { title: 'Top-Up: Scale', value: '₹1,000 (10,000 credits)' },

@@ -167,8 +167,10 @@ async function handle(request: Request, env: RuntimeEnv, ctx: ExecutionContext):
       const releases = Array.isArray(siteData.releases) ? siteData.releases : [];
       const currentReleaseId = String(siteData.currentRelease || '');
       const release = releases.find((r: any) => r.id === currentReleaseId) || releases[releases.length - 1];
-      if (!release || !release.html) throw notFound('Site content unavailable.');
-      return new Response(String(release.html), {
+      const indexKey = release && Array.isArray(release.files) ? (release.files as Array<{ path?: string; key?: string }>).find((file) => file.path === '/index.html')?.key : undefined;
+      const html = indexKey ? await env.SITE_RELEASES.get(indexKey) : null;
+      if (!html) throw notFound('Site content unavailable.');
+      return new Response(await html.text(), {
         status: 200,
         headers: {
           'Content-Type': 'text/html; charset=utf-8',
@@ -264,7 +266,7 @@ async function handle(request: Request, env: RuntimeEnv, ctx: ExecutionContext):
     const actionMatch = /^actions\/([a-z.]+)$/.exec(nested);
     if (request.method === 'POST' && actionMatch) {
       const key = request.headers.get('Idempotency-Key') || ''; const input = await Effect.runPromise(parseJson(request));
-      const result = await Effect.runPromise(executeGateway(client, current, { actionId: actionMatch[1] as GatewayRequest['actionId'], idempotencyKey: key, input }, { productContent: env.PRODUCT_CONTENT, ai: env.AI }));
+      const result = await Effect.runPromise(executeGateway(client, current, { actionId: actionMatch[1] as GatewayRequest['actionId'], idempotencyKey: key, input }, { productContent: env.PRODUCT_CONTENT, siteReleases: env.SITE_RELEASES, ai: env.AI }));
       return response(result, 201);
     }
     throw notFound('Route not found.');
@@ -278,7 +280,7 @@ export default {
       const body = object(message.body);
       if (body.kind !== 'chat.command' || typeof body.id !== 'string') { message.ack(); continue; }
       try {
-        await processCommand(env.CONTROL, body.id, (current, work) => withWorkspace(env, current, work), { productContent: env.PRODUCT_CONTENT, ai: env.AI });
+        await processCommand(env.CONTROL, body.id, (current, work) => withWorkspace(env, current, work), { productContent: env.PRODUCT_CONTENT, siteReleases: env.SITE_RELEASES, ai: env.AI });
         message.ack();
       } catch { message.retry({ delaySeconds: 60 }); }
     }

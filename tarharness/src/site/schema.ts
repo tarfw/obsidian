@@ -134,6 +134,7 @@ export interface ReleaseFile {
   readonly mime: string;
   readonly bytes: number;
   readonly hash: string;
+  readonly key: string;
 }
 
 export interface ReleaseManifest {
@@ -142,8 +143,6 @@ export interface ReleaseManifest {
   readonly version: number;
   readonly generation: number;
   readonly created: number;
-  readonly html: string;
-  readonly css: string;
   readonly hash: string;
   readonly files: ReleaseFile[];
 }

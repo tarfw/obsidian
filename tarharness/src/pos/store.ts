@@ -2,6 +2,7 @@ import type { Client, Transaction } from '@libsql/client/web';
 import { badRequest, conflict, forbidden, notFound } from '../errors.ts';
 import type { AccessContext } from '../types.ts';
 import { isCook } from '../access.ts';
+import { appendRun, eventStatement, findReplay } from '../gateway/commit.ts';
 
 type DB = Pick<Client, 'execute'>;
 type Data = Record<string, unknown>;
@@ -87,12 +88,8 @@ export async function executePos(client: Client, context: AccessContext, actionI
   try {
     await requirePos(tx);
     // Recheck under the write lock: concurrent retries must never sell twice.
-    const previous = await tx.execute({ sql: 'SELECT input_hash,data FROM events WHERE idempotency_key=?', args: [key] });
-    if (previous.rows[0]) {
-      if (previous.rows[0].input_hash !== hash) throw conflict('Operation key was used with different input.');
-      await tx.commit();
-      return object(JSON.parse(String(previous.rows[0].data))).result as Data;
-    }
+    const replay = await findReplay(tx, key, hash);
+    if (replay) { await tx.commit(); return replay.result as Data; }
     const result = await mutate(tx, context, actionId, input);
     const at = Date.now();
     const templateId = actionId === 'pos.checkout' || actionId.startsWith('pos.order.') ? 'sell' : actionId === 'pos.refund' ? 'orders' : actionId.startsWith('pos.product.') || actionId.startsWith('pos.stock.') ? 'stock' : actionId.startsWith('pos.customer.') ? 'customers' : actionId.startsWith('pos.register.') ? 'register' : null;
@@ -100,14 +97,9 @@ export async function executePos(client: Client, context: AccessContext, actionI
     let runId: string | null = null;
     if (flowId) {
       const flow = await tx.execute({ sql: "SELECT version FROM definitions WHERE id=? AND state='published'", args: [flowId] });
-      if (flow.rows.length) {
-        runId = 'run_' + crypto.randomUUID();
-        await tx.execute({ sql: "INSERT INTO runs(id,flow_id,flow_version,occurrence,state,action_id,context,version,started_at,finished_at,created_at,updated_at) VALUES(?,?,?,?,'completed',?,?,1,?,?,?,?)",
-          args: [runId, flowId, Number(flow.rows[0].version), key, actionId, JSON.stringify({ result }), at, at, at, at] });
-      }
+      if (flow.rows.length) runId = await appendRun(tx, { flowId, flowVersion: Number(flow.rows[0].version), occurrence: key, state: 'completed', actionId, context: { result }, startedAt: at, finishedAt: at });
     }
-    await tx.execute({ sql: "INSERT INTO events(id,kind,run_id,action_id,state,actor_id,input_hash,idempotency_key,data,created_at,updated_at) VALUES(?,'action',?,?,'accepted',?,?,?,?,?,?)",
-      args: ['evt_' + crypto.randomUUID(), runId, actionId, context.identity.id, hash, key, JSON.stringify({ result }), at, at] });
+    await tx.execute(eventStatement({ action: actionId, actor: context.identity.id, runId, key, hash, result }));
     await tx.commit();
     return result;
   } catch (error) { await tx.rollback().catch(() => undefined); throw error; }

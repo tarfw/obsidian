@@ -1,4 +1,4 @@
-import type { Client } from '@libsql/client/web';
+import type { Client, InStatement } from '@libsql/client/web';
 import { Effect } from 'effect';
 import { badRequest, conflict, forbidden, notFound, unavailable } from '../errors.ts';
 import { query } from '../db/turso.ts';
@@ -9,12 +9,12 @@ import { executePos, POS_INDEXES } from '../pos/store.ts';
 import { draftProduct, saveProductContent } from '../pos/content.ts';
 import { canExecute, canReadRecord } from '../access.ts';
 import { executeSiteGenerate, executeSiteUpdate, executeSiteCompile, executeSitePublish, executeSiteRollback, executeSiteRefresh } from '../site/store.ts';
+import { appendEvent, eventStatement, findReplay, fingerprint, runStatement, stamp } from './commit.ts';
 
 type GatewayError = ReturnType<typeof badRequest> | ReturnType<typeof conflict> | ReturnType<typeof forbidden> | ReturnType<typeof notFound> | ReturnType<typeof unavailable>;
 export interface GatewayRequest { readonly idempotencyKey: string; readonly actionId: ActionId; readonly input: Record<string, unknown>; }
-export interface GatewayServices { readonly productContent?: R2Bucket; readonly ai?: Ai }
+export interface GatewayServices { readonly productContent?: R2Bucket; readonly siteReleases?: R2Bucket; readonly ai?: Ai }
 
-const stamp = () => Date.now();
 const object = (value: unknown): Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const text = (value: unknown, max = 200): string => typeof value === 'string' ? value.trim().slice(0, max) : '';
 const json = (value: unknown) => JSON.stringify(value);
@@ -26,26 +26,6 @@ const rowToRecord = (row: Record<string, unknown>): RecordItem => ({
   createdAt: Number(row.created),
   updatedAt: Number(row.updated),
 });
-
-async function fingerprint(value: unknown): Promise<string> {
-  const bytes = new TextEncoder().encode(json(value));
-  const hash = await crypto.subtle.digest('SHA-256', bytes);
-  return [...new Uint8Array(hash)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
-}
-
-async function existing(client: Client, key: string, inputHash: string): Promise<Record<string, unknown> | null> {
-  const result = await client.execute({ sql: 'SELECT input_hash,data FROM events WHERE idempotency_key=?', args: [key] });
-  if (!result.rows[0]) return null;
-  const storedHash = String(result.rows[0][0]);
-  if (storedHash !== inputHash) throw conflict('This idempotency key was already used with different input.');
-  return object(JSON.parse(String(result.rows[0][1])));
-}
-
-async function appendEvent(client: Client, input: { action: string; actor: string; recordId?: string; runId?: string; key: string; hash: string; result: Record<string, unknown> }): Promise<void> {
-  const at = stamp();
-  await client.execute({ sql: `INSERT INTO events (id,kind,run_id,record_id,action_id,state,actor_id,input_hash,idempotency_key,data,created_at,updated_at)
-    VALUES (?,?,?,?,?,'accepted',?,?,?,?,?,?)`, args: [`evt_${crypto.randomUUID()}`, 'action', input.runId ?? null, input.recordId ?? null, input.action, input.actor, input.hash, input.key, json({ result: input.result }), at, at] });
-}
 
 export function executeGateway(client: Client, context: AccessContext, request: GatewayRequest, services: GatewayServices = {}): Effect.Effect<Record<string, unknown>, GatewayError> {
   return Effect.tryPromise({
@@ -60,7 +40,7 @@ export function executeGateway(client: Client, context: AccessContext, request: 
         if (field.kind === 'number' && value !== undefined && (!Number.isFinite(Number(value)))) throw badRequest(`${field.label} must be a number.`);
       }
       const hash = await fingerprint({ actor: context.identity.id, action: request.actionId, input: request.input });
-      const replay = await existing(client, request.idempotencyKey, hash);
+      const replay = await findReplay(client, request.idempotencyKey, hash);
       if (replay) return object(replay.result);
       const at = stamp();
       if (request.actionId === 'pos.product.content.save') return saveProductContent(client, services.productContent, context, request.input, { key: request.idempotencyKey, hash });
@@ -73,7 +53,7 @@ export function executeGateway(client: Client, context: AccessContext, request: 
       if (request.actionId === 'site.generate') return executeSiteGenerate(client, context, request.input, request.idempotencyKey, hash);
       if (request.actionId === 'site.update') return executeSiteUpdate(client, context, request.input, request.idempotencyKey, hash);
       if (request.actionId === 'site.compile') return executeSiteCompile(client, context, request.input, request.idempotencyKey, hash);
-      if (request.actionId === 'site.publish') return executeSitePublish(client, context, request.input, request.idempotencyKey, hash);
+      if (request.actionId === 'site.publish') return executeSitePublish(client, services.siteReleases, context, request.input, request.idempotencyKey, hash);
       if (request.actionId === 'site.rollback') return executeSiteRollback(client, context, request.input, request.idempotencyKey, hash);
       if (request.actionId === 'site.refresh') return executeSiteRefresh(client, context, request.input, request.idempotencyKey, hash);
 
@@ -92,7 +72,7 @@ export function executeGateway(client: Client, context: AccessContext, request: 
             ON CONFLICT(id) DO UPDATE SET name=excluded.name,version=definitions.version+1,state='published',data=excluded.data,updated_at=excluded.updated_at`, args: [flowId, name, json({ source: 'custom', botId, description, actions }), at, at] },
           { sql: `INSERT INTO definitions (id,kind,name,version,state,data,created_at,updated_at) VALUES (?, 'kit', ?, 1, 'published', ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET name=excluded.name,version=definitions.version+1,state='published',data=excluded.data,updated_at=excluded.updated_at`, args: [kitId, name, json({ source: 'custom', flowId, canvas: { cards: [card] } }), at, at] },
-          { sql: `INSERT INTO events (id,kind,action_id,state,actor_id,input_hash,idempotency_key,data,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)`, args: [`evt_${crypto.randomUUID()}`, 'action', request.actionId, 'accepted', context.identity.id, hash, request.idempotencyKey, json({ result }), at, at] },
+          eventStatement({ action: request.actionId, actor: context.identity.id, key: request.idempotencyKey, hash, result }),
         ], 'write');
         return result;
       }
@@ -105,7 +85,7 @@ export function executeGateway(client: Client, context: AccessContext, request: 
         if (!selected.length || selected.length !== flowIds.length) throw badRequest('Choose at least one available Flow.');
         const ids = directoryDefinitionIds(item.id);
         const cards = selected.map((flow) => ({ id: `flow-${item.id}-${flow.id}`, kind: 'flow', title: flow.title, description: flow.description, flowId: directoryDefinitionIds(item.id, flow.id).flow! }));
-        const statements = [
+        const statements: InStatement[] = [
           { sql: `INSERT INTO definitions (id,kind,name,version,state,data,created_at,updated_at) VALUES (?, 'bot', ?, 1, 'published', ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET name=excluded.name,version=definitions.version+1,state='published',data=excluded.data,updated_at=excluded.updated_at`, args: [ids.bot, item.title, json({ source: 'directory', itemId: item.id, description: item.description, guidance: item.guidance, flowIds }), at, at] },
           { sql: `INSERT INTO definitions (id,kind,name,version,state,data,created_at,updated_at) VALUES (?, 'kit', ?, 1, 'published', ?, ?, ?)
@@ -119,7 +99,7 @@ export function executeGateway(client: Client, context: AccessContext, request: 
         }
         const result = { itemId: item.id, flowIds, installed: true };
         if (item.id === 'pos') for (const sql of POS_INDEXES) statements.push({ sql, args: [] });
-        statements.push({ sql: `INSERT INTO events (id,kind,action_id,state,actor_id,input_hash,idempotency_key,data,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)`, args: [`evt_${crypto.randomUUID()}`, 'action', request.actionId, 'accepted', context.identity.id, hash, request.idempotencyKey, json({ result }), at, at] });
+        statements.push(eventStatement({ action: request.actionId, actor: context.identity.id, key: request.idempotencyKey, hash, result }));
         await client.batch(statements, 'write');
         return result;
       }
@@ -128,11 +108,11 @@ export function executeGateway(client: Client, context: AccessContext, request: 
         const itemId = text(request.input.itemId, 160); const item = findDirectoryBot(itemId);
         if (!item) throw notFound('Bot not found.');
         const ids = directoryDefinitionIds(item.id); const result = { itemId: item.id, installed: false };
-        const statements = [
+        const statements: InStatement[] = [
           { sql: "UPDATE definitions SET state='archived',version=version+1,updated_at=? WHERE id=?", args: [at, ids.bot] },
           { sql: "UPDATE definitions SET state='archived',version=version+1,updated_at=? WHERE id=?", args: [at, ids.kit] },
           { sql: "UPDATE definitions SET state='archived',version=version+1,updated_at=? WHERE id LIKE ?", args: [at, `custom.${item.id}.%`] },
-          { sql: `INSERT INTO events (id,kind,action_id,state,actor_id,input_hash,idempotency_key,data,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)`, args: [`evt_${crypto.randomUUID()}`, 'action', request.actionId, 'accepted', context.identity.id, hash, request.idempotencyKey, json({ result }), at, at] },
+          eventStatement({ action: request.actionId, actor: context.identity.id, key: request.idempotencyKey, hash, result }),
         ];
         for (const flow of item.flows) statements.splice(-1, 0, { sql: "UPDATE definitions SET state='archived',version=version+1,updated_at=? WHERE id=?", args: [at, directoryDefinitionIds(item.id, flow.id).flow!] });
         await client.batch(statements, 'write');
@@ -148,7 +128,7 @@ export function executeGateway(client: Client, context: AccessContext, request: 
         const record: RecordItem = { id: `rec_${crypto.randomUUID()}`, type, title, state: request.actionId === 'task.create' ? 'open' : 'active', data: object(request.input.data), owner: context.identity.id, assignee, version: 1, createdAt: at, updatedAt: at };
         await client.batch([
           { sql: `INSERT INTO records (id,type,title,state,data,owner,assignee,due,version,created,updated) VALUES (?,?,?,?,?,?,?,?,1,?,?)`, args: [record.id, record.type, record.title, record.state, json(record.data), record.owner, record.assignee, null, at, at] },
-          { sql: `INSERT INTO events (id,kind,record_id,action_id,state,actor_id,input_hash,idempotency_key,data,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`, args: [`evt_${crypto.randomUUID()}`, 'action', record.id, request.actionId, 'accepted', context.identity.id, hash, request.idempotencyKey, json({ result: { record } }), at, at] },
+          eventStatement({ action: request.actionId, actor: context.identity.id, recordId: record.id, key: request.idempotencyKey, hash, result: { record } }),
         ], 'write');
         return { record };
       }
@@ -165,7 +145,7 @@ export function executeGateway(client: Client, context: AccessContext, request: 
         const state = text(request.input.state, 80) || String(current.state);
         await client.batch([
           { sql: 'UPDATE records SET title=?,state=?,data=?,version=version+1,updated=? WHERE id=? AND version=?', args: [title, state, json(nextData), at, recordId, baseVersion] },
-          { sql: `INSERT INTO events (id,kind,record_id,action_id,state,actor_id,input_hash,idempotency_key,data,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`, args: [`evt_${crypto.randomUUID()}`, 'action', recordId, request.actionId, 'accepted', context.identity.id, hash, request.idempotencyKey, json({ result: { recordId, version: baseVersion + 1 } }), at, at] },
+          eventStatement({ action: request.actionId, actor: context.identity.id, recordId, key: request.idempotencyKey, hash, result: { recordId, version: baseVersion + 1 } }),
         ], 'write');
         return { recordId, version: baseVersion + 1 };
       }
@@ -181,7 +161,7 @@ export function executeGateway(client: Client, context: AccessContext, request: 
         try {
           const update = await transaction.execute({ sql: 'UPDATE records SET state=\'completed\',version=version+1,updated=? WHERE id=? AND version=?', args: [at, taskId, Number(task.version)] });
           if (update.rowsAffected !== 1) throw conflict('Task changed. Refresh and try again.');
-          await transaction.execute({ sql: `INSERT INTO events (id,kind,record_id,action_id,state,actor_id,input_hash,idempotency_key,data,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`, args: [`evt_${crypto.randomUUID()}`, 'action', taskId, request.actionId, 'accepted', context.identity.id, hash, request.idempotencyKey, json({ result: { taskId, state: 'completed' } }), at, at] });
+          await transaction.execute(eventStatement({ action: request.actionId, actor: context.identity.id, recordId: taskId, key: request.idempotencyKey, hash, result: { taskId, state: 'completed' } }));
           await transaction.commit();
         } catch (cause) {
           await transaction.rollback().catch(() => undefined);
@@ -195,10 +175,10 @@ export function executeGateway(client: Client, context: AccessContext, request: 
       const flowDefinition = definitions[0]; if (!flowDefinition) throw notFound('Published Flow not found.');
       const data = object(JSON.parse(String(flowDefinition.data))); const actions = Array.isArray(data.actions) ? data.actions.map(object) : [];
       const first = actions[0]; if (!first || !text(first.id)) throw badRequest('Flow needs at least one Action.');
-      const run: FlowRun = { id: `run_${crypto.randomUUID()}`, flowId, flowVersion: Number(flowDefinition.version), occurrence: request.idempotencyKey, recordId: text(request.input.recordId, 160) || null, state: 'ready', actionId: text(first.id), context: object(request.input.context), version: 1, dueAt: null };
+      const run: FlowRun = { id: `run_${crypto.randomUUID()}`, flowId, flowVersion: Number(flowDefinition.version), occurrence: request.idempotencyKey, recordId: text(request.input.recordId, 160) || null, state: 'ready', actionId: text(first.id), context: object(request.input.context), version: 1 };
       await client.batch([
-        { sql: `INSERT INTO runs (id,flow_id,flow_version,occurrence,record_id,state,action_id,context,version,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`, args: [run.id, run.flowId, run.flowVersion, run.occurrence, run.recordId, run.state, run.actionId, json(run.context), 1, at, at] },
-        { sql: `INSERT INTO events (id,kind,run_id,record_id,action_id,state,actor_id,input_hash,idempotency_key,data,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`, args: [`evt_${crypto.randomUUID()}`, 'action', run.id, run.recordId, request.actionId, 'accepted', context.identity.id, hash, request.idempotencyKey, json({ result: { run } }), at, at] },
+        runStatement({ id: run.id, flowId: run.flowId, flowVersion: run.flowVersion, occurrence: run.occurrence, recordId: run.recordId, state: run.state, actionId: run.actionId, context: run.context }),
+        eventStatement({ action: request.actionId, actor: context.identity.id, runId: run.id, recordId: run.recordId, key: request.idempotencyKey, hash, result: { run } }),
       ], 'write');
       return { run };
     },

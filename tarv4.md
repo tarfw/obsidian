@@ -51,9 +51,14 @@
 
 ```text
 +=============================================================================+
-| Scope: [ Slice House v ]                    Space | Inbox | BOTS            |
+|                                             Space | Inbox | BOTS            |
 +=============================================================================+
-| Search Bots...                                                              |
+| MY BOT                                                                      |
+|                                                                             |
+| Personal Bot      Always available   Goals · Tasks · Apps · Background work |
+|                                                     [ Open Personal Bot ]   |
+|                                                                             |
+| SLICE HOUSE BOTS                                      [ Search Bots... ]    |
 |                                                                             |
 | POS Bot          Installed     Customers · Orders · Stock · Register        |
 | Sales Bot        Add           Leads · Deals · Follow-up                    |
@@ -66,9 +71,10 @@
 
 | Scope rule | Decision |
 |---|---|
-| Personal vs work | Compact selector, such as `Personal / Slice House` |
-| Personal in Bots | No; Personal is a data scope, not installable capability |
-| Workspace switcher | No separate full-screen switcher required |
+| Personal UX | Personal Bot in the Bots list; no Personal workspace selector |
+| Personal Bot | System Bot: always available, private and not installable/removable |
+| Work Bots | Listed under each workspace and installed by permitted members |
+| Workspace switcher | Needed only when moving among real work workspaces |
 
 ===============================================================================
 
@@ -262,10 +268,17 @@ validate -> upload unique/content-hash key -> checked DB reference -> later clea
                               v permitted projections
                        +==================+
                        | DEVICE SQLITE    |
-                       | Personal         |
                        | work cache       |
                        | drafts/pending   |
                        +==================+
+
+ +=======================+
+ | PRIVATE PERSONAL      |
+ | TENANT                |
+ | records · runs        |
+ | events · file refs    |
+ +=======================+
+    only the identity
 ```
 
 ### Store ownership
@@ -275,7 +288,8 @@ validate -> upload unique/content-hash key -> checked DB reference -> later clea
 | D1 control | Identity, membership, invites, registry, Channel links and ledger | Control Actions |
 | Turso workspace | Business Records, definitions, Runs and Events | Action Gateway |
 | R2 | Immutable files and releases | Authorized object protocol |
-| Device SQLite | Personal, permitted cache, drafts, preferences, pending commands | Local app; shared commands still need Gateway acceptance |
+| Private personal tenant | Personal Bot Records, Runs, Events and file references | Identity-scoped Action Gateway; never workspace Owner/Admin |
+| Device SQLite | Permitted cache, drafts, preferences and pending commands | Local app; authoritative commands still need Gateway acceptance |
 
 ### Workspace schema
 
@@ -433,6 +447,71 @@ remove -> archive configuration -> preserve Records, Events, releases, active wo
 | Workspace Automation | No; composes registered Actions | Shift close or lead follow-up |
 | Reviewed extension | Yes; internal packaging boundary | Payment adapter or tax rule |
 
+### Personal Bot — a private agent, not a workspace
+
+```text
++=============================================================================+
+| < Bots                           PERSONAL BOT                PRIVATE        |
++=============================================================================+
+| Ask anything...  [ Plan my week, track a goal, or handle a task           ]|
+|                                                                             |
+| ACTIVE                                                                      |
+| Renew insurance       Waiting for approval                    [ Review ]    |
+| Track laptop price    Checking daily                           [ Open ]      |
+| Plan family trip      4 of 7 steps complete                    [ Open ]      |
+|                                                                             |
+| [ New task ] [ Goals ] [ Files ] [ Connected apps ] [ Activity ]           |
++=============================================================================+
+```
+
+| Property | Decision |
+|---|---|
+| Product role | One persistent agent for the signed-in person |
+| Display name | Starts as `Personal Bot`; the person may give it a friendly name |
+| UI home | `Bots → Personal Bot`; no Personal workspace appears |
+| Availability | Built-in system Bot; cannot be installed, removed or shared |
+| Conversation | Main conversation plus optional task/goal threads |
+| Memory | Private Records, files, preferences and Event history |
+| Background work | Durable Flow/Run; resumes after waits or restarts |
+| Apps | Explicit Connectors and Tools with per-connection permissions |
+| Sensitive effects | Inbox approval before send, purchase, booking, disclosure or destructive Action |
+| Work access | Only through the person's current workspace membership and field permissions |
+| Audit | Shows completed, pending, blocked and proposed Actions |
+
+```text
+PERSONAL BOT UI
+      |
+      v
+RUNNER = Skills + Context + Model/Code + Tools + Limits
+      |
+      +--> read private Records / connected apps
+      |
+      +--> FLOW + RUN --------------------------+
+      |    plan · wait · resume · retry         |
+      |                                         v
+      +--> proposed Action -------------> ACTION GATEWAY
+                                               |
+                         +---------------------+---------------------+
+                         |                                           |
+                         v                                           v
+                PRIVATE PERSONAL TENANT                    WORK WORKSPACE
+                Records · Events · Files             member permissions apply
+                         |
+                         +--> Inbox approval when required
+```
+
+| Muse-like behavior | TAR component |
+|---|---|
+| Persistent conversational agent | Personal Bot + private Records |
+| Skills chosen for a task | Runner Skills and registered Tools |
+| Multi-step background work | Flows and durable Runs |
+| Email, calendar, browser and other apps | Connectors, Channels and Tools |
+| Permission before critical effects | Action Gateway + Inbox approval |
+| Activity history | Events + Run history |
+| Isolated execution | Bounded Runner execution; stronger sandbox required for generated tools |
+
+The Personal Bot may help with work, but it never gains extra authority. “Summarize my Slice House sales” reads only fields that the member can read. “Refund Order #1031” still calls the registered POS Action, passes through the Action Gateway and follows the same approval rule.
+
 ### Safety rules
 
 | Rule | Enforcement |
@@ -588,14 +667,14 @@ provider webhook
 
 ===============================================================================
 
-## 10. MEMBERS, ACCESS, PERSONAL, AND HTTP
+## 10. MEMBERS, ACCESS, PERSONAL BOT, AND HTTP
 
 ### Identity and scopes
 
 ```text
 Google sign-in
       |
-      +--> Personal scope     private, intended device-local
+      +--> Personal Bot       private identity tenant; no workspace in UI
       |
       +--> Work workspace     membership + shared Records
 ```
@@ -618,17 +697,20 @@ Google sign-in
 | UI visibility | Convenience only; server policy is authoritative |
 | Multiple Jobs | Add only when a real staffing need requires it |
 
-### Personal decision
+### Personal Bot data decision
 
-| Property | Intended behavior | Current alignment |
+| Property | Target behavior | Current alignment |
 |---|---|---|
-| Storage | Device-local SQLite | **Not aligned:** service still provisions remote Personal |
-| Members | None | Intended |
-| Owner/Admin access | None | Intended |
-| Work credits | None | Intended |
-| Backup/device replacement | Must be explicitly defined | Open decision |
+| UI | Personal Bot in Bots; no Personal workspace | **Not aligned:** Personal workspace is still provisioned |
+| Server storage | Separate private tenant for cross-device memory and background Runs | Existing remote Personal must be reshaped and isolated |
+| Device storage | Cache, drafts, preferences and pending commands | Partial |
+| Members | None; exactly one identity owns it | Intended |
+| Workspace Owner/Admin access | None | Intended |
+| Work access | Uses the person's live membership and permissions | Must be enforced at every read and Action |
+| Backup/device replacement | Private server tenant restores permitted data | Planned |
+| Delete/export | Explicit identity-owned Actions | Planned |
 
-The remote Personal provisioning must be removed or this privacy contract must be revised before launch.
+Rename and constrain the existing remote Personal provisioning as the private Personal Bot tenant. It must never appear as a workspace, accept members, consume work-workspace authority or become readable by workspace Owner/Admin roles.
 
 ### Offline work
 
@@ -734,7 +816,7 @@ Site drafting currently uses reviewed templates, not a model. Preview HTML/CSS s
 | Approvals | **Planned** | No approval Action registered |
 | Durable delivery/reconciliation | **Planned** | External effects synchronous |
 | Authorized offline cache | **Partial** | No cross-device offline operation |
-| Device-local Personal | **Not aligned** | Remote Personal still provisioned |
+| Personal Bot | **Not aligned** | Remote Personal exists, but UI, identity isolation and durable background Runs need the Personal Bot contract |
 
 ### Delivery order
 
@@ -1352,7 +1434,7 @@ available = on-hand - reserved
 | UPI refund | Require returned confirmation and unique refund reference |
 | Kitchen privacy | Product, quantity and preparation only |
 | Cashier privacy | Operational customer/payment fields only as permitted |
-| Owner access | Full permitted business view; never Personal scope |
+| Owner access | Full permitted business view; never the member's Personal Bot tenant |
 | Provider not integrated | Say “recorded manually,” never “provider completed” |
 
 ===============================================================================

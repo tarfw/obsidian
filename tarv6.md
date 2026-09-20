@@ -19,10 +19,12 @@ ATOMIC SAVE
 |-- changed Records
 |-- Run checkpoint
 |-- resulting Event(s)
-'-- Delivery intent, when needed
+'-- Effect Request, when an external system must act
 ```
 
 **Architecture type:** hybrid state + Event log + durable state machine.
+
+**Status:** target architecture. Guarantees below are requirements, not claims that the runtime already implements them. Section 18 records the reported implementation baseline and delivery priorities; implementation status requires code verification.
 
 **Not full event sourcing:** current business state is read from Records. It is not rebuilt from the complete Event history for every request.
 
@@ -72,7 +74,7 @@ There is no Personal workspace in the UI. My Agent has a private identity tenant
 | 4 | Events wake Runs; they never bypass permissions or business rules |
 | 5 | Every authoritative private or shared write passes through the Action Gateway |
 | 6 | Record changes, Run checkpoints and Events save atomically |
-| 7 | External effects begin with a durable Delivery intent |
+| 7 | External effects begin with a durable Effect Request |
 | 8 | At-least-once wake-ups are safe through idempotency and version checks |
 | 9 | Views show permitted projections; UI visibility is never authorization |
 | 10 | Models propose; registered code and policy decide shared effects |
@@ -87,7 +89,7 @@ There is no Personal workspace in the UI. My Agent has a private identity tenant
 | Flow | Versioned process definition | Automation |
 | Run | One durable occurrence of a Flow | Progress or history |
 | Transition | One allowed move in a Run | Usually hidden |
-| Delivery | Durable request for an external effect | Sending/retry status |
+| External Effect | Work performed outside TAR, such as sending, printing or charging; TAR first saves an Effect Request | Sending, payment, print or retry status |
 | Bot | Installable business capability | Bot |
 | My Agent | Private built-in agent for one identity | My Agent or custom name |
 | Runner | Bounded agentic harness for code/model/tool/human steps | Internal |
@@ -120,7 +122,7 @@ There is no Personal workspace in the UI. My Agent has a private identity tenant
           |          +=======================+
           +--------->| TURSO TENANT DATABASE |
                      | Records · Runs · Events|
-                     | Definitions · Delivery|
+                     | Definitions · Effects |
                      +=======================+
                                   |
                            committed Event
@@ -137,7 +139,7 @@ There is no Personal workspace in the UI. My Agent has a private identity tenant
                 +===============+  +================+
                          |
                          +--> Cloudflare Workflow: wait · timer · retry
-                         +--> Queue: wake-up and delivery work
+                         +--> Queue: wake-up and external-effect work
                          +--> Runner: bounded code/model/human step
 
 CONTROL: D1 = identity · membership · tenant routing · connectors · command ledger
@@ -155,7 +157,7 @@ DEVICE:  SQLite = permitted cache · drafts · pending commands
 | Action Gateway | Whether an Action is accepted | Undeclared arbitrary work |
 | Tenant transaction | Winning version and atomic result | External provider outcome |
 | Event router | Which consumers to wake | Meaning of business state |
-| Delivery worker | Attempt an authorized effect | Invent a new effect |
+| Effect worker | Attempt an authorized external effect | Invent a new effect |
 
 ===============================================================================
 
@@ -179,7 +181,7 @@ EXECUTE one bounded transition
 ACTION GATEWAY
       |
       v
-ATOMIC SAVE: Records + Run + Event(s) + optional Delivery
+ATOMIC SAVE: Records + Run + Event(s) + optional Effect Request
       |
       +--> another transition is immediately safe? --> another bounded turn
       |
@@ -220,7 +222,7 @@ ready -> running -> waiting -> running -> completed
 | Event | Matching committed Event | `order.ready` |
 | Time | Durable timer | Follow up tomorrow |
 | Human | Completed Inbox Task | Refund approved |
-| Delivery | Provider result Event | Email delivered |
+| External effect | Provider result Event | Email delivered |
 | Retry | Backoff deadline | Provider temporarily unavailable |
 
 ### 3.4 Event folding in the hybrid model
@@ -239,7 +241,7 @@ Event stream -> timeline / metric / search index / Inbox projection
 | Build timelines and metrics | Grant authority |
 | Rebuild disposable projections | Recreate every Record on every request |
 | Explain why state changed | Treat an attempted command as accepted |
-| Reconcile deliveries | Claim an external effect succeeded before confirmation |
+| Reconcile external effects | Claim an external effect succeeded before confirmation |
 
 ===============================================================================
 
@@ -271,14 +273,15 @@ authenticate identity
    -> resolve private ownership or workspace membership
    -> find registered Action version
    -> check role, job, subject and fields
-   -> validate input schema and business invariants
+   -> validate input schema and canonicalize request
    -> find idempotent replay
    -> open transaction
+      -> recheck replay and current business invariants
       -> recheck current Record + Run versions
       -> apply deterministic transition
       -> append compact Event(s)
       -> update Run checkpoint when present
-      -> append Delivery intent when required
+      -> append Effect Request when required
    -> commit all or commit nothing
 ```
 
@@ -294,9 +297,17 @@ authenticate identity
 | Unauthorized field | Type policy projects reads and validates writes |
 | Cross-tenant ID | Resolve inside the authorized tenant only |
 
+### Command replay contract
+
+Persist an Action result separately from its Events: one accepted Action may append several Events. The tenant-local `action_results` ledger has a unique `(actor_id, action_id, action_version, idempotency_key)` key, a canonical request hash, and a compact saved result. Events reference that result through `action_result_id`; uniqueness of the command key belongs to the result ledger, not each Event.
+
+The hash covers input and expected versions. An exact retry returns the accepted result; reusing the key with a different request fails. Check current authorization before returning a replay. Replay lookup precedes mutable-state validation so a successful checkout retry is not rejected because the Order is now paid. Recheck the ledger within the transaction; a concurrent duplicate rolls back and loads the winning result. New business occurrences receive new keys; internal transitions use a stable key derived from Run, transition, and source checkpoint version.
+
+Money and stock quantities use integers in declared units; rates use basis points. Protected Order, Payment, Task, Site and access lifecycles cannot be edited through a generic Record Action.
+
 ===============================================================================
 
-## 5. RECORDS, EVENTS, RUNS, AND DELIVERY
+## 5. RECORDS, DEFINITIONS, EVENTS, RUNS, AND EXTERNAL EFFECTS
 
 ### Records
 
@@ -316,13 +327,52 @@ version · created_at · updated_at · archived_at?
 | Removal | Archive by default |
 | Large content | Immutable R2 object reference |
 
+### Core Records
+
+```text
+CORE (owned by no Bot, shared by every Bot)
+contact · organization · link
+```
+
+| Record | Holds |
+|---|---|
+| `contact` | A person: `roles[]`, handles, consent |
+| `organization` | A company that contacts reference |
+| `link` | A typed relationship: source, target, relation |
+
+| Rule | Decision |
+|---|---|
+| Ownership | Core records are owned by no Bot and are never forked |
+| No Contacts Bot | A business installs a Bot that operates on contacts |
+| Contact roles | `roles[]` such as lead, customer, candidate, employee, vendor or partner |
+| Roles are not access | A contact role never grants login or membership |
+| One identity per person | Bots reference one contact; a purchase keeps its own historical snapshot |
+
+### Definitions
+
+```text
+definitions
+id · kind · name · version · state · data JSON
+published_at? · created_at
+```
+
+| Rule | Decision |
+|---|---|
+| Holds | Bot, Flow, view and Action definitions |
+| Kind | `bot`, `flow`, `view`, `action` or another registered kind |
+| Action registry | Registered Action versions live here; the Gateway resolves the requested version |
+| Version | Immutable once published; a new publication is a new version |
+| State | Draft or published |
+| Pinning | A Run stores the exact Flow and Action versions it started with |
+| Removal | Archive on Bot removal; a published version is never rewritten |
+
 ### Events
 
 ```text
 events
 id · kind · subject_type · subject_id
 action_id · actor_id · run_id?
-input_hash · idempotency_key · data JSON
+action_result_id · data JSON
 sequence · created_at
 ```
 
@@ -341,7 +391,8 @@ sequence · created_at
 runs
 id · flow_id · flow_version · subject_id?
 state · step_id · wait_kind? · wait_match?
-context JSON · attempts · lease_until?
+context JSON · attempts · lease_owner? · lease_epoch · lease_until?
+wait_after_sequence? · authority_ref
 version · started_at · wake_at? · finished_at?
 ```
 
@@ -350,30 +401,35 @@ version · started_at · wake_at? · finished_at?
 | Definition | Pin immutable Flow and Action versions |
 | Checkpoint | Save after every accepted transition |
 | Context | Keep continuation facts; reload authoritative Records |
-| Wake | Event router, timer, approval, delivery result or retry |
+| Wake | Event router, timer, approval, effect result or retry |
 | Claim | Versioned lease; one winning transition |
 | Completion | Terminal state + final Event |
 | Runtime driver | Workflow/Queue may wake execution; the Run row is TAR's authoritative checkpoint |
 
-### Delivery intents
+`authority_ref` identifies the initiating identity or explicitly authorized service principal and declared scope. Every resumed Action checks current policy. Lost authority pauses work for authorized reassignment or fails it; a runtime never substitutes an administrator silently. D1 control changes and tenant writes do not share a transaction: document the authorization-check linearization point and use control-command reconciliation for provisioning and cross-store operations.
+
+### Effect Requests
 
 ```text
-deliveries
+effect_requests
 id · kind · provider · destination_ref
 payload_ref · state · attempt · next_attempt_at
 provider_key · provider_result_ref? · version
+lease_owner? · lease_epoch · lease_until? · authority_ref
 ```
 
 ```text
-Atomic Save: business change + delivery.requested Event + Delivery intent
+Atomic Save: business change + effect.requested Event + Effect Request
                                       |
                                       v
-Delivery worker -> provider with stable provider key
+Effect worker -> provider with stable provider key
         |
-        +--> confirmed -> delivery.succeeded Event
-        +--> rejected  -> delivery.failed Event
+        +--> confirmed -> effect.succeeded Event
+        +--> rejected  -> effect.failed Event
         '--> unknown   -> reconcile before retry
 ```
+
+Provider calls occur outside database transactions. Claim an Effect Request with a fenced lease and record results through a registered Action. Recheck current effect policy before acting; approval binds the specific destination, payload and operation. Duplicate callbacks are deduped by provider/account/event identity. Stable keys prevent duplicate external effects only when the provider supports that contract. If a provider cannot confirm an ambiguous outcome or safely dedupe retries, keep the Effect Request `unknown` and request human reconciliation; do not blindly retry. Printer acknowledgement must not be described as confirmed physical printing unless the adapter can establish that fact.
 
 ===============================================================================
 
@@ -389,36 +445,38 @@ start: accept-order
 
 steps:
   accept-order:
-    action: pos.order.accept
+    command: pos.order.accept@1
     next: wait-kitchen
 
   wait-kitchen:
-    waitFor: order.ready
+    waitFor: order.item-ready
+    match: { subject: "$run.subject_id" }
+    guard: all-order-items-ready
+    action: pos.order.mark-ready@1
     next: wait-payment
 
   wait-payment:
-    waitFor: payment.confirmed
-    next: request-receipt
-
-  request-receipt:
-    action: pos.receipt.request
-    next: wait-receipt
-
-  wait-receipt:
-    waitFor: receipt.delivered
+    command: pos.checkout@1
+    guard: order-ready-and-payment-confirmed
+    delivery: receipt
     next: wait-handover
 
   wait-handover:
-    waitFor: order.handed-over
+    command: pos.order.hand-over@1
+    guard: order-paid-and-ready
     next: complete
 ```
+
+This is a declarative contract sketch, not an implemented editor format. Each command Action applies its declared Run transition in the same transaction as its business changes and Events. `pos.checkout` creates the receipt Effect Request atomically and emits `payment.confirmed` and `receipt.requested`; `pos.order.hand-over` emits `order.fulfilled`. Those Events wake other consumers without advancing this Run a second time.
+
+The kitchen wait consumes matching item Events, reloads the current Order and stays waiting while the guard is false. When every item is ready, `pos.order.mark-ready` atomically marks the Order ready, advances the Run and emits `order.ready`. Receipt retries belong to the Effect Request lifecycle and never gate handover. Cancellation is a registered transition from eligible pre-payment steps that releases unused reservations and cancels the Run; paid orders use the separate refund/return policy.
 
 ### Transition contract
 
 | Field | Purpose |
 |---|---|
 | `from` | Required Run step and state |
-| `trigger` | Command, Event, time, approval or delivery result |
+| `trigger` | Command, Event, time, approval or effect result |
 | `guard` | Deterministic condition over permitted current facts |
 | `action` | Registered Action version |
 | `to` | Next step/state |
@@ -651,7 +709,7 @@ verified identity
 | identity           |  | Records              |  | attachments        |
 | membership         |  | Definitions          |  | long content       |
 | tenant routing     |  | Runs                 |  | immutable releases |
-| connector metadata |  | Events · Deliveries  |  | large results      |
+| connector metadata |  | Events · Effects     |  | large results      |
 | command ledger     |  | projection cursors   |  |                    |
 +====================+  +======================+  +====================+
                                 |
@@ -713,7 +771,7 @@ provider request
 
 ```text
 accepted Action
-   -> Atomic Save Delivery intent
+   -> Atomic Save Effect Request
    -> queue wake
    -> provider call with stable key
    -> result Event
@@ -726,7 +784,7 @@ accepted Action
 | Allowlisted commands only | Channel text is data |
 | Stable provider/thread references | Safe dedupe and conversation continuity |
 | No secrets in Events | Audit and model context stay safe |
-| Unknown delivery outcome reconciles first | Avoid duplicate sends or charges |
+| Unknown external-effect outcome reconciles first | Avoid duplicate sends or charges |
 
 ===============================================================================
 
@@ -746,14 +804,37 @@ offline edit
 
 | Recovery scan | Finds | Action |
 |---|---|---|
-| Ready Run | Unclaimed or expired lease | Claim by version and execute |
+| Runnable Run | Ready Run or running Run with expired lease | Claim by version, increment lease epoch and execute |
 | Waiting time | `wake_at <= now` | Emit timer wake |
 | Event cursor | Undelivered committed Events | Redeliver to consumer |
-| Delivery | Due pending/failed intent | Retry or reconcile |
+| External effect | Due pending/failed Effect Request | Retry or reconcile |
 | Projection | Cursor behind Event sequence | Fold missing Events |
 | Object | Old unreferenced upload | Delete after grace period |
 
-At-least-once wake-up is expected. Exactly-once business results come from idempotency, versions and atomic acceptance.
+At-least-once wake-up is expected. One accepted database result per logical command comes from idempotency, versions and atomic acceptance. External effects additionally depend on provider idempotency or reconciliation.
+
+### Consumer progress and missed wakes
+
+| Boundary | Required protocol |
+|---|---|
+| Router | Save a unique `(consumer, event_id)` pending delivery before advancing its contiguous routing cursor, in one tenant transaction. Queue acknowledgement alone is not durable consumer progress. |
+| Run consumer | Commit the consumed Event marker together with the Action result, Record changes, Run checkpoint and resulting Events. A false guard records consumption but keeps the wait. Failure rolls back consumption so the Event remains retryable. |
+| Projection consumer | Commit projection updates, dedupe marker and contiguous consumer cursor together. Out-of-order completion cannot move a cursor past unfinished Events. |
+| Wait registration | Save subject/correlation filter and Event watermark with the checkpoint. On registration, evaluate current facts and scan relevant committed Events since the previous checkpoint watermark; continue from durable progress thereafter. Router delivery alone cannot find Events that preceded registration. |
+| Event retention | Retain Events needed by active waits and consumers. Projection rebuild requires versioned sufficient payloads plus retained history, or an authoritative Record snapshot and subsequent Events. Compact audit entries alone do not guarantee reconstruction of historical metrics. |
+| Poison Event | Persist failure and retry state; surface actionable recovery work. Never silently advance past failed work and call it consumed. |
+
+The recovery scanner must enumerate all active tenants from control routing and resume bounded batches using persisted scan progress. Per-tenant recovery cannot depend solely on fresh user traffic.
+
+### Leases and runtime ownership
+
+Claim a Run using database time and compare-and-set on its version and eligible state. Increment a monotonic lease epoch and set owner/expiry. Every commit from that worker checks the expected Run version, owner, epoch and unexpired lease. After another worker claims an expired lease, the old worker cannot commit. Apply the same fencing to Effect Request bookkeeping; provider keys handle effects already in flight.
+
+Turso owns step, wait, deadline, retry count and completion. Workflow and Queue drivers carry stable IDs and wake execution; they do not keep a second authoritative process state or call providers outside the Effect Request protocol. Start with Queue plus scheduled recovery; add a Workflow timer adapter only when needed. Cancellation and rescheduling are checked against the Run row, so obsolete timer wakes become harmless no-ops.
+
+### Offline authority
+
+Offline reads use permitted cached projections; edits remain pending commands. Payment, refund, approval, access changes and authoritative stock transitions require online acceptance. Reconnection rechecks current membership, fields, versions and business rules, then clears caches no longer permitted. Revocation cannot erase data already held on a disconnected device; cross-device coordination during an outage is unsupported.
 
 ===============================================================================
 
@@ -794,7 +875,7 @@ At-least-once wake-up is expected. Exactly-once business results come from idemp
 |---|---|
 | Payload | Stable IDs and routing facts only |
 | Truth | Reload from the tenant database |
-| Delivery | At least once |
+| External effect | At least once |
 | Dedupe | Consumer cursor/Event ID |
 | Permission | Rechecked before every Action |
 | Failure | Retry with backoff, then Inbox/recovery state |
@@ -836,16 +917,16 @@ RUN: wait_for_payment
       |
       v
 CASHIER
-checkout -> payment + stock movement
+checkout -> payment + reserved stock consumption + receipt intent
       |
       v
 EVENT: payment.confirmed
       |
       v
-RUN: request receipt -> wait_for_handover
+RUN: wait_for_handover (receipt delivers independently)
       |
       v
-EVENT: order.handed-over
+EVENT: order.fulfilled
       |
       v
 RUN: completed
@@ -870,19 +951,18 @@ RUN: completed
 
 ### 16.4 Every durable transition
 
-| # | Trigger | Action | Records saved | Run checkpoint | Event appended | Delivery |
+| # | Trigger | Action | Records saved | Run checkpoint | Event appended | External effect |
 |---:|---|---|---|---|---|---|
-| 1 | Cashier accepts | `pos.order.accept` | Order `accepted`, unpaid items `pending` | `waiting / wait-kitchen` | `order.accepted` | None |
+| 1 | Cashier accepts | `pos.order.accept` | Order `accepted`, unpaid items `pending`, stock reservations | `waiting / wait-kitchen` | `order.accepted`, `stock.reserved` | None |
 | 2 | Velan starts item | `pos.order.item.update` | Item `preparing` | Still `wait-kitchen` | `order.item-preparing` | None |
 | 3 | Velan marks first item ready | `pos.order.item.update` | Item 1 `ready` | Still `wait-kitchen` | `order.item-ready` | None |
 | 4 | Velan marks final item ready | `pos.order.item.update` | Final item `ready` | Still `wait-kitchen` | `order.item-ready` | None |
 | 5 | Runtime handles final item Event | `pos.order.mark-ready` | Order preparation `ready` | `waiting / wait-payment` | `order.ready` | Optional cashier alert intent |
-| 6 | Cashier confirms payment | `pos.checkout` | Order `paid`, Payment, stock movements | `ready / request-receipt` | `payment.confirmed` | None |
-| 7 | Runtime requests receipt | `pos.receipt.request` | Delivery `pending` | `waiting / wait-receipt` | `receipt.requested` | Receipt intent |
-| 8 | Receipt provider confirms | internal delivery result Action | Delivery `succeeded` | `waiting / wait-handover` | `receipt.delivered` | Completed |
-| 9 | Cashier hands over | `pos.order.hand-over` | Order `fulfilled` | `completed` | `order.fulfilled` | None |
+| 6 | Cashier confirms payment | `pos.checkout` | Order payment `paid`, Payment, reservation consumption, stock movements, Effect Request `pending` | `waiting / wait-handover` | `payment.confirmed`, `stock.consumed`, `receipt.requested` | Receipt request |
+| 7 | Cashier hands over | `pos.order.hand-over` | Order fulfillment `fulfilled` | `completed` | `order.fulfilled` | Unchanged |
+| 8 | Receipt adapter confirms (may precede row 7) | internal effect-result Action | Effect Request `succeeded` | Unchanged, possibly already completed | `receipt.delivered` | Completed |
 
-Every row is one Action Gateway acceptance. Every row saves all listed database changes in one transaction.
+Every row is one Action Gateway acceptance. Every row saves all listed database changes and its replay result in one transaction. Item updates leave the Run checkpoint unchanged; only declared transitions advance it. A failed receipt Effect Request creates retry/reconciliation work independently of the Order Run.
 
 ### 16.5 First transaction
 
@@ -893,15 +973,17 @@ COMMAND: Accept Order #1042
 ACTION GATEWAY
 authenticate Iniya
 authorize Cashier job
-validate prices, tax, products and stock visibility
+validate prices, tax, products and stock availability
 check idempotency key
              |
              v
 BEGIN TENANT TRANSACTION
 |-- insert Order #1042       state=accepted version=1
 |-- insert Order items       state=pending
+|-- reserve stock            conditional available-quantity check
 |-- insert Run #700          state=waiting step=wait-kitchen version=1
-|-- append Event #2048       kind=order.accepted run=#700
+|-- append Events            order.accepted + stock.reserved
+|-- save Action result       scoped idempotency key + request hash
 '-- commit
              |
              v
@@ -924,7 +1006,7 @@ EVENT ROUTER wakes projections and matching Runs
 +=============================================================================+
 ```
 
-### 16.7 How `order.ready` resumes the Run
+### 16.7 How `order.item-ready` advances the kitchen wait
 
 ```text
 Event #2071: order.item-ready
@@ -941,9 +1023,9 @@ registered Action: pos.order.mark-ready
         v
 ATOMIC SAVE
 |-- Order preparation = ready
-|-- Run #700 step = wait-payment, state = waiting, version = 6
+|-- Run #700 step = wait-payment, state = waiting, version = prior + 1
 |-- Event #2072 = order.ready
-'-- optional cashier Delivery intent
+'-- optional cashier Effect Request
         |
         v
 cashier Inbox shows [ Checkout ]
@@ -957,28 +1039,24 @@ The Event does not change the Order by itself. It wakes the Run; the registered 
 COMMAND: Cash checkout Order #1042
                   |
                   v
-validate register open · payment amount · current product versions · stock
+validate register open · confirmed payment · accepted price snapshot · reservations
                   |
                   v
 ATOMIC SAVE
-|-- Order #1042       paid
+|-- Order #1042       payment=paid; preparation=ready
 |-- Payment #900      cash · ₹651 · confirmed
-|-- Stock movements   ingredient/product deductions
-|-- Run #700          ready / request-receipt
-|-- Event             payment.confirmed
+|-- Stock movements   consume reserved quantities exactly once
+|-- Reservations      consumed; reserved total reduced
+|-- Run #700          waiting / wait-handover
+|-- Events            payment.confirmed + stock.consumed + receipt.requested
+|-- Effect Request    print/share receipt
+|-- Action result     saved replay result
 '-- commit
-                  |
-                  v
-Run engine resumes -> pos.receipt.request
-                  |
-                  v
-ATOMIC SAVE
-|-- Run #700          waiting / wait-receipt
-|-- Event             receipt.requested
-'-- Delivery intent   print/share receipt
 ```
 
 If any write fails, none of them are accepted.
+
+This example records a confirmed cash payment. Integrated charging first saves a payment Effect Request; only a verified provider result Action records confirmation and applies the equivalent paid transition. An unknown charge outcome remains unresolved until reconciled. Manual payment entries must be labelled as manually recorded, not provider-verified.
 
 ### 16.9 Crash recovery
 
@@ -1004,7 +1082,7 @@ recovery scan finds Event cursor behind / ready Run
 redeliver same Event ID
       |
       v
-consumer dedupes and resumes once
+consumer commits progress with its accepted transition; duplicates replay
 ```
 
 #### Duplicate checkout request
@@ -1022,13 +1100,14 @@ same idempotency key
 provider timed out after request
       |
       v
-Delivery = unknown
+Effect Request = unknown
       |
       v
 query provider using stable provider key
       |
       +--> already delivered -> append receipt.delivered
-      '--> absent            -> retry safely
+      +--> safely absent     -> retry with the same provider key
+      '--> inconclusive      -> keep unknown; human reconciliation
 ```
 
 ### 16.10 Event log and Run together
@@ -1038,8 +1117,8 @@ query provider using stable provider key
 | Order #1042 was accepted | Waiting for kitchen |
 | Margherita became ready | Still waiting for remaining item |
 | Order became ready | Waiting for payment |
-| Payment was confirmed | Requesting receipt |
-| Receipt was delivered | Waiting for handover |
+| Payment was confirmed; receipt requested | Waiting for handover |
+| Receipt was delivered | Unchanged: waiting for handover or completed |
 | Order was fulfilled | Completed |
 
 ```text
@@ -1072,6 +1151,14 @@ Food Order Run begins
 
 Sales Bot never writes POS Order or Payment state directly.
 
+### 16.12 Stock and business lifecycle
+
+Track preparation, payment and fulfillment separately; a paid Order can still await handover. Acceptance saves the agreed price/tax snapshot and reserves required products or ingredients in the same transaction. `available = on_hand - reserved`; conditional quantity checks prevent concurrent Orders from reserving the same last unit.
+
+For this Flow, checkout converts the reservation into consumption: reduce on-hand and reserved quantities together and append uniquely linked stock movements. Handover never deducts again. Cancellation releases only unused reservations. Once preparation consumes ingredients irreversibly, cancellation records usage/waste rather than returning them to availability. Refunds do not automatically restock prepared food; returned inventory requires an explicit eligible stock Action. Reservation changes, expiry and Order changes must be reconciled through registered Actions, never silent timer deletion.
+
+Accepted Orders keep their agreed price snapshot when the catalog changes. Quantity substitutions or price amendments require an explicit version-checked Action that adjusts reservations and the accepted snapshot under business policy.
+
 ===============================================================================
 
 ## 17. REQUIRED INVARIANTS
@@ -1080,12 +1167,12 @@ Sales Bot never writes POS Order or Payment state directly.
 |---|---|
 | Records | One accepted version wins each concurrent state transition |
 | Events | Every accepted state change has one or more Events in the same transaction |
-| Runs | Every accepted transition advances one version or returns replay |
+| Runs | Every accepted Run transition advances one version or returns replay; unrelated Record/effect Actions need not change the Run |
 | Wakes | Duplicate and lost wake-ups cannot duplicate business results |
-| Waits | Time, Event, human and delivery waits survive deployment/restart |
+| Waits | Time, Event, human and effect-result waits survive deployment/restart |
 | Permissions | Every resumed Action uses current identity/membership policy |
 | Models | Model output alone never becomes shared truth |
-| Delivery | External effect has durable intent, stable key and result/reconciliation |
+| External effect | Has a durable Effect Request, stable key and result/reconciliation |
 | Bots | Cross-Bot changes call the owning Bot's registered Action |
 | Tenancy | Private and work data never cross without an authorized projection |
 | Files | Accepted Record references immutable validated objects |
@@ -1096,19 +1183,71 @@ Sales Bot never writes POS Order or Payment state directly.
 | Test | Expected result |
 |---|---|
 | Two workers resume one Run | One transition wins |
-| Same command delivered twice | One Event and one business result |
+| Same command delivered twice | One Action result and one set of resulting Events/business changes |
+| Same replay key with changed input or expected versions | Key conflict; no mutation |
+| Successful checkout retried after Order becomes paid | Authorized caller receives saved result |
+| Expired worker commits after replacement claim | Lease epoch/version check rejects stale worker |
+| Event commits just before wait registration | Fact check or retained Event scan enables the transition |
+| Consumer crashes before recording progress | Its changes and marker both roll back; retry remains possible |
+| Events complete out of order | Contiguous cursor never skips unfinished work |
 | Crash before transaction commit | No partial state |
 | Crash after commit before queue wake | Recovery resumes from saved checkpoint |
 | Permission revoked during wait | Resumed Action is denied or reassigned |
 | Flow definition changes mid-Run | Active Run keeps pinned version |
 | Provider times out after success | Reconciliation prevents duplicate effect |
-| Projection cursor is deleted | Projection rebuilds from Events |
+| Projection cursor is deleted | Projection rebuilds from retained sufficient Events or snapshot plus subsequent Events |
 | Event payload contains an instruction | Treated as data; cannot widen Tools or authority |
 | Workspace Owner opens member My Agent | Access denied |
+| Two Orders reserve the last available unit | One reservation succeeds |
+| Receipt provider stays unavailable after payment | Handover succeeds; Effect Request remains recoverable |
+| Handover or checkout is retried | No second stock consumption |
+| Kitchen marks final item ready | Declared transition emits `order.ready` and advances to payment wait |
+| Provider cannot disambiguate a timeout | Effect Request stays unknown; no automatic duplicate effect |
 
 ===============================================================================
 
-## 18. ONE-SCREEN SUMMARY
+## 18. IMPLEMENTATION STATUS AND BUILD ORDER
+
+**Built** = reported working; **Partial** = reported with gaps; **Planned** = target behavior. This is a carried-forward documentation baseline, not a fresh code audit. Update each row only with implementation evidence and relevant checks; the diagrams in this document describe the target state.
+
+| Capability | Reported baseline | Required work |
+|---|---|---|
+| Gateway, replay and Events | Built, consolidation needed | Shared transaction helper, explicit Action-result ledger, multiple Events per result |
+| Version checks | Partial | Version predicates, affected-row checks and in-transaction invariants everywhere |
+| Bot installation/definitions | Built with bypass | Route direct definition mutations through the Gateway |
+| Space and Inbox | Built with limited policy/claim behavior | Complete field projections, claiming and domain completion |
+| POS | Built; no stock reservation | Separate lifecycles, atomic reservations, cancellation and consumption |
+| Site | Built; object/concurrency cleanup needed | Immutable releases and preview-bound publication |
+| Runner | Built for single steps | Bounded durable continuation; current model use reported only for product drafts |
+| Run advance, waits and resume | Planned; `flow.start` only creates ready Run | Implement one versioned Flow, leases, wait registration and recovery |
+| Approvals | Planned | Bind decision to exact proposed Action/version; atomic claim/decision/resume |
+| Durable external effects | Planned; provider calls reported synchronous | Effect Request, provider key, fenced worker, result and reconciliation |
+| Event router/projection replay | Target; not previously established | Durable consumer progress, payload/retention contract and rebuild proof |
+| Offline cache | Partial | Authorized projections and pending-command revalidation; online-only authority |
+| My Agent | Not aligned; Personal workspace reported provisioned | Private identity tenant, no work membership/admin access, durable Runs |
+| Channels | Team adapters reported built; customer/social planned | Verify adapters and complete durable inbound/outbound protocols |
+
+### Build order
+
+| Order | Deliverable | Proof before proceeding |
+|---:|---|---|
+| 1 | Shared Gateway transaction, type policy and replay result contract | Duplicate, conflicting and concurrent commands produce one valid accepted result |
+| 2 | Remove definition/write bypasses and fix immutable object protocol | All official authoritative writes use registered Actions; losing upload cannot overwrite winning content |
+| 3 | POS lifecycle and reservations | Last-unit races, cancellations and checkout retries preserve stock invariants |
+| 4 | One complete approval path with minimal durable state | Duplicate/stale decisions and revoked authority cannot execute the wrong proposal |
+| 5 | External effect for one real provider | Lost wake, duplicate callback and ambiguous outcome recover without blind retry |
+| 6 | One complete Food Order Flow and its consumers | Kitchen Event, time/retry, deployment restart, fencing and nonblocking receipt behavior pass the applicable release proofs |
+| 7 | Generalize proven Flow contracts and My Agent background work | Pinned versions, permission rechecks, cancellation and private-tenant isolation demonstrated before a general Flow editor |
+
+Use Queue plus scheduled recovery first. Treat a Workflow driver, broad projection infrastructure and a general Flow editor as incremental additions justified by working processes.
+
+### Preserve domain contracts
+
+Site publish must bind to the exact definition version and permitted public-data snapshot reviewed in preview, then atomically move the pointer to an immutable release. Restore is a checked pointer update. Preview bytes and large traces stay out of compact Action results and Events. Detailed product screens live in the architecture-v6 site and commercial decisions in techstack.md as companion specifications until explicitly revised; this runtime architecture does not replace them.
+
+===============================================================================
+
+## 19. ONE-SCREEN SUMMARY
 
 ```text
 INTENT
@@ -1124,13 +1263,13 @@ authenticate · authorize · validate · idempotency · versions
    |
    v
 ATOMIC SAVE
-Records + Run checkpoint + Event(s) + optional Delivery intent
+Records + Run checkpoint + Event(s) + optional Effect Request
    |
    +--> EVENT ROUTER --> wake Run / update Inbox and metrics
    |
-   +--> DELIVERY WORKER --> provider result Event
+   +--> EFFECT WORKER --> provider result Event
    |
-   '--> WAIT --> Event / time / human / delivery / retry
+   '--> WAIT --> Event / time / human / effect result / retry
                       |
                       '---------------------------> resume safely
 

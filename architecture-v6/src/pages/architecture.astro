@@ -1,39 +1,25 @@
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="theme-color" content="#111a2d">
-  <title>TAR v6 — Architecture</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="system.css">
-</head>
-<body>
-  <header class="nav">
-    <a class="brand" href="index.html"><span>T</span>TAR <em>v6 / architecture</em></a>
-    <nav aria-label="Page navigation"><a href="#model">System path</a><a href="#lab">Run a flow</a><a href="#agent">Agent system</a><a href="#runtime">Runtime</a><a href="glossary.html">Glossary</a></nav>
+---
+import Base from '../layouts/Base.astro';
+import '../styles/system.css';
+---
+
+<Base title="TAR v6 — Architecture" themeColor="#111a2d">
+<header class="nav">
+    <a class="brand" href="/"><span>T</span>TAR <em>v6 / architecture</em></a>
+    <nav aria-label="Page navigation"><a href="#model">System path</a><a href="#lab">Run a flow</a><a href="#agent">Agent system</a><a href="#runtime">Runtime</a><a href="/glossary">Glossary</a></nav>
   </header>
   <main>
-    <section class="hero shell" id="top">
-      <div class="hero-copy">
-        <p class="eyebrow"><i></i>TAR v6 target architecture</p>
-        <h1>From intent to<br><em>durable result.</em></h1>
-        <p>People, channels, and schedules enter through the same controlled path. TAR checks authority, saves one accepted truth, and resumes unfinished work safely.</p>
-        <div class="hero-actions"><a class="primary" href="#model">Follow the system path ↓</a><a class="text-link" href="index.html">See the order example</a></div>
-      </div>
-      <div class="hero-path" aria-label="Intent sources entering TAR">
-        <div class="entry-group"><span>PERSON</span><span>CHANNEL</span><span>SCHEDULE</span></div>
-        <div class="moving-line"><i></i></div>
-        <div class="path-core"><small>ONE CONTROLLED PATH</small><b>Intent → accepted result</b><span>Target design · implementation status varies</span></div>
-      </div>
-    </section>
-
     <section class="model" id="model"><div class="shell">
-      <div class="section-head inverse"><div><p class="eyebrow">THE SYSTEM PATH</p><h2>Five responsibilities.<br>One direction.</h2></div><p>Select each stage. Together they cover intake, agent work, policy, durable state, recovery, and external systems.</p></div>
-      <div class="five" id="five"></div><article class="part-detail" id="part-detail"></article>
-      <div class="truth-line"><b>Records</b><span>current truth</span><i>+</i><b>Events</b><span>accepted history</span><i>+</i><b>Runs</b><span>what happens next</span><i>+</i><b>Effect Requests</b><span>work outside TAR</span></div>
+      <h1 class="path-title">Five responsibilities. One direction.</h1>
+      <p class="gate-legend" aria-hidden="true"><span></span><span>Stage</span><span>What happens</span><span>Boundary</span></p>
+      <ol class="gates">
+        <li class="gate"><div class="gate-name"><b>Start</b><small>Intent enters</small></div><div class="ops" role="img" aria-label="A person, verified channel, schedule, webhook, Event, retry, or approval asks TAR to do work."><span class="op">Person</span><span class="op">Channel</span><span class="op">Schedule</span><span class="op">Webhook</span><span class="op">Event</span><span class="op">Retry</span><span class="op">Approval</span><i class="op-arrow">→</i><span class="op-out">Intent</span></div><p class="gate-boundary">Intent expresses a request. It does not carry authority.</p></li>
+        <li class="gate"><div class="gate-name"><b>Harness</b><small>Prepare one step</small></div><div class="ops" role="img" aria-label="The Runner loads a saved checkpoint, permitted context, Skills, allowlisted Tools, an executor, and strict limits."><span class="op">Checkpoint</span><span class="op">Context</span><span class="op">Skills</span><span class="op">Tools</span><span class="op">Executor</span><span class="op">Limits</span><i class="op-arrow">→</i><span class="op-out">One bounded step</span></div><p class="gate-boundary">The LLM works inside this harness; it is not the whole agent system.</p></li>
+        <li class="gate"><div class="gate-name"><b>Gateway</b><small>Decide safely</small></div><div class="ops" role="img" aria-label="The Action Gateway authenticates, authorizes, validates, checks replay and versions, then applies deterministic business rules."><span class="op-step"><span class="op">Authenticate</span><i class="op-arrow">→</i></span><span class="op-step"><span class="op">Authorize</span><i class="op-arrow">→</i></span><span class="op-step"><span class="op">Validate</span><i class="op-arrow">→</i></span><span class="op-step"><span class="op">Replay check</span><i class="op-arrow">→</i></span><span class="op-step"><span class="op">Version check</span><i class="op-arrow">→</i></span><span class="op-step"><span class="op">Business rules</span><i class="op-arrow">→</i></span><span class="op-out">Accept</span></div><p class="gate-boundary">Every authoritative private or shared write passes here.</p></li>
+        <li class="gate"><div class="gate-name"><b>Save</b><small>Make it durable</small></div><div class="ops" role="img" aria-label="One tenant transaction saves changed Records, the Action result, Events, a Run checkpoint, and an optional Effect Request."><span class="op">Records</span><span class="op">Action result</span><span class="op">Events</span><span class="op">Run checkpoint</span><span class="op">Effect Request</span><i class="op-arrow">→</i><span class="op-out">One transaction</span></div><p class="gate-boundary">Everything succeeds together or nothing changes.</p></li>
+        <li class="gate"><div class="gate-name"><b>Continue</b><small>Wake or act outside TAR</small></div><div class="ops ops-lanes" role="img" aria-label="Committed Events update views and wake Runs. Effect workers contact providers. Queues and recovery scans keep unfinished work moving."><span class="op-lane"><span class="op">Event</span><i class="op-arrow">→</i><span class="op-out">Views · Runs</span></span><span class="op-lane"><span class="op">Effect worker</span><i class="op-arrow">→</i><span class="op-out">Provider</span></span><span class="op-lane"><span class="op">Queue · Recovery</span><i class="op-arrow">→</i><span class="op-out">Resumes work</span></span></div><p class="gate-boundary">At-least-once wakes produce one accepted business result.</p></li>
+      </ol>
+      <div class="durable"><span>Durable state</span><div><b>Records</b><small>current truth</small></div><div><b>Events</b><small>accepted history</small></div><div><b>Runs</b><small>what happens next</small></div><div><b>Effect Requests</b><small>work outside TAR</small></div></div>
     </div></section>
 
     <section class="lab shell" id="lab">
@@ -109,10 +95,9 @@
     <section class="verdict"><div class="shell">
       <div class="section-head inverse"><div><p class="eyebrow">IMPLEMENT IN LAYERS</p><h2>The model stays small.<br>Reliability grows with use.</h2></div><p>Every reliability mechanism answers a real failure: duplicate requests, stale writes, crashes, missed wake-ups, or unknown provider outcomes.</p></div>
       <div class="verdict-grid"><article><span>01</span><b>Foundation</b><p>Records, Actions, Gateway, atomic save, Events, versions, permissions, tenant boundary, and idempotency.</p></article><article><span>02</span><b>First durable flow</b><p>Runs, queue wake-ups, recovery, one approval path, and one External Effect proven through the food-order flow.</p></article><article><span>03</span><b>Expand after proof</b><p>General Flow editing, broad projections, and additional workflow adapters only when real products require them.</p></article></div>
-      <div class="closing-links"><a class="primary" href="index.html">Open the order walkthrough →</a><a href="glossary.html">Explore all 163 terms</a></div>
+      <div class="closing-links"><a class="primary" href="/">Open the order walkthrough →</a><a href="/glossary">Explore all 163 terms</a></div>
     </div></section>
   </main>
-  <footer><span>TAR v6 · Target architecture</span><div><a href="index.html">Order example</a><a href="glossary.html">Visual glossary</a></div></footer>
-  <script src="system.js?v=android-tabs-2"></script>
-</body>
-</html>
+  <footer><span>TAR v6 · Target architecture</span><div><a href="/">Order example</a><a href="/glossary">Visual glossary</a></div></footer>
+<script>import '../scripts/system.js';</script>
+</Base>

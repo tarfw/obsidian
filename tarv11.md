@@ -2,7 +2,7 @@
 
 > Local speed. Shared truth. One Jev call per turn.
 
-**Status = target architecture.** The first release proves the core; domain packages extend it. Basis = v8, v9, v10 and the TypeSafe reference in jev.md (model jev-1.13.0).
+**Status = target architecture.** The first release proves the core; domain packages extend it. Basis = v8, v9, v10 and the TypeSafe reference in jev/jev.md (model jev-1.13.0).
 
 ## 1. Purpose = the whole business cycle, decided cheap
 
@@ -165,6 +165,7 @@ message / tap / scan
 | ONE JEV CALL   state <= 2k tokens . 20-60 questions        |
 |   state = message + the records the questions name         |
 |           + published option sets + a policy excerpt       |
+|           + the memory excerpt (sec 18)                    |
 |   asks  = intent CHOICE . handler CHOICE . per-arg CHOICE  |
 |           stated? NOUL . urgency SCORE . hazard NOULs      |
 +------------------------------------------------------------+
@@ -247,6 +248,10 @@ intent --> CACHE ----- stored answer with a TTL -------> reuse
 **Rule = a model call is never spent on what code can compute.** Buttons, arithmetic,
 stock, permissions and status transitions are free and deterministic.
 
+**Rule = memory recall is code.** SQL, aliases and importance shortlist the rows; Jev
+ranks only when candidates genuinely compete, and one bounded excerpt rides the call
+already being paid for.
+
 **Rule = route to Jev only where it replaces measurable work.** A Jev call must replace
 at least two cheap calls or one reasoning-class call:
 
@@ -261,6 +266,10 @@ route to JEV only when   Cl > Cj / p
   short label does not justify a new hop.
 - Against a reasoning-class call, one Jev call pays for itself by avoiding the call.
 - Uncertain answers cost nothing extra: the band is code over the returned probability.
+
+**Rule = ration prose, never judgment.** A Jev decision costs about INR 0.005 and is
+stored and replayed, so TAR never caps judgment per turn. Only LLM prose and escalations
+are rationed (sec 9).
 
 Every proposed effect passes one outbound check before it acts:
 
@@ -303,6 +312,8 @@ a recipient, a permission or a version.
 +---------+------------------------------------------------+
 | bundle  | the pinned question-bundle revision            |
 +---------+------------------------------------------------+
+| pack    | the pinned pack revision the state read        |
++---------+------------------------------------------------+
 | hash    | the state fingerprint the answer was made from |
 +---------+------------------------------------------------+
 | answers | value, probabilities, confidence, band, branch |
@@ -342,6 +353,10 @@ a recipient, a permission or a version.
 | Limit          | Value                    | Handling                                 |
 +================+==========================+==========================================+
 | Context        | 64k per request          | keep state at 2k; filter in code         |
++----------------+--------------------------+------------------------------------------+
+| Memory pack    | 8k tokens, one revision  | compiled by WORK; never enters a turn    |
++----------------+--------------------------+------------------------------------------+
+| Memory excerpt | 300 tokens               | chosen in code; the cap rides the call   |
 +----------------+--------------------------+------------------------------------------+
 | Choice options | 255                      | two-stage choice over sections           |
 +----------------+--------------------------+------------------------------------------+
@@ -452,6 +467,25 @@ run where the answer is prose, gated by Jev; and every stored answer replays fre
  stack = AI + INR 1.72 non-AI + fixed floor / users
  at 1M: AI INR 4.27 Cr/mo becomes INR 1.68 Cr/mo; INR 2.59 Cr/mo avoided
  ceiling INR 100 and the INR 400 / 80% margin floor hold in every row
+~~~
+
+### Intelligence everywhere = decisions per session
+
+Hundreds of small decisions per user session are affordable on Jev and unaffordable on an
+LLM per decision. This is the design case for a decision model in the core.
+
+~~~text
++-----------------------------+---------------------+----------------------------+
+| line                        | with Jev            | on an LLM per call         |
++=============================+=====================+============================+
+| One decision                | INR 0.005, 1.2k in  | INR 0.034, 3k in / 500 out |
++-----------------------------+---------------------+----------------------------+
+| A session, 300 decisions    | INR 1.50            | INR 10.20                  |
++-----------------------------+---------------------+----------------------------+
+| A user, 30 sessions a month | INR 45              | INR 306                    |
++-----------------------------+---------------------+----------------------------+
+| Against the envelope        | fits inside INR 100 | breaks it three times over |
++-----------------------------+---------------------+----------------------------+
 ~~~
 
 **Rule = cost per user is flat.** It scales 1:1 with users, so the credit cap and the
@@ -663,8 +697,8 @@ The grammar follows tarv9 and tarv10: one card, one primary action, native back.
 two surfaces of its own: the review card, and the paused state when judgment is off.
 
 Screens below match the shipped app layout and strings. One target delta: the app still
-shows Records as a fourth tab, while the target folds it into Space as a saved view
-(tarv9 sec 9.1).
+shows Records as a fourth tab, while the target folds Records and Memory into Space as
+saved views (tarv9 sec 9.1, sec 18).
 
 ~~~text
 +-------------------------------------------+
@@ -735,6 +769,9 @@ shows Records as a fourth tab, while the target folds it into Space as a saved v
 +-------------------------------------------+
 ~~~
 
+- A durable forget arrives as a Review card: the row, its sources, and what the next
+  pack stops carrying (sec 18).
+
 ### Review = one unsure judgment, in the open
 
 ~~~text
@@ -802,6 +839,9 @@ shows Records as a fourth tab, while the target folds it into Space as a saved v
 | Goals | Tasks | Files | Apps | Activity   |
 +-------------------------------------------+
 ~~~
+
+- The ask box is a capture router: one Jev call turns a line or a voice note into a task, a
+  note, a reminder or an idea, scores priority, and code assembles any dates.
 
 ### Record card = one card, morphs by state
 
@@ -1651,7 +1691,7 @@ markdown again.
 +---------+------------+-------------------------------------------------------------------+
 | Publish | RUNTIME    | approval binds the release hash; R2 keeps every release           |
 +---------+------------+-------------------------------------------------------------------+
-| Visits  | JEV        | one routing call per session; components render without an LLM    |
+| Visits  | JEV        | one routing call per session, then one slot call per page         |
 +---------+------------+-------------------------------------------------------------------+
 | Refresh | CODE + JEV | facts changed: re-render free, only broken slots re-asked         |
 +---------+------------+-------------------------------------------------------------------+
@@ -1785,12 +1825,105 @@ Variants are approved once; a visit picks among them:
 +-------------------------------------------+
 ~~~
 
-- No LLM runs on a visit: one Jev call picks the persona, CTA, section and language, and
-  code renders existing components; low confidence serves the default page.
+- No LLM runs on a visit: one Jev call picks the persona, intent and language; the slot
+  picks follow in one batched call per page; code renders existing components, and low
+  confidence serves the default page.
 - Prices, products and stock always come from the database; Jev never shows a fact nobody
   stored.
 - The LLM runs only when a visitor asks for something unique, and Jev decides whether that
   call is justified.
+
+### Agentic persona sites = per-slot selection and measurement
+
+A persona site is four overlays. Layer 0 is the build (the code and approved variant sets,
+compiled once). Layer 1 is the session persona (one Jev call, stored). Layer 2 is the
+per-slot selection (one Jev batched call per page). Layers 3 and 4 are measurement and the
+offline adaptation loop. Jev is present only in Layer 1 and Layer 2; everything else is code
+or the offline LLM.
+
+~~~text
++------------------------------------------------------------------+
+| LAYER 4  ADAPT   offline LLM proposes, code allocates            |
++------------------------------------------------------------------+
+| LAYER 3  MEASURE treatment exposure + outcome logged             |
++------------------------------------------------------------------+
+| LAYER 2  SLOT    per-slot Jev pick from approved variants        |
++------------------------------------------------------------------+
+| LAYER 1  PERSONA session-level Jev call: signals -> persona      |
++------------------------------------------------------------------+
+| LAYER 0  BUILD   design.md -> design.json -> LLM compiles code   |
++------------------------------------------------------------------+
+~~~
+
+A slot is the smallest page unit Jev can personalize: hero copy, section heading, proof
+block, CTA, background. For every slot the workspace holds an approved variant set, written
+by the LLM in the build and reviewed before publish. Jev picks one variant per slot from
+that set; it never invents.
+
+~~~text
++---------------+-------------------------------------+-----------------------------------+
+| slot          | decision                            | approved set shape                |
++===============+=====================================+===================================+
+| hero copy     | which headline or body text to use  | approved headlines per persona    |
++---------------+-------------------------------------+-----------------------------------+
+| hero design   | which color and layout emphasis     | approved visual treatments        |
++---------------+-------------------------------------+-----------------------------------+
+| section order | which page ordering to use          | approved orderings per persona    |
++---------------+-------------------------------------+-----------------------------------+
+| proof block   | which testimonial or stat set       | approved proof sets               |
++---------------+-------------------------------------+-----------------------------------+
+| CTA           | which call-to-action                | approved CTA variants             |
++---------------+-------------------------------------+-----------------------------------+
+| background    | which background color or tone      | approved palette entries          |
++---------------+-------------------------------------+-----------------------------------+
+| presence      | should this slot appear             | variants include an absent option |
++---------------+-------------------------------------+-----------------------------------+
+| display gate  | does the visitor pass the condition | a yes or no list of gate rules    |
++---------------+-------------------------------------+-----------------------------------+
+~~~
+
+Rules:
+- No Jev call sits in the render path. Persona and slot decisions are computed once per
+  session (or precomputed per segment) and stored; the edge reads the stored decision, so
+  personalization has no LCP cost.
+- Every slot has an approved variant set. Jev picks from it; it never invents. If the set
+  has no match for the persona, the default is served.
+- The workspace owns the isolation boundary: approved variants, candidate copy and display
+  gates never leak across workspaces.
+- Slots are bounded per page to avoid decision fatigue (six to ten is the practical range).
+- The default page is always the fallback if confidence is low or the slot set has no match.
+- A failed or uncertain Jev call never blocks the page; it falls back to the default and
+  logs the fallback for the offline job to review.
+
+### The measurement loop = improve without re-generating
+
+Every personalized visit is logged with its thesis, slot choices and outcome. A deterministic
+control path (the generic default) exists for direct comparison.
+
+~~~text
+measure exposure + outcome
+        |
+        v
+offline LLM proposes new hypotheses and variants
+        |
+        v
+code allocates weight; approved variants created
+        |
+        v
+Jev picks from the updated variant sets
+        |
+        v
+measure again
+~~~
+
+- An offline LLM job reads the measurement log and proposes new hypotheses; code allocates
+  weight toward proven variants and archives those below a minimum lift.
+- The hypothesis loop is optional, but the whole personalization value depends on it; without
+  it the site stays at the static build with no adaptation.
+- Approved variants created by the loop must pass the same Jev review battery that the
+  original site passed: no design-system violation can ship without a check.
+- Metrics the code tracks: conversion rate per thesis, variant lift, confidence in the
+  hypothesis and time since the last hypothesis was validated.
 
 ### Screens
 
@@ -1861,19 +1994,21 @@ USD 0.09 / 0.18.
 ~~~
 
 ~~~text
-+------------------------+-----------------------------------------+-----------------------------------+
-| line                   | with Jev routing                        | without                           |
-+========================+=========================================+===================================+
-| Decision               | one Jev call, 1.2k = INR 0.005          | an LLM personalization, INR 0.034 |
-+------------------------+-----------------------------------------+-----------------------------------+
-| Render                 | existing components, free               | generated or restyled per visit   |
-+------------------------+-----------------------------------------+-----------------------------------+
-| Repeat visits          | served from the same approved variant   | repeated LLM calls                |
-+------------------------+-----------------------------------------+-----------------------------------+
-| Escalation             | one LLM call only where it is justified | every unique ask already paid     |
-+------------------------+-----------------------------------------+-----------------------------------+
-| At 100k visits a month | INR 500                                 | INR 3,400 or more                 |
-+------------------------+-----------------------------------------+-----------------------------------+
++----------------------------+-----------------------------------------+------------------------------------+
+| line                       | with Jev routing                        | without                            |
++============================+=========================================+====================================+
+| Decision                   | one Jev call, 1.2k = INR 0.005          | an LLM personalization, INR 0.034  |
++----------------------------+-----------------------------------------+------------------------------------+
+| 8 slots per page (batched) | one call, 5.6k = INR 0.022              | one LLM personalization, INR 0.034 |
++----------------------------+-----------------------------------------+------------------------------------+
+| Render                     | existing components, free               | generated or restyled per visit    |
++----------------------------+-----------------------------------------+------------------------------------+
+| Repeat visits              | served from the same approved variant   | repeated LLM calls                 |
++----------------------------+-----------------------------------------+------------------------------------+
+| Escalation                 | one LLM call only where it is justified | every unique ask already paid      |
++----------------------------+-----------------------------------------+------------------------------------+
+| At 100k visits a month     | INR 500                                 | INR 3,400 or more                  |
++----------------------------+-----------------------------------------+------------------------------------+
 ~~~
 
 - Jev pays for itself where it skips an LLM call or gates a release; run on every request
@@ -1881,7 +2016,421 @@ USD 0.09 / 0.18.
 - Site Builder stays at 0 credits (sec 13): a workspace builds once or twice, and visits are
   the cheap path above.
 
-## 17. Adoption and proof
+## 17. Workflow builder = a sentence, one composition, a reviewed flow
+
+A sentence becomes a flow draft. Jev composes the goal, trigger, steps, wiring, guards and
+waits from the workspace's own action catalog; code validates and mints; a person publishes.
+Execution is deterministic: the runtime walks the graph, a step starts when its dependencies
+finish, and every step re-checks authority at run time. Jev never runs a flow and never
+publishes one.
+
+### The flow model we need
+
+~~~text
++---------+----------------------------------+-------------------------------------------------------+
+| part    | holds                            | example                                               |
++=========+==================================+=======================================================+
+| trigger | what starts the run              | manual, a record event, a schedule, a channel message |
++---------+----------------------------------+-------------------------------------------------------+
+| steps   | the actions and their edges      | order.list -> account.get -> summarize                |
++---------+----------------------------------+-------------------------------------------------------+
+| args    | where each field comes from      | a literal, the record, or a named step output         |
++---------+----------------------------------+-------------------------------------------------------+
+| needs   | the steps that must finish first | step 3 waits on steps 1 and 2                         |
++---------+----------------------------------+-------------------------------------------------------+
+| guard   | an approved condition            | only if the order is paid                             |
++---------+----------------------------------+-------------------------------------------------------+
+| wait    | a signal that pauses the step    | until the provider confirms                           |
++---------+----------------------------------+-------------------------------------------------------+
+| on_fail | the declared recovery            | retry, skip, escalate, or park for a person           |
++---------+----------------------------------+-------------------------------------------------------+
+~~~
+
+Today a flow is an ordered list of action ids with no engine behind it; this section defines
+the shape that both the composer and the walker use.
+
+### Registered actions = current callable boundary
+
+The current harness registers the 28 actions below. A Flow can only contain these registered
+IDs after the Bot is installed. `flow.publish` accepts an ordered list and `flow.start`
+creates a Run at its first action; it does not yet execute a general multi-step graph. The
+catalog is the implementation source of truth at `tarharness/src/registry/catalog.ts` and
+`tarharness/src/pos/catalog.ts`.
+
+| Area | Registered actions |
+|---|---|
+| Flow and Bots | `flow.publish`, `flow.start`, `directory.install`, `directory.remove` |
+| Records and tasks | `record.create`, `record.update`, `task.create`, `task.complete` |
+| POS setup and products | `pos.open`, `pos.setup`, `pos.product.save`, `pos.product.content.save`, `pos.product.draft`, `pos.stock.adjust` |
+| POS customers and orders | `pos.customer.save`, `pos.order.save`, `pos.order.item.update`, `pos.order.cancel`, `pos.checkout`, `pos.refund` |
+| POS register | `pos.register.open`, `pos.register.close` |
+| Sites | `site.generate`, `site.update`, `site.compile`, `site.publish`, `site.rollback`, `site.refresh` |
+| Web research | `web.search` |
+
+The existing templates cover POS sales, orders and returns, stock, customers and register;
+Sales follow-up and review; Team onboarding and review; Operations requests and review; and
+Site building and preview. Missing Sales, CRM, service, support, purchasing, finance and
+messaging actions are target capabilities, not callable actions today.
+
+### The composition pipeline
+
+~~~text
++----------+------------+------------------------------------------------------------------------------------------------------+
+| step     | lane       | exactly                                                                                              |
++==========+============+======================================================================================================+
+| Goal     | JEV        | one call: goal kind CHOICE, record kind CHOICE, trigger CHOICE, outcome CHOICE, must-haves NOULs     |
++----------+------------+------------------------------------------------------------------------------------------------------+
+| Recall   | CODE       | shortlist actions from the workspace catalog by keyword, role and output type                        |
++----------+------------+------------------------------------------------------------------------------------------------------+
+| Steps    | JEV        | per candidate: needed NOUL, action CHOICE, needs NOUL over the last five steps, field sources CHOICE |
++----------+------------+------------------------------------------------------------------------------------------------------+
+| Guards   | JEV        | pick from approved operators; code compiles the condition                                            |
++----------+------------+------------------------------------------------------------------------------------------------------+
+| Validate | JEV + CODE | JEV: goal reached, inputs bound, none forbidden; CODE: ids exist, acyclic, bounded, gates inserted   |
++----------+------------+------------------------------------------------------------------------------------------------------+
+| Review   | HUMAN      | the canvas is approved; publish mints the definition                                                 |
++----------+------------+------------------------------------------------------------------------------------------------------+
+| Run      | RUNTIME    | a step starts when its needs finish; authority is rechecked at each step                             |
++----------+------------+------------------------------------------------------------------------------------------------------+
+~~~
+
+### Every composition judgment, mapped
+
+~~~text
++--------------+------------------------------------+--------------------------------------------------+
+| area         | Jev decides                        | example                                          |
++==============+====================================+==================================================+
+| Goal         | what the sentence wants            | a morning brief from orders and the account      |
++--------------+------------------------------------+--------------------------------------------------+
+| Trigger      | what starts it                     | manual now, or on every paid order               |
++--------------+------------------------------------+--------------------------------------------------+
+| Recall       | which actions are relevant         | shortlist three of the current twenty eight      |
++--------------+------------------------------------+--------------------------------------------------+
+| Steps        | which action each step runs        | pos.orders.list, then crm.account.get            |
++--------------+------------------------------------+--------------------------------------------------+
+| Edges        | which step feeds which             | summarize needs steps 1 and 2                    |
++--------------+------------------------------------+--------------------------------------------------+
+| Binding      | where each field comes from        | the record id from step 1 output                 |
++--------------+------------------------------------+--------------------------------------------------+
+| Guard        | which approved condition applies   | only if the order is paid                        |
++--------------+------------------------------------+--------------------------------------------------+
+| Wait         | which signal pauses a step         | until the provider confirms                      |
++--------------+------------------------------------+--------------------------------------------------+
+| Gates        | does money or access need a person | a refund step becomes an approval                |
++--------------+------------------------------------+--------------------------------------------------+
+| Validate     | is the draft sound                 | every input bound, no cycle, no forbidden action |
++--------------+------------------------------------+--------------------------------------------------+
+| Reuse        | is this an existing flow           | offer the published one instead                  |
++--------------+------------------------------------+--------------------------------------------------+
+| Failure      | what happens on a failed step      | retry once, then park for a person               |
++--------------+------------------------------------+--------------------------------------------------+
+| Review after | did the run reach the goal         | score the run, feed the loop                     |
++--------------+------------------------------------+--------------------------------------------------+
+| Cost         | reuse instead of recomposing       | no calls when the fingerprint matches            |
++--------------+------------------------------------+--------------------------------------------------+
+~~~
+
+### The gate
+
+Code rejects any step naming an action outside the catalog, any forbidden action and any
+cycle; money, access and publication steps are rewritten as human approvals; the draft is
+inert until a person publishes it. A model may propose, never mint authority.
+
+### Execution is deterministic
+
+Steps start when their needs finish; results pass only by explicit binding; every step
+re-checks roles and policy at run time; a failed step follows its declared on_fail or parks
+the run for a person; the scheduler owns recovery. Jev may be consulted mid-run only for a
+step declared a judgment step; it never picks a new step.
+
+### The workflow canvas
+
+~~~text
++-------------------------------------------+
+| Workflow lab                     Jev on   |
+| "brief me before the 10am call"           |
++-------------------------------------------+
+| 4 steps                     [ Build ]     |
+| [1] List orders       pos.orders.list     |
+|       |                                   |
+| [2] Get account      crm.account.get      |
+|       |                                   |
+| [3] Summarize        judge.summarize      |
+|       |                                   |
+| [4] Create doc       doc.create           |
++-------------------------------------------+
+| 4 steps, every input bound, no money step |
+| [ Run once ]  [ Publish ]  [ Edit ]       |
++-------------------------------------------+
+~~~
+
+### Cost = composing with Jev and without
+
+~~~text
++------------------+------------------------------------------+--------------------------------------------+
+| line             | with Jev                                 | without                                    |
++==================+==========================================+============================================+
+| Goal and steps   | two to four calls, 12k in = INR 0.05     | an LLM draft, 8k in / 2k out = INR 0.10    |
++------------------+------------------------------------------+--------------------------------------------+
+| Validity         | ids come from the catalog, so they exist | invented tools and bad wiring are rejected |
++------------------+------------------------------------------+--------------------------------------------+
+| Retries          | rare                                     | one or two extra drafts, INR 0.10 each     |
++------------------+------------------------------------------+--------------------------------------------+
+| Total to a draft | about INR 0.05                           | about INR 0.10 to 0.25                     |
++------------------+------------------------------------------+--------------------------------------------+
+| Reuse            | a fingerprint match, no calls            | recompose every time                       |
++------------------+------------------------------------------+--------------------------------------------+
+~~~
+
+- Composition happens once per goal; the same sentence reuses the published flow through a
+  stored fingerprint, with no calls.
+- When no action fits a step, Jev returns no candidate and the draft shows a
+  missing-capability note instead of inventing one.
+
+### Limits
+
+- Steps are bounded (about twelve), and edges look back at most five steps, so the question
+  count stays cheap.
+- Guards use approved operators only; code compiles them, so no free-form expression ships.
+- A large catalog needs two-stage recall: a category choice, then the action choice.
+
+## 18. Memory = rows, one pack, one excerpt
+
+TAR remembers what the work teaches. Memory is not chat history, and not a file
+store: it is one record type, a compiled pack, and a bounded excerpt that rides the
+one Jev call (sec 5). An agent reads memory; only the engine writes it.
+
+### One record type
+
+~~~text
++------------+--------------------------------------------------------------------+
+| kind       | holds                                                              |
++============+====================================================================+
+| profile    | identity, context, autonomy calibration, communication style       |
++------------+--------------------------------------------------------------------+
+| preference | what the person or the workspace prefers                           |
++------------+--------------------------------------------------------------------+
+| person     | a member, customer or supplier worth remembering                   |
++------------+--------------------------------------------------------------------+
+| fact       | a durable truth: hours, an arrangement, a standing instruction     |
++------------+--------------------------------------------------------------------+
+| recap      | what happened in a period, composed in code from records           |
++------------+--------------------------------------------------------------------+
+| pack       | the compiled revision the next turn reads                          |
++------------+--------------------------------------------------------------------+
+~~~
+
+- Memory is read-only to every agent, bot and model: no turn writes a row.
+- Rows live in the workspace database, so authority, versions, replay and traces
+  apply unchanged.
+
+### The memory record
+
+~~~text
++------------+------------------------------------------------------------+
+| field      | rule                                                       |
++============+============================================================+
+| kind       | one word: profile, preference, person, fact, recap, pack   |
++------------+------------------------------------------------------------+
+| aliases    | the words that must find it: names, spellings, synonyms    |
++------------+------------------------------------------------------------+
+| links      | the other memory rows and records it relates to            |
++------------+------------------------------------------------------------+
+| source     | the turn or event id the row came from                     |
++------------+------------------------------------------------------------+
+| state      | fresh, superseded or forgotten                             |
++------------+------------------------------------------------------------+
+| expires    | set for ephemeral facts; swept in code                     |
++------------+------------------------------------------------------------+
+| importance | drives excerpt ranking; a person can raise it              |
++------------+------------------------------------------------------------+
+| confidence | the band of the answer that wrote it                       |
++------------+------------------------------------------------------------+
+| version    | every change is a new version, never an edit               |
++------------+------------------------------------------------------------+
+~~~
+
+~~~text
+fresh --correct--> superseded --prune--> forgotten
+  ^                                        |
+  +------------- expires (code) -----------+
+~~~
+
+- A correction is a new row that supersedes the old one; the old row stays readable.
+- A row is never deleted. Forgotten is a state, and the trace keeps the reason.
+
+### The pack
+
+~~~text
+memory rows -> WORK compile (cron + threshold) -> R2 bytes + hash on the pack row
+~~~
+
+- The pack is compiled by the WORK lane, never by a turn: cron sees 25 new events,
+  or 24h with any change, and the queue runs the compile.
+- It is a pinned revision: a compile writes a pack row carrying the hash, the size
+  and the time, and a turn records the pack revision its state was built from.
+- Pack cap 8k tokens (sec 8). Over the cap, code prunes by importance, age and
+  expiry.
+
+### The excerpt
+
+~~~text
++-----------+-------+--------------------------------------------------+
+| step      | lane  | exactly                                          |
++===========+=======+==================================================+
+| shortlist | CODE  | alias and keyword match over fresh rows, cap 20  |
++-----------+-------+--------------------------------------------------+
+| rank      | CODE  | match x importance x recency, cap 300 tokens     |
++-----------+-------+--------------------------------------------------+
+| gate      | JEV   | two Nouls ride the call already being paid for   |
++-----------+-------+--------------------------------------------------+
+~~~
+
+**Rule = the excerpt is chosen in code.** SQL and aliases shortlist; the ranking is
+match times importance times recency; the cap is 300 tokens. Jev never searches and
+never sees the pack.
+
+- The two Nouls ask whether using this history is safe, and whether memory
+  contradicts the turn. A failing answer drops or flags the excerpt.
+- The safety question is the sec 16 personalization question, reused; no second
+  question is invented for it.
+
+### The consolidation job
+
+~~~text
++-----------+---------+-----------------------------------------------------+
+| step      | lane    | exactly                                             |
++===========+=========+=====================================================+
+| trigger   | WORK    | cron sees 25 new events, or 24h with any change     |
++-----------+---------+-----------------------------------------------------+
+| shortlist | CODE    | recent events, open rows, regex candidates          |
++-----------+---------+-----------------------------------------------------+
+| judge     | JEV     | one call per batch: the questions below             |
++-----------+---------+-----------------------------------------------------+
+| commit    | RUNTIME | rows, links, supersede, the new pack, the trace     |
++-----------+---------+-----------------------------------------------------+
+| review    | HUMAN   | uncertain merges and forgets go to the Inbox        |
++-----------+---------+-----------------------------------------------------+
+~~~
+
+- One call per batch, one idempotency key per batch: a retry replays, never
+  duplicates.
+- Only code-shortlisted candidates enter the state, so consolidation cost is
+  bounded by the shortlist, not by everything memory holds.
+
+### Forgetting
+
+~~~text
++--------------------------------------------------+
+| FORGET  allergy note on Priya                    |
++--------------------------------------------------+
+| row      the note and the two turns behind it    |
++--------------------------------------------------+
+| effect   the next pack stops carrying it         |
++--------------------------------------------------+
+| kept     the row stays as forgotten in the log   |
++--------------------------------------------------+
+| [ Forget it ]                   [ Keep ]         |
++--------------------------------------------------+
+~~~
+
+- Ephemeral facts carry expires and are swept in code; nothing asks.
+- A durable fact forgets only by a human decision, and the card states exactly
+  what the next pack stops carrying.
+
+### Every memory judgment, mapped
+
+Consolidation asks these in one call per batch; recall rides the call the turn
+already makes.
+
+~~~text
++----------------------------------+--------+-----------------------------------------+
+| question                         | shape  | what code does                          |
++==================================+========+=========================================+
+| same fact as another row         | NOUL   | over 0.7: supersede the loser and link  |
++----------------------------------+--------+-----------------------------------------+
+| the old row still holds          | NOUL   | under 0.3: supersede it as stale        |
++----------------------------------+--------+-----------------------------------------+
+| durable or ephemeral             | CHOICE | sets the expiry default for the row     |
++----------------------------------+--------+-----------------------------------------+
+| which row this corrects          | CHOICE | shortlist plus none; supersede the pick |
++----------------------------------+--------+-----------------------------------------+
+| how important this is            | SCORE  | sets importance for excerpt ranking     |
++----------------------------------+--------+-----------------------------------------+
+| this needs a person              | NOUL   | yes opens an Inbox card                 |
++----------------------------------+--------+-----------------------------------------+
+| safe to use this history         | NOUL   | the sec 16 question, reused at recall   |
++----------------------------------+--------+-----------------------------------------+
+| memory contradicts the turn      | NOUL   | prefer the turn, mark the row           |
++----------------------------------+--------+-----------------------------------------+
+~~~
+
+### Screens = memory is readable and correctable
+
+Memory is a saved view in Space, not a fourth surface (sec 11). The view shows rows
+with their kind, source turn and state; the actions are raise importance, open the
+source turn, and forget. Durable forgets arrive in the Inbox as a Review card.
+
+~~~text
++--------------------------------------------------+
+| MEMORY                                           |
++--------------------------------------------------+
+| Allergy note    person       fresh, 2 sources    |
++--------------------------------------------------+
+| Prep time       fact         fresh, 1 source     |
++--------------------------------------------------+
+| Deposit         preference   fresh, 1 source     |
++--------------------------------------------------+
+| [ Raise ]   [ Open source ]   [ Forget ]         |
++--------------------------------------------------+
+~~~
+
+### Cost = with memory and without
+
+~~~text
++----------------------+-------------------+------------------+
+| line                 | with memory       | without memory   |
++======================+===================+==================+
+| recall               | INR 1.80 a month  | 0                |
++----------------------+-------------------+------------------+
+| consolidation        | INR 0.48 a month  | 0                |
++----------------------+-------------------+------------------+
+| total memory         | INR 2.28          | 0                |
++----------------------+-------------------+------------------+
+| AI line, per user    | INR 19.10         | INR 16.82        |
++----------------------+-------------------+------------------+
+| a fact stated once   | recalled          | re-asked or lost |
++----------------------+-------------------+------------------+
+| failure mode         | a stale excerpt   | no continuity    |
++----------------------+-------------------+------------------+
+~~~
+
+- Assumptions are sec 9: 1,500 turns per user per month, Jev at 2,000 input tokens
+  (USD 0.042 per 1M, INR 95 = USD 1), output free.
+- Recall adds 300 tokens to turns already paid for: 450k tokens a month = INR 1.80.
+  Consolidation is 60 runs at 2.0k tokens = INR 0.48.
+- Reconciliation: the sec 9 AI line moves INR 16.82 -> INR 19.10. The INR 100
+  envelope and the INR 400 margin floor both hold.
+
+### Limits
+
+- The excerpt is the ceiling: a fact the shortlist never offers can never be chosen.
+- A wrong merge loses a fact; merges supersede rather than delete, and undo via the
+  trace.
+- The pack is a pinned revision: a change mid-session waits for the next compile.
+- Ranking can starve a rare fact, so importance is settable by a person: an allergy
+  outranks a preference.
+- No vector index, no embeddings and no memory vendor: recall stays in code, and
+  the one vendor is already Jev.
+- No agent write access and no silent forgetting: rows change through the gateway,
+  and durability is a human decision.
+- Procedures stay Flows (sec 17); memory never stores a how-to.
+- Markdown is a rendering, not the store: memory reads in Space today, and exports
+  to OKF only when a human-export need is measured.
+- Not rebuilt: the records table and gateway, traces, the queue and cron, the R2
+  pointer and hash pattern, the Inbox, and the sec 16 personalization question.
+
+## 19. Adoption and proof
 
 **Rule = a route is enabled only where the log proves it right.**
 
@@ -1911,17 +2460,19 @@ Build order:
 +-------+----------------------------------------------------+---------------------------------------+
 | 2     | Judgment layer: bundles, one call per turn, traces | typed answers stored and replayed     |
 +-------+----------------------------------------------------+---------------------------------------+
-| 3     | Router ladder, gates, budgets                      | no spend on deterministic work        |
+| 3     | Memory: rows, pack, excerpt, consolidation         | recall measured on held-out turns     |
 +-------+----------------------------------------------------+---------------------------------------+
-| 4     | App surfaces: review band, drafts, ai-paused       | offline never lies about truth        |
+| 4     | Router ladder, gates, budgets                      | no spend on deterministic work        |
 +-------+----------------------------------------------------+---------------------------------------+
-| 5     | First routes enabled alone                         | a measured win, then the next route   |
+| 5     | App surfaces: review band, drafts, ai-paused       | offline never lies about truth        |
 +-------+----------------------------------------------------+---------------------------------------+
-| 6     | Scale and contracts                                | rate limits, price, residency         |
+| 6     | First routes enabled alone                         | a measured win, then the next route   |
++-------+----------------------------------------------------+---------------------------------------+
+| 7     | Scale and contracts                                | rate limits, price, residency         |
 +-------+----------------------------------------------------+---------------------------------------+
 ~~~
 
-## 18. Risks and references
+## 20. Risks and references
 
 ~~~text
 +----------------------------------------+--------------------------------------------------------------------------------------+
@@ -1937,11 +2488,23 @@ Build order:
 +----------------------------------------+--------------------------------------------------------------------------------------+
 | Text only                              | A photo or voice user always needs OCR or Whisper in front; cascades cost real money |
 +----------------------------------------+--------------------------------------------------------------------------------------+
-| Single vendor, early access            | Price, behavior and rate limits can move; the WRITE fallback must exist              |
+| Single vendor, early access            | Rate limits bind before price: density hits them first; keep a WRITE fallback        |
 +----------------------------------------+--------------------------------------------------------------------------------------+
 | Residency                              | Personal data leaving to a closed-weight foreign model needs a legal answer          |
 +----------------------------------------+--------------------------------------------------------------------------------------+
 | Flat cost                              | Nothing gets cheaper with scale; the credit cap and gates stay load-bearing          |
++----------------------------------------+--------------------------------------------------------------------------------------+
+| The excerpt is the ceiling             | A fact the shortlist never offers can never be chosen; coverage is the limit         |
++----------------------------------------+--------------------------------------------------------------------------------------+
+| A wrong merge loses a fact             | Merges supersede and never delete, undo via the trace; uncertain merges wait         |
++----------------------------------------+--------------------------------------------------------------------------------------+
+| The pack is a pinned revision          | A change mid-session waits for the next compile: minutes of lag, not instant         |
++----------------------------------------+--------------------------------------------------------------------------------------+
+| Ranking can starve a rare fact         | An allergy must outrank a preference: importance is settable by a person             |
++----------------------------------------+--------------------------------------------------------------------------------------+
+| Consolidation cost grows with rows     | Only shortlisted candidates enter state; the shortlist is the scaling edge           |
++----------------------------------------+--------------------------------------------------------------------------------------+
+| Memory is derived personal data        | It leaves to a closed-weight model; the residency answer covers memory too           |
 +----------------------------------------+--------------------------------------------------------------------------------------+
 ~~~
 
@@ -1949,7 +2512,7 @@ Build order:
 +----------------------------------+--------------------------------------------------------+
 | Source                           | Guidance taken                                         |
 +==================================+========================================================+
-| jev.md                           | Jev contract, recipes, confidence bands, honest limits |
+| jev/jev.md                       | Jev contract, recipes, confidence bands, honest limits |
 +----------------------------------+--------------------------------------------------------+
 | TypeSafe docs (docs.typesafe.ai) | API, models, jaggedness page                           |
 +----------------------------------+--------------------------------------------------------+

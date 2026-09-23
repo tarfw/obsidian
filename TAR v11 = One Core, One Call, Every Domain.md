@@ -1,7 +1,7 @@
 
 > Local speed. Shared truth. One Jev call per turn.
 
-**Status = target architecture.** The first release proves the core; domain packages extend it. Basis = v8, v9, v10 and the TypeSafe reference in jev.md (model jev-1.13.0).
+**Status = target architecture.** The first release proves the core; domain packages extend it. Basis = v8, v9, v10 and the TypeSafe reference in jev/jev.md (model jev-1.13.0).
 
 ## 1. Purpose = the whole business cycle, decided cheap
 
@@ -1067,7 +1067,7 @@ Build order:
 +----------------------------------+--------------------------------------------------------+
 | Source                           | Guidance taken                                         |
 +==================================+========================================================+
-| jev.md                           | Jev contract, recipes, confidence bands, honest limits |
+| jev/jev.md                       | Jev contract, recipes, confidence bands, honest limits |
 +----------------------------------+--------------------------------------------------------+
 | TypeSafe docs (docs.typesafe.ai) | API, models, jaggedness page                           |
 +----------------------------------+--------------------------------------------------------+

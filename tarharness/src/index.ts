@@ -17,7 +17,7 @@ import { providers, providerStatus, verifyEvent, chatResponse, type ChannelEnv, 
 import { beginLink, channelState, confirmLink, disconnect, proveLink, resolveSender } from './channels/store.ts';
 import { enqueueCommand, processCommand } from './channels/jobs.ts';
 
-type RuntimeEnv = Env & ChannelEnv & { readonly TURSO_PLATFORM_TOKEN?: string };
+type RuntimeEnv = Env & ChannelEnv & { readonly TURSO_PLATFORM_TOKEN?: string; readonly TINYFISH_API_KEY?: string };
 const jsonHeaders = { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' };
 const corsHeaders = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Authorization, Content-Type, Idempotency-Key', 'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS' };
 const now = () => Date.now();
@@ -266,7 +266,7 @@ async function handle(request: Request, env: RuntimeEnv, ctx: ExecutionContext):
     const actionMatch = /^actions\/([a-z.]+)$/.exec(nested);
     if (request.method === 'POST' && actionMatch) {
       const key = request.headers.get('Idempotency-Key') || ''; const input = await Effect.runPromise(parseJson(request));
-      const result = await Effect.runPromise(executeGateway(client, current, { actionId: actionMatch[1] as GatewayRequest['actionId'], idempotencyKey: key, input }, { productContent: env.PRODUCT_CONTENT, siteReleases: env.SITE_RELEASES, ai: env.AI }));
+      const result = await Effect.runPromise(executeGateway(client, current, { actionId: actionMatch[1] as GatewayRequest['actionId'], idempotencyKey: key, input }, { productContent: env.PRODUCT_CONTENT, siteReleases: env.SITE_RELEASES, ai: env.AI, tinyfish: env.TINYFISH_API_KEY }));
       return response(result, 201);
     }
     throw notFound('Route not found.');

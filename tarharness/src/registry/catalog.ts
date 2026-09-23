@@ -168,6 +168,16 @@ export const actionCatalog = [
     ],
     output: ['refreshed', 'itemCount'], roles: ['owner', 'admin'], effects: ['record_update'],
   },
+  {
+    id: 'web.search', version: 1, type: 'app', title: 'Search the web',
+    description: 'Find current public sources for a focused research question.', interfaceKey: 'form',
+    fields: [
+      { key: 'query', label: 'Search query', kind: 'text', required: true },
+      { key: 'location', label: 'Country code', kind: 'text' },
+      { key: 'language', label: 'Language code', kind: 'text' },
+    ],
+    output: ['query', 'sources'], roles: ['owner', 'admin', 'member'], effects: ['web_search'],
+  },
 ] as const satisfies readonly ActionDefinition[];
 
 export type ActionId = typeof actionCatalog[number]['id'];

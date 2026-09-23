@@ -1,12 +1,12 @@
 import { createClient } from '@libsql/client';
 import { Effect } from 'effect';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { WORKSPACE_SCHEMA } from '../src/db/schema.ts';
 import { executeGateway } from '../src/gateway/actions.ts';
 import type { AccessContext } from '../src/types.ts';
 
 const clients: ReturnType<typeof createClient>[] = [];
-afterEach(() => { while (clients.length) clients.pop()?.close(); });
+afterEach(() => { while (clients.length) clients.pop()?.close(); vi.unstubAllGlobals(); });
 
 async function workspace() {
   const client = createClient({ url: 'file::memory:' }); clients.push(client);
@@ -60,5 +60,19 @@ describe('mandatory Gateway execution', () => {
     expect(result).toEqual({ flowId: 'custom.sales.new-customer', published: true });
     const definitions = await client.execute("SELECT kind FROM definitions WHERE id LIKE 'custom.sales.new-customer%'");
     expect(definitions.rows).toHaveLength(2);
+  });
+
+  it('searches TinyFish through the Gateway and replays the saved sources', async () => {
+    const client = await workspace();
+    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ results: [
+      { title: 'TAR docs', url: 'https://example.com/tar', snippet: 'Current TAR documentation.', date: '2026-09-22' },
+    ] })));
+    vi.stubGlobal('fetch', fetch);
+    const request = { actionId: 'web.search' as const, idempotencyKey: 'search-tar-1', input: { query: 'TAR documentation', location: 'IN', language: 'en' } };
+    const first = await Effect.runPromise(executeGateway(client, access, request, { tinyfish: 'test-key' }));
+    const replay = await Effect.runPromise(executeGateway(client, access, request, { tinyfish: 'test-key' }));
+    expect(first).toEqual({ query: 'TAR documentation', sources: [{ title: 'TAR docs', url: 'https://example.com/tar', snippet: 'Current TAR documentation.', date: '2026-09-22' }] });
+    expect(replay).toEqual(first);
+    expect(fetch).toHaveBeenCalledTimes(1);
   });
 });

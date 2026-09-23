@@ -9,11 +9,12 @@ import { executePos, POS_INDEXES } from '../pos/store.ts';
 import { draftProduct, saveProductContent } from '../pos/content.ts';
 import { canExecute, canReadRecord } from '../access.ts';
 import { executeSiteGenerate, executeSiteUpdate, executeSiteCompile, executeSitePublish, executeSiteRollback, executeSiteRefresh } from '../site/store.ts';
+import { searchWeb } from '../web/search.ts';
 import { appendEvent, eventStatement, findReplay, fingerprint, runStatement, stamp } from './commit.ts';
 
 type GatewayError = ReturnType<typeof badRequest> | ReturnType<typeof conflict> | ReturnType<typeof forbidden> | ReturnType<typeof notFound> | ReturnType<typeof unavailable>;
 export interface GatewayRequest { readonly idempotencyKey: string; readonly actionId: ActionId; readonly input: Record<string, unknown>; }
-export interface GatewayServices { readonly productContent?: R2Bucket; readonly siteReleases?: R2Bucket; readonly ai?: Ai }
+export interface GatewayServices { readonly productContent?: R2Bucket; readonly siteReleases?: R2Bucket; readonly ai?: Ai; readonly tinyfish?: string }
 
 const object = (value: unknown): Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const text = (value: unknown, max = 200): string => typeof value === 'string' ? value.trim().slice(0, max) : '';
@@ -56,6 +57,11 @@ export function executeGateway(client: Client, context: AccessContext, request: 
       if (request.actionId === 'site.publish') return executeSitePublish(client, services.siteReleases, context, request.input, request.idempotencyKey, hash);
       if (request.actionId === 'site.rollback') return executeSiteRollback(client, context, request.input, request.idempotencyKey, hash);
       if (request.actionId === 'site.refresh') return executeSiteRefresh(client, context, request.input, request.idempotencyKey, hash);
+      if (request.actionId === 'web.search') {
+        const result = await searchWeb(services.tinyfish, request.input);
+        await appendEvent(client, { action: request.actionId, actor: context.identity.id, key: request.idempotencyKey, hash, result });
+        return result;
+      }
 
       if (request.actionId === 'flow.publish') {
         const botId = text(request.input.botId, 80); const flowId = text(request.input.flowId, 160); const name = text(request.input.name, 100); const description = text(request.input.description, 400);

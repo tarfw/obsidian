@@ -56,11 +56,16 @@ Custom Flows belong to an installed Bot and use the registered `flow.publish` Ac
    npx wrangler types
    ```
 
-3. Add the Turso platform token without committing it:
+3. Add the Turso platform token and TinyFish key without committing either value:
 
    ```sh
    npx wrangler secret put TURSO_PLATFORM_TOKEN
+   npx wrangler secret put TINYFISH_API_KEY
    ```
+
+   `web.search` is unavailable until `TINYFISH_API_KEY` is configured. It calls TinyFish
+   Search from the Worker and returns a bounded list of public sources; the client never
+   receives the provider key.
 
 4. Apply the control migration, validate and deploy:
 

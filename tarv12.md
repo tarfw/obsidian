@@ -3,8 +3,7 @@
 > Local speed. Shared truth. Understand once, reuse across the business.
 
 **Status (2026-09-23): final target architecture.** This is the sole target
-architecture for design and build decisions. Provider references and
-implementation source files remain evidence, not a second target plan.
+architecture for design and build decisions.
 
 **Scope of the claim:** final means one chosen design, not complete deployment.
 The existing gateway, catalog, Turso workspace schema, D1 membership, POS and
@@ -33,8 +32,6 @@ decision being revised.
 +-------------------+-----------------------------------------------------------------------+
 | Document status   | Final target architecture; not a shipped-implementation claim        |
 +===================+=======================================================================+
-| Basis             | Jev research and current source code                                  |
-+-------------------+-----------------------------------------------------------------------+
 | Implementation    | Existing and proposed behavior are identified in sections 4 and 19  |
 +-------------------+-----------------------------------------------------------------------+
 | Provider snapshot | Jev 1.13.0 docs checked 2026-09-23; account terms need verification  |
@@ -174,7 +171,7 @@ stack, routing system, or planner.
 +--------------------------------+   +--------------------------------+
 | SHELL    Space Inbox Bots      |   | INGRESS  chat site pos email   |
 | LOCAL    sqlite render drafts  |   | KERNEL   gateway runtime log   |
-| CAPTURE  forms pos voice scan  |   | JUDGMENT Jev router traces     |
+| INPUT    forms pos voice scan  |   | JUDGMENT Jev router traces     |
 | CONFIRM  approval card         |   | WORK     executor scheduler    |
 | SYNC     push and pull deltas  |   | STORAGE  turso d1 r2 outbox    |
 +--------------------------------+   +--------------------------------+
@@ -212,7 +209,7 @@ confirms exactly what the worker commits.
 | Files and releases | R2 stores large objects and immutable release assets; committed records hold references and hashes. | Existing POS and site paths; no blob replication through device sync. |
 | Async work | Persist intent and effect state, then dispatch with bounded retries, scheduled recovery and reconciliation. | Required architecture; do not describe queue or cron wiring as complete until verified in code. |
 | Semantic provider | Jev via a server adapter for typed, bounded judgments; other models only for justified generation or escalation. | Proposed integration, gated by route evaluation and current account terms. |
-| Browser and heavy compute | Add a browser service or isolated compute only for a measured workflow that needs it. | No fixed `browser-use`, `box` or Containers commitment from the historical cost study. |
+| Browser and heavy compute | Add a browser service or isolated compute only for a measured workflow that needs it. | No fixed vendor or runtime commitment. |
 | Channels | Native site chat and email adapters; evaluate the proposed aggregator against required networks and current fees. | Provider selection is conditional, as section 12 specifies. |
 
 The platform can scale by adding capacity and domain packages without changing
@@ -221,15 +218,15 @@ estimate proves million-seat capacity, data residency, sync reliability or
 end-to-end margin. These require load tests, provider agreements and measured
 workloads before a commercial promise.
 
-## 3. App side = capture, confirm, keep working offline
+## 3. App side = input, confirm, keep working offline
 
 ~~~text
 +----------------------------------------------------------------+
-| APP = capture + decide locally + draft + confirm + sync        |
+| APP = input + decide locally + draft + confirm + sync          |
 +----------------------------------------------------------------+
 | SHELL   | Space role canvas | Inbox decisions | Bots install   |
 | LOCAL   | sqlite: inbox, projections, drafts, recent reads     |
-| CAPTURE | forms, POS, voice note, photo scan, chat message     |
+| INPUT   | forms, POS, voice note, photo scan, chat message     |
 | CONFIRM | approval card: the exact effect, amount and versions |
 | SYNC    | deltas push/pull; queued turns while offline         |
 +----------------------------------------------------------------+
@@ -342,8 +339,7 @@ A sales-readiness rubric and a support-urgency rubric have different meanings an
 **Use the primitive that matches the answer.** Choice is a competing set, Score is degree on an ordered
 rubric, and Noul is probability of a yes/no proposition. A Noul of 0.5 is not “medium urgency.” Score
 divided by its maximum index can normalize an intensity for weighting; it does not become a probability of a
-business outcome. See [primitives](https://docs.typesafe.ai/primitives.md) and [composite
-scoring](https://docs.typesafe.ai/patterns/composite-scoring.md).
+business outcome. See [TypeSafe primitives](https://docs.typesafe.ai/primitives.md).
 
 ### Runtime = one module inside the existing server
 
@@ -372,6 +368,26 @@ The existing catalog supplies admissible actions. Domain adapters supply descrip
 business code supplies eligibility. A customer request does not unlock an action that the authenticated
 actor cannot perform.
 
+### Investigation = connect signal, cause and action
+
+~~~text
++----------------+-------------------------+------------------------------------------------+
+| Stage          | Owner                   | Rule                                           |
++================+=========================+================================================+
+| Signal         | SQL and domain code     | Detect measured changes before inference       |
++----------------+-------------------------+------------------------------------------------+
+| Cause          | One run; domain package | Test only reviewed relationships against data  |
++----------------+-------------------------+------------------------------------------------+
+| Action         | Code plus bounded Jev   | Check eligibility and cause-action fit         |
++----------------+-------------------------+------------------------------------------------+
+| Outlook        | Code                    | Label scenarios; forecast only with evidence   |
++----------------+-------------------------+------------------------------------------------+
+~~~
+
+Pilot this in reporting: test stock availability before recommending a promotion for falling sales. Use
+catalog or code relationships first; add graph infrastructure only for a measured need. Bound stages, reuse
+assessments, and compare cost per correct recommendation with the current workflow.
+
 ### Decision = distinguish inference from execution
 
 1. Code narrows to valid actions and candidate values.
@@ -382,10 +398,9 @@ actor cannot perform.
 For an unsupported request, return an explicit unsupported or missing-input outcome. A prose model may
 explain or help form a draft; it must not bypass the same gateway.
 
-The [function-calling cookbook](https://docs.typesafe.ai/cookbooks/function_calling.md) supports closed-set
-functions, enum arguments, and boolean/multiple-label selections. Its demonstration does not solve arbitrary
-text, numbers, or dates. TAR must find or obtain these values separately and preserve their source. Do not
-silently accept a cookbook default for an unstated payment amount or booking date.
+Closed-set action and enum selection does not supply arbitrary text, numbers or dates. TAR must find or
+obtain these values separately and preserve their source. Never default an unstated payment amount or
+booking date.
 
 ### Candidate generation before model selection
 
@@ -408,8 +423,7 @@ silently accept a cookbook default for an unstated payment amount or booking dat
 ~~~
 
 Keep source offset and record version with every candidate. Equal-looking values may have different roles:
-two “500” spans can be a deposit and a balance. A confident Choice cannot recover an omitted candidate. See
-[pre-parsed extraction](https://docs.typesafe.ai/cookbooks/pre_parsed_value_extraction_cookbook.md).
+two “500” spans can be a deposit and a balance. A confident Choice cannot recover an omitted candidate.
 
 ### Small contextual state
 
@@ -441,9 +455,6 @@ all authorized records -> code shortlist -> Jev compare -> code validates -> pro
 
 - Measure category recall because a wrong first branch hides the correct item.
 - Bot suggestions are recommendations only; no suggestion installs a capability.
-- [Hierarchy](https://docs.typesafe.ai/cookbooks/hierarchical_classification.md) and
-  [skill suggestion](https://docs.typesafe.ai/cookbooks/skill_suggestion.md) provide patterns, not TAR
-  accuracy guarantees.
 
 ### Call plans = stage dependencies explicitly
 
@@ -477,9 +488,7 @@ all authorized records -> code shortlist -> Jev compare -> code validates -> pro
 
 Speculate only branches that are both plausible and cheap. If a route has ten unrelated actions with many
 arguments, routing first may save more tokens than avoiding the second network round trip. State the
-speculative premise in each question; questions cannot refer to sibling answers. See
-[fan-out](https://docs.typesafe.ai/patterns/fan-out.md) and [structure
-recovery](https://docs.typesafe.ai/cookbooks/autoformat.md).
+speculative premise in each question; questions cannot refer to sibling answers.
 
 Use confidence to choose useful behavior. If two harmless hero variants are both acceptable, select a
 default. If two customer records are plausible recipients of a private invoice, clarify. The desired
@@ -547,9 +556,8 @@ prose model is not a universal fallback for a typed action resolver.
 For generated replies, check exact values and references in code first, then use Jev for contextual support,
 contradiction, and unresolved customer questions. Check the completed draft before the authorized send step.
 
-The [citation cookbook](https://docs.typesafe.ai/cookbooks/citation_check.md) combines exact quote matching
-with a semantic support check. Apply that pattern to quotes, invoices, policy explanations, and supplier
-comparisons: a quoted passage can exist while failing to support the claim.
+For quotes, invoices, policy explanations and supplier comparisons, match cited text exactly and check
+whether it supports the claim. A passage can exist while failing to support the claim.
 
 Use independent flags for serious failures; do not average a wrong recipient or unsupported price away with
 good tone and relevance. Conversely, do not run a generic semantic guard on every deterministic effect when
@@ -752,9 +760,6 @@ design starting points, not provider requirements.
 +--------------------------+----------------------------------------------------------------+
 ~~~
 
-Source: [HTTP API](https://docs.typesafe.ai/api.md), [models and data
-handling](https://docs.typesafe.ai/models.md).
-
 ## 9. Cost = transparent workload scenarios, measured outcomes
 
 As checked on 2026-09-21, `jev-1.13.0` costs **USD 0.042 per million input tokens**, with free output
@@ -805,25 +810,22 @@ ingress and a new background assessment.
 +---------------------------+------------------------------+------------------------------+-------------------------------------------+
 | Per user / month scenario | With Jev                     | No Jev                       | Comparison rule                           |
 +===========================+==============================+==============================+===========================================+
-| Semantic interpretation   | INR 11.97                    | INR 42.73 historical model  | Same 1,500 user intents; no-Jev number is |
-| at 1,500 intents          | 1,500 × 2,000 input tokens   | baseline, including generic  | an illustration, not a current quote      |
-|                           |                              | model, guard and retry mix   |                                           |
+| Semantic interpretation   | INR 11.97                    | Measure the matched route    | Same 1,500 intents and completed outcomes |
+| at 1,500 intents          | 1,500 × 2,000 input tokens   | and its full cost            | on both sides                             |
 +---------------------------+------------------------------+------------------------------+-------------------------------------------+
-| Selective whole workflow  | INR 8.67                     | Measure against the same     | Same capture, response, review and outcome |
+| Selective whole workflow  | INR 8.67                     | Measure against the same     | Same capture, reply, review and outcome   |
 |                           | 843 stages; 2.172M tokens    | route before claiming saving | must be included on both sides            |
 +---------------------------+------------------------------+------------------------------+-------------------------------------------+
-| Explicit structured work  | INR 0 semantic cost          | INR 0 semantic cost          | Buttons, rules, totals and lookups use     |
+| Explicit structured work  | INR 0 semantic cost          | INR 0 semantic cost          | Buttons, rules, totals and lookups use    |
 |                           |                              |                              | code in both architectures                |
 +---------------------------+------------------------------+------------------------------+-------------------------------------------+
-| Common generation, OCR,   | Add actual provider cost      | Add actual provider cost      | Compare the same output and evidence path  |
-| storage and review        | outside the Jev line         | outside the baseline line     | rather than crediting it to Jev            |
+| Common generation, OCR,   | Add actual provider cost     | Add actual provider cost     | Compare the same output and evidence path |
+| storage and review        | outside the Jev line         | outside the baseline line    | rather than crediting it to Jev           |
 +---------------------------+------------------------------+------------------------------+-------------------------------------------+
 ~~~
 
-The INR 42.73 row is retained only as a historical illustrative generative-model baseline. Its provider
-prices and workload have not been revalidated. The INR 11.97 and INR 8.67 rows are Jev input-cost scenarios,
-not product-total cost. The meaningful comparison is a matched completed workflow, which the next table
-defines.
+The INR 11.97 and INR 8.67 rows are Jev input-cost scenarios, not product-total cost. Compare matched
+completed workflows using the next table.
 
 ### Table A2 = end-to-end cost ledger per user
 
@@ -1141,9 +1143,7 @@ infrastructure. These are priorities, not claims of current implementation.
 +--------------------+----------------------------+----------------------------+----------------------------+-------+
 ~~~
 
-This extends the possibilities in the [TypeSafe use-case
-map](https://docs.typesafe.ai/concepts/use-case-map.md). A possible use is not a reason to ship it
-immediately. Each row must beat the current or deterministic baseline on a meaningful outcome.
+Each proposed use must beat the current or deterministic baseline on a meaningful outcome.
 
 ### Worked paths = bounded interpretation, ordinary execution
 
@@ -1589,9 +1589,8 @@ layout differences during implementation.
 +---------------------+--------------------------------------------+-------------------------------------------+
 ~~~
 
-The [feature-discovery cookbook](https://docs.typesafe.ai/cookbooks/autoresearch_feature_discovery.md)
-demonstrates offline question refinement on a different dataset. It justifies experiments, not a TAR
-prediction claim. Cache unchanged features, hold out outcome data, and measure each surface separately.
+Predictive features remain an experiment, not a TAR accuracy claim. Cache unchanged features, hold out
+outcome data, and measure each surface separately.
 
 ## 12. Channels = one inbox and two families
 
@@ -2804,9 +2803,8 @@ frozen state and one Jev request; a dependent retrieval or evidence expansion is
 +----------------+------------------------------------------------------+------------------------------------------+
 ~~~
 
-The LangChain study used five fixed weather traces, human labels, two signals, and repeated judging to
-separate agreement from variance. TAR reuses that experimental shape, not its reported quality, latency,
-or price: each TAR route needs its own labeled slices and calibration.
+Use fixed traces, human labels and repeated judging to separate agreement from variance. Each TAR route
+needs its own labeled slices and calibration.
 
 ~~~text
 +----------------+--------------------------------------------------------------------+
@@ -2910,16 +2908,16 @@ for the implementation evidence summarized below.
 +----------------------------------------------------------------+-------------------------------------------------------------------+
 | Local evidence                                                 | Consequence for this plan                                         |
 +================================================================+===================================================================+
-| [Action catalog](tarharness/src/registry/catalog.ts) has       | Derive semantic selection from these definitions; do not maintain |
+| Action catalog has                                             | Derive semantic selection from these definitions; do not maintain |
 | descriptions, fields, outputs, roles, and effects              | a second competing tool catalog                                   |
 +----------------------------------------------------------------+-------------------------------------------------------------------+
-| [Gateway actions](tarharness/src/gateway/actions.ts) contain   | Route accepted proposals through this path; full graph            |
+| Gateway actions contain                                        | Route accepted proposals through this path; full graph            |
 | existing Flow publication and execution handling               | orchestration is not established merely by having Flow records    |
 +----------------------------------------------------------------+-------------------------------------------------------------------+
-| [Database schema](tarharness/src/db/schema.ts) restricts       | Adding a question-definition kind would require a                 |
+| Database schema restricts                                      | Adding a question-definition kind would require a                 |
 | definition kinds to `flow`, `record_type`, `bot`, and `kit`    | deliberate migration; begin with versioned code assets            |
 +----------------------------------------------------------------+-------------------------------------------------------------------+
-| [App AI helpers](tarapp/src/lib/ai.ts) already distinguish app | Keep credentials and paid inference in the server boundary        |
+| App AI helpers already distinguish app                         | Keep credentials and paid inference in the server boundary        |
 | helpers from remote model work                                 |                                                                   |
 +----------------------------------------------------------------+-------------------------------------------------------------------+
 ~~~
@@ -2978,7 +2976,7 @@ malformed responses, provider timeouts and concurrent updates. Shadow mode recor
 changing accepted business behavior. Human-reviewed drafts can establish value while automatic acceptance
 remains disabled.
 
-## 20. Risks, coverage and references
+## 20. Risks and coverage
 
 ~~~text
 +------------------------------------------------------------+-------------------------------------------------------------------+
@@ -3046,59 +3044,6 @@ remains disabled.
 | Provider terms and data handling change | Verify current account contract before production integration   |
 +-----------------------------------------+-----------------------------------------------------------------+
 ~~~
-
-### Sources = local basis and live primary documentation
-
-The [Jev research reference](jev/jev.md) and implementation links in section 19
-support particular claims; the decisions themselves are stated here. The
-model, API and confidence pages were refreshed 2026-09-23. Other linked
-patterns and cookbooks were reviewed in the preceding draft; recheck their
-current text before translating an example into an implementation:
-
-~~~text
-+--------+-----------------------------------+------------------------------------------------+
-| Group  | Sources                           | Guidance used                                  |
-+========+===================================+================================================+
-| S1     | Index, use-case map, build guide  | Scope, decomposition and question design       |
-+--------+-----------------------------------+------------------------------------------------+
-| S2     | Models, API, confidence           | Contract, price, limits and response semantics |
-+--------+-----------------------------------+------------------------------------------------+
-| S3     | Function calling, extraction,     | Typed commands and independent questions       |
-|        | fan-out                           |                                                |
-+--------+-----------------------------------+------------------------------------------------+
-| S4     | Reranking, hierarchy, skill       | Bounded retrieval and progressive disclosure   |
-|        | suggestion                        |                                                |
-+--------+-----------------------------------+------------------------------------------------+
-| S5     | Composite scoring, feature        | Reuse and offline predictive experiments       |
-|        | discovery                         |                                                |
-+--------+-----------------------------------+------------------------------------------------+
-| S6     | Autoformat, citations, cascade    | Structure preservation and verification        |
-+--------+-----------------------------------+------------------------------------------------+
-| S7     | LangChain Jev-as-a-Judge article  | Frozen-trace evaluation and human calibration  |
-+--------+-----------------------------------+------------------------------------------------+
-~~~
-
-S1: [index](https://docs.typesafe.ai/llms.txt), [use-case map](https://docs.typesafe.ai/concepts/use-case-map.md), [building guide](https://docs.typesafe.ai/concepts/how-to-build-with-system-one.md).
-
-S2: [models](https://docs.typesafe.ai/models.md), [API](https://docs.typesafe.ai/api.md), [confidence](https://docs.typesafe.ai/confidence.md).
-
-S3: [function calling](https://docs.typesafe.ai/cookbooks/function_calling.md), [pre-parsed extraction](https://docs.typesafe.ai/cookbooks/pre_parsed_value_extraction_cookbook.md), [fan-out](https://docs.typesafe.ai/patterns/fan-out.md).
-
-S4: [reranking](https://docs.typesafe.ai/cookbooks/rerank_typesafe.md), [hierarchical classification](https://docs.typesafe.ai/cookbooks/hierarchical_classification.md), [skill suggestion](https://docs.typesafe.ai/cookbooks/skill_suggestion.md).
-
-S5: [composite scoring](https://docs.typesafe.ai/patterns/composite-scoring.md), [feature discovery](https://docs.typesafe.ai/cookbooks/autoresearch_feature_discovery.md).
-
-S6: [autoformat](https://docs.typesafe.ai/cookbooks/autoformat.md), [citation checking](https://docs.typesafe.ai/cookbooks/citation_check.md), [extraction cascade](https://docs.typesafe.ai/cookbooks/sde_cascade.md).
-
-S7: [Jev-as-a-Judge for Agent Evals](https://x.com/LangChain/article/2101454284927959080). The article is
-the basis for the frozen-trace, human-oracle and repeatability method in section 19; its five-weather-trace
-result and reported cost/latency are not TAR performance evidence. Live TypeSafe documentation governs
-primitive semantics and API contracts.
-
-Several cookbook examples use Jev 1.12 or small/synthetic datasets. Their reported results demonstrate a
-pattern on that workload, not expected TAR accuracy on 1.13. The original social post is background context
-in [sources.md](jev/sources.md); it is not used here as evidence for API contracts, throughput, or measured
-savings.
 
 Provider prices and implementation claims are not automatically current facts.
 Screen figures are concept examples; provider facts are dated, and performance

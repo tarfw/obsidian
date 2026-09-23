@@ -2,11 +2,8 @@
 
 > Local speed. Shared truth. Understand once, reuse across the business.
 
-**Status (2026-09-23): final target architecture.** This document supersedes
-`tarv6.md` through `tarv11.md`, `TAR v11 = One Core, One Call, Every Domain.md`,
-and `techstack.md` for architecture and build decisions. Those files record the
-evolution and may be retired after their remaining inbound links are updated.
-No earlier version is required to interpret this one. Provider references and
+**Status (2026-09-23): final target architecture.** This is the sole target
+architecture for design and build decisions. Provider references and
 implementation source files remain evidence, not a second target plan.
 
 **Scope of the claim:** final means one chosen design, not complete deployment.
@@ -16,7 +13,7 @@ pipeline, full domain packages, and measured economics are target work. A
 working feature is established by code and tests, never by an example screen or
 cost table in this document.
 
-### Final decisions carried through the evolution
+### Architecture decisions
 
 | Concern | Decision | Sections |
 | --- | --- | --- |
@@ -27,27 +24,16 @@ cost table in this document.
 | Product | Space, Inbox, Bots, POS, channels, site publishing, Flows and memory use one interaction and execution grammar. | 11–18 |
 | Economics | Credits are a product allowance. Provider spend, full workflow cost and margin are measured independently. | 8–9, 13, 19 |
 
-The superseded versions' useful decisions are restated in these sections.
-Their provider prices, universal one-call rule, automatic margin claims,
-full-graph orchestration assumption and runtime site personalization are not
-adopted as requirements. Changes to this architecture should update this file
-and name the decision being revised.
-
-| Historical input | Decision preserved here | Decision revised or retired here |
-| --- | --- | --- |
-| v6 | Durable commands, replay, runs, effects and recovery (4, 17). | Keep the runtime bounded; avoid implying that every proposed flow is shipped. |
-| v7 | Decision first routing with code owned authority (5–6). | Model output remains a proposal, never a permission. |
-| v8 | Fast local screens with server accepted business state (2–4, 11). | Device data is a permitted projection and draft store, not independent workspace truth. |
-| v9 | Cost gates, offline conflicts and release proofs (6–9, 19). | Costs require matched outcomes and current prices. |
-| v10 | One core and full commerce domain coverage (1, 10). | Domain work is sequenced by evidence, not assumed implemented. |
-| v11 | Channels, POS, sites, Flows, memory and full concept screens (11–18). | Semantic work can have dependent stages; public site views have no mandatory inference. |
-| Tech stack study | Expo, Worker, D1, Turso, R2 and a cost envelope (2, 9). | Browser and compute vendors remain workflow choices; historical margins are unproven. |
+Provider prices, automatic margin claims, full-graph orchestration and runtime
+site personalization are not requirements. Semantic work may have dependent
+stages. Changes to this architecture should update this file and name the
+decision being revised.
 
 ~~~text
 +-------------------+-----------------------------------------------------------------------+
 | Document status   | Final target architecture; not a shipped-implementation claim        |
 +===================+=======================================================================+
-| Inputs            | v6–v11, tech stack study, Jev research and current source code       |
+| Basis             | Jev research and current source code                                  |
 +-------------------+-----------------------------------------------------------------------+
 | Implementation    | Existing and proposed behavior are identified in sections 4 and 19  |
 +-------------------+-----------------------------------------------------------------------+
@@ -1729,8 +1715,8 @@ semantic failures or network retries.
 +---------------------+-------------------------------------------------------------------+
 ~~~
 
-Earlier detailed vendor prices, network counts and refresh-success statistics are not carried forward as
-verified facts. The adapter boundary and measured fee line are retained. Selecting a vendor does not
+Vendor prices, network counts and refresh-success statistics are not verified facts.
+The adapter boundary and measured fee line are retained. Selecting a vendor does not
 establish that every required channel is supported.
 
 ## 13. Plans and credits = the meter the person sees
@@ -3063,9 +3049,7 @@ remains disabled.
 
 ### Sources = local basis and live primary documentation
 
-This document incorporates the historical v6–v11 architecture sequence and
-the tech stack study. They are provenance, not normative dependencies. The
-[Jev research reference](jev/jev.md) and implementation links in section 19
+The [Jev research reference](jev/jev.md) and implementation links in section 19
 support particular claims; the decisions themselves are stated here. The
 model, API and confidence pages were refreshed 2026-09-23. Other linked
 patterns and cookbooks were reviewed in the preceding draft; recheck their
@@ -3116,10 +3100,9 @@ pattern on that workload, not expected TAR accuracy on 1.13. The original social
 in [sources.md](jev/sources.md); it is not used here as evidence for API contracts, throughput, or measured
 savings.
 
-Historical prices and implementation claims are not automatically current facts.
+Provider prices and implementation claims are not automatically current facts.
 Screen figures are concept examples; provider facts are dated, and performance
-or savings require TAR measurements. Retiring the earlier architecture files
-does not change the authority, workflow or product decisions in this document.
+or savings require TAR measurements.
 
 **TAR = reusable core + domain rules + shared semantic assessments. Jev proposes; code composes; the runtime
 validates and commits; evidence makes the result reviewable.**

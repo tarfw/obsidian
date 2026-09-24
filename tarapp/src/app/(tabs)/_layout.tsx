@@ -1,16 +1,17 @@
 import { NativeTabs } from 'expo-router/unstable-native-tabs';
 
 import { WorkspaceTabsProvider } from '@/components/WorkspaceTabsProvider';
+import { tokens } from '@/components/ds/tokens';
 
 export default function TabsLayout() {
   return <WorkspaceTabsProvider>
     <NativeTabs
-      backgroundColor="#FFFFFF"
-      tintColor="#3559E0"
-      iconColor={{ default: '#737985', selected: '#3559E0' }}
-      labelStyle={{ default: { color: '#737985' }, selected: { color: '#3559E0', fontWeight: '700' } }}
-      indicatorColor="#E8EEFF"
-      rippleColor="#DCE5FF"
+      backgroundColor={tokens.color.surface}
+      tintColor={tokens.color.accentSelected}
+      iconColor={{ default: tokens.color.inkMuted, selected: tokens.color.accentSelected }}
+      labelStyle={{ default: { color: tokens.color.inkMuted }, selected: { color: tokens.color.accentSelected, fontWeight: '700' } }}
+      indicatorColor={tokens.color.accentSurface}
+      rippleColor={tokens.color.accentSurface}
       backBehavior="history">
       <NativeTabs.Trigger name="canvas">
         <NativeTabs.Trigger.Label>Space</NativeTabs.Trigger.Label>
@@ -25,8 +26,8 @@ export default function TabsLayout() {
         <NativeTabs.Trigger.Icon sf={{ default: 'folder', selected: 'folder.fill' }} md="folder" />
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="bots">
-        <NativeTabs.Trigger.Label selectedStyle={{ color: '#13795B', fontWeight: '700' }}>Bots</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon src={require('../../../assets/images/splash-logo.png')} renderingMode="template" selectedColor="#13795B" />
+        <NativeTabs.Trigger.Label selectedStyle={{ color: tokens.color.accentSelected, fontWeight: '700' }}>Bots</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon src={require('../../../assets/images/splash-logo.png')} renderingMode="template" selectedColor={tokens.color.accentSelected} />
       </NativeTabs.Trigger>
     </NativeTabs>
   </WorkspaceTabsProvider>;

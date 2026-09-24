@@ -3,6 +3,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 import { useRouter } from 'expo-router';
 
 import CreateWorkspace from '@/components/CreateWorkspace';
+import { tokens } from '@/components/ds/tokens';
 import { HarnessRequestError, harness, type HarnessWorkspace } from '@/lib/harness';
 
 interface WorkspaceTabsValue {
@@ -66,10 +67,10 @@ export function WorkspaceTabsProvider({ children }: React.PropsWithChildren) {
     createWorkspace: () => setCreating(true),
   }) : null, [current, workspaces]);
 
-  if (loading) return <View style={styles.center}><ActivityIndicator size="large" color="#3559e0" /></View>;
+  if (loading) return <View style={styles.center}><ActivityIndicator size="large" color={tokens.color.accent} /></View>;
   if (error) return <View style={styles.center}><Text style={styles.error}>{error}</Text><Pressable accessibilityRole="button" onPress={() => { void reload(); }} style={styles.retry}><Text style={styles.retryText}>Try again</Text></Pressable></View>;
   if (loaded && workspaces.length === 0) return <CreateWorkspace visible canClose={false} existingSlugs={[]} onClose={() => undefined} onSuccess={async (slug) => { await reload(slug); }} />;
-  if (!value) return <View style={styles.center}><ActivityIndicator size="large" color="#3559e0" /></View>;
+  if (!value) return <View style={styles.center}><ActivityIndicator size="large" color={tokens.color.accent} /></View>;
 
   return <WorkspaceTabsContext.Provider value={value}>
     {children}
@@ -81,5 +82,5 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14, padding: 24, backgroundColor: '#fff' },
   error: { color: '#b42318', fontSize: 15, lineHeight: 22, textAlign: 'center' },
   retry: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 18 },
-  retryText: { color: '#3559e0', fontSize: 15, fontWeight: '700' },
+  retryText: { color: tokens.color.accent, fontSize: 15, fontWeight: '700' },
 });

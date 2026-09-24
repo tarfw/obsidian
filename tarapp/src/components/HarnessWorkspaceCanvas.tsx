@@ -17,7 +17,7 @@ type InboxEntry = { kind: 'task' | 'order'; record: HarnessRecord; source: Inbox
 interface Props { tab: WorkspaceTab; scope: string; workspaceName: string; role: 'owner' | 'admin' | 'member' | 'guest'; workspaces: HarnessWorkspace[]; onSelectWorkspace: (slug: string) => void; onCreateWorkspace: () => void; }
 interface OpenAction { action: HarnessAction; scope: string; input?: Record<string, unknown>; title?: string; }
 
-const colors = { ink: '#171A21', muted: '#737985', faint: '#9AA0AA', line: '#E7E9ED', wash: '#F6F7F9', blue: '#3559E0', green: '#168563', amber: '#A66D00', personal: '#D5654F' };
+const colors = { ink: '#1B1C20', muted: '#626671', faint: '#8B8F99', line: '#D8DBE3', wash: '#F1F3F8', blue: '#3157A8', selected: '#173673', selectedWash: '#DCE5FF', green: '#18865B', amber: '#A66D00', personal: '#D5654F' };
 const titleCase = (value: string) => value.replace(/[_-]+/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
 const orderLines = (order: HarnessRecord) => Array.isArray(order.data.lines) ? order.data.lines as OrderLine[] : [];
 const orderState = (order: HarnessRecord): OrderState => { const states = orderLines(order).map((line) => line.status || 'pending'); if (states.some((state) => state === 'pending')) return 'pending'; if (states.some((state) => state === 'preparing')) return 'preparing'; return 'ready'; };
@@ -669,10 +669,10 @@ const styles = StyleSheet.create({
   error: { backgroundColor: '#FFF1F0', borderRadius: 10, padding: 12, marginBottom: 14 },
   errorText: { color: '#B42318' },
   metricGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 },
-  metric: { flexGrow: 1, flexBasis: '45%', minHeight: 132, borderWidth: 1, borderColor: colors.line, borderRadius: 16, padding: 16, justifyContent: 'space-between', backgroundColor: '#fff' },
-  posMetric: { minHeight: 76, flexBasis: '27%', padding: 10, borderRadius: 10 },
+  metric: { flexGrow: 1, flexBasis: '45%', minHeight: 132, borderWidth: 1, borderColor: colors.line, borderRadius: 8, padding: 16, justifyContent: 'space-between', backgroundColor: '#fff' },
+  posMetric: { minHeight: 76, flexBasis: '27%', padding: 10, borderRadius: 6 },
   metricTitle: { fontSize: 13, fontWeight: '700', color: colors.muted },
-  metricValue: { fontSize: 34, fontWeight: '800', color: colors.ink },
+  metricValue: { fontSize: 28, fontWeight: '700', color: colors.ink },
   posMetricValue: { fontSize: 21 },
   workCard: { minHeight: 56, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: colors.line, flexDirection: 'row', alignItems: 'center', gap: 12 },
   workIcon: { width: 28, height: 36, alignItems: 'center', justifyContent: 'center' },
@@ -680,19 +680,19 @@ const styles = StyleSheet.create({
   recordsWrapper: { marginTop: 4 },
   filterRail: { flexDirection: 'row', gap: 8, paddingBottom: 14 },
   filterChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, backgroundColor: colors.wash, borderWidth: 1, borderColor: colors.line },
-  filterChipActive: { backgroundColor: colors.ink, borderColor: colors.ink },
+  filterChipActive: { backgroundColor: colors.selectedWash, borderColor: colors.selectedWash },
   filterChipText: { fontSize: 12, fontWeight: '700', color: colors.muted },
-  filterChipTextActive: { color: '#fff' },
+  filterChipTextActive: { color: colors.selected },
   recordsHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   recordsHeaderTitle: { fontSize: 12, fontWeight: '800', color: colors.muted, letterSpacing: 0.6, textTransform: 'uppercase' },
   createButton: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.blue, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
   createButtonText: { color: '#fff', fontSize: 12, fontWeight: '700' },
   recordCard: { minHeight: 64, flexDirection: 'row', alignItems: 'center', gap: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: colors.line, paddingVertical: 10 },
-  recordIconBox: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  recordIconBox: { width: 36, height: 36, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
   recordCopy: { flex: 1, minWidth: 0 },
   recordTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   recordTitle: { flex: 1, fontSize: 15, fontWeight: '700', color: colors.ink },
-  recordAmount: { fontSize: 14, fontWeight: '800', color: colors.ink },
+  recordAmount: { fontSize: 14, fontWeight: '700', color: colors.ink },
   recordMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
   recordTypeTag: { fontSize: 11, fontWeight: '700', color: colors.muted },
   recordMetaDot: { fontSize: 11, color: colors.faint },

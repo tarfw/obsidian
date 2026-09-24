@@ -3,6 +3,7 @@ import React from 'react';
 import { Linking, Modal, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { HarnessRecord } from '@/lib/harness';
+import { tokens } from '@/components/ds/tokens';
 
 interface Props {
   visible: boolean;
@@ -13,13 +14,13 @@ interface Props {
 }
 
 const colors = {
-  ink: '#171A21',
-  muted: '#737985',
-  faint: '#9AA0AA',
-  line: '#E7E9ED',
-  wash: '#F6F7F9',
-  blue: '#3559E0',
-  green: '#168563',
+  ink: tokens.color.ink,
+  muted: tokens.color.inkMuted,
+  faint: tokens.color.inkFaint,
+  line: tokens.color.border,
+  wash: tokens.color.surfaceSunk,
+  blue: tokens.color.accent,
+  green: tokens.color.success,
   amber: '#A66D00',
   red: '#D54F4F',
 };
@@ -263,7 +264,7 @@ const styles = StyleSheet.create({
   },
   headerCopy: { flex: 1 },
   typeLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 0.6, color: colors.blue, textTransform: 'uppercase', marginBottom: 2 },
-  title: { fontSize: 20, fontWeight: '800', color: colors.ink },
+  title: { fontSize: 20, fontWeight: '600', color: colors.ink },
   closeButton: { padding: 8 },
   content: { padding: 20, gap: 16 },
   statusRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
@@ -272,11 +273,11 @@ const styles = StyleSheet.create({
   badgeText: { fontSize: 12, fontWeight: '800', letterSpacing: 0.5 },
   versionText: { fontSize: 12, fontWeight: '600', color: colors.muted },
   highlightCard: {
-    backgroundColor: '#F0F5FF',
-    borderRadius: 14,
+    backgroundColor: tokens.color.accentSurface,
+    borderRadius: 8,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#D4E2FF',
+    borderColor: tokens.color.border,
   },
   highlightLabel: { fontSize: 11, fontWeight: '700', color: colors.blue, letterSpacing: 0.6 },
   highlightValue: { fontSize: 28, fontWeight: '800', color: colors.ink, marginTop: 4 },
@@ -284,7 +285,7 @@ const styles = StyleSheet.create({
   sectionCard: {
     borderWidth: 1,
     borderColor: colors.line,
-    borderRadius: 14,
+    borderRadius: 8,
     padding: 16,
     gap: 12,
   },
@@ -312,7 +313,7 @@ const styles = StyleSheet.create({
   kvValue: { flex: 1, fontSize: 13, color: colors.ink, textAlign: 'right' },
   metaCard: {
     backgroundColor: colors.wash,
-    borderRadius: 12,
+    borderRadius: 8,
     padding: 14,
     gap: 8,
   },
@@ -333,7 +334,7 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 48,
     backgroundColor: colors.blue,
-    borderRadius: 12,
+    borderRadius: 8,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -343,7 +344,7 @@ const styles = StyleSheet.create({
   secondaryAction: {
     height: 48,
     backgroundColor: colors.wash,
-    borderRadius: 12,
+    borderRadius: 8,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',

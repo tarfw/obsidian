@@ -28,14 +28,14 @@ const event: ChannelEvent = { provider: 'slack', tenantId: 'T1', channelId: 'C1'
 beforeAll(async () => {
   runtime = new Miniflare(convertV4MiniflareOptions({ name: 'team-test', modules: true, script: 'export default { fetch() { return new Response("ok"); } }', d1Databases: ['CONTROL'], compatibilityDate: '2026-09-05' }));
   db = await runtime.getD1Database('CONTROL');
-  for (const file of ['0001_control.sql','0002_workspace_invites.sql','0003_team_chat.sql']) {
+  for (const file of ['0001_control.sql','0002_workspace_invites.sql','0003_team_chat.sql','0004_dispatches.sql']) {
     const sql = readFileSync(new URL('../migrations/' + file, import.meta.url), 'utf8');
     for (const statement of sql.split(';').filter((item) => item.trim())) await db.prepare(statement).run();
   }
 }, 30_000);
 afterAll(async () => { await runtime?.dispose(); });
 beforeEach(async () => {
-  for (const table of ['channel_commands','control_events','channel_link_requests','channel_identities','team_channels','workspace_invites','members','workspaces','users']) await db.prepare(`DELETE FROM ${table}`).run();
+  for (const table of ['dispatches','channel_commands','control_events','channel_link_requests','channel_identities','team_channels','workspace_invites','members','workspaces','users']) await db.prepare(`DELETE FROM ${table}`).run();
   for (const identity of [owner.identity, cook.identity]) await db.prepare('INSERT INTO users(id,email,name,created_at,updated_at) VALUES(?,?,?,0,0)').bind(identity.id, identity.email, identity.name).run();
   await db.prepare("INSERT INTO workspaces(id,owner_id,name,slug,mode,database_name,database_host,state,created_at,updated_at) VALUES('ws','owner','Restaurant','restaurant','work','db','db','active',0,0)").run();
   for (const member of [owner.member, cook.member]) await db.prepare("INSERT INTO members(workspace_id,user_id,role,work_role,state,created_at,updated_at) VALUES('ws',?,?,?,'active',0,0)").bind(member.userId, member.role, member.workRole!).run();
@@ -53,6 +53,12 @@ describe('one member authority', () => {
     const identity = { id: 'new', email: 'new@example.com', name: 'New' };
     await Effect.runPromise(store.upsertUser(identity));
     expect((await Effect.runPromise(store.access(identity, 'restaurant'))).member.workRole).toBe('cashier');
+  });
+  it('resolves current authority for a resumed Flow Book and rejects revocation', async () => {
+    const store = new ControlStore(db);
+    expect((await Effect.runPromise(store.accessFor('ws', 'cook'))).member.workRole).toBe('cook');
+    await db.prepare("UPDATE members SET state='revoked' WHERE workspace_id='ws' AND user_id='cook'").run();
+    await expect(Effect.runPromise(store.accessFor('ws', 'cook'))).rejects.toThrow();
   });
   it('protects the owner and rejects member self-promotion', async () => {
     await expect(updateMember(db, cook, 'cook', { role: 'admin' })).rejects.toThrow();

@@ -9,7 +9,7 @@ export default function Index() {
   useEffect(() => {
     let active = true;
     void getValidIdToken()
-      .then((token) => { if (active) setTarget(token ? '/(tabs)/canvas' : '/auth'); })
+      .then((token) => { if (active) setTarget(token ? '/(tabs)/space' : '/auth'); })
       .catch(() => { if (active) setTarget('/auth'); });
     return () => { active = false; };
   }, []);

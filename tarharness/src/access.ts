@@ -16,6 +16,7 @@ export function canExecute(member: Member, actionId: string): boolean {
 
 export function canReadRecord(member: Member, record: Pick<RecordItem, 'type' | 'data' | 'assignee'>): boolean {
   if (member.state !== 'active') return false;
+  if (member.role === 'guest' && ['person', 'organization', 'contact', 'customer', 'account'].includes(record.type)) return false;
   if (record.type === 'task') {
     if (managesMembers(member)) return true;
     if (record.assignee && record.assignee !== member.userId) return false;
@@ -25,7 +26,7 @@ export function canReadRecord(member: Member, record: Pick<RecordItem, 'type' | 
   }
   if (isCook(member)) return false; // Kitchen orders use an explicit projection, without customer/payment data.
   if (member.role === 'guest' && record.type.startsWith('pos.')) return false;
-  if (member.role === 'member' && member.workRole === 'cashier') return ['contact', 'pos.order', 'pos.customer', 'pos.product'].includes(record.type);
+  if (member.role === 'member' && member.workRole === 'cashier') return ['contact', 'person', 'pos.order', 'pos.customer', 'pos.product'].includes(record.type);
   return true;
 }
 

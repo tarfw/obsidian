@@ -6,7 +6,6 @@ import { StatusBar } from 'expo-status-bar';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { signInWithGoogle, getCurrentUser, getValidIdToken, trySilentSignIn } from '@/lib/auth';
-import { setUserId } from '@/lib/tar';
 import { TarLogo } from '@/components/TarLogo';
 import { TarLogoLoader } from '@/components/TarLogoLoader';
 
@@ -41,8 +40,7 @@ export default function AuthScreen() {
         if (user) {
           const token = await getValidIdToken();
           if (token) {
-            setUserId(user.id);
-            router.replace('/(tabs)/canvas');
+            router.replace('/(tabs)/space');
           } else {
             console.log(`[AUTH] ${ms()} — saved Google session needs sign-in`);
           }
@@ -53,8 +51,7 @@ export default function AuthScreen() {
         const silent = await trySilentSignIn();
         console.log(`[AUTH] ${Date.now() - t2}ms — trySilentSignIn: ${silent ? silent.email : 'null'}`);
         if (silent) {
-          setUserId(silent.id);
-          router.replace('/(tabs)/canvas');
+          router.replace('/(tabs)/space');
         } else {
           console.log(`[AUTH] ${ms()} — no silent sign-in, staying on auth screen`);
         }
@@ -68,9 +65,8 @@ export default function AuthScreen() {
     if (loading) return;
     setLoading(true);
     try {
-      const user = await signInWithGoogle();
-      setUserId(user.id);
-      router.replace('/(tabs)/canvas');
+      await signInWithGoogle();
+      router.replace('/(tabs)/space');
     } catch (e: any) {
       console.warn('[Auth] Google sign-in failed:', e.message);
       Alert.alert('Google Sign-In Error', e.message || 'Failed to sign in with Google');

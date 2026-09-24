@@ -1,4 +1,4 @@
-# TAR v12 = Architecture handbook
+# TAR v12: Architecture handbook
 
 > 🧠 Brain understands and coordinates. 🙌 Hands act through the Gateway. 🗃️ Files preserve truth, context and work.
 >
@@ -7,10 +7,10 @@
 | Document | Meaning |
 | --- | --- |
 | Status | Chosen target architecture, reviewed 2026-09-24. It is not a claim that every part is built. |
-| Scope | App, Brain, Hands, Files, goals, tasks, Action Gateway, Jev, Flow Books, vertical domains, sites, POS, channels, memory, economics, delivery. |
+| Scope | App, Worker, Contacts and Relationships, Brain, Hands, Files, goals, tasks, Action Gateway, Jev, Flow Books, business domains, channels, memory, economics and delivery. |
 | Authority | This is TAR's sole consolidated architecture target. Older architecture files and techstack.md are historical inputs. |
 | Proof | Code and tests establish implementation; measured outcomes establish accuracy, capacity and economics. |
-| Naming | New internal tables, columns and identifiers use one semantic lowercase word. Qualify through structure, such as tasks.owner. Keep existing external spellings behind adapters until migrated. |
+| Naming | Target Turso tables and columns use one semantic lowercase word. Qualify through structure, such as `records.owner`. Migrate deployed spellings deliberately; preserve external spellings behind adapters. |
 
 ## Start here: TAR in five minutes
 
@@ -26,13 +26,14 @@ Imagine a customer asks for a quote:
 | Term | Plain meaning | Quote example |
 | --- | --- | --- |
 | Shared core | Common identity, records, action catalog, Gateway, tasks and recovery. | Checks who may read, approve and send. |
-| Domain package | Business facts, exact rules, actions and screens for an area of work. | Sales defines quotes and quote math; CRM defines customers. |
+| Contacts and Relationships | Shared people, organizations and their time-bound roles; a contact is not automatically a lead. | Malar may be a buyer at one organization and a supplier contact at another. |
+| Domain package | Exact records, rules, actions and views for a kind of work. | Sales defines quotes; Purchasing defines purchase orders. |
 | TAR assistant | One conversational way to find evidence and request eligible work. | “Prepare a quote for Malar.” |
 | Goal and task | An outcome to pursue and a bounded work item toward it. | Win the sale; get this quote reviewed. |
 | Flow Book | A reusable, versioned process made from registered actions. | Follow up after an approved quote. |
 | Run | One saved execution of a task or Flow Book. | This quote's follow-up, including its waits and receipts. |
 
-**The simple rule:** a known action runs directly. A repeatable process uses a Flow Book. An unfamiliar request may need a bounded plan. All accepted changes and external effects still go through the Gateway. TAR first uses domain code, then a provider API, then a temporary browser if the needed operation is website-only, and finally a temporary computer sandbox if real OS software is required. Browser and computer execution are planned capabilities, not current defaults.
+**The simple rule:** a contact identifies who is involved; a relationship says how they are connected; a business record holds what happened; a Flow Book describes how repeatable work proceeds. A known one-step action runs directly. An unfamiliar multi-step request may need a bounded plan. Every accepted change and external effect still goes through the Gateway. TAR first uses domain code, then a provider API, then a temporary browser for a website-only operation, and finally a temporary computer sandbox when real OS software is required. Browser and computer execution are planned capabilities, not current defaults.
 
 **What exists now:** the Worker, workspace storage, an action catalog, a Gateway path, POS and site features, and basic Flow definitions. **What needs to be built or proven:** full durable step execution and recovery, ongoing goal/task supervision, Jev integration, more commerce domains, and governed browser/computer adapters. See section 0.2 for the precise status.
 
@@ -43,32 +44,12 @@ Imagine a customer asks for a quote:
 | The product and one business journey | This guide, then sections 1 and 7. |
 | How work runs and recovers | Sections 3 and 8. |
 | What to build next | Sections 0.2 and 15.2. |
-| The app experience | Sections 10.2 and 10.3; use the screen atlas in 10.1 only when designing a specific screen. |
-| Data, security, models or cost | Go directly to the relevant detailed section using the table below. |
+| The app experience | Sections 10.2 and 10.3; open [the mobile concepts](tar-mobile-concepts.pen) for screens. |
+| Data, security, models or cost | Go directly to sections 2, 3, 4, 6 or 14. |
 
-| Read for | Sections |
-| --- | --- |
-| System and implementation status | 0 to 2 |
-| 🙌 Hands: catalog, execution, connections and compute | 3; channels in 9 |
-| 🧠 Brain: judgments, goals, tasks and Flow Books | 4 to 8 |
-| 🗃️ Files: records, memory, skills, repositories and artifacts | 2 and 14 |
-| Screens and commerce domain paths | 10 to 13 |
-| Proof, build order and risks | 15 to 16 |
+## 0. Architecture at a glance
 
-| Visual key | Meaning |
-| --- | --- |
-| 🧠 | Models and the shared harness: interpret, plan, schedule and resume. |
-| 🙌 | Authorized tools: business actions, provider APIs, browser and computer. |
-| 🗃️ | Durable information: records, memories, skills, repositories and artifacts. |
-| 🧭 | Discover a domain, record or recipe. |
-| ⚡ | Execute one eligible catalog action. |
-| 📚 | Configure or run a durable Flow Book. |
-| 🧾 | Inspect source evidence and effect receipts. |
-| 🔒 | Review an exact permission or approval boundary. |
-
-## 0 = Read this first
-
-### 0.1 = The system in one diagram
+### 0.1 The system in one diagram
 
 **Brain / Hands / Files is TAR's reading map and ownership model.** These are logical boundaries in the existing platform; they do not require three services or three agents. Files includes databases and object storage. Identity, authority, recovery and measurement apply across all three. The goal is minimum necessary complexity, with measured cost and completion quality.
 
@@ -82,7 +63,7 @@ Imagine a customer asks for a quote:
 +--------------------------------------------------------------+
 | TAR APP = Expo / React Native                                |
 |--------------------------------------------------------------|
-| Space | Inbox | Flows | POS | Site Studio | forms | Ask      |
+| Space | Inbox | Ask TAR | POS | Site Studio | forms                 |
 | SQLite = permitted projections + drafts + offline queue      |
 +--------------------------------------------------------------+
                                |
@@ -102,36 +83,53 @@ Imagine a customer asks for a quote:
 | FILES: Turso truth + context | D1 control | R2 assets        |
 +--------------------------------------------------------------+
 
-CATALOG   = one versioned registry of TAR-callable capabilities.
-ASSISTANT = one TAR interface to eligible actions and evidence.
-GOAL      = an owned outcome with constraints and completion evidence.
-TASK      = one work item; may use actions or pinned Flow Book runs.
-HARNESS   = code for context, routing, task supervision and recovery.
-FLOW BOOK = versioned trigger, steps, bindings, waits and grants.
-RUNNER    = one execution contract for task episodes and Flow runs.
-JEV       = typed judgments; CODE owns rules, authority and effects.
-LLM       = optional draft of prose, code, a task plan or Flow Book.
 ~~~
 
 The user can ask, correct, pause and return later through the same assistant. Closing the app leaves accepted work durable. An idle goal needs stored state and a future event or due time; it does not need a live model loop or a permanent computer. Brain and background memory jobs access Files directly. Hands receive only the data and temporary execution resources needed for the current task.
 
-### 0.2 = What exists, what is planned
+**Target app core.** These are shared product surfaces, not separate agents or installations. Section 0.2 distinguishes the present app from the target.
+
+| App surface | Always-available job | Opens when needed |
+| --- | --- | --- |
+| Space | Home for outcomes, records, Contacts and Flow Books. | Domain views such as POS, Sales or Site Studio when relevant. |
+| Contacts | Find people and organizations; inspect relationships, current work and history; start an eligible action or Flow Book. | A relationship, opportunity, purchase, booking or member detail. |
+| Inbox | Approvals, waits, exceptions, suggestions and conversations that need attention. | The same canonical task, proposal and receipt shown elsewhere. |
+| Ask TAR | One main conversation plus named work conversations. | A bounded task, direct action or Flow Book request. |
+| Search and Settings | Find permitted records; manage workspace, connections, budgets and access. | Contextual forms and domain configuration. |
+
+Keep `Space | Inbox | Ask TAR` as mobile bottom navigation. Flow Books are opened from Space; they do not require a separate bottom tab. Contacts is prominent inside Space and available from search, the composer and relevant records. A walk-in sale or anonymous enquiry can begin without creating a contact.
+
+**Target Worker core.** Each app entry point uses these same contracts; section 0.2 records what exists today.
+
+| Worker capability | Shared responsibility |
+| --- | --- |
+| Identity and access | Authenticate members, resolve workspace and enforce current record and action scope. A business contact is not an authenticated member. |
+| Contacts and records | Persist sourced people, organizations, relationships and domain records; validate versions, consent and exact business rules. |
+| Action Registry and Gateway | Expose eligible typed actions; validate grants, approvals, replay keys and every accepted effect. |
+| One harness and runner | Route exact commands or bounded judgments, supervise tasks, execute pinned Flow Books, wait and resume. |
+| Model adapters | Use Jev for typed selection among permitted candidates and an LLM only for needed prose or novel plan drafts; code validates both. |
+| Connections and effects | Keep credentials server-side; use domain/provider adapters first; persist outbox intent, receipts and reconciliation. |
+| Durable Files | Use Turso workspace truth, D1 identity/control and R2 artifacts; search and memory read only permitted evidence. |
+| Notifications and budgets | Dispatch due/event work, apply spending limits and report meaningful changes without keeping a computer running. |
+
+### 0.2 What exists, what is planned
 
 | Area | Built or present in repository | Target or unproven |
 | --- | --- | --- |
 | Worker | Cloudflare Worker; D1 identity and membership; Turso workspace schema; R2 patterns; gateway action path. | Full cross-domain coverage, durable effect reconciliation and load proof. |
-| Actions | 29 registered action IDs across the [shared catalog](tarharness/src/registry/catalog.ts) and [POS catalog](tarharness/src/pos/catalog.ts). | Versioned schemas and contracts for reads, external tools, human waits and AI steps. |
-| Gateway | Registered action lookup, eligibility and typed-command replay in [gateway actions](tarharness/src/gateway/actions.ts). | Actor-scoped replay before paid interpretation; unified effect and trace contracts. |
-| Flows | flow.publish stores an ordered action list; flow.start creates a Run at its first action. | Durable runner that advances the whole list, waits, resumes and reconciles effects; branching later. |
+| Actions | Shared catalog across the [Worker](tarharness/src/registry/catalog.ts) and POS packages; new person, organization, relationship and Flow Book actions use the Gateway. | Versioned schemas and contracts for reads, external tools, human waits and AI steps. |
+| Gateway | Registered action lookup, eligibility and typed-command replay in [gateway actions](tarharness/src/gateway/actions.ts). Jev and web-search calls now claim a turn before paid work, so a concurrent request with the same key waits for the saved result. The legacy direct definition-publish route was removed. | Generalized claim/replay across every command and channel; unified effect and trace contracts. |
+| Flows | Standalone `book.*` definitions no longer need a Bot. Each publication preserves an immutable edition. `flow.start` snapshots ordered actions; `flow.advance` saves manual progress. A local Cloudflare Workflow adapter and D1 dispatch intent now run reviewed internal steps with pinned literal input and current member checks. The app has a Flow Books tab with start, resume and running/blocked states. | Prove Workflow crash/replay/revocation and live dispatch; typed inputs and output mapping; durable human waits, approval and effect reconciliation; broader action support; branching later. |
 | Ongoing agent | Record/task primitives and the assistant concept. | Goal/task contracts, bounded supervision, proactivity, task continuity and Workflows execution; these are new target additions. |
 | Files and tools | Turso records/events, repository assets and R2 patterns. | Scoped memory maintenance, reviewed skills, artifact lifecycle, connection grants and isolated browser/computer execution. |
-| Legacy Bots | Bot/directory installation and `bot`/`kit` definitions exist. | Retire Bot as target runtime and product prerequisite; migrate installed recipes to Flow Books without deleting history. |
+| Legacy Bots | Bot installation, directory routes and Bot UI are removed. New definitions permit only `flow` and `record_type`; an existing-workspace patch converts safe published recipes into manual Flow Books and archives remaining Bot/kit recipes while retaining history. | Review converted books with owners, validate grants, migrate useful recipes into maintained starter books and remove archived legacy rows only under a separately approved retention policy. |
 | App | Expo app, POS and site paths, [app AI helpers](tarapp/src/lib/ai.ts). | Fully proven offline sync, shared concept screens and expanded domains. |
-| Jev | No TypeSafe/Jev integration found in inspected tarharness/src. | Server adapter, reviewed question assets, assessments, reuse, evaluation and route gates. |
-| Domains | POS and site paths plus template examples. | Complete Sales, CRM, Services, Support, Purchasing, Finance and messaging action packages. |
+| Jev | A Worker HTTP adapter asks Jev to suggest one first step from six registered actions. The user reviews and accepts or discards it; Jev cannot run or publish the action. | Calibrated route thresholds, reusable assessments, labeled evaluation and measured latency/cost gates. |
+| Contacts | `contact.create` and `organization.create` create separate identities. The workspace `links` table stores dated person-to-organization roles; record details show the timeline and can end an active role. Server-side contact search and pagination feed the Records contact view, and a contact can start a published Flow Book with that record linked. Explicit channel/purpose consent decisions with a source now have append-only history; no contact field implies consent. Existing databases receive schema patches on open. | Indexed verified-channel lookup, consent enforcement on future customer-message actions, duplicate review, and broader contact-started direct actions. |
+| Domains | POS and site paths plus template examples. | Complete Sales, Services, Support, Purchasing, Finance and messaging action packages. |
 | Economics | Planning scenarios in this handbook. | Measured provider spend, capacity, conversion, corrections and full margin. |
 
-### 0.3 = Rules that govern every chapter
+### 0.3 Rules that govern every chapter
 
 | Rule | Operational meaning |
 | --- | --- |
@@ -146,21 +144,22 @@ The user can ask, correct, pause and return later through the same assistant. Cl
 | Initiative = configured scope | A goal or watch has an owner, sources, limits and stop condition. Suggestions never create their own execution authority. |
 | Capability = contract | A skill, model, browser or generated script cannot add a callable action or bypass the Gateway. |
 
-## 1 = Product and domain model
+## 1. Product and domain model
 
 ~~~text
 DISCOVER -> RELATE -> SELL -> COMMIT -> DELIVER -> SUPPORT -> RETAIN
-   Sites      CRM     Sales   Commerce  Products   Support   Campaigns
-   Content  Contacts  Quotes  Payments  Services   Returns   Renewals
+   Sites    Contacts   Sales   Commerce  Products   Support   Campaigns
+   Content  People +   Quotes  Payments  Services   Returns   Renewals
+            relations
                                |
                    Team + Stock + Purchasing + Finance + Reporting
 ~~~
 
-| Package | Records and work | Shared core it uses |
+| Capability | Records and work | Shared core it uses |
 | --- | --- | --- |
 | Sites | Pages, content, forms, enquiries, checkout, releases. | Gateway, catalog, assessments, outbox. |
-| CRM | People, companies, relationships, consent, timeline. | Identity, evidence, memory, search. |
-| Sales | Leads, opportunities, quotes, follow-up, conversion. | Catalog, assessments, Flows, channels. |
+| Contacts and Relationships, shared | People, organizations, time-bound roles, channels, consent and source-linked activity. | Workspace records, access, search, evidence and Gateway. |
+| Sales, when relevant | Opportunities, quotes, follow-up and conversion. A pipeline is an optional view of opportunity states. | Catalog, assessments, Flow Books and channels. |
 | Products | Catalog, variants, stock, purchasing, reservations. | Domain rules, live commit checks. |
 | Services | Offerings, resources, availability, bookings, completion. | Calendar code, gateway, Flows. |
 | Commerce | Orders, invoices, payments, fulfilment, subscriptions, refunds. | Transactional records and effect receipts. |
@@ -168,11 +167,25 @@ DISCOVER -> RELATE -> SELL -> COMMIT -> DELIVER -> SUPPORT -> RETAIN
 | Operations | Suppliers, purchases, receiving, shipping, team, approvals. | Tasks, waits, outbox. |
 | Finance | Postings, balances, reconciliation, reporting, exports. | Exact arithmetic and trace. |
 
-**Domain package = records + business rules + catalog actions + candidate retrieval + Jev rubrics + recipes + views + tests.** A domain does not get a second gateway, model router, authority source or agent runtime.
+**Contact-first record model.** Contact is the app's name for a `person` or `organization`, not a third identity table. These identities are stable within a workspace. A `relationship` links two permitted subjects, such as person to organization, organization to workspace, or person to workspace, with role, start/end, status and source. A job change closes the old relationship and creates a new one; historical quotes and purchases keep their original organization. A contact never has one global lead stage. Identity matching proposes candidates; uncertain merges require review and preserve source history. Do not infer consent from an address, relationship or Flow Book. Record it for the actual channel, purpose and workspace with evidence.
+
+Use `records.type` values `person`, `organization` and `relationship` with validated payloads before adding physical tables. Relationship fields such as `subject`, `target`, `role`, `started`, `ended`, `state` and `source` each use one lowercase semantic word. Authenticated members remain D1 identities; onboarding may begin from a person contact, but only a verified invitation and authorized role assignment create membership. Walk-in work can remain unlinked to a person. Contacts never merge across workspaces merely because names or phone numbers match.
+
+**Domain package = business records + exact rules + catalog actions + candidate retrieval + Jev rubrics + starter Flow Books + views + tests.** A domain does not get a second gateway, model router, authority source or agent runtime. Contacts and Relationships are shared capabilities; Sales, Purchasing, Services and other packages add the specific business truth. Flow Books coordinate their actions but cannot replace quotes, orders, memberships, consent or receipts.
+
+| Question | TAR answer |
+| --- | --- |
+| Who is involved? | A person or organization contact. |
+| How are they connected? | A sourced, time-bound relationship. |
+| What business work exists? | A domain record such as opportunity, purchase, booking or ticket. |
+| How should work proceed? | A direct action for one step or a reusable Flow Book for a process. |
+| Where is a sales pipeline? | An optional Sales view of opportunity records; book runs may advance verified stages through registered actions. |
+
+A workspace can publish a Sales pipeline recipe as a Flow Book when its stages form one bounded process. Longer journeys use small books linked by verified opportunity, quote and order events. The optional pipeline screen groups those records by current stage; it does not become the source of truth or a requirement for other businesses.
 
 | Workflow | Bounded judgment | Code and evidence | Outcome to measure |
 | --- | --- | --- | --- |
-| CRM capture and duplicates | Select source roles; relate plausible pairs. | Exact identifiers, source versions and review before merge. | Field precision and false merges. |
+| Contact capture and duplicates | Select source roles; relate plausible pairs. | Exact identifiers, source versions and review before merge. | Field precision and false merges. |
 | Sales and quotes | Score need/timing/fit; select offering. | Consent, pricing, stock and quote arithmetic. | Accepted leads, quote correction and conversion. |
 | Catalog and POS | Select product/modifier; rank allowed substitutes. | Compatibility, quantities, tax and current stock. | Whole-cart correctness and counter time. |
 | Services and operations | Match job/resource; interpret supplier terms. | Calendar, capacity, purchasing and receiving rules. | Booking correction and shortage resolution. |
@@ -183,7 +196,7 @@ DISCOVER -> RELATE -> SELL -> COMMIT -> DELIVER -> SUPPORT -> RETAIN
 
 Investigation = code detects a measured signal -> domain rules test reviewed causes against data -> Jev may judge cause/action fit among eligible candidates -> code labels scenarios and commits only an authorized action. Start with ordinary records and relationships; add graph or predictive infrastructure only after measured need.
 
-## 2 = Platform, data and offline boundary
+## 2. Platform, data and offline boundary
 
 | Layer | Choice | Boundary |
 | --- | --- | --- |
@@ -197,41 +210,15 @@ Investigation = code detects a measured signal -> domain rules test reviewed cau
 
 **Runtime decision:** retain the Cloudflare stack. Use Workflows for durable task episodes and Flow runs, and a scheduled Worker to dispatch due occurrences and repair missed dispatch. Direct reads and single transactions stay ordinary Worker requests. Add a queue only when measured throughput/backpressure requires it; do not introduce a second orchestration framework. Workflows can persist steps and wait for external events, but retries still require TAR's own effect identities and reconciliation. [Workflows](https://developers.cloudflare.com/workflows/), [retry rules](https://developers.cloudflare.com/workflows/build/rules-of-workflows/).
 
-### 2.1 = Turso schema: physical state today
+### 2.1 Turso schema: physical state today
 
-Source of truth for deployed workspace DDL = `tarharness/src/db/schema.ts`. Each workspace has its own Turso database. D1 holds `users`, `workspaces` and `members`; those are control-plane tables, not Turso workspace tables. The arrows below are application references, not declared SQL foreign keys.
+The deployed workspace database has general tables including `definitions` for versioned definitions, `records` for business objects, `runs` for Flow execution state and `events` for accepted commands and receipts. D1 holds identity and membership; R2 holds referenced objects. POS data currently uses typed `records` and POS indexes, not a separate table per record kind. The authoritative deployed columns and indexes live in [`tarharness/src/db/schema.ts`](tarharness/src/db/schema.ts) and [`tarharness/src/pos/store.ts`](tarharness/src/pos/store.ts). Existing Bot and kit rows are archived on workspace open and retained for audit.
 
-~~~text
- D1 control plane                          Turso: one database / workspace
- +----------------------+                  +-------------------------------+
- | users | workspaces   | -- DB locator -->| definitions                   |
- | members              |                  | records                       |
- +----------------------+                  | runs -> definitions, records  |
-                                           | events -> runs, records       |
-                                           +-------------------------------+
-                                                        |
-                                                        v
-                                           R2 object references and hashes
-~~~
+The deployed schema is not silently renamed by this handbook. The one-word vocabulary below is the **target for new internal DDL and deliberate migrations**. Preserve existing data, replay identities and external API spellings through adapters until a versioned migration is complete.
 
-| Current table | Exact columns (SQL spelling) | Key and enforced rule | Role |
-| --- | --- | --- | --- |
-| `definitions` | `id TEXT`, `kind TEXT`, `name TEXT`, `version INTEGER`, `state TEXT`, `data TEXT`, `created_at INTEGER`, `updated_at INTEGER` | `id` primary; current `kind` in `flow`, `record_type`, `bot`, `kit`; `data` valid JSON; required fields `NOT NULL`. | Current Flow, record type and legacy Bot/kit definitions. Target Flow Books use the `flow` kind with a migrated, validated contract. |
-| `records` | `id TEXT`, `type TEXT`, `title TEXT`, `state TEXT`, `data TEXT`, `owner TEXT`, `assignee TEXT`, `due INTEGER`, `version INTEGER`, `created INTEGER`, `updated INTEGER`, `archived INTEGER` | `id` primary; `data` valid JSON; identity/type/title/state/version/timestamps required. | Shared business records and typed domain data. |
-| `runs` | `id TEXT`, `flow_id TEXT`, `flow_version INTEGER`, `occurrence TEXT`, `record_id TEXT`, `state TEXT`, `action_id TEXT`, `context TEXT`, `version INTEGER`, `started_at INTEGER`, `finished_at INTEGER`, `created_at INTEGER`, `updated_at INTEGER` | `id` primary; unique (`flow_id`, `occurrence`); `context` valid JSON; required flow, occurrence, state, version and timestamps. | Existing Flow run state and replay identity. |
-| `events` | `id TEXT`, `kind TEXT`, `run_id TEXT`, `record_id TEXT`, `action_id TEXT`, `state TEXT`, `actor_id TEXT`, `input_hash TEXT`, `idempotency_key TEXT`, `data TEXT`, `created_at INTEGER`, `updated_at INTEGER` | `id` primary; unique `idempotency_key`; `data` valid JSON; kind/state/hash/key/timestamps required. | Command result, replay and action event evidence. |
+### 2.2 Turso target: minimum durable additions
 
-| Current index group | Indexes and purpose |
-| --- | --- |
-| Core, provisioned with workspace | `records_by_type` on live record type/state/update; `tasks_by_assignee` on live task assignee/state/update; `events_by_run` on run/time. |
-| POS, installed by POS activation | `pos_payment_day`, `pos_order_day`, `pos_payment_register`, `pos_customer_orders` accelerate JSON-backed day/register/customer lookups. |
-| POS, unique | `pos_unique_reference` (payment reference), `pos_unique_barcode`, `pos_unique_sku` (live product), `pos_one_open_register`, `pos_unique_draft_key` (owner + draft key). These are partial indexes with the predicates in `tarharness/src/pos/store.ts`. |
-
-`pos.settings`, `pos.product`, `pos.movement`, `pos.customer`, `pos.register`, `pos.order` and `pos.payment` are values of `records.type`, not separate physical tables. Current refunds write a negative `pos.payment` and update the `pos.order`; the schema has no `refunds` table. Existing spellings with underscores are retained at the adapter/database boundary. The one-word naming rule applies to new internal identifiers and deliberate migrations, not silent renaming of deployed columns or action IDs.
-
-### 2.2 = Turso target: minimum durable additions
-
-Do not create one table per Flow, tool or commerce domain. Reuse `definitions`, `records`, `runs` and `events` where their semantics and indexes fit. Add a physical table only when an independent lifecycle, transaction boundary or query/uniqueness requirement needs it. The following are proposed entities, not existing migrations or final DDL. Legacy `bot` and `kit` rows remain readable for migration/audit; no new target runtime depends on them.
+Do not create one table per Flow, tool or commerce domain. Reuse `definitions`, `records`, `runs` and `events` where their semantics and indexes fit. Add a physical table only when an independent lifecycle, transaction boundary or query/uniqueness requirement needs it. The following are proposed entities, not existing migrations or final DDL. Historical `bot` and `kit` rows are archived for audit; no target runtime depends on them.
 
 | Proposed table | Durable responsibility | Minimum invariant / boundary |
 | --- | --- | --- |
@@ -244,6 +231,7 @@ Do not create one table per Flow, tool or commerce domain. Reuse `definitions`, 
 
 | Proposed contract on existing storage | Minimum change before use |
 | --- | --- |
+| `records.type` values `person`, `organization`, `relationship` | Define verified contact channels, workspace access, source-linked relationship endpoints and role history. Validate relationship changes and preserve the old link when a role ends. Review uncertain matches; keep member authentication in D1. |
 | `records.type` values `goal`, `task`, `watch`, `conversation`, `artifact`, `connection` | Reuse records for independent user-visible objects. Define each payload, access policy, lifecycle and required index; retain the existing task interface through an adapter. No new table per kind by default. |
 | Common `runs` contract | Add a discriminator `kind` with `flow` or `task`, and a `task` reference where applicable. Existing rows migrate to `flow`; existing flow reference columns remain required for flow runs and may be absent only for task episodes. Preserve existing replay uniqueness and add uniqueness for task + occurrence; do not rely on nullable flow keys to deduplicate task runs. |
 | Tasks and watches | Store goal/source links, due time, budget/grant references, status and revision in validated record data; index due active work. A leased claim and advancing epoch fence competing workers and obsolete task revisions. |
@@ -251,15 +239,27 @@ Do not create one table per Flow, tool or commerce domain. Reuse `definitions`, 
 
 These are proposed contracts, not permission to send new payloads through existing endpoints without schema and policy changes. A conversation links messages, tasks and receipts; a task may serve a goal; several Flow runs may serve a task. They all use the same catalog and authority boundary. Private records stay inside their owning workspace and access scope; shared identity does not permit retrieval across workspaces.
 
-~~~text
-CURRENT                           PROPOSED, MIGRATE ONLY WHEN NEEDED
-definitions ----> runs            runs ----> steps ----> effects
-records --------> events          proposals ---> approvals
-events = replay/command log       assessments -> attempts
-repo fixtures -> offline evaluator -> reports (outside live path)
-~~~
+Before Contacts rollout, define indexed lookup for normalized, verified channels and source IDs, plus time-ordered relationship history. Names and unverified phone/email values are search hints, not unique identity keys. A merge preserves aliases, source links, consent evidence and historical business references; the preview names every record it will affect.
 
-Start with versioned fixtures in the repository and run output in the evaluation harness; add a Turso table only if workspace-visible evaluation history needs online queries. Use one-word lowercase names for any new physical tables and columns. Keep existing external JSON and action spellings behind adapters. Before implementation, specify keys, foreign references, deletion/retention, workspace isolation, indexes, migration order and recovery tests; add versioned migrations rather than treating `CREATE TABLE IF NOT EXISTS` as a schema upgrade plan. Money, stock and provider receipts continue to require exact transaction rules regardless of where domain payloads live.
+**Target Turso names.** Every listed table and column is one lowercase semantic word, with no spaces, underscores, hyphens or joined words. Qualification comes from the table, such as `runs.definition` or `events.replay`. This is a vocabulary and relationship plan, not deployed DDL.
+
+| Table | Target columns |
+| --- | --- |
+| `definitions` | `id`, `kind`, `name`, `version`, `state`, `data`, `created`, `updated` |
+| `records` | `id`, `type`, `title`, `state`, `data`, `owner`, `assignee`, `due`, `version`, `created`, `updated`, `archived` |
+| `runs` | `id`, `kind`, `definition`, `edition`, `occurrence`, `task`, `record`, `state`, `action`, `context`, `version`, `started`, `finished`, `created`, `updated` |
+| `events` | `id`, `kind`, `run`, `record`, `action`, `state`, `actor`, `digest`, `replay`, `data`, `created`, `updated` |
+| `proposals` | `id`, `task`, `action`, `actor`, `input`, `evidence`, `state`, `version`, `expires`, `created`, `updated` |
+| `assessments` | `id`, `task`, `model`, `question`, `evidence`, `answers`, `scope`, `expires`, `created`, `updated` |
+| `attempts` | `id`, `task`, `provider`, `request`, `state`, `usage`, `cost`, `started`, `finished` |
+| `steps` | `id`, `run`, `action`, `occurrence`, `state`, `input`, `output`, `version`, `created`, `updated` |
+| `effects` | `id`, `step`, `provider`, `replay`, `state`, `receipt`, `created`, `updated` |
+| `approvals` | `id`, `proposal`, `actor`, `decision`, `expires`, `created` |
+| `messages`, if needed | `id`, `conversation`, `task`, `speaker`, `body`, `sequence`, `replay`, `created` |
+
+`runs.definition` refers to a Flow Book definition; `runs.edition` pins its published version, while `runs.version` is the run's own concurrency version. A task run uses `runs.task`. `events.digest` is the input hash and `events.replay` is its unique replay key. A Flow occurrence must be unique per definition; a task occurrence must be unique per task. Conversation sequence and effect replay keys also require uniqueness. Exact foreign references, nullability, retention and indexes are specified with each migration.
+
+Use versioned migrations: add and backfill target columns, verify records and uniqueness, switch validated adapters, then retire old fields only after historical runs and clients remain readable. Start evaluation history in repository fixtures; add live tables only for independent workspace-visible lifecycles. Exact money, stock and provider receipt rules remain domain code regardless of storage shape.
 
 ~~~text
 APP MAY: render cached permitted data | calculate a draft | queue offline intent
@@ -281,9 +281,9 @@ WORKER MUST: authenticate | read live authority | validate | commit | trace
 
 Offline checkout remains a draft until the worker confirms it. Cached stock and roles are hints, never final availability or permission. A disconnected device cannot claim verified electronic payment or a shared order.
 
-## 3 = 🙌 Hands: Action Gateway and catalog
+## 3. 🙌 Hands: Action Gateway and catalog
 
-### 3.1 = One callable boundary
+### 3.1 One callable boundary
 
 ~~~text
 +--------------------------------------------------------------+
@@ -336,7 +336,7 @@ Offline checkout remains a draft until the worker confirms it. Cached stock and 
 
 Provider brokers such as treg or managed action catalogs may supply operations through adapters. Each operation needs a TAR contract, workspace connection, price cap and bounded grant. A provider's growing tool list cannot silently grant a Flow more actions. Credentials stay server-side. Internal helper functions and UI navigation are not automatically gateway actions.
 
-### 3.2 = Commit and replay
+### 3.2 Commit and replay
 
 ~~~text
 natural turn: resolve actor/workspace -> claim turn key BEFORE paid inference
@@ -356,7 +356,7 @@ typed action: authenticate -> authorize -> validate -> replay key + input hash
 | Unknown provider effect | Reconcile before another non-idempotent send. |
 | D1 + Turso + R2 | Use reservations and outbox; never imply one transaction spans all stores. |
 
-### 3.3 = Connected apps and optional computer tools
+### 3.3 Connected apps and optional computer tools
 
 **Choose the least expensive executor that can correctly complete the authorized action.** Tool choice cannot weaken a grant, a receipt requirement or a data boundary.
 
@@ -380,7 +380,7 @@ The browser/sandbox adapter is itself a governed executor. All network egress, i
 
 Each session has a workspace/task owner, permitted inputs, lifetime, cost ceiling and output manifest. Use isolated scratch space and a minimal approved tool image; never expose database credentials or another task's cookies/files. Logs redact secrets and private payloads. Browser login and verification use a secure user handoff outside chat; redact credential fields from captures. Files downloaded from sites and instructions found in repositories remain untrusted input. A sandbox can return evidence or a draft; saving, sharing, publishing and provider effects follow registered actions.
 
-### 3.4 = Autonomy controls
+### 3.4 Autonomy controls
 
 | User choice | Meaning |
 | --- | --- |
@@ -390,7 +390,7 @@ Each session has a workspace/task owner, permitted inputs, lifetime, cost ceilin
 
 These are settings on the existing authority model. A chat request can authorize its stated scope where policy allows; accepted work does not repeatedly request the same permission. Inferred preferences and memory never grant authority. Pausing a goal or revoking a connection stops future dispatch even if an earlier plan or workflow checkpoint allowed it. An attempted effect with uncertain completion remains subject to reconciliation.
 
-## 4 = 🧠 Brain: Jev judgment module
+## 4. 🧠 Brain: Jev judgment module
 
 **Jev = one shared server module**, with provider adapter, versioned questions, result validation, assessment reuse, budget and traces. Domain packages supply candidate retrieval and rubrics. Routing, tagging, relating, extraction checks and layout selection are uses of the same three primitives.
 
@@ -402,70 +402,22 @@ These are settings on the existing authority model. A chat request can authorize
 
 Choice and Score confidence describe distribution concentration. It does not establish whole-workflow correctness or authorization. A Noul near 0.5 = uncertain yes/no, not medium intensity. [TypeSafe primitives](https://docs.typesafe.ai/primitives) and [confidence](https://docs.typesafe.ai/confidence).
 
-### 4.1 = Build a question bundle
+### 4.1 TAR's judgment contract
 
-~~~text
-+--------------------------------------------------------------+
-| 1 AUTHORIZED STATE                                           |
-| Actual request + roles + source spans + current facts.       |
-| Code retrieves candidates and checks access first.           |
-+--------------------------------------------------------------+
-                               |
-                               v
-+--------------------------------------------------------------+
-| 2 SHARED JUDGMENT                                            |
-| Reuse valid assessment or ask needed Choice/Noul/Score.      |
-| Independent questions share state; dependencies stage.       |
-+--------------------------------------------------------------+
-                               |
-                               v
-+--------------------------------------------------------------+
-| 3 COMPOSITION                                                |
-| Code consumes relevant typed answers and source values.      |
-| Validate required fields, relationships and hard rules.      |
-+--------------------------------------------------------------+
-                               |
-                               v
-+--------------------------------------------------------------+
-| 4 DECISION                                                   |
-| Exact action -> gateway; missing fact -> clarify;            |
-| consequential ambiguity -> review; unsupported -> stop.      |
-+--------------------------------------------------------------+
-~~~
+Code retrieves permitted evidence and a small eligible candidate set before Jev runs. Jev answers only the narrow semantic questions that code cannot settle exactly; independent questions may share one state. Code then validates fields, source relationships and business rules. Missing evidence causes retrieval or clarification, not an invented answer. [TypeSafe's building guide](https://docs.typesafe.ai/concepts/how-to-build-with-system-one) covers the general programming model.
 
-| Input to compiler | Required detail |
+| Situation | TAR response |
 | --- | --- |
-| State | Actual message, roles, subject, locale/timezone, current facts and versions, relevant policy and source offsets. |
-| Candidates | Authorized IDs and source spans; a no-match option where coverage may fail. |
-| Questions | Complete instructions and criteria; question ID alone is not model instruction. |
-| Version | Question, candidate set, model, evidence, locale and time assumptions. |
-| Budget | State tokens, option count, question tokens, deadline, concurrency and retry bound. |
+| Valid button, form, calculation or exact identifier | Use code; zero model calls. |
+| Ambiguous action, contact, item or source span | Use Choice over authorized candidates with a no-match route; check shortlist recall. |
+| Independent yes/no requirements or graded fit | Use targeted Noul or Score questions with versioned rubrics. |
+| Answer changes what evidence is needed | Fetch that evidence, then make a second bounded judgment. |
+| Scanned or spoken input | Preserve OCR/transcription uncertainty and source spans; normalize dates, amounts and quantities in code. |
+| Evidence, candidate set, rubric or time assumption changes | Invalidate only affected assessments and recheck current access. |
 
-| Need | Call plan |
-| --- | --- |
-| Valid button or typed form | Zero Jev. |
-| All relevant evidence and candidates present | One bundle of independent questions over shared state. |
-| Answer determines which records to fetch | First judgment, retrieval, second bounded judgment. |
-| Several cheap plausible branches | State each premise; ask speculatively in one bundle and consume relevant answers only. |
-| Too many options | Code shortlist; if necessary category then item; measure category recall. |
-| Generated reply | Draft, exact checks, then targeted Jev support/contradiction check before send. |
-| Scanned or spoken input | OCR/transcription first; preserve source uncertainty. |
+Question assets and accepted assessments record their model, evidence, candidate order, scope and versions. A typed answer is a judgment, not a business fact, permission or receipt. [TypeSafe primitives](https://docs.typesafe.ai/primitives) and [confidence](https://docs.typesafe.ai/confidence) provide primitive-specific details.
 
-Questions in one request are independent; one answer cannot feed another in that request. More questions still cost input tokens. Measure one broad bundle against two staged requests on actual workflows. [TypeSafe fan-out](https://docs.typesafe.ai/patterns/fan-out).
-
-### 4.2 = Candidate and value discipline
-
-| Stage | Owner | Output |
-| --- | --- | --- |
-| Find | IDs, aliases, screen context and search in code. | Authorized candidate IDs, versions, source offsets. |
-| Judge | Jev Choice or Score. | Selected role/item or comparable ranking. |
-| Normalize | Code copies selected source span. | Parsed dates/amounts/quantities, validated by domain rules. |
-| Miss | Code widens retrieval or asks person. | Explicit missing-input outcome. |
-| Evaluate | Offline labeled data. | Candidate recall separately from judgment accuracy. |
-
-Two identical numbers may mean deposit and balance. Preserve span relationships and modifier scope. Never invent an unstated amount, date or recipient. Arithmetic, tax, ledger balance, stock, consent, payment evidence and calendar comparison remain in code.
-
-### 4.3 = Route and acceptance
+### 4.2 Route and acceptance
 
 ~~~text
 CODE exact rule -> REUSE valid assessment -> JEV bounded judgment
@@ -483,7 +435,7 @@ CODE exact rule -> REUSE valid assessment -> JEV bounded judgment
 
 Use independent serious-failure flags; a good tone or relevance Score cannot offset a wrong recipient. Ignore uncertainty on unused speculative branches. A missing candidate needs retrieval, not a larger prose model. A missing field needs capture or clarification. An outage needs a useful manual/default path.
 
-### 4.4 = Bounded interactive assistance
+### 4.3 Bounded interactive assistance
 
 | Trigger | Shared state and questions | Code response |
 | --- | --- | --- |
@@ -493,7 +445,7 @@ Use independent serious-failure flags; a good tone or relevance Score cannot off
 
 Do not infer on every keystroke or every screen view. Prefer submit, explicit assist or a meaningful state change. Measure whether assistance reduces correct-task completion time after review, including network and correction time. The form never treats a high model probability as permission or proof of an external effect.
 
-## 5 = Assessment, trace and reuse
+## 5. Assessment, trace and reuse
 
 **Assessment = completed, reusable judgment. Attempt = provider call. Proposal = composed candidate action. Command = accepted gateway effect.** Keep separate identities and link them.
 
@@ -508,7 +460,7 @@ Reuse identity = tenant + access scope + evidence versions + candidate set/order
 
 ~~~text
 new enquiry -> assess topic + urgency + readiness + missing detail once
-             -> Inbox | CRM | Sales | Search | Review | Reporting
+             -> Inbox | Contacts | Sales | Search | Review | Reporting
 changed UI ranking weight -> recompute in code; zero new inference
 changed message or offering -> invalidate affected assessment
 ~~~
@@ -517,15 +469,15 @@ changed message or offering -> invalidate affected assessment
 | --- | --- |
 | At verified ingress | Persist/deduplicate the event, resolve workspace and access, then collect the smallest authorized state. |
 | One shared pass when useful | Batch independent topic, urgency, intent and missing-detail questions; skip questions already answered exactly by structured input. |
-| Reuse across surfaces | Inbox, CRM, Sales and reporting consume the same completed assessment with their own code policies; no surface gains new authority. |
+| Reuse across surfaces | Inbox, Contacts, Sales and reporting consume the same completed assessment with their own code policies; no surface gains new authority. |
 | On changed facts | Recompute only affected judgments; check access again before reuse and current rules again at commit. |
 | At scale | Compare selective, sampled and every-eligible-event assessment on real traffic; choose by correct outcomes, capacity and full cost. |
 
 Do not make a universal cache from identical text alone. Pending and failed attempts are not completed assessments. An uncertain completed judgment may be reusable without being acceptable. Critical current facts such as stock and refund eligibility must be recomputed in code at commit.
 
-## 6 = Budget, provider limits and economics
+## 6. Budget, provider limits and economics
 
-### 6.1 = Runtime budget
+### 6.1 Runtime budget
 
 **Reserve -> record attempt -> spend -> reconcile actual usage.** Unknown completion retains a conservative reservation until reconciled or resolved by documented expiry policy.
 
@@ -546,7 +498,7 @@ Do not make a universal cache from identical text alone. Pending and failed atte
 
 The [model page](https://docs.typesafe.ai/models) owns current provider limits; these values are a dated architecture snapshot.
 
-### 6.2 = Cost ledger
+### 6.2 Cost ledger
 
 ~~~text
 Jev input cost = actual input tokens / 1,000,000 * USD 0.042
@@ -577,7 +529,7 @@ Unit to optimize = cost and latency per correctly completed task
 
 At one million seats and 1,500 calls/seat/month, a 30-day average is about 579 requests/sec and 1.16M input tokens/sec at 2,000 tokens/request, above the dated published quotas. The selective 843-call scenario is still about 325 requests/sec before peaks or background jobs. Capacity and margin require negotiated limits and real workload tests.
 
-### 6.3 = Product credits
+### 6.3 Product credits
 
 | Proposed product item | Customer-facing allowance |
 | --- | --- |
@@ -588,7 +540,7 @@ At one million seats and 1,500 calls/seat/month, a 30-day average is about 579 r
 | Joined or personal workspace | No ownership charge under this proposal. |
 | Manual actions and public browsing | Zero usage credits. |
 | TAR assistant | 2/query proposal. |
-| Messaging/CRM | 2 to 5/query proposal. |
+| Messaging/Sales | 2 to 5/query proposal. |
 | Sales/Growth | 10 to 50/query proposal. |
 | Operations/Finance | 3 to 20/query proposal. |
 | Site Builder | Zero credits within explicit bounded allowance. |
@@ -596,14 +548,16 @@ At one million seats and 1,500 calls/seat/month, a 30-day average is about 579 r
 
 These are proposed product prices, not a live billing contract. Publish route prices or a maximum before charging. Credits are separate from provider cost and connected-account fees. Exhaustion pauses optional AI, not manual work. No duplicate charge for replayed accepted commands. Zero-credit site builds still consume real resources; measure full margin before claiming a floor.
 
-## 7 = 🧠 Brain: TAR assistant, goals and ongoing work
+## 7. 🧠 Brain: TAR assistant, goals and ongoing work
 
 **No target Bot system.** Business domains, the Action Registry, Inbox, approvals, Flow Books and one TAR assistant belong to every workspace. A business configures its products, services, people and connections; it does not install a Bot to acquire actions. The old Bot directory is migration input, not a target runtime, grant source, memory silo or product prerequisite.
 
 ~~~text
-DOMAIN PACKAGE -> records + rules + actions + views + starter Flow Books
+CONTACTS + RELATIONSHIPS -> who and context
+DOMAIN PACKAGE -> exact business records, rules and actions
+STARTER FLOW BOOK -> optional repeatable process
                                        |
-PERSON / EVENT / SCHEDULE -> exact UI or TAR assistant
+PERSON / EVENT / SCHEDULE -> contact detail, form or TAR assistant
                                        |
                          eligible Action Registry
                               |              |
@@ -614,36 +568,29 @@ PERSON / EVENT / SCHEDULE -> exact UI or TAR assistant
                          Turso + outbox + receipts
 ~~~
 
-| Default in every workspace | Ready before configuration | What requires setup or explicit enablement |
-| --- | --- | --- |
-| Identity, roles, records, search | Workspace, permitted business record types and manual forms. | Members, role assignments and imported data. |
-| Action Registry + Gateway | Versioned action contracts, eligibility and replay path. | External credentials, scope, money-moving or publishing permissions. |
-| Inbox + approvals | Tasks, exceptions, decisions and receipts. | Approval policy and assignees for consequential routes. |
-| TAR assistant + Jev | One ask surface and shared judgment module when provisioned. | Budget, evidence access and route evaluation; manual work remains if AI is unavailable. |
-| Goals + tasks | Track a requested outcome, current work and completion evidence in existing views. | Sources, due times, owner, budget and explicit grants for background execution. |
-| Flow Books | Built-in recipes visible and editable as drafts. | Workspace-specific trigger, bindings, grants, owner and publication; unattended effects start disabled. |
-| Channels + sites | Native surfaces and adapter contracts. | Domain, provider connection, consent, send/publish authority. |
+The app and Worker core tables in section 0.1 are the shared default. Business areas expose eligible actions without installing a Bot or creating a domain agent. A workspace configures its contacts, offerings, team and connections; an action or book becomes usable only when its required capability, scope and policy exist.
 
-| Domain = built-in vertical | Core records and exact rules | Starter Flow Book examples |
+| Business area | Exact records and rules | Starter Flow Book examples |
 | --- | --- | --- |
 | Sites and acquisition | Site, page, form, enquiry, campaign; publication and consent. | Enquiry capture; site review and publish. |
-| CRM and sales | Contact, account, lead, opportunity, quote; identity and quote math. | Enquiry to lead; follow-up; quote approval. |
+| Contacts and team | Person, organization, relationship; verified member identity and roles. | Member onboarding; relationship review. |
+| Sales, when relevant | Opportunity and quote; pricing, stage evidence and consent. | Enquiry to quote; follow-up. An optional pipeline view groups opportunity records. |
 | Products and POS | Product, price, stock, register, cart; tax, stock and checkout. | Low stock review; order preparation. |
 | Services | Offering, resource, slot, booking, job; capacity and time. | Booking confirmation; service completion. |
 | Commerce and delivery | Order, invoice, payment, shipment, subscription, return; provider receipts. | Order fulfilment; return approval. |
 | Support and retention | Conversation, ticket, resolution, renewal; consent and policy. | Support triage; renewal follow-up. |
-| Purchasing and finance | Supplier, purchase, receipt, posting, reconciliation; exact balances. | Reorder approval; payment reconciliation. |
-| Team and reporting | Member, task, approval, report; role and data scope. | Onboarding; daily exception review. |
+| Purchasing and finance | Supplier relationship, purchase, receipt, posting, reconciliation; exact balances. | Supplier order; payment reconciliation. |
+| Reporting | Report and sourced metrics; access and exact totals. | Daily exception review. |
 
-These are target package capabilities, not a claim that all domain actions already exist. Starter books are available but inactive until configured, published and explicitly enabled for unattended triggers. Manual single actions remain direct Gateway calls. The full cycle is composed of small books linked by authoritative events; TAR does not make one giant Flow that owns the business.
+These are target capabilities, not a claim that all actions or starter books already exist. Starter books are visible as examples and remain inactive until configured and published; unattended triggers need separate enablement. Manual single actions remain direct Gateway calls. The full cycle uses small books linked by verified events, not one book that owns the business.
 
 | Ask surface | Scope and behavior |
 | --- | --- |
 | TAR assistant | One entry point; exact commands use code, ambiguous requests use bounded Jev over eligible actions, novel prose/composition may use an LLM. |
 | Personal view | Private goals, notes and activity for one identity; current workspace access still governs every read/action. |
-| Domain screen | POS, CRM, site and other verticals use the same contracts; a button never needs an assistant round trip. |
+| Domain screen | Contacts, POS, Sales, Site Studio and other relevant views use the same contracts; a button never needs an assistant round trip. |
 
-### 7.1 = Goals and tasks
+### 7.1 Goals and tasks
 
 **Goal = an owned outcome. Task = a bounded piece of work. Flow Book = a reusable process. Run = one execution.** A request can use one action without creating a goal. Create ongoing work only when the person requests it or an enabled recipe explicitly defines it.
 
@@ -658,7 +605,7 @@ Task lifecycle meanings are accepted work, active work, waiting, paused, complet
 
 Example: "Make sure today's enquiries are handled by closing time" creates a scoped goal, an enquiry watch and tasks that invoke eligible follow-up/quote books. TAR reports unanswered enquiries and verified replies. The goal does not authorize discounts, outreach to new recipients or a promise of conversion.
 
-### 7.2 = One bounded task supervisor
+### 7.2 One bounded task supervisor
 
 The supervisor is code in the shared harness. It routes to the same actions and runner used by forms and Flow Books. Use exact rules or a suitable recipe first; open-ended research or a novel task can use a bounded LLM plan. Jev selects or scores supplied candidates; it does not generate a plan, reply or script. See [TypeSafe's programming model](https://docs.typesafe.ai/concepts/system-one) and [typed function selection](https://docs.typesafe.ai/cookbooks/function_calling).
 
@@ -682,7 +629,7 @@ request / relevant event / due wake
 
 The task supervisor and Flow interpreter share one execution contract (§8.3). Multiple tasks are ordinary work items; they do not require a separate agent/persona per domain or a swarm. Add delegation only after independent parallel work shows a measured benefit; child tasks inherit narrower scope and the parent's remaining budget.
 
-### 7.3 = Proactivity and attention
+### 7.3 Proactivity and attention
 
 **Observe -> test a configured condition -> propose or execute within grants -> report a meaningful result.** Prefer verified business events and webhooks. Use a bounded due scan for time-based checks or providers without events. Record the source cursor/version and occurrence so replayed events cannot produce repeated work or notifications.
 
@@ -699,13 +646,13 @@ Start with business cases that have visible outcomes: missed enquiry, approachin
 
 The product target takes continuity, interruptible tasks, meaningful notifications and visible goals from [Muse's design](https://introducing.muse.ai/) and conversational follow-through from [Instinct](https://instinct.com/). These references establish product behavior, not TAR's implementation status or performance. TAR applies the pattern to the full commerce cycle through its shared domain packages.
 
-## 8 = 🧠 Brain: Flow Books and durable execution
+## 8. 🧠 Brain: Flow Books and durable execution
 
-### 8.1 = Current catalog and execution gap
+### 8.1 Current catalog and execution gap
 
 | Registered area | Existing action IDs |
 | --- | --- |
-| Flows and legacy directory | `flow.publish`, `flow.start`; legacy `directory.install`, `directory.remove` remain current-only adapters during migration. |
+| Flows | `flow.publish`, `flow.start`; Bot directory installation actions and routes have been retired. |
 | Records/tasks | record.create, record.update, task.create, task.complete. |
 | POS setup/products | pos.open, pos.setup, pos.product.save, pos.product.content.save, pos.product.draft, pos.stock.adjust. |
 | POS customers/orders | pos.customer.save, pos.order.save, pos.order.item.update, pos.order.cancel, pos.checkout, pos.refund. |
@@ -713,23 +660,59 @@ The product target takes continuity, interruptible tasks, meaningful notificatio
 | Sites | site.generate, site.update, site.compile, site.publish, site.rollback, site.refresh. |
 | Web | web.search. |
 
-Current directory templates include POS, Sales follow-up/review, Team onboarding/review, Operations requests/review and Site build/preview. Migrate their useful action sequences into starter Flow Books and domain navigation. Missing Sales, CRM, service, support, purchasing, finance and messaging actions remain target capabilities. A template or canvas label does not make a missing action callable.
+Useful legacy recipes should become maintained starter Flow Books and relevant record navigation. Shared contact/relationship actions and missing Sales, service, support, purchasing, finance and messaging actions remain target capabilities. A template or canvas label does not make a missing action callable.
 
 **Delivery gate = durable execution of the ordered list.** flow.start presently positions a Run at its first action; it does not execute all later steps. Complete this before branching.
 
 | Existing implementation | Deliberate target migration |
 | --- | --- |
-| `directory.install/remove` and Bot directory UI | Replace with always-visible domains and Flow recipe library; keep old API adapters only for existing clients during transition. |
-| `definitions.kind = bot` | Read old installations to identify selected recipes and settings; migrate to reviewed workspace Flow Book drafts. Preserve audit rows. |
-| `definitions.kind = kit` | Derive cards/navigation from domain and Flow definitions; migrate user-edited canvas data before retiring writes. |
+| `directory.install/remove` and Bot directory UI | Retired. Existing Bot/kit definitions are archived on workspace open, preserving audit rows. |
+| `definitions.kind = bot` | Retired from the target schema and runtime; historical rows are archived for audit. |
+| `definitions.kind = kit` | Canvas cards are derived from domain and Flow definitions; historical kit rows are archived for audit. |
 | `definitions.kind = flow` | Evolve to validated Flow Book contract; publish without requiring an installed Bot. Existing IDs and run versions remain resolvable. |
-| `flow.publish` and `flow.start` | Version/migrate contract and runner deliberately; current `flow.publish` requires a Bot and current `flow.start` does not advance steps. |
+| `flow.publish` and `flow.start` | `flow.publish` creates standalone Flow Books. The runner currently supports reviewed internal steps; complete authoring, recovery and external-effect reconciliation remain release gates. |
 
 Migration must not silently activate an unattended trigger or broaden a grant. Show owners a preview of each converted book and require publication for new external effects.
 
-### 8.2 = Flow Book contract and authoring
+### 8.2 Flow Book contract and authoring
 
 **Flow Book = a versioned, compiled business process.** A book is a definition; a run is one durable execution of that definition. A recipe is a built-in starting definition. Publishing a book never preapproves a future payment, refund, message or publication.
+
+**Starter cards in Flows and on a relevant contact.** A card explains the entry record, likely steps and required authority before anyone starts. These are proposed recipes; their names do not make missing actions callable. The app shows the same card in the library and as an eligible suggestion on contact detail.
+
+~~~text
++------------------------------------------+
+| MEMBER ONBOARDING           STARTER / OFF|
+| From: person contact                     |
+| Check role -> review access -> invite    |
+| -> wait for acceptance -> confirm member |
+| Truth: verified D1 member and receipt    |
+| Needs: owner, role grant, invite channel |
+| [ Preview ] [ Use for this person ]      |
++------------------------------------------+
+
++------------------------------------------+
+| SUPPLIER ORDER              STARTER / OFF|
+| From: supplier relationship              |
+| Draft purchase -> approve spend -> send  |
+| -> receive goods -> reconcile invoice    |
+| Truth: purchase, receipt and postings    |
+| Needs: supplier, catalog, spend grant    |
+| [ Preview ] [ Use for this supplier ]    |
++------------------------------------------+
+
++------------------------------------------+
+| SALES FOLLOW-UP             STARTER / OFF|
+| From: contact + optional opportunity     |
+| Qualify -> quote -> approve/send -> wait |
+| -> follow up or close                    |
+| Truth: quote, reply and opportunity state|
+| Needs: offering, consent, channel grant  |
+| [ Preview ] [ Use for this contact ]     |
++------------------------------------------+
+~~~
+
+`STARTER / OFF` means a visible template with no published workspace version or unattended trigger. To use it, a permitted person binds the contact or record, reviews the steps and publishes a version before a manual run. Enabling event or schedule starts is a separate reviewed choice. The member card never treats a contact as an authenticated member, the supplier card never treats an approved draft as received goods, and the Sales card does not place a stage on the contact. A pipeline, when useful, is a view of opportunity records changed by verified actions.
 
 | Part | Definition | Owner |
 | --- | --- | --- |
@@ -744,11 +727,14 @@ Migration must not silently activate an unattended trigger or broaden a grant. S
 | grants | Exact action subset, connection scopes and effect ceilings. | Gateway intersects them with current workspace policy. |
 | version | Immutable published snapshot; draft may change. | Runs pin it; edits publish a new version. |
 
-| Add a Flow Book | Jev and LLM role | Human/code gate |
+| User intent | Jev and LLM role | Code and person |
 | --- | --- | --- |
-| Choose built-in recipe | Jev Choice only if the user's description is ambiguous; otherwise exact selection. | Configure trigger, bindings, owner and grants; preview and publish. No LLM. |
-| Adapt a recipe | Jev selects compatible actions/bindings when meaning is unclear. | Compiler checks changed steps and effects; preview diff and publish new version. |
-| Describe novel process | Jev shortlists eligible actions and detects independent requirements; LLM drafts trigger/steps/bindings/waits only where existing recipes cannot express the goal. | Compiler rejects unknown actions, missing inputs, invalid graph/guard/grants and unsafe effects; user reviews exact plan before publish. |
+| “Do this once for this contact” | Jev selects a supported recipe only if the request is ambiguous. No LLM for an exact match. | Bind the current record and run a published book with live authority, or use a bounded task episode if it is genuinely one-off; do not create a new book by default. |
+| “Make this a reusable process” | Code retrieves eligible recipes and actions. Jev chooses a plausible recipe and missing requirements, with a no-match outcome. | Configure owner, inputs, waits, grants and costs; preview the exact steps. Publish a new immutable version after review. |
+| “Change this recipe” | Jev selects compatible actions or bindings when meaning is unclear. An LLM drafts only the novel changed structure that the recipe cannot express. | Compiler checks the diff, types, graph, effects, recovery and current capability. Review and publish; old runs retain their pinned version. |
+| “Create a new process” | Jev shortlists eligible actions and independent requirements; an LLM drafts trigger, steps, bindings and waits from that shortlist. | Compiler rejects invented actions, missing inputs, invalid graph/guard/grants and unsafe effects. Person reviews exact recipients, spend, connections and trigger before publishing. |
+
+Authoring begins in Flows, Ask TAR, or a contact/record card. The app shows a step card with inputs, expected result, wait, approval, owner and estimated cost; missing requirements appear as specific questions. A person may also choose steps directly in the editor without either model. A draft may be saved without running. Publishing allows a manual run under the current actor's authority; a separate explicit switch enables an event or schedule trigger under scoped automation grants. A user correction creates a new draft revision, not a silent mutation of a published book. [TypeSafe function selection](https://docs.typesafe.ai/cookbooks/function_calling) informs the bounded Jev selection; the LLM is a draft writer and never the action catalog or authority source.
 
 | Book state | Meaning and allowed use |
 | --- | --- |
@@ -761,54 +747,14 @@ Migration must not silently activate an unattended trigger or broaden a grant. S
 If the automation owner loses authority, a connection expires, or a grant narrows, new dispatch pauses for reassignment or review. The book never inherits a departed person's permission indefinitely.
 
 ~~~text
-"Follow up on new enquiries"
-       |
-       v
-Jev Choice -> enquiry recipe? eligible actions? no-match?
-Jev Noul   -> reply requested? human review needed? due date stated?
-       |
-       +-- existing recipe fits -> configure it; zero LLM
-       |
-       +-- novel combination -> LLM drafts Flow Book structure
-                                |
-                                v
-                    compiler -> preview -> human publish
-                                |
-                                v
-                     event -> durable run -> Gateway
-~~~
-
-~~~text
-+--------------------------------------------------------------+
-| AUTHOR: choose recipe, adapt it or describe a new goal       |
-| Retrieve eligible catalog actions and built-in recipes.      |
-+--------------------------------------------------------------+
-                               |
-                               v
-+--------------------------------------------------------------+
-| SELECT OR DRAFT                                              |
-| Jev selects known fit/bindings; LLM drafts only novel books. |
-+--------------------------------------------------------------+
-                               |
-                               v
-+--------------------------------------------------------------+
-| COMPILE + PREVIEW                                            |
-| Code proves types, grants, effects, dependencies and waits.  |
-| Test with recorded/sandboxed inputs; no live effect.         |
-+--------------------------------------------------------------+
-                               |
-                               v
-+--------------------------------------------------------------+
-| REVIEW + PUBLISH                                             |
-| Person reviews trigger, grants and effects; pin version.     |
-+--------------------------------------------------------------+
-                               |
-                               v
-+--------------------------------------------------------------+
-| RUN                                                          |
-| Persist steps; recheck authority; invoke gateway; record     |
-| output/receipt; wait, resume or reconcile as declared.       |
-+--------------------------------------------------------------+
+contact / record / Flows / Ask TAR
+    -> code retrieves eligible actions and starter recipes
+    -> Jev selects fit or no-match when meaning is unclear
+    -> reuse/configure recipe OR LLM drafts a novel structure
+    -> code compiles types, waits, recovery, grants and budget
+    -> person previews and publishes an immutable version
+    -> manual run; separately enable event or schedule trigger
+    -> durable runner rechecks each step through the Gateway
 ~~~
 
 | Authoring question | Primitive | Compiler must still prove |
@@ -831,7 +777,7 @@ Only compatible producers may bind an input; do not use an arbitrary last-five-n
 
 The order, payment, delivery and support books start from their own verified events. Each book may be paused or revised without rewriting completed transactions.
 
-### 8.3 = Durable runner
+### 8.3 Durable runner
 
 ~~~text
 pin Flow Book/action versions -> persist step + input binding
@@ -866,7 +812,7 @@ The scheduled dispatcher submits due work and repairs dispatch gaps through the 
 | Published execution | Only declared judgment steps consume Jev. |
 | Adaptive task episode | Use exact rules and valid assessments first; generation only for the novel step, within the task budget. |
 
-## 9 = Channels and communication
+## 9. Channels and communication
 
 ~~~text
 +--------------------------------------------------------------------------------+
@@ -908,11 +854,13 @@ Preserve speaker roles and quoted text; customer content is evidence, not truste
 
 Each channel message retains a stable source identity and links to its conversation/task. A user can send new work, correct a pending plan or ask for status without losing the active task. Resolve identity and access again on channel changes; redact previews and notifications for their actual audience. Customer requests never acquire staff authority. Voice notes and attachments use bounded transcription/OCR and source references; material uncertainty routes to clarification. Live voice, outbound phone calls and device context are later adapters with explicit consent and measurable value, not prerequisites for the core assistant.
 
-## 10 = Product screens and interaction grammar
+## 10. Product screens and interaction grammar
 
 ~~~text
 TOP:     current workspace | sync status | identity
 BOTTOM:  Space             | Inbox       | Flows
+SPACE:   Contacts          | outcomes    | domain work
+CONTACT: relationships     | activity    | eligible actions/books
 DETAIL:  one record        | one primary legal action
 REVIEW:  one ambiguity     | evidence    | concrete alternatives
 ~~~
@@ -920,6 +868,7 @@ REVIEW:  one ambiguity     | evidence    | concrete alternatives
 | Surface | Job | Hard rule |
 | --- | --- | --- |
 | Space | Permitted facts, role home, records and Memory saved view. | Visibility is not authorization. |
+| Contacts | People and organizations, their sourced relationships and current work; start an eligible action or Flow Book. | A contact is not a member, lead, customer or consent grant by default. |
 | Inbox | Decisions, exceptions, waits, failed work, approvals. | Show only actions actor can perform. |
 | Review | One consequential ambiguity and its source. | Do not expose full model state as a user task. |
 | Flows | Built-in recipes, workspace drafts, published books and runs. | A visible recipe is inactive until configured and published. |
@@ -931,12 +880,12 @@ REVIEW:  one ambiguity     | evidence    | concrete alternatives
 
 | Screen group | Target screen inventory |
 | --- | --- |
-| Entry | Boot; Sign in; First run; Space; Inbox; Review. |
+| Entry | Boot; Sign in; First run; Space; Contacts; Inbox; Review. |
 | Capability | Flows; Flow Book detail; TAR assistant; Flow authoring; Search; Settings. |
-| Record | Record card; Record detail; Action form; Confirmation; Approval. |
+| Record | Contact detail; Relationship detail; Record card/detail; Action form; Confirmation; Approval. |
 | POS | POS sale; Receipt; Register; Stock adjust; Product form. |
 | Publishing | Site Studio; site request; design picker; release plan. |
-| Vertical domains | CRM; Sales; Services; Commerce; Delivery; Support; Purchasing; Finance; Campaigns; Reporting. |
+| Vertical domains | Sales and optional pipeline view; Services; Commerce; Delivery; Support; Purchasing; Finance; Campaigns; Reporting. |
 | Flow work | Flow Book editor; preview; run; trigger and grants; failure/recovery. |
 | Team | Members and chat; Channel link. |
 | Commercial | Plans and credits. |
@@ -955,7 +904,7 @@ REVIEW:  one ambiguity     | evidence    | concrete alternatives
 | Flat treatment | Tonal surfaces and dividers carry grouping; no elevation, drop shadows, decorative gradients or floating cards. |
 | Touch and type | Target at least 48 dp for actual controls; use clear labels, supporting text and readable type hierarchy. |
 
-The visual atlas follows [Android layout and navigation patterns](https://developer.android.com/design/ui/mobile/guides/layout-and-content/layout-and-nav-patterns), [compact layout margins](https://developer.android.com/design/ui/mobile/guides/layout-and-content/content-structure) and [accessibility touch targets](https://developer.android.com/design/ui/mobile/guides/foundations/accessibility). It is a concept artifact; native app implementation must still verify insets, accessibility and device sizes.
+The [mobile concepts](tar-mobile-concepts.pen) show the target screens. Native app implementation must verify insets, accessibility, touch targets and device sizes against [Android guidance](https://developer.android.com/design/ui/mobile/guides/foundations/accessibility). The concepts do not establish implemented behavior.
 
 ~~~text
 +------------------+     +------------------+     +------------------+
@@ -964,8 +913,8 @@ The visual atlas follows [Android layout and navigation patterns](https://develo
 +--------+---------+     +--------+---------+     +--------+---------+
          |                        |                        |
          v                        v                        v
-  POS / Site Studio       Review / Record card     Book / Preview / Run
-  CRM / Search / Memory          |                  grants / Activity
+  Contacts / POS / Site   Review / Record card     Book / Preview / Run
+  Search / Memory                |                  grants / Activity
                                 v
                        Action form -> Confirm
                                          |
@@ -978,648 +927,18 @@ The visual atlas follows [Android layout and navigation patterns](https://develo
 Shared overlays = Offline | Pending | Conflict | Denied | Failed | AI paused
 ~~~
 
-### 10.1 = Screen atlas
+### 10.1 Screen map and design source
 
-**Prototype status:** `tar-mobile-prototype.html` is not present in this checkout at review. The 57 frames below are the target content specifications; an interactive prototype should demonstrate their journeys, tabs and actions with simulated data. Neither an atlas frame nor a prototype establishes implemented business behavior.
+Use the screen inventory above for scope and [tar-mobile-concepts.pen](tar-mobile-concepts.pen) for the visual journeys, components and states. The interaction rules in this section govern implementation. Screen concepts are targets, not evidence that their business actions are built. The same canonical record, task, approval and receipt appears wherever it is opened.
 
-#### 10.1.1 = Entry, workspace and Flow screens
+### 10.2 Ongoing agent experience
 
-~~~text
-+------------------------------------------------+
-| 01 BOOT                                        |
-+------------------------------------------------+
-| TAR                                            |
-| Opening saved workspace...                     |
-| [=====       ]                                 |
-| Local database: ready                          |
-| Identity: checking                             |
-| Next = Sign in or Space                        |
-+------------------------------------------------+
-
-+------------------------------------------------+
-| 02 SIGN IN                                     |
-+------------------------------------------------+
-| Welcome to TAR                                 |
-| Continue with Google                           |
-| [ Continue ]                                   |
-| Your existing work stays on this device        |
-| until your workspace is available.             |
-+------------------------------------------------+
-
-+------------------------------------------------+
-| 03 FIRST RUN                                   |
-+------------------------------------------------+
-| Choose how to begin                            |
-| [ Create a workspace ]                         |
-| [ Join with an invitation ]                    |
-| Personal space: private and ready              |
-| Next = role-aware Space                        |
-+------------------------------------------------+
-
-+------------------------------------------------+
-| 04 SPACE                                       |
-+------------------------------------------------+
-| Slice House                 Sync  Me           |
-| Sales today: INR 18,420 | Open orders: 4       |
-| Kitchen: 2 preparing | 1 ready                 |
-| [ Site Studio ]  [ Sell ]                      |
-| [ New order ] [ New lead ] [ Ask ]             |
-| Space             Inbox              Flows     |
-+------------------------------------------------+
-
-+------------------------------------------------+
-| 05 INBOX                                       |
-+------------------------------------------------+
-| All areas                         Filter v     |
-| NOW  Order #1044       Needs detail            |
-|      2 x Margherita      [ Review ]            |
-|      Payment INR 651    [ Collect ]            |
-| NEXT Chase deposit T7     [ Done ]             |
-| Space             Inbox              Flows     |
-+------------------------------------------------+
-
-+------------------------------------------------+
-| 06 REVIEW                                      |
-+------------------------------------------------+
-| Order #1044              Needs detail          |
-| Question: what did 'that' mean?                |
-| Options: Margherita | Garlic Bread             |
-| Evidence: 2 close menu matches [ Open ]        |
-| [ Accept Margherita ]  [ Ask Priya ]           |
-+------------------------------------------------+
-
-+------------------------------------------------+
-| 07 FLOWS                                       |
-+------------------------------------------------+
-| Built-in recipes       Workspace books         |
-| Enquiry to lead           available            |
-| Quote approval             active v2           |
-| Order fulfilment           draft               |
-| Runs: 2 waiting | 1 needs review               |
-| [ New Flow Book ] [ Open runs ]                |
-+------------------------------------------------+
-
-+------------------------------------------------+
-| 08 FLOW BOOK DETAIL                            |
-+------------------------------------------------+
-| Quote approval | active v2                     |
-| Trigger: quote submitted                       |
-| Steps: validate -> manager review -> send      |
-| Owner: Malar | grant: quote + approved email   |
-| Last run: waiting for review                   |
-| [ View book ] [ Pause ] [ New version ]        |
-+------------------------------------------------+
-
-+------------------------------------------------+
-| 09 TAR ASSISTANT                               |
-+------------------------------------------------+
-| Ask TAR | Slice House                          |
-| [ Follow up with today's new leads... ]        |
-| Can use: CRM, tasks, permitted records         |
-| Draft: 3 follow-up tasks [ Review ]            |
-| Private goals [ Open ] | Activity [ Open ]     |
-| No action runs until you review or submit.     |
-+------------------------------------------------+
-~~~
-
-#### 10.1.2 = Record, decision and discovery screens
-
-~~~text
-+------------------------------------------------+
-| 10 RECORD CARD                                 |
-+------------------------------------------------+
-| ORDER #1044   new          [ Accept ]          |
-| same card -> preparing    [ Ready ]            |
-| same card -> paid       [ Hand over ]          |
-| same card -> complete         Done             |
-| One current state; one legal next action.      |
-+------------------------------------------------+
-
-+------------------------------------------------+
-| 11 RECORD DETAIL                               |
-+------------------------------------------------+
-| ORDER #1044                 ready v7           |
-| 2 x Margherita         INR 440                 |
-| 1 x Garlic Bread       INR 180                 |
-| Tax                    INR 31                  |
-| Total                  INR 651                 |
-| Customer: Priya        [ Contact ]             |
-| [ Mark done ]   [ Open in POS ]                |
-+------------------------------------------------+
-
-+------------------------------------------------+
-| 12 ACTION FORM                                 |
-+------------------------------------------------+
-| Refund order #1038                             |
-| Amount       [ INR 250          ]              |
-| Reason       [ item unavailable v ]            |
-| Destination  original payment                  |
-| Source       order #1038                       |
-| [ Continue to confirmation ]                   |
-+------------------------------------------------+
-
-+------------------------------------------------+
-| 13 CONFIRMATION                                |
-+------------------------------------------------+
-| Confirm this refund                            |
-| Order #1038 | amount INR 250                   |
-| Original payment | requested by Malar          |
-| Irreversible provider effect                   |
-| Approval required from manager                 |
-| [ Cancel ]             [ Request ]             |
-+------------------------------------------------+
-
-+------------------------------------------------+
-| 14 APPROVAL                                    |
-+------------------------------------------------+
-| Refund #1038 | expires in 6 hours              |
-| Amount INR 250 -> original payment             |
-| Reason: item unavailable                       |
-| Requested by Malar                             |
-| Evidence: order + payment [ Open ]             |
-| [ Reject ]             [ Approve ]             |
-+------------------------------------------------+
-
-+------------------------------------------------+
-| 24 SEARCH                                      |
-+------------------------------------------------+
-| Search workspace                               |
-| [ orders, contacts, actions...     ]           |
-| Records | Actions | Help                       |
-| Order #1044        paid  [ Open ]              |
-| Priya              CRM   [ Open ]              |
-| Search only permitted records.                 |
-+------------------------------------------------+
-
-+------------------------------------------------+
-| 25 SETTINGS                                    |
-+------------------------------------------------+
-| Settings                                       |
-| Workspace | Members | Connections              |
-| Theme | Language | Notifications               |
-| AI budget: available [ Detail ]                |
-| Account and data [ Open ]                      |
-| Saved changes go through gateway.              |
-+------------------------------------------------+
-~~~
-
-#### 10.1.3 = POS screens
-
-~~~text
-+------------------------------------------------+
-| 28 POS SETUP                                   |
-+------------------------------------------------+
-| Set up your store                              |
-| 1 Store details             done               |
-| 2 First product       [ Add product ]          |
-| 3 Opening stock      [ Adjust ]                |
-| 4 Register           [ Open ]                  |
-| [ Continue ]                                   |
-+------------------------------------------------+
-
-+------------------------------------------------+
-| 15 POS SALE                                    |
-+------------------------------------------------+
-| Slice House          Register open             |
-| Sell | Orders | Stock | Customers              |
-| [ Search item or scan barcode ]                |
-| 2 x Margherita          INR 440                |
-| 1 x Garlic Bread        INR 180                |
-| Subtotal 620 | Tax 31 | Total 651              |
-| [ Cash ] [ UPI ] [ Order details ]             |
-+------------------------------------------------+
-
-+------------------------------------------------+
-| 16 RECEIPT                                     |
-+------------------------------------------------+
-| Payment recorded | order #1044                 |
-| 2 x Margherita          INR 440                |
-| 1 x Garlic Bread        INR 180                |
-| Total                  INR 651                 |
-| Method Cash | Change INR 49                    |
-| [ Share receipt ] [ Return ] [ Done ]          |
-+------------------------------------------------+
-
-+------------------------------------------------+
-| 17 REGISTER                                    |
-+------------------------------------------------+
-| Register | Slice House                         |
-| Status: open | opened 09:00                    |
-| Cash sales       INR 3,240                     |
-| Expected cash    INR 3,740                     |
-| Counted cash     [ INR ... ]                   |
-| Difference       calculated by code            |
-| [ Close register ]                             |
-+------------------------------------------------+
-
-+------------------------------------------------+
-| 18 STOCK ADJUST                                |
-+------------------------------------------------+
-| Margherita | stock adjustment                  |
-| On hand: 24                                    |
-| [ - ]     2 units      [ + ]                   |
-| Reason [ damaged stock v ]                     |
-| New on hand: 22                                |
-| [ Update stock ]                               |
-+------------------------------------------------+
-
-+------------------------------------------------+
-| 19 PRODUCT FORM                                |
-+------------------------------------------------+
-| Product | Details Inventory More               |
-| Name       [ Margherita ]                      |
-| Price      [ INR 220    ]                      |
-| Category   [ Pizza v    ]                      |
-| On hand    24                                  |
-| [ Suggest fields ]       [ Save ]              |
-+------------------------------------------------+
-
-+------------------------------------------------+
-| 29 CUSTOMER FORM                               |
-+------------------------------------------------+
-| Add customer                                   |
-| Name       [ Priya             ]               |
-| Phone      [ +91 98xx xx21    ]                |
-| Note       [ regular; no onion ]               |
-| Consent    [ current status v ]                |
-| [ Save customer ]                              |
-+------------------------------------------------+
-
-+------------------------------------------------+
-| 30 RETURN SALE                                 |
-+------------------------------------------------+
-| Return order #1044 | paid INR 651              |
-| [x] 2 x Margherita   INR 440                   |
-| [ ] 1 x Garlic Bread INR 180                   |
-| Reason [ damaged item v ]                      |
-| Refund proposal: INR 440                       |
-| [ Continue to approval ]                       |
-+------------------------------------------------+
-~~~
-
-#### 10.1.4 = Site, channel and plan screens
-
-~~~text
-+------------------------------------------------+
-| 20 SITE STUDIO                                 |
-+------------------------------------------------+
-| Slice House | Site Studio                      |
-| Draft v4            Live release v3            |
-| Pages: Home | Menu | Contact                   |
-| Checks: 4/4 grounded; links valid              |
-| [ Preview ] [ Edit ] [ Publish ]               |
-| Rollback: release v2 [ View ]                  |
-+------------------------------------------------+
-
-+------------------------------------------------+
-| 31 SITE REQUEST                                |
-+------------------------------------------------+
-| Site Studio                   Draft            |
-| You: warm page for local families              |
-| TAR: draft ready: hero, menu, hours            |
-| Sources: products + hours + brief              |
-| [ Preview ]       [ Request change ]           |
-| [ Ask for a change... ]                        |
-+------------------------------------------------+
-
-+------------------------------------------------+
-| 32 DESIGN PICKER                               |
-+------------------------------------------------+
-| Pick a design                                  |
-| (*) Warm counter   cafe / friendly             |
-| ( ) Clean slate    minimal / airy              |
-| ( ) Night kitchen  dark / bold                 |
-| ( ) Market stall   playful                     |
-| [ See live ]    [ Use this design ]            |
-+------------------------------------------------+
-
-+------------------------------------------------+
-| 33 SITE PLAN                                   |
-+------------------------------------------------+
-| Slice House | release plan                     |
-| [x] Hero    from merchant brief                |
-| [x] Menu    12 products; six shown             |
-| [x] Hours   from current record                |
-| [ ] Gallery no approved photos                 |
-| Copy support: 4/4 checked                      |
-| [ Edit sections ]   [ Publish ]                |
-+------------------------------------------------+
-
-+------------------------------------------------+
-| 21 MEMBERS AND CHAT                            |
-+------------------------------------------------+
-| Members & chat | Slice House                   |
-| Team destination: Slack #slice-house           |
-| Owner: Iniya  Admin: Malar                     |
-| Cashier: Priya | Kitchen: Arun                 |
-| [ Invite member ]                              |
-| [ Link team channel ]                          |
-+------------------------------------------------+
-
-+------------------------------------------------+
-| 22 CHANNEL LINK                                |
-+------------------------------------------------+
-| Link team channel                              |
-| Destination: Slack #slice-house                |
-| Code: K7Q2-M4 | expires in 10 min              |
-| Connection scope [ View ]                      |
-| [ Confirm link ]                               |
-| Refresh connection if code expires             |
-+------------------------------------------------+
-
-+------------------------------------------------+
-| 35 CUSTOMER CHANNELS                           |
-+------------------------------------------------+
-| Customer channels                              |
-| WhatsApp  +91 98xx xx21 connected              |
-| Instagram @slicehouse connected                |
-| Telegram  @slicehouse connected                |
-| Website chat          native                   |
-| Email hello@slice     native                   |
-| [ Manage connections ]                         |
-+------------------------------------------------+
-
-+------------------------------------------------+
-| 23 PLANS AND CREDITS                           |
-+------------------------------------------------+
-| Credits & AI                                   |
-| Balance: 10,000 credits                        |
-| Plan INR 500/mo | 1,000 credits                |
-| Top-up 1,000 credits: INR 100                  |
-| AI paused at limit; manual stays               |
-| [ Buy top-up ] [ Usage detail ]                |
-+------------------------------------------------+
-~~~
-
-#### 10.1.5 = Workflow, memory and system-state screens
-
-~~~text
-+------------------------------------------------+
-| 34 FLOW BOOK EDITOR                            |
-+------------------------------------------------+
-| Flow Book | Draft                              |
-| Goal: follow up on new enquiries               |
-| Recipe: enquiry to lead [ Change ]             |
-| Trigger: verified new enquiry                  |
-| [1] Save or link contact                       |
-|        |                                       |
-| [2] Create follow-up task                      |
-|        |                                       |
-| [3] Wait for review -> send reply              |
-| [ Preview ] [ Publish ]                        |
-+------------------------------------------------+
-
-+------------------------------------------------+
-| 43 FLOW BOOK PREVIEW                           |
-+------------------------------------------------+
-| Enquiry to lead | draft v3                     |
-| Input: test enquiry from Priya                 |
-| 1 Contact: existing match -> review            |
-| 2 Task: assign Malar by tomorrow               |
-| 3 Reply: waits for approval                    |
-| Effects: 1 record, 1 task, 1 possible send     |
-| [ Edit ] [ Test again ] [ Publish ]            |
-+------------------------------------------------+
-
-+------------------------------------------------+
-| 44 FLOW TRIGGER AND GRANTS                     |
-+------------------------------------------------+
-| Trigger: verified enquiry received             |
-| Owner: Malar | Runs as: workspace automation   |
-| Allowed: contact.save, task.create, reply.send |
-| Channel: email connected | consent required    |
-| Send: review required | max 1 per enquiry      |
-| [ Review exact effects ] [ Save draft ]        |
-+------------------------------------------------+
-
-+------------------------------------------------+
-| 45 FLOW RUN                                    |
-+------------------------------------------------+
-| Enquiry to lead | run #E104 | v3               |
-| Contact linked          done                   |
-| Follow-up task          done                   |
-| Reply approval          waiting for Malar      |
-| Source enquiry [ Open ] | receipts [ View ]    |
-| [ Open approval ] [ Pause future steps ]       |
-+------------------------------------------------+
-
-+------------------------------------------------+
-| 46 FLOW RECOVERY                               |
-+------------------------------------------------+
-| Reply send | outcome unknown                   |
-| Provider reference: M-449                      |
-| TAR is checking delivery before retry          |
-| Contact and task remain committed              |
-| [ View evidence ] [ Assign review ]            |
-+------------------------------------------------+
-
-+------------------------------------------------+
-| 47 FLOW REVISIONS                              |
-+------------------------------------------------+
-| Quote approval | active v2 | draft v3          |
-| Changed: manager threshold, email template     |
-| Grants: unchanged | new send scope: none       |
-| Running v2 instances finish under v2 rules     |
-| [ Compare ] [ Preview v3 ] [ Publish v3 ]      |
-+------------------------------------------------+
-
-+------------------------------------------------+
-| 36 MEMORY VIEW                                 |
-+------------------------------------------------+
-| Memory | saved view in Space                   |
-| Allergy note   person   2 sources              |
-| Prep time      fact     1 source               |
-| Deposit        preference 1 source             |
-| [ Raise ] [ Source ] [ Forget ]                |
-+------------------------------------------------+
-
-+------------------------------------------------+
-| 37 FORGET REVIEW                               |
-+------------------------------------------------+
-| Forget saved preference?                       |
-| Source: note + supporting event                |
-| Effect: exclude from recall now                |
-| Retention follows workspace policy             |
-| [ Keep ]              [ Forget ]               |
-+------------------------------------------------+
-
-+------------------------------------------------+
-| 26 OFFLINE                                     |
-+------------------------------------------------+
-| OFFLINE | showing saved data                   |
-| 2 turns waiting to sync                        |
-| Order draft #1045 is not confirmed             |
-| [ Keep editing draft ]                         |
-| [ Retry now ]                                  |
-+------------------------------------------------+
-
-+------------------------------------------------+
-| 27 AI PAUSED                                   |
-+------------------------------------------------+
-| AI PAUSED | manual work continues              |
-| Orders, checkout and stock available           |
-| Cause: monthly AI budget reached               |
-| Drafts remain saved                            |
-| [ Continue manually ] [ Detail ]               |
-+------------------------------------------------+
-
-+------------------------------------------------+
-| 38 EMPTY                                       |
-+------------------------------------------------+
-| No orders yet                                  |
-| Take your first order to start                 |
-| [ New order ]                                  |
-+------------------------------------------------+
-
-+------------------------------------------------+
-| 39 PENDING                                     |
-+------------------------------------------------+
-| Order #1045 | pending                          |
-| Request accepted; final result unknown         |
-| Keep this reference: T7-4F9A21                 |
-| [ Check status ]                               |
-+------------------------------------------------+
-
-+------------------------------------------------+
-| 40 CONFLICT                                    |
-+------------------------------------------------+
-| Order draft changed while offline              |
-| Stock: 3 -> 1 since your draft                 |
-| Draft retained; quantities unchanged           |
-| [ Review draft ]                               |
-+------------------------------------------------+
-
-+------------------------------------------------+
-| 41 DENIED                                      |
-+------------------------------------------------+
-| Refund unavailable for this account            |
-| No private order details displayed             |
-| [ Request access ]                             |
-+------------------------------------------------+
-
-+------------------------------------------------+
-| 42 FAILED                                      |
-+------------------------------------------------+
-| Message not delivered                          |
-| Provider response: temporary outage            |
-| Draft and recipient are preserved              |
-| [ Retry safely ] [ Open Inbox ]                |
-+------------------------------------------------+
-~~~
-
-#### 10.1.6 = End-to-end vertical screens
-
-~~~text
-+------------------------------------------------+
-| 48 CRM CONTACT                                 |
-+------------------------------------------------+
-| Priya Rao | customer | consent: email yes      |
-| Related: 2 enquiries, 1 quote, 4 orders        |
-| Possible duplicate: P. Rao [ Review match ]    |
-| Timeline: source-linked events                 |
-| [ Add note ] [ Create follow-up ]              |
-+------------------------------------------------+
-
-+------------------------------------------------+
-| 49 SALES QUOTE                                 |
-+------------------------------------------------+
-| Quote Q28 | Priya | draft                      |
-| 12 lunch boxes x INR 240 = INR 2,880           |
-| Tax and discount: calculated by code           |
-| Stock/fulfilment: check current availability   |
-| [ Preview terms ] [ Submit for approval ]      |
-+------------------------------------------------+
-
-+------------------------------------------------+
-| 50 SERVICE BOOKING                             |
-+------------------------------------------------+
-| Installation | customer: Maya                  |
-| Slot: Tue 10:00-12:00 | worker: Arun           |
-| Capacity: available | travel: checked          |
-| Deposit: pending; booking not confirmed        |
-| [ Hold slot ] [ Request deposit ]              |
-+------------------------------------------------+
-
-+------------------------------------------------+
-| 51 COMMERCE ORDER                              |
-+------------------------------------------------+
-| Order O91 | paid | fulfilment pending          |
-| Quote Q28 -> invoice I91 -> payment P91        |
-| Items reserved: 12 | short: 0                  |
-| Delivery address: verified                     |
-| [ Prepare ] [ View payment receipt ]           |
-+------------------------------------------------+
-
-+------------------------------------------------+
-| 52 DELIVERY                                    |
-+------------------------------------------------+
-| Shipment S91 | packing                         |
-| 12 of 12 items checked | address verified      |
-| Carrier: not connected | manual handoff        |
-| Promise: Fri before 17:00                      |
-| [ Print packing list ] [ Mark handed over ]    |
-+------------------------------------------------+
-
-+------------------------------------------------+
-| 53 SUPPORT CASE                                |
-+------------------------------------------------+
-| Case C17 | damaged item | priority: review     |
-| Order O91 + photo + policy [ Open evidence ]   |
-| Suggested resolution: replacement              |
-| Stock and eligibility: live checks             |
-| [ Reply draft ] [ Request return approval ]    |
-+------------------------------------------------+
-
-+------------------------------------------------+
-| 54 PURCHASING                                  |
-+------------------------------------------------+
-| Reorder: lunch box packaging                   |
-| On hand 20 | reserved 12 | threshold 30        |
-| Supplier A: INR 8/unit | minimum 100           |
-| Proposal: 100 units | approval required        |
-| [ Compare suppliers ] [ Request approval ]     |
-+------------------------------------------------+
-
-+------------------------------------------------+
-| 55 FINANCE RECONCILIATION                      |
-+------------------------------------------------+
-| Payment P91 | INR 2,880 | provider settled     |
-| Invoice I91 | INR 2,880 | balance 0            |
-| Source receipt: R-887 [ Open ]                 |
-| Difference: 0 | posting: verified              |
-| [ Export ] [ Review unmatched ]                |
-+------------------------------------------------+
-
-+------------------------------------------------+
-| 56 CAMPAIGN                                    |
-+------------------------------------------------+
-| Repeat lunch offer | draft                     |
-| Audience: 42 consented customers               |
-| Excluded: 3 opted out, 2 unresolved            |
-| Message and timing [ Preview ]                 |
-| [ Request send approval ]                      |
-+------------------------------------------------+
-
-+------------------------------------------------+
-| 57 REPORTING                                   |
-+------------------------------------------------+
-| This month | sales and service                 |
-| Orders 91 | fulfilled 84 | returns 2           |
-| Revenue: exact ledger totals                   |
-| Enquiries -> quotes -> paid: source linked     |
-| [ Inspect records ] [ Export ]                 |
-+------------------------------------------------+
-~~~
-
-Screen numbers 01-57 cover the shared shell, Flow Books, vertical domains and system states. They are target concepts, not implementation claims. A card never grants authority merely because its button is visible.
-
-### 10.2 = Ongoing agent experience
-
-Reuse Space, Inbox, Flows, the assistant and Settings. The following contracts extend the atlas; they do not add primary navigation destinations or imply those screens are built.
+Reuse Space, Contacts within Space, Inbox, Flows, the assistant and Settings. The following contracts extend the screen map; they do not add primary navigation destinations or imply those screens are built.
 
 | Existing destination | Added behavior | What the person can control |
 | --- | --- | --- |
 | Space | Goals with observed progress, deadline, next check and linked tasks. | Change outcome/constraints, pause or stop; inspect why progress changed. |
+| Contacts | Person/organization search, relationship history and relevant Flow Book cards. | Correct identity, end or add a sourced relationship, and start a permitted book for this contact. |
 | Assistant | Private main conversation with task links and named work conversations (§10.3). Accept another request while work runs; show accepted, working, waiting and completed states accurately. | Interrupt, correct, attach evidence and resume the same task from another permitted channel. |
 | Inbox | For you contains actionable exceptions, approvals and useful suggestions; Conversations contains permitted chat history. Routine execution detail stays in Activity. | Approve the exact effect, resolve a dependency, reopen a conversation, dismiss/snooze a suggestion or mute a watch. |
 | Task/Activity detail | Current plan, next action/wait, changes, elapsed work, spend, outputs and receipts. | Inspect sources; pause/cancel future work; retry only through the recovery policy. |
@@ -1631,9 +950,9 @@ Onboarding asks for the business's first useful outcome, connects only the requi
 
 Use 🧠, 🙌 and 🗃️ in architecture documentation and explanatory onboarding where useful. Use familiar action labels, status text and accessible names in operational screens; emoji never carries permission, status or meaning on its own.
 
-### 10.3 = TAR conversations: one assistant, organized work
+### 10.3 TAR conversations: one assistant, organized work
 
-**Target decision:** a familiar main TAR conversation plus a searchable list of named work conversations. Keep `Space | Inbox | Flows` as primary navigation. Chat is the natural request surface; POS, record forms and other direct business screens retain their efficient controls. This is a proposed UX and persistence contract, not an implemented chat system.
+**Target decision:** a familiar main TAR conversation plus a searchable list of named work conversations. Keep `Space | Inbox | Ask TAR` as primary navigation, and open Flow Books from Space. Chat is the natural request surface; POS, record forms and other direct business screens retain their efficient controls. This is a proposed UX and persistence contract, not an implemented chat system.
 
 | Pattern from the references | Benefit | Decision for TAR |
 | --- | --- | --- |
@@ -1647,7 +966,9 @@ Muse itself describes a main conversation with side chats, background activity, 
 
 | Surface | Target behavior |
 | --- | --- |
-| Space | A visible Ask TAR entry opens the user's main conversation in the current workspace. A consistently placed chat control on root screens provides the same shortcut. |
+| Ask TAR | The dedicated bottom tab opens the user's main conversation in the current workspace. A consistently placed chat control on root screens provides the same shortcut. |
+| Space | Home for outcomes, records, Contacts and Flow Books. Flow Books opens the reusable process library and its runs. |
+| Contacts | Space opens the shared people/organization list. A contact shows sourced roles, current work, direct actions and eligible Flow Book cards; choosing a book binds this contact only after the person reviews that context. |
 | Inbox | Two sibling tabs: For you and Conversations. For you stays the default and shows actionable work. Conversations offers search, New conversation, pinned chats and recent chats; the private main TAR conversation is pinned first. |
 | Conversation list | Each row shows a work title, one useful latest update, time, unread marker and a text status when work is active or needs attention. Examples: Malar's quote, September stock review, Weekend staffing. Order pinned then recent; offer an explicit Needs you filter. |
 | Conversation detail | Header shows title, workspace and audience. Short chat bubbles surround flat cards for drafts, approvals, records, files and results. A compact active-task strip opens task detail; full tool activity is available there. |
@@ -1656,8 +977,8 @@ Muse itself describes a main conversation with side chats, background activity, 
 | Larger screens | Show the conversation list beside the selected chat; optionally open the selected record or artifact in a detail pane. Mobile uses list, chat and detail as successive screens with native back behavior. |
 
 ~~~text
-Space                 Inbox                         Flows
-Ask TAR               For you | Conversations       Recipes and runs
+Space                 Inbox                         Ask TAR
+Contacts / Flow Books For you | Conversations       Main and work chats
                              |
                       TAR                 pinned
                       Malar's quote       Needs you
@@ -1690,7 +1011,7 @@ Loading the list, searching permitted history, scrolling and viewing receipts us
 
 **First release:** main chat, conversation list/search, explicit work chats, persisted messages, task correlation, draft/approval/result cards and truthful reconnect states. Add richer browser cards and voice after the corresponding execution adapters pass their gates. Validate with an enquiry-to-quote journey: ask in main chat, continue in Malar's quote, review the same draft from Inbox, send once, close/reopen the app and see the confirmed receipt.
 
-## 11 = POS and restaurant path
+## 11. POS and restaurant path
 
 **Two inputs, one action contract.** A cashier tapping products uses code; a customer message or voice note may need transcription and bounded Jev. Both commit the same POS action through the gateway.
 
@@ -1725,10 +1046,9 @@ message/voice -> capture -> Jev draft ----+
 
 Example = "Two oat cappuccinos, one without sugar, and the sandwich from yesterday." The draft must preserve which item has the modifier, find the historical sandwich candidate, and ask if no candidate matches. Identical lines merge only when their modifiers and source meaning agree. A voice note adds transcription cost and uncertainty; offline work stays a draft.
 
-The POS sale, receipt, setup, stock, product, customer and return concepts are
-drawn together in the section 10 screen atlas.
+The POS sale, receipt, setup, stock, product, customer and return concepts are grouped in [the mobile concepts](tar-mobile-concepts.pen).
 
-## 12 = Site Studio and publishing
+## 12. Site Studio and publishing
 
 ~~~text
 +--------------------------------------------------------------------------------+
@@ -1783,7 +1103,7 @@ drawn together in the section 10 screen atlas.
 
 Precompute plans for a small set of permitted segment/page/locale combinations on meaningful releases. Default is useful with no personal history. Explicit language or category selection is deterministic. Consent is never inferred; do not derive sensitive personas from browsing. Experiments require merchant enablement, separate budget, persistent control assignment and measured lift. A site chat question uses the channel budget, not a page-view budget. Rebuild only plans affected by content, eligibility or rubric changes.
 
-## 13 = Sales, GTM and staged external data
+## 13. Sales, GTM and staged external data
 
 **Pattern = pay for evidence in stages.** This makes the shared catalog useful for discovery and retention without exposing arbitrary broker tools.
 
@@ -1804,12 +1124,12 @@ signal -> cheap code filters -> small authorized source fetch
 | Verify | Email/domain or source verification. | Exact validity result, price cap and purpose. |
 | Assess | Shared Jev bundle. | Candidate coverage, evidence quality and calibrated route policy. |
 | Enrich | Approved person/company lookup. | Spend only after qualification; enforce per-hit cap. |
-| Act | CRM lead, task, draft or outreach action. | Consent, frequency, recipient, approval and delivery receipt. |
+| Act | Sales opportunity, task, draft or outreach action. | Consent, frequency, recipient, approval and delivery receipt. |
 | Learn | Store assessment and actual outcome. | Compare cost per qualified and accepted opportunity. |
 
 The [Jev + treg GTM examples](https://treg.to/jev) illustrate staged lead qualification, signup triage and post research. Their vendor prices, availability, performance and synthetic examples are not TAR benchmarks. A Jev fraud probability alone cannot ban an account. TAR needs independent abuse evidence, consequence-aware review and an authorized account action. Social network access and outreach terms must be verified before selecting an adapter.
 
-## 14 = 🗃️ Files: memory, skills, repositories and artifacts
+## 14. 🗃️ Files: memory, skills, repositories and artifacts
 
 **Memory = sourced, scoped, derived context in workspace storage.** It accelerates continuity; it never replaces authoritative orders, balances, permissions, stock or service state.
 
@@ -1867,7 +1187,7 @@ The [Jev + treg GTM examples](https://treg.to/jev) illustrate staged lead qualif
 
 Initial planning bounds = pack about 8k tokens, excerpt about 300 where adequate, compaction after 25 changed events or 24 hours, immediate overlay for corrections and withdrawals. These are tunable, not laws. No probability cutoff silently deletes a critical fact. Forget excludes a row from recall immediately; retained data, deletion and exports follow applicable lifecycle policy. Memory is a saved Space view with source, correct and forget actions; durable forget can appear as an Inbox Review card. Begin with aliases/text search; add vector infrastructure only after measured recall warrants it.
 
-### 14.1 = Memory maintenance without a computer
+### 14.1 Memory maintenance without a computer
 
 Use the same scheduled dispatcher and runner to select changed entities, read authorized source records, expire temporary context, resolve supported updates and compile affected packs. A no-change scope needs no model call. Code performs exact expiry/deduplication/composition; Jev handles ambiguous relationships. Narrative generation, when required, has its own explicit budget. This job accesses Turso and R2 directly, so no browser, sandbox or Drive is needed.
 
@@ -1875,7 +1195,7 @@ Persist the input revision/cursor and publish a new pack only if its dependencie
 
 Learning updates sourced context or proposes a recipe/skill improvement. It cannot change permissions, budgets, production code or published books. Private person context and shared business context have separate access scopes; using the same assistant across channels does not merge those scopes. Factual business answers still read current authoritative records.
 
-### 14.2 = Skills, files and reusable outputs
+### 14.2 Skills, files and reusable outputs
 
 | Durable content | Default home | Lifecycle and access |
 | --- | --- | --- |
@@ -1893,9 +1213,9 @@ Use ordinary records, templates and native views for reports first. Generated do
 
 Restore and export are part of the data contract: define recovery objectives and retention per data class, test workspace restore with object references and receipts intact, and preserve revocation/forget exclusions through restoration. Do not claim an atomic backup or transaction across D1, Turso and R2. Reconcile storage mismatches before resuming affected effects.
 
-## 15 = Evaluation, rollout and build order
+## 15. Evaluation, rollout and build order
 
-### 15.1 = Route proof
+### 15.1 Route proof
 
 ~~~text
 OFF -> fixed offline evaluation -> sampled SHADOW -> reviewed drafts
@@ -1957,49 +1277,32 @@ For Noul, ask a single testable yes/no claim and retain its probability; do not 
 
 Jev evaluates frozen traces, never authorizes live effects. Human labels and exact assertions remain the reference. Agreement is distinct from repeatability, and score variance is distinct from score accuracy. A zero-error sample of 1,000 independent relevant cases still has about a 0.3% 95% upper error bound by the rule of three; important accepted subsets and slices may need more. Do not multiply separate probabilities to claim whole-workflow accuracy.
 
-The [LangChain Jev-as-a-Judge article](https://x.com/LangChain/article/2101454284927959080) and its [experiment repository](https://github.com/danielgshea/jev-as-a-judge) are useful evidence for trying this evaluator pattern: five fixed weather-agent traces were judged 100 times each against one human review. Jev matched the reviewer's binary labels in 500/500 repeated decisions; its mean per-case continuous Score variance was 0.0000149. Five cases, one reviewer and score variance alone do not establish TAR's accuracy, language coverage, safety or current service behavior. The published experiment did not expose the hosted Jev service version. Reproduce on a larger, independently labeled TAR set; record every available model and bundle identifier, and rerun calibration when the served version cannot be pinned. Do not add LangSmith or Deep Agents as runtime dependencies for this: the needed parts are frozen traces, rubrics, exact assertions, a judge adapter and route reports. An external tracing tool is optional only if it measurably improves operations.
-
-| Ablation | Comparison |
-| --- | --- |
-| Router | Deterministic baseline vs every-interaction vs selective Jev. |
-| Architecture | Shared three-primitive compiler vs separate domain prompts/agents. |
-| Bundle | Narrow vs speculative; staged vs single call; reuse vs recompute. |
-| Output | Template vs generation. |
-| Retrieval | Lexical baseline vs added method only if recall improves. |
-
-| Robustness test | Failure it can expose |
-| --- | --- |
-| Permute eligible Choice option order; keep labels, evidence and policy fixed. | Decision or threshold changes caused by presentation order. |
-| Add an irrelevant option; compare probabilities and chosen action. | Candidate-set sensitivity or a missing none/unknown route. |
-| Rephrase one atomic question without changing its meaning. | Fragile rubric wording. |
-| Add/remove an independent question in a shared request. | Unexpected bundle-composition effects. |
-| Remove evidence, add contradictory text and test noisy language/transcription. | Confident unsupported decisions and unsafe fallback. |
-
-The option-order and irrelevant-option probes are motivated by an [independent Jev API investigation](https://archerhume.com/posts/jevs-architecture-unmasked); its proposed model internals are hypotheses. Treat observed behavior as a reason to test TAR's actual requests, not as a fixed performance guarantee. Measure calibration and false acceptance on held-out cases, including slices with costly mistakes.
+External demonstrations are useful hypotheses, not TAR accuracy evidence. Before promotion, test TAR's frozen traces against independently labeled cases, including changed option order, irrelevant candidates, missing or contradictory evidence, question rephrasing and noisy language. Measure false acceptance, coverage, latency and cost by operating slice; preserve model and question versions.
 
 Thresholds depend on route, model, question version, evidence quality, language and consequence. Promote only when the composed policy beats predeclared baseline criteria for error, coverage, latency and cost. Pin model, canary, roll back and disable per route.
 
 Smallest deciding experiment = freeze 100 to 200 permission-safe enquiries and command requests; label intended action, missing facts and forbidden effects; run exact-code baseline, bundled Jev route and applicable current generator. Report candidate recall, false automatic accepts, correct completed tasks, human review minutes, p50/p95 end-to-end latency and total cost including retries and corrections. Set route-specific go/no-go bounds before seeing results. This is an experiment design, not a measured TAR result.
 
-### 15.2 = Build sequence
+### 15.2 Build sequence
 
 | Phase | Deliverable | Exit gate |
 | --- | --- | --- |
 | P0a | Extend existing action contract, eligible shortlist, task grants and connection policy. | One catalog drives forms, TAR assistant, Flow Book discovery and gateway validation. |
-| P0b | Pre-inference turn replay; proposal/assessment/attempt links. | Duplicate turn repeats zero inference; accepted effects are reconstructible. |
-| P0c | Server Jev adapter, reviewed bundles, support/Inbox and command-draft slice. | Contract and whole-route accuracy/latency/cost gates pass. |
-| P0d | POS or quote draft from spans and real catalog candidates. | Candidate recall and whole-order correctness measured against manual entry. |
+| P0b | Shared person, organization and relationship record contracts; contact search/detail and direct actions. | One person can change organizations without rewriting historical work; matching never merges across workspaces or grants consent. |
+| P0c | Pre-inference turn replay; proposal/assessment/attempt links. | Duplicate turn repeats zero inference; accepted effects are reconstructible. |
+| P0d | Extend the first-step Jev suggestion into reviewed candidate/recipe selection and a command-draft slice. | Whole-route accuracy, latency and cost gates pass; no-match and missing-capability cases stop safely. |
+| P0e | Contact-started direct action and POS or quote draft from real candidates. | One-step work bypasses Flow creation; candidate recall and whole-order correctness beat the declared baseline. |
 | P1a | Common run migration; Cloudflare Workflows adapter; ordered runner, durable ingress, waits, dispatcher and outbox reconciliation. | Crash/replay/revocation gates pass; old Flow runs remain readable; current authority governs every resumed effect. |
-| P1b | Flow Book authoring and legacy Bot/kit migration; goal/task records, work views and §10.3 conversation navigation/persistence. | Configure, preview, publish, pause and revise; show requested outcomes, next steps, waits and receipts. Main/topic chats reconnect correctly and share canonical task/approval cards. Converted books need reviewed grants. |
+| P1b | Complete Flow Book authoring with typed inputs, output mapping, optional LLM drafting, compiler, preview and publication; migrate legacy Bot/kit recipes. Add goal/task views and §10.3 conversations. | Reuse an exact recipe with zero LLM; reject an invented action or unsafe trigger; publish only a reviewed version. Main/topic chats reconnect to the same task, approval and receipt. Converted books need reviewed grants. |
 | P1c | Assessment reuse and scoped memory with correction, forgetting and incremental maintenance. | Changed display weights add zero inference; correction/forget wins over concurrent consolidation; no sandbox is needed. |
-| P1d | Scoped connections, channel continuity, domain actions and versioned artifacts. | Prove one enquiry-to-quote-to-order-to-delivery-to-support journey, then apply the action/rule/recovery gates to every domain package. Measure provider spend and actual outcomes. |
+| P1d | Scoped connections, channel continuity, member and purchasing actions, other domain actions and versioned artifacts. | Prove contact-to-member and supplier-to-purchase journeys, then an enquiry-to-quote-to-order-to-delivery-to-support cycle. Apply action/rule/recovery gates to every package; measure real outcomes and provider spend. |
 | P1e | Bounded task supervision, enabled watches, useful notifications and autonomy controls. | Complete a requested goal across interruptions and changed evidence within budget; paused/revoked work stops new dispatch; notification value is measured. |
 | P2a | Browser/computer route for an observed API gap; richer documents or voice where needed. | Enforced egress/credential/file boundaries, human handoff, trustworthy receipts and acceptable cost per completed task. |
 | P2b | Branching graphs, selective delegation and predictive/personalization experiments. | Independent measured need, shared budgets, recovery/authority proof and controlled outcome lift. |
 
-Use keyless offline fixtures plus separate live provider smoke checks. Start question bundles as versioned code assets; editable stored definitions require versioning, validation, review, tenant isolation and a migration. The current definitions schema accepts flow, record_type, bot and kit; no arbitrary question kind exists. An HTTP adapter inside the Worker is acceptable; the documented JavaScript SDK targets Node.js 20+, so verify runtime compatibility before adoption. [TypeSafe API](https://docs.typesafe.ai/api), [JavaScript SDK](https://docs.typesafe.ai/sdk/javascript).
+Use keyless offline fixtures plus separate live provider smoke checks. Start question bundles as versioned code assets; editable stored definitions require versioning, validation, review, tenant isolation and a migration. New workspace schemas accept only `flow` and `record_type`; existing database constraints remain compatible while historical Bot/kit rows are archived. No arbitrary question kind exists. An HTTP adapter inside the Worker is acceptable; the documented JavaScript SDK targets Node.js 20+, so verify runtime compatibility before adoption. [TypeSafe API](https://docs.typesafe.ai/api), [JavaScript SDK](https://docs.typesafe.ai/sdk/javascript).
 
-### 15.3 = Ongoing agent acceptance gates
+### 15.3 Ongoing agent acceptance gates
 
 | Scenario | Required observable result |
 | --- | --- |
@@ -2010,6 +1313,9 @@ Use keyless offline fixtures plus separate live provider smoke checks. Start que
 | Several tasks run in one chat; an ambiguous reply arrives | Ask which task/proposal is intended; corrections and cancellation affect only the selected work. |
 | Same proposal is approved in chat and Inbox; client reconnects | One effect and one canonical receipt; messages replay without duplication; unknown external results never show Done. |
 | Workspace switches, conversation audience changes or a chat is archived | No private history leaks through search, previews, streams or summaries; active work remains discoverable and archiving does not silently cancel it. |
+| A person changes organizations or has two concurrent opportunities | End the old relationship without changing its history; keep each quote and stage tied to its own organization/opportunity. |
+| Contact-started member onboarding or supplier ordering | A contact does not become a member until verified acceptance and authorized role assignment; a purchase does not become received or paid without exact records and receipts. |
+| Jev chooses no recipe or an LLM drafts an unknown action | Show the missing capability or a reviewable draft; the compiler rejects unknown actions and unattended triggers remain off. |
 | Role/connection/grant changes during a wait | Resume uses current authority and exact approval scope; unavailable work pauses with an actionable reason. |
 | Task requests another tenant's context or forget races with consolidation | No unauthorized retrieval; obsolete or forgotten content cannot reappear through packs, artifacts or caches. |
 | Malicious page, repository instruction or generated script | It cannot obtain credentials, broaden grants, contact forbidden destinations or bypass effect approval. Test the real executor, not only the model prompt. |
@@ -2019,50 +1325,18 @@ Use keyless offline fixtures plus separate live provider smoke checks. Start que
 
 The first ongoing-agent pilot should use an existing supported commerce path and a real bounded goal. Require evidence for completion and recovery before expanding autonomy or domain breadth. Product inspiration is not an accuracy, security or cost guarantee.
 
-## 16 = Risks, limits and architecture test
+## 16. Risks and complexity budget
 
-| Risk | Control or evidence needed |
+| Risk or temptation | Required response |
 | --- | --- |
-| Confident wrong judgment | Whole-route labels, consequence-aware gates and source-linked review. |
-| Prompt injection from records/messages | Treat text as data; filter action candidates; keep authorization deterministic. |
-| Missing candidate or source | Measure recall; widen retrieval or ask for input. |
-| Stale state | Dependency invalidation, immediate correction overlay and live commit checks. |
-| Correlated model errors | Evaluate composed outcomes; never multiply primitive probabilities as proof. |
-| Language/transcript errors | Measure actual operating slices and capture quality. |
-| Provider outage or quota | Reservation, bounded retry, manual/default path and capacity agreement. |
-| Unattended Flow overreach | Explicit automation identity, owner, action grants, effect limits and live Gateway recheck. |
-| Goal drift or endless work | Versioned task objective, completion evidence, bounded next steps, shared budget and no-progress stop. |
-| Notification fatigue | Configured watches, changed evidence, deduplication, quiet hours and measured usefulness. |
-| Browser/computer bypass | Trusted credential/egress enforcement outside generated code, isolated inputs and scoped output publication. |
-| Duplicate engine/store authority | Workflows owns checkpoints; Turso owns accepted intent and receipts; repair dispatch gaps without replaying uncertain effects. |
-| Hidden costs | Full ledger: data, model, channel, rendering, storage, review and retries. |
-| Visual overclaim | Render/inspect sites; text judgments cannot verify pixels. |
-| Bad memory update | Scoped source relations, conservative correction and explicit deletion lifecycle. |
-| Architecture sprawl | Reuse gateway, catalog, Turso and one Jev module until measured need. |
-| External terms | Verify current provider access, data handling, pricing and permitted outreach. |
+| Wrong or stale model judgment | Measure whole-route errors; link evidence; invalidate changed assessments; check live facts at commit. |
+| Missing candidate or source | Measure retrieval recall, widen eligible search or ask for input. |
+| Unauthorized or duplicated effect | One catalog and Gateway; exact grants, replay keys, outbox receipts and reconciliation. |
+| Browser, computer or prompt injection | Isolate temporary sessions; enforce credentials and network egress outside generated code; require the same effect approval. |
+| Provider outage, quota or hidden cost | Bounded retry and budget, manual path, full cost per correctly completed outcome. |
+| Goal drift or noisy proactivity | Owned scope, stop condition, due/event wakes, meaningful notifications and no-progress limit. |
+| Memory error or data leak | Sourced, scoped context; correction, forgetting and current access checks. |
+| Contact or relationship conflation | Preserve person and organization identity, time-bound roles, consent evidence and history; review uncertain merges. |
+| Architecture sprawl | Reuse the shared catalog, Jev module, runner and stores; add a service, table or agent loop only after measured need. |
 
-### 16.1 = Complexity budget
-
-| Avoid by default | Use first |
-| --- | --- |
-| One language agent and prompt stack per domain. | Shared Jev compiler plus domain rubrics. |
-| Second tool list for forms, assistant, Flows or providers. | Versioned eligible action catalog and adapters. |
-| Separate Bot runtime, memory or installer. | One TAR assistant, domain packages and a common Flow runner. |
-| Three services merely to match Brain / Hands / Files. | Logical boundaries in the existing Worker, shared runner and stores. |
-| Always-running computer or model loop per customer. | Durable goals, event/due wakes and temporary tool sessions. |
-| Separate goal planner, scheduler and memory agent stacks. | One task supervisor, one runner and one scheduled dispatcher. |
-| New table or vector store for every kind of context. | Validated record kinds, scoped text retrieval and measured indexing needs. |
-| Browser automation for an available typed API. | Direct catalog action; optional compute only for a demonstrated gap. |
-| Generative JSON for every extraction. | Source spans, Choice and code normalizers. |
-| Prompt checks for schemas, money or permissions. | Deterministic compiler and domain rules. |
-| Full prose rewrite of every brief. | Selected source blocks and templates. |
-| Model call per site slot or visit. | Approved precomputed page plans. |
-| Freeform planner for every Flow. | Recipe selection and compiler. |
-| Reclassification on every screen. | Reusable assessments with dependency invalidation. |
-| Full-history memory rebuild per event. | Entity-scoped retrieval, overlay and incremental packs. |
-| Vector database or feature platform on day one. | Existing storage and text lookup until measured recall needs more. |
-| Generic semantic guard on every effect. | Exact invariants and targeted support checks. |
-
-**Architecture test = adding a domain mostly adds catalog contracts/adapters, domain rules, rubrics, recipes, templates and tests.** If it demands a new authority source, agent loop or general planner, first test whether the shared core already expresses it.
-
-**TAR = 🧠 shared Brain + 🙌 authorized Hands + 🗃️ durable Files, expressed through reusable domain packages. Goals retain intent; tasks coordinate work; Flow Books repeat known processes; Jev judges; code composes; the Gateway validates and commits; receipts prove outcomes.**
+**Architecture test:** adding a domain should mainly add actions, rules, rubrics, recipes, views and tests. A new business process should usually add a Flow Book. A new shared primitive belongs in the core only when several domains need it. TAR uses one assistant, one Action Gateway and one durable runner; business truth and receipts survive after compute stops.

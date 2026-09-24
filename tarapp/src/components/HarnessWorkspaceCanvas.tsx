@@ -1,21 +1,29 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, AppState, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, AppState, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import ActionInterfaceHost from '@/action-interfaces/ActionInterfaceHost';
-import BotDirectory from '@/components/BotDirectory';
 import RecordDetailModal from '@/components/RecordDetailModal';
+import SearchRecordsModal from '@/components/SearchRecordsModal';
 import SiteScreen from '@/components/site';
 import WorkspaceTeam from '@/components/WorkspaceTeam';
-import { createOperationKey, harness, type HarnessAction, type HarnessCanvasCard, type HarnessInterfaceContract, type HarnessRecord, type HarnessWorkspace } from '@/lib/harness';
+import { createOperationKey, harness, type HarnessAction, type HarnessCanvasCard, type HarnessFlowBook, type HarnessFlowRun, type HarnessInterfaceContract, type HarnessRecord, type HarnessWorkspace } from '@/lib/harness';
 
-export type WorkspaceTab = 'canvas' | 'inbox' | 'records' | 'bots';
+export type WorkspaceTab = 'space' | 'inbox' | 'flows' | 'ask';
 type OrderLine = { productId: string; title: string; quantity: number; status?: 'pending' | 'preparing' | 'ready' };
 type OrderState = 'pending' | 'preparing' | 'ready';
 type InboxSource = { workspace: HarnessWorkspace; tasks: HarnessRecord[]; orders: HarnessRecord[]; permissions?: import('@/lib/harness').InboxPermissions };
 type InboxEntry = { kind: 'task' | 'order'; record: HarnessRecord; source: InboxSource };
 interface Props { tab: WorkspaceTab; scope: string; workspaceName: string; role: 'owner' | 'admin' | 'member' | 'guest'; workspaces: HarnessWorkspace[]; onSelectWorkspace: (slug: string) => void; onCreateWorkspace: () => void; }
 interface OpenAction { action: HarnessAction; scope: string; input?: Record<string, unknown>; title?: string; }
+
+const flowPublishAction: HarnessAction = {
+  id: 'flow.publish', version: 3, type: 'app', title: 'Create Flow Book',
+  description: 'Publish a reusable ordered process for this workspace.', interfaceKey: 'flow-builder',
+  fields: [], output: [], roles: ['owner', 'admin'], effects: ['definition_publish', 'canvas_update'],
+};
+const flowBuilderContract: HarnessInterfaceContract = { key: 'flow-builder', version: 1, title: 'Flow builder', presentation: 'screen', submitLabel: 'Create Flow' };
 
 const colors = { ink: '#1B1C20', muted: '#626671', faint: '#8B8F99', line: '#D8DBE3', wash: '#F1F3F8', blue: '#3157A8', selected: '#173673', selectedWash: '#DCE5FF', green: '#18865B', amber: '#A66D00', personal: '#D5654F' };
 const titleCase = (value: string) => value.replace(/[_-]+/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
@@ -34,32 +42,52 @@ const scheduledAt = (record: HarnessRecord) => { const value = record.data.sched
 const entryPriority = (entry: InboxEntry, now: number) => { if (entry.kind === 'order' && orderState(entry.record) !== 'pending') return 0; const time = scheduledAt(entry.record); if (time !== null && time <= now + 30 * 60 * 1000) return 1; if (entry.kind === 'task' && time === null) return 2; return 3; };
 
 export default function HarnessWorkspaceCanvas({ tab, scope, workspaceName, role, workspaces, onSelectWorkspace, onCreateWorkspace }: Props) {
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const [areaFilter, setAreaFilter] = useState('all');
-  const [now, setNow] = useState(0);
+  const [now, setNow] = useState(() => Date.now());
   const [teamOpen, setTeamOpen] = useState(false);
   const [siteOpen, setSiteOpen] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<HarnessRecord | null>(null);
+  const [selectedRecordScope, setSelectedRecordScope] = useState(scope);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [cards, setCards] = useState<HarnessCanvasCard[]>([]);
   const [records, setRecords] = useState<HarnessRecord[]>([]);
+  const [recordNext, setRecordNext] = useState<number | null>(null);
+  const [loadingMoreRecords, setLoadingMoreRecords] = useState(false);
+  const [spaceRecords, setSpaceRecords] = useState<'all' | 'contacts' | null>(null);
+  const [spaceFlows, setSpaceFlows] = useState(false);
+  const [books, setBooks] = useState<HarnessFlowBook[]>([]);
+  const [flowRuns, setFlowRuns] = useState<HarnessFlowRun[]>([]);
   const [inboxSources, setInboxSources] = useState<InboxSource[]>([]);
   const [actions, setActions] = useState<HarnessAction[]>([]);
   const [interfaces, setInterfaces] = useState<HarnessInterfaceContract[]>([]);
   const [openAction, setOpenAction] = useState<OpenAction | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const currentScope = useRef(scope);
+  currentScope.current = scope;
+  const selectRecord = (record: HarnessRecord, recordScope = scope) => {
+    setSelectedRecordScope(recordScope);
+    setSelectedRecord(record);
+  };
 
   const reload = useCallback(async () => {
+    if (currentScope.current !== scope) return;
+    setLoading(true);
     setError('');
     try {
-      const [registry, nextCanvas, nextRecords, inboxes] = await Promise.all([
+      const [registry, nextCanvas, nextRecords, inboxes, flowData] = await Promise.all([
         harness.workspaceRegistry(scope),
-        tab === 'canvas' ? harness.canvas(scope) : Promise.resolve(null),
-        tab === 'records' ? harness.records(scope) : Promise.resolve(null),
+        tab === 'space' ? harness.canvas(scope) : Promise.resolve(null),
+        tab === 'space' && spaceRecords ? harness.records(scope) : Promise.resolve(null),
         tab === 'inbox' ? Promise.all(workspaces.map((workspace) => harness.inbox(workspace.slug))) : Promise.resolve([]),
+        tab === 'flows' || (tab === 'space' && spaceFlows) ? harness.flows(scope) : Promise.resolve(null),
       ]);
+      if (currentScope.current !== scope) return;
       if (nextCanvas) setCards(nextCanvas.cards);
-      if (nextRecords) setRecords(nextRecords.records);
+      if (nextRecords) { setRecords(nextRecords.records); setRecordNext(nextRecords.next); }
+      if (flowData) { setBooks(flowData.books); setFlowRuns(flowData.runs); }
       setActions(registry.actions);
       setInterfaces(registry.interfaces);
       if (tab === 'inbox') {
@@ -71,15 +99,28 @@ export default function HarnessWorkspaceCanvas({ tab, scope, workspaceName, role
         })));
       }
     } catch (cause) {
+      if (currentScope.current !== scope) return;
       setError(cause instanceof Error ? cause.message : 'Could not load this workspace.');
     } finally {
-      setLoading(false);
+      if (currentScope.current === scope) setLoading(false);
     }
-  }, [scope, tab, workspaces]);
+  }, [scope, tab, workspaces, spaceRecords, spaceFlows]);
+
+  useEffect(() => {
+    setCards([]);
+    setRecords([]);
+    setRecordNext(null);
+    setBooks([]);
+    setFlowRuns([]);
+    setSpaceFlows(false);
+    setInboxSources([]);
+    setActions([]);
+    setInterfaces([]);
+  }, [scope]);
 
   useEffect(() => { const timer = setTimeout(() => { void reload(); }, 0); return () => clearTimeout(timer); }, [reload]);
   useEffect(() => { const subscription = AppState.addEventListener('change', (state) => { if (state === 'active') void reload(); }); return () => subscription.remove(); }, [reload]);
-  useEffect(() => { const initial = setTimeout(() => setNow(Date.now()), 0); const timer = setInterval(() => setNow(Date.now()), 60_000); return () => { clearTimeout(initial); clearInterval(timer); }; }, []);
+  useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 60_000); return () => clearInterval(timer); }, []);
 
   const suggestedSource = useMemo(() => {
     const entries: InboxEntry[] = inboxSources.flatMap((source) => [...source.tasks.map((record) => ({ kind: 'task' as const, record, source })), ...source.orders.map((record) => ({ kind: 'order' as const, record, source }))]);
@@ -131,63 +172,100 @@ export default function HarnessWorkspaceCanvas({ tab, scope, workspaceName, role
   const handleCreateRecord = (category?: string) => {
     if (category === 'orders') open(scope, 'pos.open', { section: 'sell' }, 'New Order / Sale');
     else if (category === 'tasks') open(scope, 'task.create', {}, 'New Task');
-    else if (category === 'contacts') open(scope, 'record.create', { type: 'contact' }, 'New Contact');
+    else if (category === 'contacts') Alert.alert('Add a contact', 'Choose the identity to add.', [
+      ...(actions.some((action) => action.id === 'contact.create') ? [{ text: 'Person', onPress: () => open(scope, 'contact.create', {}, 'Add person') }] : []),
+      ...(actions.some((action) => action.id === 'organization.create') ? [{ text: 'Organization', onPress: () => open(scope, 'organization.create', {}, 'Add organization') }] : []),
+      { text: 'Cancel', style: 'cancel' },
+    ]);
     else if (category === 'products') open(scope, 'pos.product.create', {}, 'New Product');
     else open(scope, 'record.create', {}, 'New Record');
   };
 
+  const loadMoreRecords = async () => {
+    if (recordNext === null || loadingMoreRecords) return;
+    setLoadingMoreRecords(true);
+    try {
+      const page = await harness.records(scope, undefined, recordNext);
+      if (currentScope.current === scope) {
+        setRecords((current) => {
+          const known = new Set(current.map((record) => record.id));
+          return [...current, ...page.records.filter((record) => !known.has(record.id))];
+        });
+        setRecordNext(page.next);
+      }
+    } catch (cause) {
+      Alert.alert('Could not load more records', cause instanceof Error ? cause.message : 'Try again.');
+    } finally {
+      setLoadingMoreRecords(false);
+    }
+  };
+
+  const canCreateRecord = (category?: string) => {
+    const eligible = new Set(actions.map((action) => action.id));
+    if (category === 'orders') return eligible.has('pos.open');
+    if (category === 'contacts') return eligible.has('contact.create') || eligible.has('organization.create');
+    if (category === 'products') return eligible.has('pos.product.create');
+    if (category === 'tasks') return eligible.has('task.create');
+    return eligible.has('record.create');
+  };
+
   const chooseArea = (slug: string) => { setAreaFilter(slug); if (slug !== 'all') onSelectWorkspace(slug); };
   const activeWorkspace = workspaces.find((item) => item.slug === scope) || workspaces[0];
-  const canManageSite = role === 'owner' || role === 'admin';
+  const canManageSite = activeWorkspace?.mode === 'work' && (role === 'owner' || role === 'admin');
 
   return (
-    <View style={styles.page}>
+      <View style={styles.page}>
       {teamOpen ? <WorkspaceTeam key={scope} scope={scope} name={workspaceName} onClose={() => setTeamOpen(false)} onChanged={() => { void reload(); }} /> : null}
-      {tab === 'bots' ? (
+      {tab === 'flows' ? (
         <View style={[styles.tabBody, { paddingTop: insets.top }]}>
-          {activeWorkspace ? <View style={styles.botContext}><ContextLabel workspace={activeWorkspace} name={workspaceName} /></View> : null}
-          <BotDirectory
-            visible
-            embedded
-            scope={scope}
-            canInstall={role === 'owner' || role === 'admin'}
-            onClose={() => undefined}
-            onChanged={() => { void reload(); }}
-            onCreateCustom={(botId, botTitle) => open(scope, 'flow.publish', { botId }, botTitle)}
-            onOpenSiteStudio={() => setSiteOpen(true)}
+          <AreaRail sources={workspaces.map((workspace) => ({ workspace, tasks: [], orders: [] }))} value={scope} onChange={chooseArea} onCreate={onCreateWorkspace} showAllWorkspaces onSearch={() => setSearchOpen(true)} onSettings={() => router.push('/settings')} showMembers={activeWorkspace?.mode === 'work'} onMembers={() => setTeamOpen(true)} />
+          <ScrollView style={styles.scroll} contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 24 }]}>
+          <FlowBooks
+            books={books}
+            runs={flowRuns}
+            canCreate={role === 'owner' || role === 'admin'}
+            onCreate={() => setOpenAction({ action: flowPublishAction, scope, input: {}, title: 'Create a reusable process' })}
+            onStart={(flowId, title) => open(scope, 'flow.start', { flowId }, title)}
+            onResume={(run) => open(scope, 'flow.start', { flowId: run.flowId, runId: run.id }, run.name || 'Continue Flow Book')}
           />
+          </ScrollView>
         </View>
       ) : (
         <ScrollView refreshControl={<RefreshControl refreshing={loading} onRefresh={() => { setLoading(true); void reload(); }} />} style={styles.scroll} contentContainerStyle={[styles.content, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 24 }]}>
-          {tab === 'inbox' ? <AreaRail sources={inboxSources} value={areaFilter} onChange={chooseArea} onCreate={onCreateWorkspace} /> : null}
-          {tab !== 'inbox' && activeWorkspace ? (
-            <>
-              <AreaRail sources={workspaces.map((workspace) => ({ workspace, tasks: [], orders: [] }))} value={scope} onChange={chooseArea} onCreate={onCreateWorkspace} showAllWorkspaces />
-              <ContextLabel workspace={activeWorkspace} name={workspaceName} />
-            </>
-          ) : null}
-
-          {activeWorkspace?.mode === 'work' ? (
-            <View style={styles.headerBar}>
-              <Pressable accessibilityRole="button" onPress={() => setTeamOpen(true)} style={styles.headerLink}>
-                <Text style={styles.headerLinkText}>Members & chat · {workspaceName}</Text>
-              </Pressable>
-              {canManageSite ? (
-                <Pressable accessibilityRole="button" onPress={() => setSiteOpen(true)} style={styles.headerSiteLink}>
-                  <Ionicons name="globe-outline" size={15} color={colors.blue} />
-                  <Text style={styles.headerSiteText}>Site Studio</Text>
-                </Pressable>
-              ) : null}
-            </View>
-          ) : null}
+          {tab === 'inbox' ? <AreaRail sources={inboxSources} value={areaFilter} onChange={chooseArea} onCreate={onCreateWorkspace} showAllWorkspaces allowAllAreas onSearch={() => setSearchOpen(true)} onSettings={() => router.push('/settings')} showMembers={activeWorkspace?.mode === 'work'} onMembers={() => setTeamOpen(true)} /> : null}
+          {(tab === 'space' || tab === 'ask') && activeWorkspace ? <AreaRail sources={workspaces.map((workspace) => ({ workspace, tasks: [], orders: [] }))} value={scope} onChange={chooseArea} onCreate={onCreateWorkspace} showAllWorkspaces onSearch={() => setSearchOpen(true)} onSettings={() => router.push('/settings')} showMembers={activeWorkspace.mode === 'work'} onMembers={() => setTeamOpen(true)} /> : null}
 
           {error ? <Pressable style={styles.error} onPress={() => { setLoading(true); void reload(); }}><Text style={styles.errorText}>{error} Tap to retry.</Text></Pressable> : null}
 
-          {loading ? (
+          {loading && tab !== 'space' ? (
             <View style={styles.center}><ActivityIndicator color={colors.blue} /></View>
           ) : (
             <>
-              {tab === 'canvas' ? <Canvas cards={cards} onOpen={openCard} onOpenSite={() => setSiteOpen(true)} canManageSite={canManageSite} /> : null}
+              {tab === 'space' && loading ? <View style={styles.progress}><ActivityIndicator size="small" color={colors.blue} /><Text style={styles.progressText}>Loading this space…</Text></View> : null}
+              {tab === 'ask' ? <View style={styles.askEmpty}>
+                <Ionicons name="chatbubble-ellipses-outline" size={24} color={colors.blue} />
+                <Text style={styles.askTitle}>Ask TAR</Text>
+                <Text style={styles.askMessage}>Private TAR conversations aren’t available in this workspace yet.</Text>
+              </View> : null}
+              {tab === 'space' ? spaceRecords ? <>
+                <TouchableOpacity style={styles.workCard} onPress={() => setSpaceRecords(null)} accessibilityRole="button" accessibilityLabel="Back to Space"><Ionicons name="arrow-back" size={20} color={colors.blue} /><Text style={styles.canvasRowTitle}>Space</Text></TouchableOpacity>
+                <RecordsSection key={spaceRecords} scope={scope} records={records} initialFilter={spaceRecords} hasMore={spaceRecords === 'all' && recordNext !== null} isLoading={loading} loadError={error} loadingMore={loadingMoreRecords} onLoadMore={() => void loadMoreRecords()} onRetry={() => { setLoading(true); void reload(); }} canCreate={canCreateRecord} onSelectRecord={(r) => selectRecord(r)} onCreateRecord={handleCreateRecord} />
+              </> : spaceFlows ? <>
+                <TouchableOpacity style={styles.workCard} onPress={() => setSpaceFlows(false)} accessibilityRole="button" accessibilityLabel="Back to Space"><Ionicons name="arrow-back" size={20} color={colors.blue} /><Text style={styles.canvasRowTitle}>Space</Text></TouchableOpacity>
+                <FlowBooks
+                  books={books}
+                  runs={flowRuns}
+                  canCreate={role === 'owner' || role === 'admin'}
+                  onCreate={() => setOpenAction({ action: flowPublishAction, scope, input: {}, title: 'Create a reusable process' })}
+                  onStart={(flowId, title) => open(scope, 'flow.start', { flowId }, title)}
+                  onResume={(run) => open(scope, 'flow.start', { flowId: run.flowId, runId: run.id }, run.name || 'Continue Flow Book')}
+                />
+              </> : <>
+                <TouchableOpacity style={styles.workCard} onPress={() => setSpaceRecords('contacts')} accessibilityRole="button" accessibilityLabel="Open Contacts"><Ionicons name="people-outline" size={21} color={colors.blue} /><Text style={styles.canvasRowTitle}>Contacts</Text><Ionicons name="chevron-forward" size={17} color="#9aa3b1" /></TouchableOpacity>
+                <TouchableOpacity style={styles.workCard} onPress={() => setSpaceRecords('all')} accessibilityRole="button" accessibilityLabel="Open Records"><Ionicons name="folder-outline" size={21} color={colors.blue} /><Text style={styles.canvasRowTitle}>Records</Text><Ionicons name="chevron-forward" size={17} color="#9aa3b1" /></TouchableOpacity>
+                <TouchableOpacity style={[styles.workCard, styles.workCardLast]} onPress={() => setSpaceFlows(true)} accessibilityRole="button" accessibilityLabel="Open Flow Books"><Ionicons name="git-branch-outline" size={21} color={colors.blue} /><Text style={styles.canvasRowTitle}>Flow Books</Text><Ionicons name="chevron-forward" size={17} color="#9aa3b1" /></TouchableOpacity>
+                <View style={styles.canvasSection}><Canvas cards={cards} onOpen={openCard} onOpenSite={() => setSiteOpen(true)} canManageSite={canManageSite} /></View>
+              </> : null}
               {tab === 'inbox' ? (
                 <UnifiedInbox
                   sources={inboxSources}
@@ -197,15 +275,12 @@ export default function HarnessWorkspaceCanvas({ tab, scope, workspaceName, role
                   onUpdateOrder={(source, order, productId, status) => void updateOrderItem(source, order, productId, status)}
                   onOpenTask={(source, task) => {
                     onSelectWorkspace(source.workspace.slug);
+                    selectRecord(task, source.workspace.slug);
+                  }}
+                  onCompleteTask={(source, task) => {
+                    onSelectWorkspace(source.workspace.slug);
                     open(source.workspace.slug, 'task.complete', { taskId: task.id }, task.title);
                   }}
-                />
-              ) : null}
-              {tab === 'records' ? (
-                <RecordsSection
-                  records={records}
-                  onSelectRecord={(r) => setSelectedRecord(r)}
-                  onCreateRecord={handleCreateRecord}
                 />
               ) : null}
             </>
@@ -215,7 +290,7 @@ export default function HarnessWorkspaceCanvas({ tab, scope, workspaceName, role
 
       <ActionInterfaceHost
         action={openAction?.action || null}
-        contracts={interfaces}
+        contracts={interfaces.some((item) => item.key === flowBuilderContract.key) ? interfaces : [...interfaces, flowBuilderContract]}
         scope={openAction?.scope || scope}
         initialInput={openAction?.input}
         contextTitle={openAction?.title}
@@ -226,9 +301,16 @@ export default function HarnessWorkspaceCanvas({ tab, scope, workspaceName, role
       <RecordDetailModal
         visible={Boolean(selectedRecord)}
         record={selectedRecord}
-        scope={scope}
+        scope={selectedRecordScope}
         onClose={() => setSelectedRecord(null)}
-        onAction={(actId, inp, tit) => open(scope, actId, inp, tit)}
+        onAction={(actId, inp, tit) => open(selectedRecordScope, actId, inp, tit)}
+      />
+
+      <SearchRecordsModal
+        visible={searchOpen}
+        scope={scope}
+        onClose={() => setSearchOpen(false)}
+        onSelect={(record) => { selectRecord(record); setSearchOpen(false); }}
       />
 
       <SiteScreen
@@ -242,51 +324,60 @@ export default function HarnessWorkspaceCanvas({ tab, scope, workspaceName, role
   );
 }
 
-function AreaRail({ sources, value, onChange, onCreate, showAllWorkspaces = false }: { sources: InboxSource[]; value: string; onChange: (slug: string) => void; onCreate: () => void; showAllWorkspaces?: boolean }) {
+function AreaRail({ sources, value, onChange, onCreate, showAllWorkspaces = false, allowAllAreas = false, onSearch, onSettings, showMembers = false, onMembers }: { sources: InboxSource[]; value: string; onChange: (slug: string) => void; onCreate: () => void; showAllWorkspaces?: boolean; allowAllAreas?: boolean; onSearch: () => void; onSettings: () => void; showMembers?: boolean; onMembers: () => void }) {
+  const insets = useSafeAreaInsets();
+  const { height: screenHeight } = useWindowDimensions();
   const [open, setOpen] = useState(false);
   const relevant = sources.filter((source) => showAllWorkspaces || source.tasks.length || source.orders.length);
-  const selected = relevant.find((source) => source.workspace.slug === value);
+  const selected = sources.find((source) => source.workspace.slug === value);
   const label = selected ? selected.workspace.mode === 'personal' ? 'Personal' : selected.workspace.name : 'All areas';
+  const sheetMaxHeight = Math.min(520, screenHeight * 0.72);
   const choose = (slug: string) => { onChange(slug); setOpen(false); };
 
   return (
     <View style={styles.areaPicker}>
-      <TouchableOpacity onPress={() => setOpen((current) => !current)} style={styles.areaTrigger} accessibilityRole="button" accessibilityState={{ expanded: open }}>
+      <View style={styles.workspaceBar}>
+      <TouchableOpacity onPress={() => setOpen((current) => !current)} style={styles.areaTrigger} accessibilityRole="button" accessibilityLabel={`Switch workspace. Current: ${label}`} accessibilityState={{ expanded: open }}>
         <Text numberOfLines={1} style={styles.areaTriggerText}>{label}</Text>
-        <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={14} color={colors.muted} />
+        <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={18} color={colors.ink} />
       </TouchableOpacity>
-      {open ? (
-        <View style={styles.areaMenu}>
-          <TouchableOpacity onPress={() => choose('all')} style={styles.areaOption}>
-            <Text style={[styles.areaOptionText, value === 'all' && styles.areaOptionActive]}>All areas</Text>
-            {value === 'all' ? <Ionicons name="checkmark" size={16} color={colors.blue} /> : null}
-          </TouchableOpacity>
-          {relevant.map(({ workspace }) => (
-            <TouchableOpacity key={workspace.id} onPress={() => choose(workspace.slug)} style={styles.areaOption}>
-              <View style={styles.areaOptionLabel}>
-                <View style={[styles.areaOptionDot, { backgroundColor: workspaceTint(workspace) }]} />
-                <Text numberOfLines={1} style={[styles.areaOptionText, value === workspace.slug && styles.areaOptionActive]}>
-                  {workspace.mode === 'personal' ? 'Personal' : workspace.name}
-                </Text>
-              </View>
-              {value === workspace.slug ? <Ionicons name="checkmark" size={16} color={colors.blue} /> : null}
-            </TouchableOpacity>
-          ))}
-          <TouchableOpacity onPress={() => { setOpen(false); onCreate(); }} style={styles.areaOption}>
-            <Text style={styles.newAreaText}>New area</Text>
-            <Ionicons name="add" size={16} color={colors.muted} />
-          </TouchableOpacity>
+        <View style={styles.workspaceActions}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Search contacts and records" onPress={onSearch} style={styles.headerIconButton}><Ionicons name="search-outline" size={19} color={colors.blue} /></Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="Open Settings" onPress={onSettings} style={styles.headerIconButton}><Ionicons name="settings-outline" size={19} color={colors.blue} /></Pressable>
+          {showMembers ? <Pressable accessibilityRole="button" accessibilityLabel="Open Members and chat" onPress={onMembers} style={styles.headerIconButton}><Ionicons name="people-outline" size={19} color={colors.blue} /></Pressable> : null}
         </View>
-      ) : null}
-    </View>
-  );
-}
-
-function ContextLabel({ workspace, name }: { workspace: HarnessWorkspace; name: string }) {
-  return (
-    <View style={styles.contextLabel}>
-      <View style={[styles.contextDot, { backgroundColor: workspaceTint(workspace) }]} />
-      <Text numberOfLines={1} style={styles.contextText}>{name}</Text>
+      </View>
+      <Modal visible={open} transparent animationType="slide" presentationStyle="overFullScreen" statusBarTranslucent onRequestClose={() => setOpen(false)}>
+        <View style={styles.sheetOverlay}>
+          <Pressable style={styles.sheetBackdrop} onPress={() => setOpen(false)} accessibilityRole="button" accessibilityLabel="Close workspace switcher" />
+          <View style={[styles.workspaceSheet, { maxHeight: sheetMaxHeight, paddingBottom: Math.max(insets.bottom, 16) }]}>
+            <View style={styles.sheetHandle} />
+            <View style={styles.sheetHeader}>
+              <Text style={styles.sheetTitle}>Switch workspace</Text>
+              <Pressable onPress={() => setOpen(false)} style={styles.sheetClose} accessibilityRole="button" accessibilityLabel="Close">
+                <Ionicons name="close" size={20} color={colors.muted} />
+              </Pressable>
+            </View>
+            <ScrollView style={[styles.workspaceList, { maxHeight: Math.max(120, sheetMaxHeight - 150 - insets.bottom) }]} showsVerticalScrollIndicator={false}>
+              {allowAllAreas ? <TouchableOpacity activeOpacity={0.7} onPress={() => choose('all')} style={[styles.workspaceOption, value === 'all' && styles.workspaceOptionSelected]} accessibilityRole="button" accessibilityState={{ selected: value === 'all' }}>
+                <Text style={[styles.workspaceOptionText, value === 'all' && styles.workspaceOptionTextSelected]}>All areas</Text>
+                {value === 'all' ? <Ionicons name="checkmark-circle" size={20} color={colors.blue} /> : null}
+              </TouchableOpacity> : null}
+              {relevant.map(({ workspace }) => {
+                const selectedWorkspace = value === workspace.slug;
+                return <TouchableOpacity key={workspace.id} activeOpacity={0.7} onPress={() => choose(workspace.slug)} style={[styles.workspaceOption, selectedWorkspace && styles.workspaceOptionSelected]} accessibilityRole="button" accessibilityState={{ selected: selectedWorkspace }}>
+                  <Text numberOfLines={1} style={[styles.workspaceOptionText, selectedWorkspace && styles.workspaceOptionTextSelected]}>{workspace.mode === 'personal' ? 'Personal' : workspace.name}</Text>
+                  {selectedWorkspace ? <Ionicons name="checkmark-circle" size={20} color={colors.blue} /> : null}
+                </TouchableOpacity>;
+              })}
+            </ScrollView>
+            <TouchableOpacity activeOpacity={0.7} onPress={() => { setOpen(false); onCreate(); }} style={styles.createWorkspaceOption} accessibilityRole="button">
+              <Ionicons name="add-circle-outline" size={20} color={colors.blue} />
+              <Text style={styles.createWorkspaceText}>Create workspace</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -298,6 +389,7 @@ function UnifiedInbox({
   onOpenOrder,
   onUpdateOrder,
   onOpenTask,
+  onCompleteTask,
 }: {
   sources: InboxSource[];
   filter: string;
@@ -305,6 +397,7 @@ function UnifiedInbox({
   onOpenOrder: (source: InboxSource, order: HarnessRecord) => void;
   onUpdateOrder: (source: InboxSource, order: HarnessRecord, productId: string, status: 'preparing' | 'ready') => void;
   onOpenTask: (source: InboxSource, task: HarnessRecord) => void;
+  onCompleteTask: (source: InboxSource, task: HarnessRecord) => void;
 }) {
   const visibleSources = useMemo(() => filter === 'all' ? sources : sources.filter((source) => source.workspace.slug === filter), [filter, sources]);
   const showWorkspace = filter === 'all' && visibleSources.filter((source) => source.tasks.length || source.orders.length).length > 1;
@@ -341,12 +434,26 @@ function UnifiedInbox({
               task={entry.record}
               showWorkspace={showWorkspace}
               onOpen={() => onOpenTask(entry.source, entry.record)}
+              onComplete={() => onCompleteTask(entry.source, entry.record)}
             />
           ))}
         </View>
       ))}
     </>
   );
+}
+
+function FlowBooks({ books, runs, canCreate, onCreate, onStart, onResume }: { books: HarnessFlowBook[]; runs: HarnessFlowRun[]; canCreate: boolean; onCreate: () => void; onStart: (flowId: string, title: string) => void; onResume: (run: HarnessFlowRun) => void }) {
+  return <View>
+    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}><View style={{ flex: 1 }}><Text style={{ color: colors.ink, fontSize: 25, fontWeight: '800' }}>Flow Books</Text><Text style={{ color: colors.muted, fontSize: 13, marginTop: 3 }}>Reusable processes for the work you do.</Text></View>{canCreate ? <TouchableOpacity accessibilityRole="button" onPress={onCreate} style={styles.createButton}><Ionicons name="add" size={17} color={colors.blue} /><Text style={styles.createButtonText}>Create</Text></TouchableOpacity> : null}</View>
+    {runs.length ? <><Text style={{ color: colors.muted, fontSize: 12, fontWeight: '800', letterSpacing: 0.8, marginTop: 20, marginBottom: 8 }}>IN PROGRESS</Text>{runs.map((run) => <TouchableOpacity key={run.id} accessibilityRole="button" onPress={() => onResume(run)} style={styles.workCard}><View style={[styles.workIcon, { backgroundColor: '#FFF2D7' }]}><Ionicons name="time-outline" size={20} color={colors.amber} /></View><View style={{ flex: 1 }}><Text style={styles.canvasRowTitle}>{run.name || 'Flow Book'}</Text><Text style={{ color: colors.muted, fontSize: 12, marginTop: 3 }}>Continue at step {(run.step || 0) + 1}</Text></View><Ionicons name="chevron-forward" size={17} color="#9aa3b1" /></TouchableOpacity>)}</> : null}
+    <Text style={{ color: colors.muted, fontSize: 12, fontWeight: '800', letterSpacing: 0.8, marginTop: 20, marginBottom: 8 }}>AVAILABLE BOOKS</Text>
+    {books.length ? books.map((book) => {
+      const actions = Array.isArray(book.data.actions) ? book.data.actions : [];
+      const description = typeof book.data.description === 'string' && book.data.description ? book.data.description : `${actions.length} ordered ${actions.length === 1 ? 'step' : 'steps'}`;
+      return <TouchableOpacity key={book.id} accessibilityRole="button" onPress={() => onStart(book.id, book.name)} style={styles.workCard}><View style={styles.workIcon}><Ionicons name="git-branch-outline" size={20} color={colors.blue} /></View><View style={{ flex: 1 }}><Text style={styles.canvasRowTitle}>{book.name}</Text><Text style={{ color: colors.muted, fontSize: 12, lineHeight: 17, marginTop: 3 }}>{description}</Text></View><Ionicons name="play-circle-outline" size={21} color={colors.blue} /></TouchableOpacity>;
+    }) : <View style={{ paddingVertical: 28, alignItems: 'center' }}><Ionicons name="git-branch-outline" size={32} color={colors.faint} /><Text style={{ color: colors.muted, fontSize: 14, marginTop: 10 }}>No Flow Books yet.</Text>{canCreate ? <Text style={{ color: colors.faint, fontSize: 12, marginTop: 3 }}>Create one from your registered Actions.</Text> : null}</View>}
+  </View>;
 }
 
 function Canvas({
@@ -375,14 +482,11 @@ function Canvas({
         ))}
       </View>
       {canManageSite ? (
-        <TouchableOpacity style={styles.workCard} onPress={onOpenSite}>
-          <View style={[styles.workIcon, { backgroundColor: '#EDEBE4', borderRadius: 8 }]}>
-            <Ionicons name="globe-outline" size={19} color="#000BFA" />
+        <TouchableOpacity style={styles.workCard} onPress={onOpenSite} accessibilityRole="button" accessibilityLabel="Open Site Studio">
+          <View style={styles.workIcon}>
+            <Ionicons name="globe-outline" size={21} color="#536174" />
           </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.canvasRowTitle}>Site Studio</Text>
-            <Text style={{ fontSize: 11, color: colors.muted }}>Draft, preview & publish website</Text>
-          </View>
+          <Text style={styles.canvasRowTitle}>Site Studio</Text>
           <Ionicons name="chevron-forward" size={17} color="#9aa3b1" />
         </TouchableOpacity>
       ) : null}
@@ -400,15 +504,67 @@ function Canvas({
 }
 
 function RecordsSection({
+  scope,
   records,
+  initialFilter = 'all',
+  hasMore,
+  isLoading,
+  loadError,
+  loadingMore,
+  canCreate,
+  onLoadMore,
+  onRetry,
   onSelectRecord,
   onCreateRecord,
 }: {
+  scope: string;
   records: HarnessRecord[];
+  initialFilter?: 'all' | 'contacts';
+  hasMore: boolean;
+  isLoading: boolean;
+  loadError: string;
+  loadingMore: boolean;
+  canCreate: (type?: string) => boolean;
+  onLoadMore: () => void;
+  onRetry: () => void;
   onSelectRecord: (record: HarnessRecord) => void;
   onCreateRecord: (type?: string) => void;
 }) {
-  const [filter, setFilter] = useState<'all' | 'orders' | 'contacts' | 'products' | 'tasks' | 'other'>('all');
+  const [filter, setFilter] = useState<'all' | 'orders' | 'contacts' | 'products' | 'tasks' | 'other'>(initialFilter);
+  const [search, setSearch] = useState('');
+  const [contacts, setContacts] = useState<HarnessRecord[]>([]);
+  const [next, setNext] = useState<number | null>(null);
+  const [searching, setSearching] = useState(false);
+  const [contactError, setContactError] = useState('');
+  const [contactRetry, setContactRetry] = useState(0);
+  const searchGeneration = useRef(0);
+
+  useEffect(() => {
+    const generation = ++searchGeneration.current;
+    if (filter !== 'contacts') { setContacts([]); setNext(null); setContactError(''); setSearching(false); return; }
+    let current = true;
+    setContacts([]); setNext(null); setSearching(true); setContactError('');
+    const timer = setTimeout(() => {
+      void harness.contacts(scope, search).then((page) => {
+        if (!current || generation !== searchGeneration.current) return;
+        setContacts(page.contacts); setNext(page.next); setContactError('');
+      }).catch((cause) => {
+        if (current && generation === searchGeneration.current) setContactError(cause instanceof Error ? cause.message : 'Could not search contacts.');
+      }).finally(() => { if (current && generation === searchGeneration.current) setSearching(false); });
+    }, search ? 250 : 0);
+    return () => { current = false; clearTimeout(timer); };
+  }, [filter, scope, search, contactRetry]);
+
+  const loadMoreContacts = async () => {
+    if (next === null || searching) return;
+    const generation = searchGeneration.current;
+    setSearching(true);
+    try {
+      const page = await harness.contacts(scope, search, next);
+      if (generation === searchGeneration.current) { setContacts((current) => [...current, ...page.contacts]); setNext(page.next); setContactError(''); }
+    } catch (cause) { if (generation === searchGeneration.current) setContactError(cause instanceof Error ? cause.message : 'Could not load contacts.'); }
+    finally { if (generation === searchGeneration.current) setSearching(false); }
+  };
 
   const categories = [
     { id: 'all' as const, label: 'All' },
@@ -423,27 +579,20 @@ function RecordsSection({
     const t = record.type.toLowerCase();
     if (cat === 'all') return true;
     if (cat === 'orders') return t === 'order' || t.startsWith('pos.order');
-    if (cat === 'contacts') return t === 'contact' || t === 'customer' || t === 'account' || t === 'lead';
+    if (cat === 'contacts') return t === 'person' || t === 'organization' || t === 'contact' || t === 'customer' || t === 'account' || t === 'lead';
     if (cat === 'products') return t === 'product' || t.startsWith('pos.product');
     if (cat === 'tasks') return t === 'task';
-    if (cat === 'other') return !['order', 'contact', 'customer', 'account', 'lead', 'product', 'task'].some((k) => t === k || t.startsWith(`pos.${k}`));
+    if (cat === 'other') return !['order', 'person', 'organization', 'contact', 'customer', 'account', 'lead', 'product', 'task'].some((k) => t === k || t.startsWith(`pos.${k}`));
     return true;
   };
 
-  const filtered = useMemo(() => records.filter((r) => matchesCategory(r, filter)), [records, filter]);
-
-  const counts = useMemo(() => {
-    const map: Record<string, number> = {};
-    for (const c of categories) {
-      map[c.id] = records.filter((r) => matchesCategory(r, c.id)).length;
-    }
-    return map;
-  }, [records]);
+  const filtered = useMemo(() => filter === 'contacts' ? contacts : records.filter((r) => matchesCategory(r, filter)), [records, filter, contacts]);
+  const canLoadMore = filter === 'contacts' ? next !== null : hasMore;
 
   const recordIcon = (type: string): keyof typeof Ionicons.glyphMap => {
     const t = type.toLowerCase();
     if (t === 'order' || t.startsWith('pos.order')) return 'receipt-outline';
-    if (t === 'contact' || t === 'customer' || t === 'account') return 'people-outline';
+    if (t === 'person' || t === 'organization' || t === 'contact' || t === 'customer' || t === 'account') return 'people-outline';
     if (t === 'product' || t.startsWith('pos.product')) return 'cube-outline';
     if (t === 'task') return 'checkbox-outline';
     if (t === 'lead' || t === 'deal') return 'trending-up-outline';
@@ -454,7 +603,7 @@ function RecordsSection({
   const recordIconColor = (type: string): string => {
     const t = type.toLowerCase();
     if (t === 'order' || t.startsWith('pos.order')) return colors.blue;
-    if (t === 'contact' || t === 'customer' || t === 'account') return colors.green;
+    if (t === 'person' || t === 'organization' || t === 'contact' || t === 'customer' || t === 'account') return colors.green;
     if (t === 'product' || t.startsWith('pos.product')) return colors.amber;
     if (t === 'task') return '#7C3AED';
     if (t === 'lead' || t === 'deal') return '#2563EB';
@@ -464,7 +613,7 @@ function RecordsSection({
   return (
     <View style={styles.recordsWrapper}>
       {/* Category filter rail */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRail}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRail}>
         {categories.map((cat) => {
           const active = filter === cat.id;
           return (
@@ -472,24 +621,40 @@ function RecordsSection({
               key={cat.id}
               style={[styles.filterChip, active && styles.filterChipActive]}
               onPress={() => setFilter(cat.id)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
             >
-              <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>
-                {cat.label} {counts[cat.id] != null ? `(${counts[cat.id]})` : ''}
-              </Text>
+              <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>{cat.label}</Text>
             </TouchableOpacity>
           );
         })}
       </ScrollView>
 
+      {filter === 'contacts' ? <View style={styles.contactSearch}>
+        <Ionicons name="search-outline" size={17} color={colors.muted} />
+        <TextInput
+          accessibilityLabel="Search contacts"
+          placeholder="Search contacts, email, or phone"
+          placeholderTextColor={colors.faint}
+          value={search}
+          onChangeText={setSearch}
+          autoCapitalize="none"
+          autoCorrect={false}
+          style={styles.contactSearchInput}
+        />
+        {search ? <Pressable accessibilityRole="button" accessibilityLabel="Clear contact search" onPress={() => setSearch('')} hitSlop={8}><Ionicons name="close-circle" size={18} color={colors.faint} /></Pressable> : null}
+      </View> : null}
+      {contactError && filtered.length > 0 ? <Text style={{ color: colors.muted, marginHorizontal: 16 }}>{contactError}</Text> : null}
+
       {/* Action Header */}
       <View style={styles.recordsHeader}>
         <Text style={styles.recordsHeaderTitle}>
-          {filter === 'all' ? 'All Records' : categories.find((c) => c.id === filter)?.label} ({filtered.length})
+          {filter === 'all' ? 'Records' : categories.find((c) => c.id === filter)?.label}
         </Text>
-        <TouchableOpacity style={styles.createButton} onPress={() => onCreateRecord(filter === 'all' ? undefined : filter)}>
-          <Ionicons name="add" size={16} color="#fff" />
-          <Text style={styles.createButtonText}>New</Text>
-        </TouchableOpacity>
+        {canCreate(filter === 'all' ? undefined : filter) ? <TouchableOpacity accessibilityRole="button" style={styles.createButton} onPress={() => onCreateRecord(filter === 'all' ? undefined : filter)}>
+          <Ionicons name="add" size={17} color={colors.blue} />
+          <Text style={styles.createButtonText}>{filter === 'contacts' ? 'Add contact' : filter === 'orders' ? 'New order' : filter === 'products' ? 'New product' : filter === 'tasks' ? 'New task' : 'New'}</Text>
+        </TouchableOpacity> : null}
       </View>
 
       {/* Records list */}
@@ -527,8 +692,15 @@ function RecordsSection({
           );
         })
       ) : (
-        <Empty text={filter === 'all' ? 'No records in this workspace yet.' : `No ${filter} found.`} />
+        isLoading || searching ? <View style={styles.recordsLoading}><ActivityIndicator color={colors.blue} /><Text style={styles.emptyHint}>{filter === 'contacts' ? 'Searching contacts…' : 'Loading records…'}</Text></View> : loadError ? <View style={styles.emptyState}><Text style={styles.emptyTitle}>Records couldn’t be loaded</Text><Text style={styles.emptyHint}>{loadError}</Text><Pressable accessibilityRole="button" onPress={onRetry} style={styles.emptyAction}><Text style={styles.emptyActionText}>Try again</Text></Pressable></View> : contactError ? <View style={styles.emptyState}><Text style={styles.emptyTitle}>Contacts couldn’t be loaded</Text><Text style={styles.emptyHint}>{contactError}</Text><Pressable accessibilityRole="button" onPress={() => setContactRetry((value) => value + 1)} style={styles.emptyAction}><Text style={styles.emptyActionText}>Try again</Text></Pressable></View> : canLoadMore ? <View style={styles.emptyPageState}>
+          <Pressable accessibilityRole="button" style={styles.inlineLoadMore} disabled={filter === 'contacts' ? searching : loadingMore} onPress={() => { if (filter === 'contacts') void loadMoreContacts(); else onLoadMore(); }}><Text style={styles.loadMoreText}>{filter === 'contacts' ? searching ? 'Loading…' : 'Load more contacts' : loadingMore ? 'Loading…' : 'Load more records'}</Text></Pressable>
+        </View> : <View style={styles.emptyState}>
+          <Text style={styles.emptyTitle}>{filter === 'all' ? 'No records yet' : filter === 'contacts' ? search ? 'No contacts found' : 'No contacts yet' : `No ${categories.find((item) => item.id === filter)?.label.toLowerCase()} yet`}</Text>
+          {filter === 'contacts' && !search ? <Text style={styles.emptyHint}>Add a person or organization to get started.</Text> : null}
+        </View>
       )}
+      {filter === 'contacts' && next !== null && filtered.length > 0 ? <Pressable accessibilityRole="button" style={styles.loadMore} disabled={searching} onPress={() => void loadMoreContacts()}><Text style={styles.loadMoreText}>{searching ? 'Loading…' : 'Load more contacts'}</Text></Pressable> : null}
+      {filter !== 'contacts' && hasMore && filtered.length > 0 ? <Pressable accessibilityRole="button" style={styles.loadMore} disabled={loadingMore} onPress={onLoadMore}><Text style={styles.loadMoreText}>{loadingMore ? 'Loading…' : 'Load more records'}</Text></Pressable> : null}
     </View>
   );
 }
@@ -542,15 +714,15 @@ function WorkspaceLabel({ workspace }: { workspace: HarnessWorkspace }) {
   );
 }
 
-function TaskRow({ source, task, showWorkspace, onOpen }: { source: InboxSource; task: HarnessRecord; showWorkspace: boolean; onOpen: () => void }) {
+function TaskRow({ source, task, showWorkspace, onOpen, onComplete }: { source: InboxSource; task: HarnessRecord; showWorkspace: boolean; onOpen: () => void; onComplete: () => void }) {
   return (
     <View style={styles.parentBlock}>
       <View style={styles.parentRow}>
-        <View style={styles.parentCopy}>
+        <Pressable accessibilityRole="button" onPress={onOpen} style={styles.parentCopy}>
           <Text numberOfLines={2} style={styles.parentTitle}>{task.title}</Text>
           {showWorkspace ? <WorkspaceLabel workspace={source.workspace} /> : null}
-        </View>
-        <Pressable onPress={onOpen} disabled={!source.permissions?.completeTask} hitSlop={8} style={styles.rowAction} accessibilityLabel={`Complete ${task.title}`}>
+        </Pressable>
+        <Pressable onPress={onComplete} disabled={!source.permissions?.completeTask} hitSlop={8} style={styles.rowAction} accessibilityLabel={`Complete ${task.title}`}>
           <Text style={styles.rowActionText}>Done</Text>
           <Ionicons name="ellipse-outline" size={16} color={colors.blue} />
         </Pressable>
@@ -626,26 +798,30 @@ const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: '#fff' },
   scroll: { flex: 1 },
   tabBody: { flex: 1 },
-  botContext: { paddingHorizontal: 18, paddingTop: 8 },
   content: { paddingHorizontal: 18 },
-  headerBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
-  headerLink: { minHeight: 40, justifyContent: 'center' },
-  headerLinkText: { color: colors.blue, fontWeight: '700', fontSize: 13 },
-  headerSiteLink: { minHeight: 40, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, backgroundColor: '#EFF6FF' },
-  headerSiteText: { color: colors.blue, fontWeight: '700', fontSize: 13 },
-  contextLabel: { height: 24, flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 8 },
-  contextDot: { width: 5, height: 5, borderRadius: 3 },
-  contextText: { maxWidth: 160, fontSize: 10, fontWeight: '600', color: colors.muted },
-  areaPicker: { alignItems: 'flex-start', marginBottom: 18 },
-  areaTrigger: { height: 32, maxWidth: 180, paddingHorizontal: 10, borderRadius: 8, borderWidth: 1, borderColor: colors.line, flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: '#fff' },
-  areaTriggerText: { fontSize: 12, fontWeight: '700', color: colors.ink },
-  areaMenu: { alignSelf: 'stretch', marginTop: 6, borderWidth: 1, borderColor: colors.line, borderRadius: 10, backgroundColor: '#fff', overflow: 'hidden' },
-  areaOption: { minHeight: 42, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
-  areaOptionLabel: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 7 },
-  areaOptionDot: { width: 6, height: 6, borderRadius: 3 },
-  areaOptionText: { flexShrink: 1, fontSize: 13, color: colors.muted },
-  areaOptionActive: { fontWeight: '700', color: colors.ink },
-  newAreaText: { fontSize: 13, color: colors.muted },
+  askEmpty: { alignItems: 'center', paddingHorizontal: 28, paddingTop: 88 },
+  askTitle: { color: colors.ink, fontSize: 20, fontWeight: '700', marginTop: 14 },
+  askMessage: { color: colors.muted, fontSize: 14, lineHeight: 21, marginTop: 8, textAlign: 'center', maxWidth: 280 },
+  headerIconButton: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  areaPicker: { alignItems: 'stretch', marginBottom: 12 },
+  workspaceBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, paddingHorizontal: 18, paddingTop: 12 },
+  workspaceActions: { flexDirection: 'row', alignItems: 'center' },
+  areaTrigger: { minHeight: 56, maxWidth: 210, minWidth: 0, flexShrink: 1, paddingHorizontal: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start', gap: 10 },
+  areaTriggerText: { flexShrink: 1, fontSize: 20, fontWeight: '800', color: colors.ink, letterSpacing: 0.1 },
+  sheetOverlay: { flex: 1, justifyContent: 'flex-end' },
+  sheetBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(18, 24, 36, 0.32)' },
+  workspaceSheet: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingTop: 10, paddingHorizontal: 18, shadowColor: '#111827', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.1, shadowRadius: 14, elevation: 12 },
+  sheetHandle: { width: 34, height: 4, borderRadius: 2, backgroundColor: '#C9CDD5', alignSelf: 'center', marginBottom: 12 },
+  sheetHeader: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
+  sheetTitle: { color: colors.ink, fontSize: 17, fontWeight: '700' },
+  sheetClose: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  workspaceList: { flexGrow: 0, flexShrink: 1 },
+  workspaceOption: { minHeight: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, paddingHorizontal: 12, borderRadius: 10 },
+  workspaceOptionSelected: { backgroundColor: '#F2F5FC' },
+  workspaceOptionText: { flex: 1, color: colors.ink, fontSize: 15, fontWeight: '600' },
+  workspaceOptionTextSelected: { color: colors.selected, fontWeight: '800' },
+  createWorkspaceOption: { minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 8, marginTop: 4, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },
+  createWorkspaceText: { color: colors.blue, fontSize: 15, fontWeight: '700' },
   inboxGroup: { marginBottom: 22 },
   inboxGroupLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 1.2, color: colors.faint, marginBottom: 7 },
   parentBlock: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },
@@ -665,7 +841,19 @@ const styles = StyleSheet.create({
   childStatus: { fontSize: 11, fontWeight: '700', textAlign: 'right' },
   collectText: { fontSize: 11, fontWeight: '700', color: colors.blue },
   center: { minHeight: 180, justifyContent: 'center', alignItems: 'center' },
+  progress: { flexDirection: 'row', alignItems: 'center', gap: 9, paddingVertical: 12 },
+  progressText: { color: colors.muted, fontSize: 13 },
   empty: { color: colors.muted, fontSize: 14, paddingVertical: 24 },
+  recordsLoading: { minHeight: 88, alignItems: 'center', justifyContent: 'center', gap: 8 },
+  emptyState: { minHeight: 72, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16, paddingVertical: 10, gap: 4 },
+  emptyPageState: { minHeight: 48, alignItems: 'stretch', justifyContent: 'center', paddingHorizontal: 0 },
+  emptyTitle: { color: colors.muted, fontSize: 14, fontWeight: '600', textAlign: 'center' },
+  emptyHint: { maxWidth: 300, color: colors.muted, fontSize: 13, lineHeight: 19, textAlign: 'center' },
+  emptyAction: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, marginTop: 2, paddingHorizontal: 8 },
+  emptyActionText: { color: colors.blue, fontSize: 13, fontWeight: '700' },
+  loadMore: { minHeight: 48, alignItems: 'center', justifyContent: 'center', borderTopWidth: StyleSheet.hairlineWidth, borderColor: colors.line },
+  inlineLoadMore: { minHeight: 48, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
+  loadMoreText: { color: colors.blue, fontSize: 13, fontWeight: '700' },
   error: { backgroundColor: '#FFF1F0', borderRadius: 10, padding: 12, marginBottom: 14 },
   errorText: { color: '#B42318' },
   metricGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 },
@@ -675,18 +863,22 @@ const styles = StyleSheet.create({
   metricValue: { fontSize: 28, fontWeight: '700', color: colors.ink },
   posMetricValue: { fontSize: 21 },
   workCard: { minHeight: 56, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: colors.line, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  workCardLast: { borderBottomWidth: 0 },
+  canvasSection: { marginTop: 14 },
   workIcon: { width: 28, height: 36, alignItems: 'center', justifyContent: 'center' },
   canvasRowTitle: { flex: 1, fontSize: 15, fontWeight: '600', color: colors.ink },
-  recordsWrapper: { marginTop: 4 },
-  filterRail: { flexDirection: 'row', gap: 8, paddingBottom: 14 },
-  filterChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, backgroundColor: colors.wash, borderWidth: 1, borderColor: colors.line },
-  filterChipActive: { backgroundColor: colors.selectedWash, borderColor: colors.selectedWash },
+  recordsWrapper: { marginTop: 0 },
+  filterRail: { flexGrow: 1, flexDirection: 'row', justifyContent: 'space-between', paddingBottom: 2 },
+  filterChip: { minHeight: 48, minWidth: 48, flexGrow: 1, paddingHorizontal: 7, alignItems: 'center', justifyContent: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent' },
+  filterChipActive: { borderBottomColor: colors.blue },
   filterChipText: { fontSize: 12, fontWeight: '700', color: colors.muted },
   filterChipTextActive: { color: colors.selected },
-  recordsHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  recordsHeaderTitle: { fontSize: 12, fontWeight: '800', color: colors.muted, letterSpacing: 0.6, textTransform: 'uppercase' },
-  createButton: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.blue, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
-  createButtonText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+  contactSearch: { minHeight: 48, marginTop: 8, marginBottom: 8, paddingHorizontal: 12, borderRadius: 9, backgroundColor: colors.wash, flexDirection: 'row', alignItems: 'center', gap: 9 },
+  contactSearchInput: { flex: 1, minWidth: 0, height: 48, paddingHorizontal: 0, paddingVertical: 0, color: colors.ink, fontSize: 14, includeFontPadding: false },
+  recordsHeader: { minHeight: 52, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
+  recordsHeaderTitle: { fontSize: 12, fontWeight: '700', color: colors.muted, letterSpacing: 0.5, textTransform: 'uppercase' },
+  createButton: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingHorizontal: 4 },
+  createButtonText: { color: colors.blue, fontSize: 13, fontWeight: '700' },
   recordCard: { minHeight: 64, flexDirection: 'row', alignItems: 'center', gap: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: colors.line, paddingVertical: 10 },
   recordIconBox: { width: 36, height: 36, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
   recordCopy: { flex: 1, minWidth: 0 },

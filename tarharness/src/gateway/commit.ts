@@ -65,6 +65,14 @@ export function runStatement(input: RunInput): InStatement {
   };
 }
 
+export function stepStatement(run: string, occurrence: number, action: string, input: Record<string, unknown>, output: Record<string, unknown>, at = stamp()): InStatement {
+  return {
+    sql: `INSERT INTO steps (id,run,action,occurrence,state,input,output,version,created,updated)
+      SELECT ?, ?, ?, ?, 'accepted', ?, ?, 1, ?, ? WHERE changes()=1`,
+    args: [crypto.randomUUID(), run, action, occurrence, json(input), json(output), at, at],
+  };
+}
+
 export async function appendRun(db: DB, input: RunInput): Promise<string> {
   const id = input.id ?? `run_${crypto.randomUUID()}`;
   await db.execute(runStatement({ ...input, id }));

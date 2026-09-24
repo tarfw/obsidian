@@ -138,4 +138,21 @@ export class ControlStore {
       catch: (cause) => cause instanceof HarnessError ? cause : unavailable('Could not resolve workspace access.', cause),
     });
   }
+
+  accessFor(workspaceId: string, userId: string): Effect.Effect<AccessContext, ReturnType<typeof forbidden> | ReturnType<typeof notFound> | ReturnType<typeof unavailable>> {
+    return Effect.tryPromise({
+      try: async () => {
+        const found = row(await this.database.prepare(`SELECT w.*,u.id AS actor,u.email,u.name AS actorname,m.role,m.work_role,m.state AS memberstate
+          FROM workspaces w JOIN users u ON u.id=? LEFT JOIN members m ON m.workspace_id=w.id AND m.user_id=u.id
+          WHERE w.id=?`).bind(userId, workspaceId).all<Record<string, unknown>>());
+        if (!found) throw notFound('Workspace or actor not found.');
+        if (found.memberstate !== 'active') throw forbidden();
+        const current = workspace(found);
+        if (current.state !== 'active' || !current.databaseHost) throw notFound('Workspace is not ready.');
+        const identity: Identity = { id: userId, email: String(found.email), name: typeof found.actorname === 'string' ? found.actorname : null };
+        return { identity, workspace: current, member: member({ workspace_id: current.id, user_id: userId, role: found.role, work_role: found.work_role, state: found.memberstate }) };
+      },
+      catch: (cause) => cause instanceof HarnessError ? cause : unavailable('Could not resolve current workspace access.', cause),
+    });
+  }
 }

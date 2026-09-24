@@ -54,13 +54,67 @@ export const actionCatalog = [
     output: ['record'], roles: ['owner', 'admin', 'member'], effects: ['record_create'],
   },
   {
-    id: 'record.update', version: 1, type: 'app', title: 'Update record',
+    id: 'contact.create', version: 1, type: 'app', title: 'Add person',
+    description: 'Create a person record that stays separate from their work history.', interfaceKey: 'form',
+    fields: [
+      { key: 'name', label: 'Name', kind: 'text', required: true },
+      { key: 'email', label: 'Email', kind: 'email' },
+      { key: 'phone', label: 'Phone', kind: 'text' },
+    ],
+    output: ['record'], roles: ['owner', 'admin', 'member'], effects: ['record_create'],
+  },
+  {
+    id: 'organization.create', version: 1, type: 'app', title: 'Add organization',
+    description: 'Create an organization record for customers, suppliers or partners.', interfaceKey: 'form',
+    fields: [
+      { key: 'name', label: 'Organization name', kind: 'text', required: true },
+      { key: 'email', label: 'Email', kind: 'email' },
+      { key: 'phone', label: 'Phone', kind: 'text' },
+      { key: 'website', label: 'Website', kind: 'text' },
+    ],
+    output: ['record'], roles: ['owner', 'admin', 'member'], effects: ['record_create'],
+  },
+  {
+    id: 'relationship.create', version: 1, type: 'app', title: 'Link person to organization',
+    description: 'Record a person’s role at an organization with its own time range.', interfaceKey: 'form',
+    fields: [
+      { key: 'source', label: 'Person record ID', kind: 'text', required: true },
+      { key: 'target', label: 'Organization record ID', kind: 'text', required: true },
+      { key: 'role', label: 'Role', kind: 'text', required: true },
+      { key: 'since', label: 'Start date (timestamp)', kind: 'number' },
+      { key: 'until', label: 'End date (timestamp)', kind: 'number' },
+    ],
+    output: ['link'], roles: ['owner', 'admin', 'member'], effects: ['relationship_create'],
+  },
+  {
+    id: 'relationship.end', version: 1, type: 'app', title: 'End relationship',
+    description: 'Close a person’s current role while keeping its history.', interfaceKey: 'form',
+    fields: [
+      { key: 'id', label: 'Relationship', kind: 'text', required: true, hidden: true },
+      { key: 'until', label: 'End date (timestamp)', kind: 'number', required: true },
+    ],
+    output: ['id', 'until'], roles: ['owner', 'admin', 'member'], effects: ['relationship_update'],
+  },
+  {
+    id: 'consent.record', version: 1, type: 'app', title: 'Record contact consent',
+    description: 'Record an explicit channel and purpose decision with its evidence. An address or relationship is never consent.', interfaceKey: 'form',
+    fields: [
+      { key: 'contactId', label: 'Contact', kind: 'record', required: true, hidden: true },
+      { key: 'channel', label: 'Channel (email, sms, phone, whatsapp)', kind: 'text', required: true },
+      { key: 'purpose', label: 'Purpose (marketing, transactional, support)', kind: 'text', required: true },
+      { key: 'state', label: 'Decision (granted or revoked)', kind: 'text', required: true },
+      { key: 'source', label: 'Evidence or source', kind: 'textarea', required: true },
+    ],
+    output: ['consent'], roles: ['owner', 'admin', 'member'], effects: ['consent_record'],
+  },
+  {
+    id: 'record.update', version: 2, type: 'app', title: 'Update record',
     description: 'Change an existing record using its current version.', interfaceKey: 'form',
     fields: [
       { key: 'recordId', label: 'Record', kind: 'record', required: true },
       { key: 'baseVersion', label: 'Version', kind: 'number', required: true, hidden: true },
       { key: 'title', label: 'Title', kind: 'text' },
-      { key: 'state', label: 'Status', kind: 'text' },
+      { key: 'state', label: 'Status', kind: 'text', hidden: true },
     ],
     output: ['recordId', 'version'], roles: ['owner', 'admin', 'member'], effects: ['record_update'],
   },
@@ -89,31 +143,30 @@ export const actionCatalog = [
     output: ['run'], roles: ['owner', 'admin', 'member'], effects: ['run_create'],
   },
   {
-    id: 'directory.install', version: 2, type: 'app', title: 'Add Bot',
-    description: 'Install a Bot and its selected template Flows.', interfaceKey: 'confirmation',
+    id: 'flow.publish', version: 3, type: 'app', title: 'Create Flow Book',
+    description: 'Publish a reusable ordered process for this workspace.', interfaceKey: 'flow-builder',
     fields: [
-      { key: 'itemId', label: 'Bot', kind: 'text', required: true, hidden: true },
-      { key: 'flowIds', label: 'Template Flows', kind: 'action-list', required: true, hidden: true },
-    ],
-    output: ['itemId', 'flowIds', 'installed'], roles: ['owner', 'admin'], effects: ['definition_publish', 'canvas_update'],
-  },
-  {
-    id: 'directory.remove', version: 2, type: 'app', title: 'Remove Bot',
-    description: 'Remove a Bot while preserving its Records, Runs and audit history.', interfaceKey: 'confirmation',
-    fields: [{ key: 'itemId', label: 'Bot', kind: 'text', required: true, hidden: true }],
-    output: ['itemId', 'installed'], roles: ['owner', 'admin'], effects: ['definition_archive', 'canvas_update'],
-  },
-  {
-    id: 'flow.publish', version: 2, type: 'app', title: 'Create custom Flow',
-    description: 'Publish an ordered Flow inside an installed Bot.', interfaceKey: 'flow-builder',
-    fields: [
-      { key: 'botId', label: 'Bot', kind: 'text', required: true, hidden: true },
       { key: 'flowId', label: 'Flow ID', kind: 'text', required: true, hidden: true },
       { key: 'name', label: 'Flow name', kind: 'text', required: true },
       { key: 'description', label: 'Description', kind: 'textarea' },
       { key: 'actions', label: 'Actions', kind: 'action-list', required: true, hidden: true },
     ],
     output: ['flowId', 'published'], roles: ['owner', 'admin'], effects: ['definition_publish', 'canvas_update'],
+  },
+  {
+    id: 'flow.advance', version: 1, type: 'app', title: 'Continue Flow Book',
+    description: 'Complete the current registered step and save Flow Book progress.', interfaceKey: 'confirmation',
+    fields: [
+      { key: 'runId', label: 'Run', kind: 'text', required: true, hidden: true },
+      { key: 'actionId', label: 'Action', kind: 'text', required: true, hidden: true },
+    ],
+    output: ['run', 'result'], roles: ['owner', 'admin', 'member'], effects: ['run_advance'],
+  },
+  {
+    id: 'flow.suggest', version: 1, type: 'agent', title: 'Suggest a Flow Book step',
+    description: 'Suggest one first step from registered Actions for a user-reviewed Flow Book.', interfaceKey: 'form',
+    fields: [{ key: 'prompt', label: 'What outcome should this Flow Book produce?', kind: 'textarea', required: true }],
+    output: ['action', 'confidence', 'probabilities', 'review'], roles: ['owner', 'admin'], effects: ['model_inference'],
   },
   {
     id: 'site.generate', version: 1, type: 'agent', title: 'Generate site draft',

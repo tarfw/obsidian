@@ -1,7 +1,7 @@
 import { createClient, type Client, type InStatement } from '@libsql/client/web';
 import { Effect } from 'effect';
 import { unavailable } from '../errors.ts';
-import { WORKSPACE_SCHEMA } from './schema.ts';
+import { WORKSPACE_PATCHES, WORKSPACE_SCHEMA } from './schema.ts';
 
 type TursoEnv = { readonly TURSO_ORG: string; readonly TURSO_PLATFORM_TOKEN: string; readonly TURSO_GROUP: string; };
 type Database = { readonly Name: string; readonly Hostname: string; };
@@ -51,17 +51,75 @@ export function provisionWorkspaceDatabase(env: TursoEnv, databaseName: string):
       try { for (const statement of WORKSPACE_SCHEMA) await client.execute(statement); } finally { client.close(); }
       return { host: database.Hostname };
     },
-    catch: (cause) => unavailable('Workspace database provisioning failed.', cause),
+    catch: (cause) => {
+      console.error(JSON.stringify({ event: 'workspace.provision.failed', database: databaseName, error: cause instanceof Error ? cause.message.slice(0, 300) : String(cause).slice(0, 300) }));
+      return unavailable('Workspace database provisioning failed.', cause);
+    },
   });
 }
 
+export async function ensureRecordColumns(client: Client): Promise<void> {
+  const columns = new Set((await client.execute('PRAGMA table_info(records)')).rows.map((column) => String(column.name)));
+  for (const [name, type] of [['owner', 'TEXT'], ['assignee', 'TEXT'], ['due', 'INTEGER'], ['archived', 'INTEGER']] as const) {
+    if (columns.has(name)) continue;
+    try {
+      await client.execute(`ALTER TABLE records ADD COLUMN ${name} ${type}`);
+    } catch (cause) {
+      const after = await client.execute('PRAGMA table_info(records)');
+      if (!after.rows.some((column) => column.name === name)) throw cause;
+    }
+    columns.add(name);
+  }
+}
+
+export async function ensureLinks(client: Client): Promise<void> {
+  const columns = (await client.execute('PRAGMA table_info(links)')).rows.map((column) => String(column.name));
+  if (columns.length === 0 || ['source', 'target', 'role', 'until'].every((name) => columns.includes(name))) return;
+  const archived = await client.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='archive'");
+  if (archived.rows.length > 0) throw new Error('Cannot preserve legacy links: archive table already exists.');
+  await client.execute('ALTER TABLE links RENAME TO archive');
+}
+
 export function openWorkspaceDatabase(env: TursoEnv, databaseName: string, host: string): Effect.Effect<Client, ReturnType<typeof unavailable>> {
-  return Effect.tryPromise({ try: async () => createClient({ url: `libsql://${host}`, authToken: await token(env, databaseName) }), catch: (cause) => unavailable('Workspace database is unavailable.', cause) });
+  return Effect.tryPromise({ try: async () => {
+    let stage = 'authorization';
+    let client: Client | undefined;
+    try {
+      client = createClient({ url: `libsql://${host}`, authToken: await token(env, databaseName) });
+      stage = 'patches';
+      await client.execute('CREATE TABLE IF NOT EXISTS patches (id TEXT PRIMARY KEY, applied INTEGER NOT NULL)');
+      const result = await client.execute('SELECT id FROM patches');
+      const applied = new Set(result.rows.map((item) => String(item[0])));
+      if (!applied.has('recordcolumns')) {
+        stage = 'patch.recordcolumns';
+        await ensureRecordColumns(client);
+        await client.execute({ sql: 'INSERT OR IGNORE INTO patches(id,applied) VALUES(?,?)', args: ['recordcolumns', Date.now()] });
+      }
+      if (!applied.has('links')) {
+        stage = 'patch.legacylinks';
+        await ensureLinks(client);
+      }
+      for (const patch of WORKSPACE_PATCHES) {
+        if (applied.has(patch.id)) continue;
+        stage = `patch.${patch.id}`;
+        await client.batch([...patch.statements.map((sql) => ({ sql, args: [] })), { sql: 'INSERT OR IGNORE INTO patches(id,applied) VALUES(?,?)', args: [patch.id, Date.now()] }], 'write');
+      }
+      return client;
+    } catch (cause) {
+      client?.close();
+      console.error(JSON.stringify({ event: 'workspace.open.failed', stage, error: cause instanceof Error ? cause.message.slice(0, 300) : String(cause).slice(0, 300) }));
+      throw cause;
+    }
+  }, catch: (cause) => unavailable('Workspace database is unavailable.', cause) });
 }
 
 export function query<T extends Record<string, unknown>>(client: Client, statement: InStatement): Effect.Effect<T[], ReturnType<typeof unavailable>> {
   return Effect.tryPromise({ try: async () => {
     const result = await client.execute(statement);
     return result.rows.map((values) => Object.fromEntries(result.columns.map((column, index) => [column, values[index]])) as T);
-  }, catch: (cause) => unavailable('Workspace query failed.', cause) });
+  }, catch: (cause) => {
+    const sql = typeof statement === 'string' ? statement : 'sql' in statement ? statement.sql : '';
+    console.error(JSON.stringify({ event: 'workspace.query.failed', sql: sql.slice(0, 300), error: cause instanceof Error ? cause.message.slice(0, 300) : String(cause).slice(0, 300) }));
+    return unavailable('Workspace query failed.', cause);
+  } });
 }

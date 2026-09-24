@@ -11,7 +11,6 @@ import { EmbeddingsProvider } from '@/db/embeddings-provider';
 import { Colors } from '@/constants/theme';
 import { initDb, getSelfId } from '@/lib/db';
 import { initEmbeddings } from '@/lib/embeddings';
-import { setUserId } from '@/lib/tar';
 
 // Keep the splash screen visible while assets & DB load
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -38,9 +37,8 @@ function RootLayoutInner() {
         console.log(`[BOOT] ${ms()} — initDb() DONE`);
 
         console.log(`[BOOT] ${ms()} — getSelfId() START`);
-        const userId = await getSelfId();
-        console.log(`[BOOT] ${ms()} — getSelfId() DONE: ${userId}`);
-        setUserId(userId);
+        await getSelfId();
+        console.log(`[BOOT] ${ms()} — getSelfId() DONE`);
       } catch (e) {
         console.error(`[BOOT] ${ms()} — Init FAILED:`, e);
       } finally {

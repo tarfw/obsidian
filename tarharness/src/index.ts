@@ -8,7 +8,6 @@ import { HarnessError, badRequest, forbidden, notFound, unavailable } from './er
 import type { AccessContext, RecordItem } from './types.ts';
 import { actionCatalog, interfaceCatalog } from './registry/catalog.ts';
 import { buildWorkspaceCanvas } from './registry/canvas.ts';
-import { botDirectory, directoryDefinitionIds } from './registry/directory.ts';
 import { posSummary, readPos, readPosInbox } from './pos/store.ts';
 import { readProductContent } from './pos/content.ts';
 import { canExecute, canReadRecord, isCook, kitchenOrder, managesMembers } from './access.ts';
@@ -16,8 +15,11 @@ import { inviteMember, listMembers, updateMember } from './team.ts';
 import { providers, providerStatus, verifyEvent, chatResponse, type ChannelEnv, type Provider } from './channels/providers.ts';
 import { beginLink, channelState, confirmLink, disconnect, proveLink, resolveSender } from './channels/store.ts';
 import { enqueueCommand, processCommand } from './channels/jobs.ts';
+import { searchContacts } from './contacts/search.ts';
+import { acceptFlowRequest, sweepFlowDispatches } from './flows/dispatch.ts';
+export { FlowWorkflow } from './flows/workflow.ts';
 
-type RuntimeEnv = Env & ChannelEnv & { readonly TURSO_PLATFORM_TOKEN?: string; readonly TINYFISH_API_KEY?: string };
+type RuntimeEnv = Env & ChannelEnv & { readonly TURSO_PLATFORM_TOKEN?: string; readonly TINYFISH_API_KEY?: string; readonly TYPESAFE_API_KEY?: string };
 const jsonHeaders = { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' };
 const corsHeaders = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Authorization, Content-Type, Idempotency-Key', 'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS' };
 const now = () => Date.now();
@@ -49,6 +51,14 @@ function record(row: Record<string, unknown>): RecordItem {
     createdAt: Number(row.created),
     updatedAt: Number(row.updated)
   };
+}
+
+async function runVisible(client: Client, member: AccessContext['member'], actor: string, recordId: unknown) {
+  if (member.role === 'guest') return false;
+  if (actor === member.userId || member.role === 'owner' || member.role === 'admin') return true;
+  if (typeof recordId !== 'string') return false;
+  const rows = await Effect.runPromise(query<Record<string, unknown>>(client, { sql: 'SELECT * FROM records WHERE id=? AND archived IS NULL', args: [recordId] }));
+  return Boolean(rows[0] && canReadRecord(member, record(rows[0])));
 }
 
 async function identity(request: Request, env: RuntimeEnv) {
@@ -106,11 +116,12 @@ async function workspaceCanvas(client: Client, member: AccessContext['member']) 
   const [definitions, counts] = await Promise.all([
     listDefinitions(client),
     Effect.runPromise(query<Record<string, unknown>>(client, { sql: `SELECT COUNT(*) AS records,
-      SUM(CASE WHEN type='task' AND state='open' THEN 1 ELSE 0 END) AS open_tasks
+      SUM(CASE WHEN type='task' AND state='open' THEN 1 ELSE 0 END) AS open_tasks,
+      SUM(CASE WHEN type LIKE 'pos.%' THEN 1 ELSE 0 END) AS pos_records
       FROM records WHERE archived IS NULL` })),
   ]);
   const count = counts[0] || {};
-  const pos = definitions.some((item) => item.id === 'directory.pos.bot' && item.state === 'published') ? await posSummary(client) : undefined;
+  const pos = Number(count.pos_records || 0) ? await posSummary(client) : undefined;
   return buildWorkspaceCanvas(definitions, { records: Number(count.records || 0), openTasks: Number(count.open_tasks || 0), pos }, member.role)
     .filter((card) => card.kind === 'data' ? member.workRole !== 'cashier' || !['pos-sales','records-total'].includes(card.id)
       : canExecute(member, card.kind === 'action' ? card.actionId : card.actionId || 'flow.start'));
@@ -147,9 +158,17 @@ async function handle(request: Request, env: RuntimeEnv, ctx: ExecutionContext):
   const channelMatch = /^\/v1\/channels\/(slack|discord|google-chat)\/events$/.exec(path);
   if (request.method === 'POST' && channelMatch) return channelRequest(request, env, channelMatch[1] as Provider, ctx);
   if (request.method === 'GET' && path === '/health') return response({ ok: true, service: 'tarharness', now: new Date().toISOString(), tursoProvisioning: Boolean(env.TURSO_PLATFORM_TOKEN && env.TURSO_ORG && !env.TURSO_ORG.startsWith('REPLACE_')) });
-  if (request.method === 'GET' && path === '/v1/actions') return response({ actions: actionCatalog, interfaces: interfaceCatalog });
+  if (request.method === 'GET' && path === '/v1/actions') return response({ actions: actionCatalog.filter((action) => action.id !== 'flow.suggest' || Boolean(env.TYPESAFE_API_KEY)), interfaces: interfaceCatalog });
   if (request.method === 'GET' && path === '/v1/workspaces') {
-    const { value, control } = await identity(request, env); await ensurePersonalWorkspace(value, control, env); const workspaces = await Effect.runPromise(control.listWorkspaces(value.id));
+    const { value, control } = await identity(request, env);
+    await ensurePersonalWorkspace(value, control, env);
+    let workspaces = await Effect.runPromise(control.listWorkspaces(value.id));
+    for (const entry of workspaces) {
+      if (entry.role === 'owner' && entry.workspace.mode === 'work' && entry.workspace.state === 'provisioning') {
+        await provision(control, env, entry.workspace);
+      }
+    }
+    workspaces = await Effect.runPromise(control.listWorkspaces(value.id));
     return response({ workspaces: workspaces.map(({ workspace, role }) => ({ id: workspace.id, name: workspace.name, slug: workspace.slug, scope: workspace.slug, role, mode: workspace.mode, state: workspace.state })) });
   }
   if (request.method === 'POST' && path === '/v1/workspaces') return createWorkspace(request, env);
@@ -207,7 +226,13 @@ async function handle(request: Request, env: RuntimeEnv, ctx: ExecutionContext):
     const body = await Effect.runPromise(parseJson(request));
     return response(await disconnect(env.CONTROL, current, body.destination === true));
   }
-  if (request.method === 'GET' && nested === 'actions') return response({ actions: actionCatalog.filter((action) => canExecute(current.member, action.id)), interfaces: interfaceCatalog });
+    if (request.method === 'GET' && nested === 'actions') return response({ actions: actionCatalog.filter((action) => canExecute(current.member, action.id) && (action.id !== 'flow.suggest' || Boolean(env.TYPESAFE_API_KEY))), interfaces: interfaceCatalog });
+  if (request.method === 'POST' && /^actions\/flow\.(start|advance)$/.test(nested)) {
+    const key = request.headers.get('Idempotency-Key') || '';
+    const input = await Effect.runPromise(parseJson(request));
+    const actionId = nested.slice(8) as GatewayRequest['actionId'];
+    return response(await acceptFlowRequest(env, current, { actionId, idempotencyKey: key, input }), 201);
+  }
   return withWorkspace(env, current, async (client) => {
     const productContentMatch = /^pos\/products\/([^/]+)\/content$/.exec(nested);
     if (request.method === 'GET' && productContentMatch) {
@@ -229,9 +254,73 @@ async function handle(request: Request, env: RuntimeEnv, ctx: ExecutionContext):
     }
     if (request.method === 'GET' && nested === 'records') {
       const type = url.searchParams.get('type');
+      const search = (url.searchParams.get('q') || '').trim();
+      const offset = Number(url.searchParams.get('offset') || 0);
+      if (!Number.isSafeInteger(offset) || offset < 0 || offset > 10000) throw badRequest('Invalid record page.');
+      if (search.length > 120) throw badRequest('Record search is too long.');
       if (current.member.role === 'guest' && type?.startsWith('pos.')) throw forbidden();
-      const rows = await Effect.runPromise(query<Record<string, unknown>>(client, type ? { sql: 'SELECT * FROM records WHERE type=? AND archived IS NULL ORDER BY updated DESC LIMIT 100', args: [type] } : { sql: 'SELECT * FROM records WHERE archived IS NULL ORDER BY updated DESC LIMIT 100' }));
-      return response({ records: rows.map(record).filter((item) => canReadRecord(current.member, item)) });
+      const rows = await Effect.runPromise(query<Record<string, unknown>>(client, type
+        ? { sql: "SELECT * FROM records WHERE type=? AND archived IS NULL AND (?='' OR instr(lower(title),lower(?))>0 OR instr(lower(data),lower(?))>0) ORDER BY updated DESC,id LIMIT 101 OFFSET ?", args: [type, search, search, search, offset] }
+        : { sql: "SELECT * FROM records WHERE archived IS NULL AND (?='' OR instr(lower(title),lower(?))>0 OR instr(lower(data),lower(?))>0) ORDER BY updated DESC,id LIMIT 101 OFFSET ?", args: [search, search, search, offset] }));
+      return response({ records: rows.slice(0, 100).map(record).filter((item) => canReadRecord(current.member, item)), next: rows.length > 100 ? offset + 100 : null });
+    }
+    if (request.method === 'GET' && nested === 'contacts') {
+      const offset = Number(url.searchParams.get('offset') || 0);
+      return response(await searchContacts(client, current.member, url.searchParams.get('q') || '', offset));
+    }
+    const linksMatch = /^records\/([A-Za-z0-9_-]+)\/links$/.exec(nested);
+    if (request.method === 'GET' && linksMatch) {
+      const id = decodeURIComponent(linksMatch[1]);
+      const found = await Effect.runPromise(query<Record<string, unknown>>(client, { sql: 'SELECT * FROM records WHERE id=? AND archived IS NULL', args: [id] }));
+      if (!found[0]) throw notFound('Record not found.');
+      if (!canReadRecord(current.member, record(found[0]))) throw forbidden();
+      const rows = await Effect.runPromise(query<Record<string, unknown>>(client, { sql: `SELECT l.id,l.source,l.target,l.role,l.since,l.until,
+        CASE WHEN l.source=? THEN target.id ELSE source.id END AS otherid,
+        CASE WHEN l.source=? THEN target.type ELSE source.type END AS othertype,
+        CASE WHEN l.source=? THEN target.title ELSE source.title END AS othername,
+        CASE WHEN l.source=? THEN target.data ELSE source.data END AS otherdata,
+        CASE WHEN l.source=? THEN target.assignee ELSE source.assignee END AS otherassignee
+        FROM links l JOIN records source ON source.id=l.source AND source.archived IS NULL JOIN records target ON target.id=l.target AND target.archived IS NULL
+        WHERE l.source=? OR l.target=? ORDER BY COALESCE(l.since,l.created) DESC`, args: [id, id, id, id, id, id, id] }));
+      const visible = rows.filter((item) => canReadRecord(current.member, { type: String(item.othertype), data: object(JSON.parse(String(item.otherdata))), assignee: typeof item.otherassignee === 'string' ? item.otherassignee : null }));
+      return response({ links: visible.map((item) => ({ id: String(item.id), role: String(item.role), since: item.since === null ? null : Number(item.since), until: item.until === null ? null : Number(item.until), other: { id: String(item.otherid), type: String(item.othertype), name: String(item.othername) } })) });
+    }
+    const consentMatch = /^records\/([A-Za-z0-9_-]+)\/consents$/.exec(nested);
+    if (request.method === 'GET' && consentMatch) {
+      if (current.member.role === 'guest' || isCook(current.member)) throw forbidden();
+      const id = consentMatch[1];
+      const found = await Effect.runPromise(query<Record<string, unknown>>(client, { sql: "SELECT * FROM records WHERE id=? AND type IN ('person','organization') AND archived IS NULL", args: [id] }));
+      if (!found[0]) throw notFound('Contact not found.');
+      if (!canReadRecord(current.member, record(found[0]))) throw forbidden();
+      const rows = await Effect.runPromise(query<Record<string, unknown>>(client, { sql: 'SELECT id,contact,channel,purpose,state,source,actor,created FROM consents WHERE contact=? ORDER BY created DESC,id DESC LIMIT 100', args: [id] }));
+      return response({ consents: rows.map((item) => ({ id: String(item.id), contact: String(item.contact), channel: String(item.channel), purpose: String(item.purpose), state: String(item.state), source: String(item.source), actor: String(item.actor), created: Number(item.created) })) });
+    }
+    if (request.method === 'GET' && nested === 'flows') {
+      const definitions = await Effect.runPromise(query<Record<string, unknown>>(client, { sql: "SELECT id,name,version,state,data FROM definitions WHERE kind='flow' AND state='published' ORDER BY name COLLATE NOCASE" }));
+      const runs = await Effect.runPromise(query<Record<string, unknown>>(client, { sql: "SELECT * FROM runs WHERE state IN ('ready','blocked') ORDER BY updated_at DESC LIMIT 100" }));
+      const books = definitions.map((item) => ({ id: String(item.id), name: String(item.name), version: Number(item.version), data: object(JSON.parse(String(item.data))) }));
+      const active = await Promise.all(runs.map(async (item) => {
+        const context = object(JSON.parse(String(item.context)));
+        const owner = String(context.startedBy || '');
+        if (!(await runVisible(client, current.member, owner, item.record_id))) return null;
+        const book = books.find((candidate) => candidate.id === String(item.flow_id));
+        if (!book) return null;
+        return { id: String(item.id), flowId: String(item.flow_id), name: book.name, flowVersion: Number(item.flow_version), state: String(item.state), actionId: typeof item.action_id === 'string' ? item.action_id : null, recordId: typeof item.record_id === 'string' ? item.record_id : null, step: Number(context.step || 0), version: Number(item.version), updatedAt: Number(item.updated_at) };
+      }));
+      return response({ books, runs: active.filter((item): item is NonNullable<typeof item> => item !== null) });
+    }
+    const runMatch = /^runs\/([A-Za-z0-9_-]+)$/.exec(nested);
+    if (request.method === 'GET' && runMatch) {
+      const rows = await Effect.runPromise(query<Record<string, unknown>>(client, { sql: 'SELECT * FROM runs WHERE id=?', args: [decodeURIComponent(runMatch[1])] }));
+      const item = rows[0]; if (!item) throw notFound('Flow Book run not found.');
+      const runContext = object(JSON.parse(String(item.context)));
+      const owner = String(runContext.startedBy || '');
+      if (!(await runVisible(client, current.member, owner, item.record_id))) throw forbidden();
+      const full = owner === current.identity.id || managesMembers(current.member);
+      const saved = await Effect.runPromise(query<Record<string, unknown>>(client, { sql: 'SELECT id,action,occurrence,state,input,output,version,created,updated FROM steps WHERE run=? ORDER BY occurrence', args: [String(item.id)] }));
+      const steps = saved.map((row) => ({ id: String(row.id), action: String(row.action), occurrence: Number(row.occurrence), state: String(row.state), input: full ? object(JSON.parse(String(row.input))) : {}, output: full && row.output !== null ? object(JSON.parse(String(row.output))) : null, version: Number(row.version), created: Number(row.created), updated: Number(row.updated) }));
+      const visibleContext = full ? runContext : { source: runContext.source, step: runContext.step, actions: Array.isArray(runContext.actions) ? runContext.actions.map((entry) => { const action = object(entry); return { id: action.id, version: action.version, auto: action.auto }; }) : [] };
+      return response({ run: { id: String(item.id), flowId: String(item.flow_id), flowVersion: Number(item.flow_version), state: String(item.state), actionId: typeof item.action_id === 'string' ? item.action_id : null, recordId: typeof item.record_id === 'string' ? item.record_id : null, context: visibleContext, version: Number(item.version), updatedAt: Number(item.updated_at), steps } });
     }
     if (request.method === 'GET' && nested === 'inbox') {
       const rows = await Effect.runPromise(query<Record<string, unknown>>(client, { sql: 'SELECT * FROM records WHERE type=\'task\' AND state=\'open\' AND (assignee=? OR assignee IS NULL) AND archived IS NULL ORDER BY updated DESC LIMIT 100', args: [current.identity.id] }));
@@ -239,34 +328,13 @@ async function handle(request: Request, env: RuntimeEnv, ctx: ExecutionContext):
       return response({ tasks: rows.map(record).filter((item) => canReadRecord(current.member, item)), orders: isCook(current.member) ? pos.orders.map(kitchenOrder) : pos.orders, permissions: { prepare: canExecute(current.member, 'pos.order.item.update'), collect: canExecute(current.member, 'pos.checkout'), completeTask: canExecute(current.member, 'task.complete'), openOrder: canExecute(current.member, 'pos.open') } });
     }
     if (request.method === 'GET' && nested === 'canvas') return response({ cards: await workspaceCanvas(client, current.member) });
-    if (request.method === 'GET' && nested === 'directory') {
-      const definitions = await listDefinitions(client);
-      const published = new Set(definitions.filter((item) => item.state === 'published').map((item) => item.id));
-      return response({ bots: botDirectory.map((bot) => ({
-        ...bot,
-        installed: published.has(directoryDefinitionIds(bot.id).bot),
-        flows: [
-          ...bot.flows.map((flow) => ({ ...flow, template: true, installed: published.has(directoryDefinitionIds(bot.id, flow.id).flow!) })),
-          ...definitions.filter((item) => item.kind === 'flow' && item.state === 'published' && item.data.source === 'custom' && item.data.botId === bot.id).map((item) => ({ id: item.id, title: item.name, description: String(item.data.description || 'Custom Flow'), records: [], actions: Array.isArray(item.data.actions) ? item.data.actions : [], template: false, installed: true })),
-        ],
-      })) });
-    }
     if (request.method === 'GET' && nested === 'definitions') return response({ definitions: await listDefinitions(client) });
-    if (request.method === 'PUT' && nested.startsWith('definitions/')) {
-      if (current.member.role !== 'owner' && current.member.role !== 'admin') throw forbidden();
-      const id = decodeURIComponent(nested.slice('definitions/'.length)); const body = await Effect.runPromise(parseJson(request));
-      const kind = typeof body.kind === 'string' ? body.kind : ''; const name = typeof body.name === 'string' ? body.name.trim().slice(0, 100) : ''; const data = object(body.data);
-      if (!/^(flow|record_type|bot|kit)$/.test(kind) || !name) throw badRequest('Definition kind and name are required.');
-      if (kind === 'flow' && (!Array.isArray(data.actions) || data.actions.length === 0)) throw badRequest('A Flow needs at least one Action.');
-      const at = now();
-      await client.execute({ sql: `INSERT INTO definitions (id,kind,name,version,state,data,created_at,updated_at) VALUES (?,?,?,1,?,?,?,?)
-        ON CONFLICT(id) DO UPDATE SET name=excluded.name,version=definitions.version+1,state=excluded.state,data=excluded.data,updated_at=excluded.updated_at`, args: [id, kind, name, body.state === 'published' ? 'published' : 'draft', JSON.stringify(data), at, at] });
-      return response({ definition: { id, kind, name, state: body.state === 'published' ? 'published' : 'draft' } });
-    }
     const actionMatch = /^actions\/([a-z.]+)$/.exec(nested);
     if (request.method === 'POST' && actionMatch) {
       const key = request.headers.get('Idempotency-Key') || ''; const input = await Effect.runPromise(parseJson(request));
-      const result = await Effect.runPromise(executeGateway(client, current, { actionId: actionMatch[1] as GatewayRequest['actionId'], idempotencyKey: key, input }, { productContent: env.PRODUCT_CONTENT, siteReleases: env.SITE_RELEASES, ai: env.AI, tinyfish: env.TINYFISH_API_KEY }));
+      const actionId = actionMatch[1] as GatewayRequest['actionId'];
+      const action = { actionId, idempotencyKey: key, input };
+      const result = await Effect.runPromise(executeGateway(client, current, action, { productContent: env.PRODUCT_CONTENT, siteReleases: env.SITE_RELEASES, ai: env.AI, tinyfish: env.TINYFISH_API_KEY, typesafe: env.TYPESAFE_API_KEY }));
       return response(result, 201);
     }
     throw notFound('Route not found.');
@@ -280,12 +348,13 @@ export default {
       const body = object(message.body);
       if (body.kind !== 'chat.command' || typeof body.id !== 'string') { message.ack(); continue; }
       try {
-        await processCommand(env.CONTROL, body.id, (current, work) => withWorkspace(env, current, work), { productContent: env.PRODUCT_CONTENT, siteReleases: env.SITE_RELEASES, ai: env.AI });
+        await processCommand(env.CONTROL, body.id, (current, work) => withWorkspace(env, current, work), { productContent: env.PRODUCT_CONTENT, siteReleases: env.SITE_RELEASES, ai: env.AI, typesafe: env.TYPESAFE_API_KEY });
         message.ack();
       } catch { message.retry({ delaySeconds: 60 }); }
     }
   },
   async scheduled(_controller: ScheduledController, env: RuntimeEnv): Promise<void> {
+    await sweepFlowDispatches(env);
     await env.CONTROL.prepare('DELETE FROM channel_link_requests WHERE expires_at<=?').bind(Date.now()).run();
     await env.CONTROL.prepare("UPDATE channel_commands SET state='failed',result='Processing interrupted. Check TAR before retrying.' WHERE state='processing' AND attempts>=5 AND due_at<=?").bind(Date.now()).run();
     const due = await env.CONTROL.prepare("SELECT id FROM channel_commands WHERE state IN ('pending','processing') AND due_at<=? AND attempts<5 ORDER BY due_at LIMIT 100").bind(Date.now()).all<{id: string}>();

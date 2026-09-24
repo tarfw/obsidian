@@ -14,31 +14,16 @@ describe('registry contracts', () => {
     const cards = buildWorkspaceCanvas([
       { id: 'customer-onboarding', kind: 'flow', name: 'Customer onboarding', state: 'published', data: {} },
     ], { records: 12, openTasks: 3 }, 'member');
-    expect(cards.map((card) => card.kind)).toEqual(['data', 'data', 'action', 'action', 'flow']);
+    expect(cards.map((card) => card.kind)).toEqual(['data', 'data', 'action', 'action', 'action', 'flow']);
     expect(cards[0]).toMatchObject({ value: 12 });
   });
 
-  it('uses valid cards from a published business Kit', () => {
+  it('renders POS from domain records without a Bot or Kit installation', () => {
     const cards = buildWorkspaceCanvas([
-      { id: 'shop', kind: 'kit', name: 'Shop', state: 'published', data: { canvas: { cards: [
-        { id: 'work', kind: 'data', title: 'Waiting', metric: 'tasks.open' },
-        { id: 'new-task', kind: 'action', title: 'Assign work', actionId: 'task.create' },
-      ] } } },
-    ], { records: 5, openTasks: 2 }, 'owner');
-    expect(cards).toHaveLength(4);
-    expect(cards).toContainEqual({ id: 'work', kind: 'data', title: 'Waiting', display: 'value', value: 2, caption: undefined });
-    expect(cards).toContainEqual(expect.objectContaining({ id: 'new-task', actionId: 'task.create' }));
-  });
-  it('renders compact POS metrics and opens the registered retail interface', () => {
-    const cards = buildWorkspaceCanvas([
-      { id: 'directory.pos.bot', kind: 'bot', name: 'POS', state: 'published', data: {} },
-      { id: 'directory.pos.sell.flow', kind: 'flow', name: 'Sell', state: 'published', data: { botId: 'pos', templateId: 'sell' } },
-      { id: 'directory.pos.kit', kind: 'kit', name: 'POS', state: 'published', data: { canvas: { cards: [
-        { id: 'pos-sell', kind: 'flow', title: 'Sell', flowId: 'directory.pos.sell.flow' },
-      ] } } },
+      { id: 'book.followup', kind: 'flow', name: 'Follow up', state: 'published', data: { source: 'book' } },
     ], { records: 10, openTasks: 0, pos: { sales: 12345, orders: 2, lowStock: 1, currency: 'INR', businessDate: '2026-09-07' } }, 'member');
-    expect(cards).toHaveLength(4);
-    expect(cards.map((card) => card.title)).toEqual(['Sales today', 'Orders today', 'Low stock', 'New sale']);
-    expect(cards[3]).toMatchObject({ actionId: 'pos.open', initialInput: { section: 'sell' } });
+    expect(cards.slice(0, 3).map((card) => card.title)).toEqual(['Sales today', 'Orders today', 'Low stock']);
+    expect(cards.find((card) => card.kind === 'action' && card.actionId === 'pos.open')).toMatchObject({ title: 'Open POS', initialInput: { section: 'sell' } });
+    expect(cards.at(-1)).toMatchObject({ kind: 'flow', flowId: 'book.followup' });
   });
 });

@@ -54,66 +54,12 @@ export interface AgentRunResult {
   result: { action?: string; summary?: string; data?: Record<string, unknown> } | null;
 }
 
-export interface BotBuilderArtifactDraft {
-  id: string;
-  name: string;
-  fields: string[];
-  initialStatus: string;
-}
-
-export interface BotBuilderStepDraft {
-  id: string;
-  title: string;
-  handler: 'app' | 'agent';
-  card?: { type: 'input' | 'selection' | 'payment' | 'report' | 'list'; fields: string[] };
-  instruction?: string;
-}
-
-export interface BotBuilderDraft {
-  name: string;
-  purpose: string;
-  artifacts: BotBuilderArtifactDraft[];
-  workflows: Array<{ id: string; title: string; artifactId: string; steps: BotBuilderStepDraft[] }>;
-}
-
-export interface HarnessDefinition { id: string; kind: 'data' | 'bot'; name: string; body: Record<string, unknown>; version: number; state: string; }
-export interface HarnessRecord { id: string; type: string; title: string; data: Record<string, unknown>; status: string; version: number; }
-export interface HarnessDataCard { id: string; kind: 'data'; title: string; dataType: string; count: number; }
-export interface HarnessRecordProfileEvent { id: string; action: string; summary: string; channel: 'message' | 'email' | 'phone' | 'calendar' | 'note' | 'system'; occurredAt: number; actorId: string; workflow?: { botId?: string; workflowId?: string; runId?: string; stepId?: string }; }
-export interface HarnessRecordProfile {
-  design: { version: number; component: 'record-profile'; layout: string; tokens: { page: string; surface: string; border: string; text: string; muted: string; divider: string; insight: string; insightText: string; panelMaxWidth: number; panelPadding: number; avatarSize: number; borderRadius: number; rowMinHeight: number }; };
-  record: { id: string; type: string; title: string; status: string; version: number; createdAt: number; updatedAt: number };
-  identity: { title: string; subtitle?: string; avatarRef?: string; email?: string; phone?: string; initials: string };
-  insight?: string;
-  activity: { heading: string; events: HarnessRecordProfileEvent[]; empty: boolean };
-  workflows?: Array<{ id: string; botId: string; workflowId: string; stepId: string; title: string; step: string; updatedAt: number }>;
-  fields: Array<{ key: string; value: string | number | boolean | null }>;
-}
-export interface HarnessHomeCard { id: string; kind: 'inbox' | 'action' | 'data' | 'report'; title: string; botId: string; workflowId: string; stepId: string; mode: 'deterministic' | 'agentic'; workspaceId?: string; }
-export interface HarnessHome { role: 'owner' | 'admin' | 'member' | 'guest'; capabilities?: { manageDefinitions: boolean }; now: HarnessHomeCard[]; actions: HarnessHomeCard[]; data: HarnessDataCard[]; }
-export interface PersonalTodayCard {
-  id: string;
-  kind: 'action' | 'reminder' | 'report' | 'plan-update';
-  title: string;
-  detail: string;
-  runId?: string;
-  planId?: string;
-  workflowId?: string;
-  stepId?: string;
-  updateId?: string;
-  mode?: 'deterministic' | 'agentic';
-}
-export interface PersonalToday { cards: PersonalTodayCard[]; }
-
 export class TaraiRequestError extends Error {
   constructor(public readonly status: number, message: string, public readonly path: string) {
     super(message);
     this.name = 'TaraiRequestError';
   }
 }
-
-export function setUserId(_id: string) {}
-export function setUserEmail(_email: string) {}
 
 function newIdempotencyKey(prefix = 'app'): string {
   return `${prefix}:${Date.now()}:${Math.random().toString(36).slice(2)}`;
@@ -206,50 +152,8 @@ async function chat(message: string, scope?: string): Promise<any> {
   throw new TaraiRequestError(504, 'The assistant is taking longer than expected. Please try again.', `/api/runs/${started.run.id}`);
 }
 
-async function waitForAgentRun(scope: string, runId: string): Promise<any> {
-  for (let attempt = 0; attempt < 60; attempt++) {
-    if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 1000));
-    const status = await request<{ run: any; result: any }>(`/api/runs/${encodeURIComponent(runId)}`, { scope });
-    if (status.run?.state === 'done') return status.result;
-    if (status.run?.state === 'failed' || status.run?.state === 'refunded') {
-      throw new TaraiRequestError(500, 'The Bot Builder could not complete this request. Any reserved credits were refunded.', `/api/runs/${runId}`);
-    }
-  }
-  throw new TaraiRequestError(504, 'The Bot Builder is taking longer than expected. Please try again.', `/api/runs/${runId}`);
-}
-
-async function generateBotDraft(scope: string, prompt: string, answers: Record<string, string>, existingArtifacts: Array<{ id: string; name: string; fields: string[] }>): Promise<BotBuilderDraft> {
-  const started = await request<{ run: { id?: string } }>('/api/agents/bot.builder/run', {
-    method: 'POST', scope, body: { prompt, answers, existingArtifacts }, idempotencyKey: newIdempotencyKey('bot-builder'),
-  });
-  if (!started.run?.id) throw new TaraiRequestError(500, 'The Bot Builder did not start.', '/api/agents/bot.builder/run');
-  const result = await waitForAgentRun(scope, started.run.id);
-  const draft = result?.result?.draft;
-  if (!draft || typeof draft !== 'object') throw new TaraiRequestError(500, 'The Bot Builder returned an invalid draft.', `/api/runs/${started.run.id}`);
-  return draft as BotBuilderDraft;
-}
-
 export const tar = {
   chat: (_sessionId: string, message: string, scope?: string) => chat(message, scope),
-  botBuilder: { generate: generateBotDraft },
-  personal: {
-    today: () => request<PersonalToday>('/api/personal/today', { scope: 'p' }),
-    addTask: (title: string) => request('/api/personal/tasks', { method: 'POST', scope: 'p', body: { title } }),
-    suggestPlan: (draft: BotBuilderDraft, kind: 'plan' | 'routine') => request('/api/personal/plan-updates', { method: 'POST', scope: 'p', body: { draft, kind } }),
-    acceptPlan: (id: string) => request('/api/personal/plan-updates/' + encodeURIComponent(id) + '/accept', { method: 'POST', scope: 'p' }),
-    rejectPlan: (id: string) => request('/api/personal/plan-updates/' + encodeURIComponent(id) + '/reject', { method: 'POST', scope: 'p' }),
-    completeStep: (runId: string, idempotencyKey?: string) => request('/api/personal/runs/' + encodeURIComponent(runId) + '/advance', { method: 'POST', scope: 'p', idempotencyKey }),
-  },
-  harness: {
-    home: (scope: string) => request<HarnessHome>('/api/harness/home', { scope }),
-    defs: (scope: string, kind?: 'data' | 'bot') => request<{ defs: HarnessDefinition[] }>(`/api/harness/defs${kind ? `?kind=${kind}` : ''}`, { scope }),
-    saveDef: (scope: string, def: { id: string; kind: 'data' | 'bot'; name: string; body: Record<string, unknown> }) => request<{ def: HarnessDefinition }>(`/api/harness/defs/${encodeURIComponent(def.id)}`, { method: 'PUT', scope, body: def }),
-    records: (scope: string, type?: string) => request<{ records: HarnessRecord[] }>(`/api/harness/records${type ? `?type=${encodeURIComponent(type)}` : ''}`, { scope }),
-    recordProfile: (scope: string, id: string) => request<{ screen: HarnessRecordProfile }>(`/api/harness/records/${encodeURIComponent(id)}/profile`, { scope }),
-    command: (scope: string, command: Record<string, unknown>) => request<any>('/api/harness/commands', { method: 'POST', scope, body: command }),
-    inbox: (scope: string) => request<{ items: Array<{ id: string; title?: string; ref?: string; workspace_id?: string; workspace_name?: string; data?: Record<string, unknown>; version?: number }> }>('/api/harness/inbox', { scope }),
-    completeInbox: (scope: string, id: string) => request('/api/harness/inbox/' + encodeURIComponent(id) + '/complete', { method: 'POST', scope }),
-  },
   aiTasks: (_scope: string) => Promise.resolve([]),
   executeAITask: (action: string, params: Record<string, any>, scope: string) => request('/api/intent', { method: 'POST', scope, body: { intent: action, action, parameters: params, scope: 'workspace' } }),
   tool: entityOperation,

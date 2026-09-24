@@ -1,8 +1,8 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Linking, Modal, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import type { HarnessRecord } from '@/lib/harness';
+import { harness, type Consent, type HarnessFlowBook, type HarnessRecord, type Link } from '@/lib/harness';
 import { tokens } from '@/components/ds/tokens';
 
 interface Props {
@@ -26,6 +26,8 @@ const colors = {
 };
 
 const businessTypeNames: Record<string, string> = {
+  person: 'Person',
+  organization: 'Organization',
   contact: 'Contact / Customer',
   customer: 'Customer',
   order: 'Order',
@@ -59,15 +61,38 @@ function formatDate(ts?: number | string | null): string {
   return Number.isNaN(d.getTime()) ? String(ts) : d.toLocaleString();
 }
 
-export default function RecordDetailModal({ visible, record, onClose, onAction }: Props) {
+export default function RecordDetailModal({ visible, record, scope, onClose, onAction }: Props) {
   const insets = useSafeAreaInsets();
+  const [links, setLinks] = useState<Link[]>([]);
+  const [books, setBooks] = useState<HarnessFlowBook[]>([]);
+  const [consents, setConsents] = useState<Consent[]>([]);
+  const [consentError, setConsentError] = useState(false);
+  useEffect(() => {
+    if (!visible || !record || !['person', 'organization'].includes(record.type)) { setLinks([]); return; }
+    let current = true;
+    void harness.links(scope, record.id).then((result) => { if (current) setLinks(result.links); }).catch(() => { if (current) setLinks([]); });
+    return () => { current = false; };
+  }, [record?.id, record?.type, scope, visible]);
+  useEffect(() => {
+    if (!visible || !record || !['person', 'organization'].includes(record.type)) { setConsents([]); setConsentError(false); return; }
+    let current = true;
+    void harness.consents(scope, record.id).then((result) => { if (current) { setConsents(result.consents); setConsentError(false); } }).catch(() => { if (current) { setConsents([]); setConsentError(true); } });
+    return () => { current = false; };
+  }, [record?.id, record?.type, scope, visible]);
+  useEffect(() => {
+    if (!visible || !record || !['person', 'organization'].includes(record.type)) { setBooks([]); return; }
+    let current = true;
+    void harness.flows(scope).then((result) => { if (current) setBooks(result.books); }).catch(() => { if (current) setBooks([]); });
+    return () => { current = false; };
+  }, [record?.id, record?.type, scope, visible]);
   if (!record) return null;
 
   const type = record.type.toLowerCase();
   const data = record.data || {};
   const isTask = type === 'task';
   const isOrder = type === 'order' || type === 'pos.order';
-  const isContact = type === 'contact' || type === 'customer';
+  const isContact = type === 'person' || type === 'contact' || type === 'customer';
+  const isOrganization = type === 'organization';
   const isProduct = type === 'product' || type === 'pos.product';
 
   const lines = Array.isArray(data.lines) ? data.lines : [];
@@ -139,9 +164,9 @@ export default function RecordDetailModal({ visible, record, onClose, onAction }
             </View>
           )}
 
-          {Boolean(isContact && (data.email || data.phone || data.organization)) && (
+          {Boolean((isContact || isOrganization) && (data.email || data.phone || data.organization || data.website)) && (
             <View style={styles.sectionCard}>
-              <Text style={styles.cardHeader}>CONTACT DETAILS</Text>
+              <Text style={styles.cardHeader}>{isOrganization ? 'ORGANIZATION DETAILS' : 'CONTACT DETAILS'}</Text>
               {data.phone ? (
                 <TouchableOpacity onPress={() => Linking.openURL(`tel:${data.phone}`)} style={styles.contactRow}>
                   <Ionicons name="call-outline" size={16} color={colors.blue} />
@@ -160,8 +185,44 @@ export default function RecordDetailModal({ visible, record, onClose, onAction }
                   <Text style={styles.contactText}>{String(data.organization)}</Text>
                 </View>
               ) : null}
+              {data.website ? (
+                <TouchableOpacity onPress={() => Linking.openURL(String(data.website))} style={styles.contactRow}>
+                  <Ionicons name="globe-outline" size={16} color={colors.blue} />
+                  <Text style={styles.contactLink}>{String(data.website)}</Text>
+                </TouchableOpacity>
+              ) : null}
             </View>
           )}
+
+          {links.length > 0 ? (
+            <View style={styles.sectionCard}>
+              <Text style={styles.cardHeader}>{isContact ? 'EXPERIENCE' : 'PEOPLE & ROLES'}</Text>
+              {links.map((link) => <View key={link.id} style={styles.linkRow}>
+                <View style={{ flex: 1 }}><Text style={styles.contactText}>{link.other.name} · {link.role}</Text><Text style={styles.emptyText}>{formatDate(link.since)} — {link.until === null ? 'Present' : formatDate(link.until)}</Text></View>
+                {link.until === null ? <TouchableOpacity accessibilityRole="button" onPress={() => { onClose(); onAction('relationship.end', { id: link.id, until: Date.now() }, `End ${link.role}`); }}><Text style={styles.endLink}>End</Text></TouchableOpacity> : null}
+              </View>)}
+            </View>
+          ) : null}
+
+          {(isContact || isOrganization) && books.length > 0 ? (
+            <View style={styles.sectionCard}>
+              <Text style={styles.cardHeader}>FLOW BOOKS</Text>
+              {books.map((book) => <Pressable key={book.id} accessibilityRole="button" style={{ minHeight: 48, justifyContent: 'center' }} onPress={() => { onClose(); onAction('flow.start', { flowId: book.id, recordId: record.id }, book.name); }}>
+                <Text style={styles.contactLink}>{book.name}</Text>
+                {typeof book.data.description === 'string' ? <Text style={styles.emptyText}>{book.data.description}</Text> : null}
+              </Pressable>)}
+            </View>
+          ) : null}
+
+          {(isContact || isOrganization) ? (
+            <View style={styles.sectionCard}>
+              <Text style={styles.cardHeader}>CONTACT CONSENT</Text>
+              {consentError ? <Text style={styles.emptyText}>Consent history is unavailable. Check the connection before relying on this contact.</Text> : consents.length ? consents.map((item) => <View key={item.id} style={styles.linkRow}>
+                <View style={{ flex: 1 }}><Text style={styles.contactText}>{item.channel} · {item.purpose} · {item.state}</Text><Text style={styles.emptyText}>{item.source} · {formatDate(item.created)}</Text></View>
+              </View>) : <Text style={styles.emptyText}>No consent decision recorded. Contact details do not grant permission.</Text>}
+              {!consentError ? <Pressable accessibilityRole="button" style={{ minHeight: 48, justifyContent: 'center' }} onPress={() => { onClose(); onAction('consent.record', { contactId: record.id }, `Record consent for ${record.title}`); }}><Text style={styles.contactLink}>Record decision</Text></Pressable> : null}
+            </View>
+          ) : null}
 
           {extraFields.length > 0 && (
             <View style={styles.sectionCard}>
@@ -229,6 +290,19 @@ export default function RecordDetailModal({ visible, record, onClose, onAction }
             >
               <Ionicons name="cart-outline" size={18} color="#fff" />
               <Text style={styles.primaryActionText}>Open in POS</Text>
+            </Pressable>
+          )}
+
+          {(isContact || isOrganization) && (
+            <Pressable
+              style={styles.primaryAction}
+              onPress={() => {
+                onClose();
+                onAction('relationship.create', isContact ? { source: record.id } : { target: record.id }, `Add role for ${record.title}`);
+              }}
+            >
+              <Ionicons name="people-outline" size={18} color="#fff" />
+              <Text style={styles.primaryActionText}>Add relationship</Text>
             </Pressable>
           )}
 
@@ -308,6 +382,8 @@ const styles = StyleSheet.create({
   contactRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 4 },
   contactLink: { fontSize: 14, color: colors.blue, fontWeight: '600' },
   contactText: { fontSize: 14, color: colors.ink, fontWeight: '500' },
+  linkRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 5 },
+  endLink: { fontSize: 13, fontWeight: '800', color: colors.blue, paddingHorizontal: 8, paddingVertical: 6 },
   kvRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingVertical: 4, gap: 12 },
   kvKey: { fontSize: 13, fontWeight: '600', color: colors.muted, textTransform: 'capitalize', width: 110 },
   kvValue: { flex: 1, fontSize: 13, color: colors.ink, textAlign: 'right' },

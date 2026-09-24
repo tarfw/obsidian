@@ -2,21 +2,10 @@ import type { Client, Transaction } from '@libsql/client/web';
 import { badRequest, conflict, forbidden, notFound } from '../errors.ts';
 import type { AccessContext } from '../types.ts';
 import { isCook } from '../access.ts';
-import { appendRun, eventStatement, findReplay } from '../gateway/commit.ts';
+import { eventStatement, findReplay } from '../gateway/commit.ts';
 
 type DB = Pick<Client, 'execute'>;
 type Data = Record<string, unknown>;
-export const POS_INDEXES = [
-  "CREATE INDEX IF NOT EXISTS pos_payment_day ON records(json_extract(data,'$.businessDate')) WHERE type='pos.payment'",
-  "CREATE INDEX IF NOT EXISTS pos_order_day ON records(json_extract(data,'$.businessDate')) WHERE type='pos.order'",
-  "CREATE INDEX IF NOT EXISTS pos_payment_register ON records(json_extract(data,'$.registerId')) WHERE type='pos.payment'",
-  "CREATE INDEX IF NOT EXISTS pos_customer_orders ON records(json_extract(data,'$.customerId')) WHERE type='pos.order'",
-  "CREATE UNIQUE INDEX IF NOT EXISTS pos_unique_reference ON records(json_extract(data,'$.reference')) WHERE type='pos.payment' AND json_extract(data,'$.reference') IS NOT NULL",
-  "CREATE UNIQUE INDEX IF NOT EXISTS pos_unique_barcode ON records(json_extract(data,'$.barcode')) WHERE type='pos.product' AND json_extract(data,'$.barcode')!='' AND archived IS NULL",
-  "CREATE UNIQUE INDEX IF NOT EXISTS pos_unique_sku ON records(json_extract(data,'$.sku')) WHERE type='pos.product' AND json_extract(data,'$.sku')!='' AND archived IS NULL",
-  "CREATE UNIQUE INDEX IF NOT EXISTS pos_one_open_register ON records(type) WHERE type='pos.register' AND state='open'",
-  "CREATE UNIQUE INDEX IF NOT EXISTS pos_unique_draft_key ON records(owner,json_extract(data,'$.draftKey')) WHERE type='pos.order' AND json_extract(data,'$.draftKey') IS NOT NULL",
-];
 export interface PosRecord { id: string; title: string; state: string; data: Data; version: number; createdAt: number }
 const object = (value: unknown): Data => value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Data : {};
 const text = (value: unknown, max = 200) => typeof value === 'string' ? value.trim().slice(0, max) : '';
@@ -39,10 +28,6 @@ async function put(db: DB, type: string, title: string, data: Data, actor: strin
     args: [id, type, title, state, JSON.stringify(data), actor, at, at] });
   return (await get(db, id, type))!;
 }
-export async function requirePos(db: DB) {
-  const installed = await db.execute("SELECT id FROM definitions WHERE id='directory.pos.bot' AND state='published'");
-  if (!installed.rows.length) throw forbidden();
-}
 async function register(db: DB) {
   const rows = await db.execute("SELECT * FROM records WHERE type='pos.register' AND state='open' AND archived IS NULL LIMIT 1");
   return rows.rows[0] ? decode(rows.rows[0]) : null;
@@ -62,7 +47,6 @@ export async function posSummary(db: DB) {
 }
 export async function readPos(db: DB, context: AccessContext, section: string, search = '', offset = 0) {
   if (isCook(context.member)) throw forbidden();
-  await requirePos(db);
   if (section === 'products' || section === 'orders' || section === 'customers') {
     const types = { products: 'pos.product', orders: 'pos.order', customers: 'pos.customer' };
     return { items: await list(db, types[section], search.slice(0, 100), offset), nextOffset: offset + 100 };
@@ -73,7 +57,6 @@ export async function readPos(db: DB, context: AccessContext, section: string, s
 }
 
 export async function readPosInbox(db: DB) {
-  await requirePos(db);
   const result = await db.execute({ sql: "SELECT * FROM records WHERE type='pos.order' AND state='open' AND archived IS NULL ORDER BY updated DESC,id LIMIT 100" });
   return { orders: result.rows.map(decode) };
 }
@@ -86,20 +69,11 @@ async function movement(db: DB, product: PosRecord, delta: number, reason: strin
 export async function executePos(client: Client, context: AccessContext, actionId: string, input: Data, key: string, hash: string): Promise<Data> {
   const tx = await client.transaction('write');
   try {
-    await requirePos(tx);
     // Recheck under the write lock: concurrent retries must never sell twice.
     const replay = await findReplay(tx, key, hash);
     if (replay) { await tx.commit(); return replay.result as Data; }
     const result = await mutate(tx, context, actionId, input);
-    const at = Date.now();
-    const templateId = actionId === 'pos.checkout' || actionId.startsWith('pos.order.') ? 'sell' : actionId === 'pos.refund' ? 'orders' : actionId.startsWith('pos.product.') || actionId.startsWith('pos.stock.') ? 'stock' : actionId.startsWith('pos.customer.') ? 'customers' : actionId.startsWith('pos.register.') ? 'register' : null;
-    const flowId = templateId ? 'directory.pos.' + templateId + '.flow' : null;
-    let runId: string | null = null;
-    if (flowId) {
-      const flow = await tx.execute({ sql: "SELECT version FROM definitions WHERE id=? AND state='published'", args: [flowId] });
-      if (flow.rows.length) runId = await appendRun(tx, { flowId, flowVersion: Number(flow.rows[0].version), occurrence: key, state: 'completed', actionId, context: { result }, startedAt: at, finishedAt: at });
-    }
-    await tx.execute(eventStatement({ action: actionId, actor: context.identity.id, runId, key, hash, result }));
+    await tx.execute(eventStatement({ action: actionId, actor: context.identity.id, key, hash, result }));
     await tx.commit();
     return result;
   } catch (error) { await tx.rollback().catch(() => undefined); throw error; }

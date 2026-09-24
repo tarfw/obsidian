@@ -108,7 +108,7 @@ export default function SiteScreen({ visible, onClose, workspaceName, subdomain,
         <View style={styles.header}>
           <View style={styles.headerCopy}>
             <Text style={styles.title}>Site Studio</Text>
-            <Text style={styles.subtitle}>Generated and published cleanly by TAR Site Bot</Text>
+            <Text style={styles.subtitle}>Build and publish a versioned business site</Text>
           </View>
           <TouchableOpacity accessibilityLabel="Close Site Studio" onPress={onClose} style={styles.closeButton}>
             <Ionicons name="close" size={20} color="#0f172a" />
@@ -134,7 +134,7 @@ export default function SiteScreen({ visible, onClose, workspaceName, subdomain,
                 </View>
               ))
             ) : (
-              <Text style={styles.body}>Create a draft to let TAR Site Bot construct a useful structure from your workspace data.</Text>
+              <Text style={styles.body}>Create a draft from verified workspace facts, then review its structure before publishing.</Text>
             )}
           </View>
           {!!message && (

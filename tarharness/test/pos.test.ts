@@ -26,7 +26,6 @@ async function fixture() {
   for (const sql of WORKSPACE_SCHEMA) await client.execute(sql);
   const run = (actionId: string, input: Record<string, unknown>, key: string = crypto.randomUUID(), context = access) =>
     Effect.runPromise(executeGateway(client, context, { actionId, input, idempotencyKey: key }));
-  await run('directory.install', { itemId: 'pos', flowIds: ['sell', 'orders', 'stock', 'customers', 'register'] });
   await run('pos.setup', { name: 'Shop', currency: 'INR', timezone: 'Asia/Kolkata', location: 'Main' });
   const result = await run('pos.product.save', { title: 'Tea', price: 1001, stock: 5, taxBps: 500, lowStock: 2, barcode: 'TEA' });
   const product = result.product as { id: string; version: number };
@@ -121,10 +120,12 @@ describe('POS ledger', { timeout: 20000 }, () => {
     expect(await posSummary(client)).toMatchObject({ sales: 0 });
     await expect(run('pos.refund', input)).rejects.toThrow('already been returned');
   });
-  it('links retail mutations to completed Flow runs', async () => {
+  it('records retail mutations directly without manufacturing a Flow run', async () => {
     const { client, run, sale } = await fixture();
     await run('pos.checkout', sale, 'sale-run');
     const runs = await client.execute("SELECT flow_id,state FROM runs WHERE occurrence='sale-run'");
-    expect(runs.rows[0]).toMatchObject({ flow_id: 'directory.pos.sell.flow', state: 'completed' });
+    expect(runs.rows).toHaveLength(0);
+    const events = await client.execute("SELECT action_id,run_id FROM events WHERE idempotency_key='sale-run'");
+    expect(events.rows[0]).toMatchObject({ action_id: 'pos.checkout', run_id: null });
   });
 });

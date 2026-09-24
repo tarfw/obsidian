@@ -13,7 +13,7 @@ export default function TabsLayout() {
       indicatorColor={tokens.color.accentSurface}
       rippleColor={tokens.color.accentSurface}
       backBehavior="history">
-      <NativeTabs.Trigger name="canvas">
+      <NativeTabs.Trigger name="space">
         <NativeTabs.Trigger.Label>Space</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf={{ default: 'square.2.layers.3d', selected: 'square.2.layers.3d.fill' }} md="workspaces" />
       </NativeTabs.Trigger>
@@ -21,13 +21,9 @@ export default function TabsLayout() {
         <NativeTabs.Trigger.Label>Inbox</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf={{ default: 'tray', selected: 'tray.fill' }} md="inbox" />
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="records">
-        <NativeTabs.Trigger.Label>Records</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon sf={{ default: 'folder', selected: 'folder.fill' }} md="folder" />
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="bots">
-        <NativeTabs.Trigger.Label selectedStyle={{ color: tokens.color.accentSelected, fontWeight: '700' }}>Bots</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon src={require('../../../assets/images/splash-logo.png')} renderingMode="template" selectedColor={tokens.color.accentSelected} />
+      <NativeTabs.Trigger name="ask">
+        <NativeTabs.Trigger.Label>Ask TAR</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf={{ default: 'bubble.left', selected: 'bubble.left.fill' }} md="chat_bubble" />
       </NativeTabs.Trigger>
     </NativeTabs>
   </WorkspaceTabsProvider>;

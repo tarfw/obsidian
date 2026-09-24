@@ -13,4 +13,4 @@ registerActionInterface('sale-screen', SaleScreen);
 
 `SaleScreen` implements `ActionInterfaceProps`. It receives the workspace scope, Action contract and initial inputs, submits through `harness.executeAction`, and calls `onSuccess` only after the Gateway accepts the result. Add the matching interface contract and Action `interfaceKey` in `tarharness/src/registry/catalog.ts`.
 
-Directory entries never contain executable UI code. They reference registered Actions and Flows, so untrusted directory content cannot select an arbitrary component.
+Published Flow Books and workspace data never contain executable UI code. They reference registered Actions and native interfaces, so stored definitions cannot select an arbitrary component.

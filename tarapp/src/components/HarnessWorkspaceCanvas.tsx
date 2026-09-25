@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, AppState, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Alert, AppState, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import ActionInterfaceHost from '@/action-interfaces/ActionInterfaceHost';
@@ -8,6 +8,7 @@ import RecordDetailModal from '@/components/RecordDetailModal';
 import SearchRecordsModal from '@/components/SearchRecordsModal';
 import SiteScreen from '@/components/site';
 import WorkspaceTeam from '@/components/WorkspaceTeam';
+import TarLogo from '@/components/TarLogo';
 import { createOperationKey, harness, type HarnessAction, type HarnessCanvasCard, type HarnessFlowBook, type HarnessFlowRun, type HarnessInterfaceContract, type HarnessRecord, type HarnessWorkspace } from '@/lib/harness';
 
 export type WorkspaceTab = 'space' | 'inbox' | 'flows' | 'ask';
@@ -65,6 +66,7 @@ export default function HarnessWorkspaceCanvas({ tab, scope, workspaceName, role
   const [openAction, setOpenAction] = useState<OpenAction | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [askDraft, setAskDraft] = useState('');
   const currentScope = useRef(scope);
   currentScope.current = scope;
   const selectRecord = (record: HarnessRecord, recordScope = scope) => {
@@ -231,7 +233,8 @@ export default function HarnessWorkspaceCanvas({ tab, scope, workspaceName, role
           </ScrollView>
         </View>
       ) : (
-        <ScrollView refreshControl={<RefreshControl refreshing={loading} onRefresh={() => { setLoading(true); void reload(); }} />} style={styles.scroll} contentContainerStyle={[styles.content, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 24 }]}>
+        <KeyboardAvoidingView style={styles.tabBody} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView refreshControl={<RefreshControl refreshing={loading} onRefresh={() => { setLoading(true); void reload(); }} />} style={styles.scroll} contentContainerStyle={[styles.content, tab === 'ask' && styles.askContent, { paddingTop: insets.top + 12, paddingBottom: tab === 'ask' ? 16 : insets.bottom + 24 }]}>
           {tab === 'inbox' ? <AreaRail sources={inboxSources} value={areaFilter} onChange={chooseArea} onCreate={onCreateWorkspace} showAllWorkspaces allowAllAreas onSearch={() => setSearchOpen(true)} onSettings={() => router.push('/settings')} showMembers={activeWorkspace?.mode === 'work'} onMembers={() => setTeamOpen(true)} /> : null}
           {(tab === 'space' || tab === 'ask') && activeWorkspace ? <AreaRail sources={workspaces.map((workspace) => ({ workspace, tasks: [], orders: [] }))} value={scope} onChange={chooseArea} onCreate={onCreateWorkspace} showAllWorkspaces onSearch={() => setSearchOpen(true)} onSettings={() => router.push('/settings')} showMembers={activeWorkspace.mode === 'work'} onMembers={() => setTeamOpen(true)} /> : null}
 
@@ -243,9 +246,9 @@ export default function HarnessWorkspaceCanvas({ tab, scope, workspaceName, role
             <>
               {tab === 'space' && loading ? <View style={styles.progress}><ActivityIndicator size="small" color={colors.blue} /><Text style={styles.progressText}>Loading this space…</Text></View> : null}
               {tab === 'ask' ? <View style={styles.askEmpty}>
-                <Ionicons name="chatbubble-ellipses-outline" size={24} color={colors.blue} />
-                <Text style={styles.askTitle}>Ask TAR</Text>
-                <Text style={styles.askMessage}>Private TAR conversations aren’t available in this workspace yet.</Text>
+                <View style={styles.askMark}><TarLogo size={24} color="#6D45C5" bgColor="#F1ECFA" /></View>
+                <Text style={styles.askTitle}>Ask tar</Text>
+                <Text style={styles.askMessage}>Conversations are coming soon.</Text>
               </View> : null}
               {tab === 'space' ? spaceRecords ? <>
                 <TouchableOpacity style={styles.workCard} onPress={() => setSpaceRecords(null)} accessibilityRole="button" accessibilityLabel="Back to Space"><Ionicons name="arrow-back" size={20} color={colors.blue} /><Text style={styles.canvasRowTitle}>Space</Text></TouchableOpacity>
@@ -286,6 +289,18 @@ export default function HarnessWorkspaceCanvas({ tab, scope, workspaceName, role
             </>
           )}
         </ScrollView>
+        {tab === 'ask' ? <View style={styles.askComposer}>
+          <View style={styles.askInputBar}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Add attachment" onPress={() => Alert.alert('Attachments', 'Attachments will be available with conversations.')} style={styles.askControl}>
+              <Ionicons name="add" size={24} color={colors.ink} />
+            </Pressable>
+            <TextInput accessibilityLabel="Message tar" value={askDraft} onChangeText={setAskDraft} placeholder="Message" placeholderTextColor="#8B8F99" multiline style={styles.askInput} />
+            <Pressable accessibilityRole="button" accessibilityLabel={askDraft.trim() ? 'Send message' : 'Voice message'} onPress={() => Alert.alert('Coming soon', 'Private conversations are not available yet.')} style={styles.askControl}>
+              <Ionicons name={askDraft.trim() ? 'arrow-up' : 'mic-outline'} size={21} color={askDraft.trim() ? '#7048C8' : colors.muted} />
+            </Pressable>
+          </View>
+        </View> : null}
+        </KeyboardAvoidingView>
       )}
 
       <ActionInterfaceHost
@@ -339,7 +354,6 @@ function AreaRail({ sources, value, onChange, onCreate, showAllWorkspaces = fals
       <View style={styles.workspaceBar}>
       <TouchableOpacity onPress={() => setOpen((current) => !current)} style={styles.areaTrigger} accessibilityRole="button" accessibilityLabel={`Switch workspace. Current: ${label}`} accessibilityState={{ expanded: open }}>
         <Text numberOfLines={1} style={styles.areaTriggerText}>{label}</Text>
-        <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={18} color={colors.ink} />
       </TouchableOpacity>
         <View style={styles.workspaceActions}>
           <Pressable accessibilityRole="button" accessibilityLabel="Search contacts and records" onPress={onSearch} style={styles.headerIconButton}><Ionicons name="search-outline" size={19} color={colors.blue} /></Pressable>
@@ -799,15 +813,21 @@ const styles = StyleSheet.create({
   scroll: { flex: 1 },
   tabBody: { flex: 1 },
   content: { paddingHorizontal: 18 },
-  askEmpty: { alignItems: 'center', paddingHorizontal: 28, paddingTop: 88 },
+  askContent: { flexGrow: 1 },
+  askEmpty: { flex: 1, minHeight: 240, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 28, paddingBottom: 60 },
+  askMark: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 14, backgroundColor: '#F1ECFA' },
   askTitle: { color: colors.ink, fontSize: 20, fontWeight: '700', marginTop: 14 },
   askMessage: { color: colors.muted, fontSize: 14, lineHeight: 21, marginTop: 8, textAlign: 'center', maxWidth: 280 },
+  askComposer: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8, backgroundColor: '#fff' },
+  askInputBar: { minHeight: 54, flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 7, borderRadius: 27, backgroundColor: '#F0F0F2' },
+  askControl: { width: 36, height: 40, alignItems: 'center', justifyContent: 'center' },
+  askInput: { flex: 1, maxHeight: 104, paddingVertical: 12, color: colors.ink, fontSize: 15 },
   headerIconButton: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   areaPicker: { alignItems: 'stretch', marginBottom: 12 },
   workspaceBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, paddingHorizontal: 18, paddingTop: 12 },
   workspaceActions: { flexDirection: 'row', alignItems: 'center' },
   areaTrigger: { minHeight: 56, maxWidth: 210, minWidth: 0, flexShrink: 1, paddingHorizontal: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start', gap: 10 },
-  areaTriggerText: { flexShrink: 1, fontSize: 20, fontWeight: '800', color: colors.ink, letterSpacing: 0.1 },
+  areaTriggerText: { flexShrink: 1, fontSize: 22, fontWeight: '900', color: colors.ink, letterSpacing: -0.4 },
   sheetOverlay: { flex: 1, justifyContent: 'flex-end' },
   sheetBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(18, 24, 36, 0.32)' },
   workspaceSheet: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingTop: 10, paddingHorizontal: 18, shadowColor: '#111827', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.1, shadowRadius: 14, elevation: 12 },

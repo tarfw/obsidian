@@ -22,8 +22,8 @@ export default function TabsLayout() {
         <NativeTabs.Trigger.Icon sf={{ default: 'tray', selected: 'tray.fill' }} md="inbox" />
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="ask">
-        <NativeTabs.Trigger.Label>Ask TAR</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon sf={{ default: 'bubble.left', selected: 'bubble.left.fill' }} md="chat_bubble" />
+        <NativeTabs.Trigger.Label>tar</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon src={require('../../../assets/images/tabIcons/tar.png')} renderingMode="original" />
       </NativeTabs.Trigger>
     </NativeTabs>
   </WorkspaceTabsProvider>;

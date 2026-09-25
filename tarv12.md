@@ -33,6 +33,26 @@ Imagine a customer asks for a quote:
 | Flow Book | A reusable, versioned process made from registered actions. | Follow up after an approved quote. |
 | Run | One saved execution of a task or Flow Book. | This quote's follow-up, including its waits and receipts. |
 
+**Example: turn business expertise into a customer experience.** A veterinary supplier contributes its product knowledge and meeting tips. TAR combines the relevant domain package and a reviewed Flow Book to offer attendees a customer-facing chat: “Who am I meeting?” can return a useful meeting brief. The supplier provides the expertise; TAR provides the shared platform and governed actions, so the supplier does not have to configure agent machinery. This is an illustrative product pattern, not a claim that this specific integration exists today.
+
+~~~text
+Vet supplier's knowledge
+  (products, expertise, meeting tips)
+              |
+              v
+        TAR domain package
+        + Flow Book
+              |
+              v
+      Customer-facing chat
+              |
+        attendee asks:
+       "Who am I meeting?"
+              |
+              v
+    TAR returns a useful brief
+~~~
+
 **The simple rule:** a contact identifies who is involved; a relationship says how they are connected; a business record holds what happened; a Flow Book describes how repeatable work proceeds. A known one-step action runs directly. An unfamiliar multi-step request may need a bounded plan. Every accepted change and external effect still goes through the Gateway. TAR first uses domain code, then a provider API, then a temporary browser for a website-only operation, and finally a temporary computer sandbox when real OS software is required. Browser and computer execution are planned capabilities, not current defaults.
 
 **What exists now:** the Worker, workspace storage, an action catalog, a Gateway path, POS and site features, and basic Flow definitions. **What needs to be built or proven:** full durable step execution and recovery, ongoing goal/task supervision, Jev integration, more commerce domains, and governed browser/computer adapters. See section 0.2 for the precise status.
@@ -456,6 +476,8 @@ Do not infer on every keystroke or every screen view. Prefer submit, explicit as
 | Proposal | evidence and consumed assessments, selected arguments, missing fields, policy version and status. |
 | Command/run | actor, channel, input hash, approvals, accepted state, effects, receipts and outcome. |
 
+For each Jev-assisted route, link these existing records into one inspectable decision trace: eligible candidate IDs and versions, selected ID or no-match, host acceptance or rejection reason, fallback used, and the resulting command/run outcome. Record a stale or invalid selection as rejected before fallback; never count the fallback or a worker's successful result as a Jev selection win. This is a trace contract across assessments, proposals, attempts and receipts, not a second action authority or a required new table.
+
 Reuse identity = tenant + access scope + evidence versions + candidate set/order + question meaning/version + served model + relevant policy + locale/time assumptions. A changed display weight or acceptance threshold can recompute over unchanged raw answers. Changed evidence, rubric, candidates, model or time assumption requires affected reassessment. Check access before reuse and again before execution.
 
 ~~~text
@@ -515,6 +537,15 @@ Unit to optimize = cost and latency per correctly completed task
 | Selective: 540 x 3,000 primary; 135 x 2,000 dependent; 108 x 1,500 verification; 60 x 2,000 consolidation. | 843 calls; 2.172M tokens; INR 8.67/seat/month. | Assumed semantic demand and reuse; not measured saving. |
 | 4 segments x 3 pages x 1,400 tokens x 4 site releases. | INR 0.268128/month Jev only. | Build-time plan selection, zero per public view. |
 | Per-visit 6,800-token layout choice x 100,000 views. | INR 2,713.20 Jev only. | Rejected normal path. |
+
+**Illustrative heavy-use comparison (checked 2026-09-25).** The same monthly input volume is sent to either model; Flash returns an assumed 200 output tokens per call, while [Jev bills input only](https://docs.typesafe.ai/models). Use the INR 95/USD planning conversion above, with cache misses, no retries and no other workflow costs. [InferX's discounted `deepseek-v4-flash-0731` rate](https://inferx.net/models/deepseek-v4-flash-0731) is USD 0.042/M input, USD 0.084/M output and USD 0.0084/M cached input; this is a provider-specific snapshot, not TAR's chosen generator or DeepSeek's official `deepseek-flash` price.
+
+| Per user per month | Input / Flash output | Jev input + output | Flash input | Flash output | Flash total |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Heavy: 5,000 calls x 4,000 input | 20M / 1M tokens | INR 79.80 + 0 = **79.80** | INR 79.80 | INR 7.98 | **INR 87.78** |
+| Very heavy: 10,000 calls x 8,000 input | 80M / 2M tokens | INR 319.20 + 0 = **319.20** | INR 319.20 | INR 15.96 | **INR 335.16** |
+
+More Flash output raises its total; cache hits can lower its input cost. Select a route by measured correctness, latency and full cost per completed task, not this token-price comparison alone.
 
 | Cost line | Record for every compared route |
 | --- | --- |

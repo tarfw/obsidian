@@ -17,3 +17,9 @@ Use structure for qualification (for example, `tasks.owner`). Preserve required
 external API spellings behind adapters; do not rename existing interfaces without
 a deliberate migration. Design for the full commerce cycle across domains using
 the shared core and domain packages described in `tarv12.md`.
+
+<!-- groma:start -->
+## Groma
+
+This project uses Groma. Before you scan, inspect, or curate architecture, or change files for a Backlog task, run `groma agent-instructions` and read the guide it names for that job. When it reports a first scan, ask the user whether they want you to curate the architecture. Do not edit Groma-owned architecture files directly.
+<!-- groma:end -->

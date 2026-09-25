@@ -12,6 +12,8 @@ import { searchWeb } from '../web/search.ts';
 import { appendEvent, eventStatement, findReplay, fingerprint, runStatement, stamp, stepStatement } from './commit.ts';
 import { suggest } from '../brain/jev.ts';
 import { claimTurn, completeTurn, failTurn } from './turns.ts';
+import { commerceActionIds } from '../commerce/catalog.ts';
+import { executeCommerce } from '../commerce/store.ts';
 
 type GatewayError = ReturnType<typeof badRequest> | ReturnType<typeof conflict> | ReturnType<typeof forbidden> | ReturnType<typeof notFound> | ReturnType<typeof unavailable>;
 export interface GatewayRequest { readonly idempotencyKey: string; readonly actionId: ActionId; readonly input: Record<string, unknown>; }
@@ -67,6 +69,7 @@ export function executeGateway(client: Client, context: AccessContext, request: 
         return result;
       }
       if (request.actionId.startsWith('pos.')) return executePos(client, context, request.actionId, request.input, request.idempotencyKey, hash);
+      if (commerceActionIds.has(request.actionId)) return executeCommerce(client, context, request.actionId, request.input, request.idempotencyKey, hash);
       if (request.actionId === 'site.generate') return executeSiteGenerate(client, context, request.input, request.idempotencyKey, hash);
       if (request.actionId === 'site.update') return executeSiteUpdate(client, context, request.input, request.idempotencyKey, hash);
       if (request.actionId === 'site.compile') return executeSiteCompile(client, context, request.input, request.idempotencyKey, hash);
@@ -113,11 +116,34 @@ export function executeGateway(client: Client, context: AccessContext, request: 
         return result;
       }
 
+      if (request.actionId === 'routine.save') {
+        if (context.workspace.mode !== 'personal') throw badRequest('Space routines are saved in Personal.');
+        const label = text(request.input.label, 80); const workspace = text(request.input.workspace, 160); const role = text(request.input.role, 80);
+        const start = text(request.input.start, 5); const end = text(request.input.end, 5);
+        const validTime = (value: string) => /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
+        if (!label || !workspace || !validTime(start) || !validTime(end) || start === end) throw badRequest('Choose a context, workspace and valid start and end times.');
+        const rawDays = text(request.input.days, 40) || '0,1,2,3,4,5,6';
+        const days = [...new Set(rawDays.split(',').map((value) => Number(value.trim())))];
+        if (!days.length || days.some((value) => !Number.isInteger(value) || value < 0 || value > 6)) throw badRequest('Days must use numbers 0 through 6.');
+        const priority = Number(request.input.priority ?? 0);
+        if (!Number.isSafeInteger(priority) || priority < 0 || priority > 100) throw badRequest('Priority must be an integer from 0 to 100.');
+        const record: RecordItem = {
+          id: `rec_${crypto.randomUUID()}`, type: 'routine', title: label, state: 'active',
+          data: { workspace, label, role, start, end, days, priority }, owner: context.identity.id, assignee: null,
+          version: 1, createdAt: at, updatedAt: at,
+        };
+        await client.batch([
+          { sql: 'INSERT INTO records (id,type,title,state,data,owner,assignee,due,version,created,updated) VALUES (?,?,?,?,?,?,?,?,1,?,?)', args: [record.id, record.type, record.title, record.state, json(record.data), record.owner, null, null, at, at] },
+          eventStatement({ action: request.actionId, actor: context.identity.id, recordId: record.id, key: request.idempotencyKey, hash, result: { record } }),
+        ], 'write');
+        return { record };
+      }
+
       if (request.actionId === 'record.create' || request.actionId === 'task.create' || request.actionId === 'contact.create' || request.actionId === 'organization.create') {
         const type = request.actionId === 'task.create' ? 'task' : request.actionId === 'contact.create' ? 'person' : request.actionId === 'organization.create' ? 'organization' : text(request.input.type, 80);
         const title = text(request.actionId === 'contact.create' || request.actionId === 'organization.create' ? request.input.name : request.input.title, 240);
         if (!type || !title) throw badRequest('Record type and title are required.');
-        if (request.actionId === 'record.create' && (!/^[a-z][a-z0-9.]{0,79}$/.test(type) || ['person', 'organization', 'relationship', 'task', 'site', 'flow', 'run', 'event'].includes(type) || type.startsWith('pos.'))) throw badRequest('Use the registered domain action for this record type.');
+        if (request.actionId === 'record.create' && (!/^[a-z][a-z0-9.]{0,79}$/.test(type) || ['person', 'organization', 'relationship', 'task', 'routine', 'site', 'flow', 'run', 'event'].includes(type) || type.startsWith('pos.'))) throw badRequest('Use the registered domain action for this record type.');
         const assignee = request.actionId === 'task.create' ? text(request.input.assigneeId, 160) || context.identity.id : text(request.input.assigneeId, 160) || null;
         const data = request.actionId === 'record.create' || request.actionId === 'task.create' ? object(request.input.data) : Object.fromEntries(['email', 'phone', 'website'].flatMap((key) => { const value = text(request.input[key], 500); return value ? [[key, value]] : []; }));
         if (type === 'person' || type === 'organization') validateContactDetails(data);

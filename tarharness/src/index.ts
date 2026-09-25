@@ -17,6 +17,8 @@ import { beginLink, channelState, confirmLink, disconnect, proveLink, resolveSen
 import { enqueueCommand, processCommand } from './channels/jobs.ts';
 import { searchContacts } from './contacts/search.ts';
 import { acceptFlowRequest, sweepFlowDispatches } from './flows/dispatch.ts';
+import { resolveContext, routineFromRecord } from './space/context.ts';
+import { buildSpaceView, groupInbox, readInboxSource } from './space/view.ts';
 export { FlowWorkflow } from './flows/workflow.ts';
 
 type RuntimeEnv = Env & ChannelEnv & { readonly TURSO_PLATFORM_TOKEN?: string; readonly TINYFISH_API_KEY?: string; readonly TYPESAFE_API_KEY?: string };
@@ -93,6 +95,47 @@ async function ensurePersonalWorkspace(owner: Awaited<ReturnType<typeof identity
   if (pending.state !== 'active') await provision(control, env, pending);
 }
 
+async function activeAccesses(request: Request, env: RuntimeEnv) {
+  const { value, control } = await identity(request, env);
+  await ensurePersonalWorkspace(value, control, env);
+  let workspaces = await Effect.runPromise(control.listWorkspaces(value.id));
+  for (const entry of workspaces) {
+    if (entry.role === 'owner' && entry.workspace.state === 'provisioning') await provision(control, env, entry.workspace);
+  }
+  return { value, control, accesses: await Effect.runPromise(control.listAccess(value)) };
+}
+
+async function routines(env: RuntimeEnv, accesses: readonly AccessContext[]) {
+  const personal = accesses.find((item) => item.workspace.mode === 'personal');
+  if (!personal) return [];
+  return withWorkspace(env, personal, async (client) => {
+    const rows = await Effect.runPromise(query<Record<string, unknown>>(client, { sql: "SELECT id,data FROM records WHERE type='routine' AND state='active' AND archived IS NULL ORDER BY updated DESC" }));
+    return rows.map((row) => routineFromRecord({ id: String(row.id), data: object(JSON.parse(String(row.data))) })).filter((item): item is NonNullable<typeof item> => Boolean(item));
+  });
+}
+
+async function spaceResponse(request: Request, env: RuntimeEnv, url: URL) {
+  const { value, control, accesses } = await activeAccesses(request, env);
+  if (!accesses.length) throw notFound('No active workspace is available.');
+  const saved = await Effect.runPromise(control.context(value.id));
+  const requested = (url.searchParams.get('scope') || '').trim();
+  const override = requested || (saved?.mode === 'hold' ? saved.workspace : undefined);
+  const zone = (url.searchParams.get('zone') || 'Asia/Kolkata').slice(0, 80);
+  const suppliedAt = Number(url.searchParams.get('at') || Date.now());
+  const at = Number.isSafeInteger(suppliedAt) && Math.abs(suppliedAt - Date.now()) < 86_400_000 ? suppliedAt : Date.now();
+  const decision = resolveContext(accesses, await routines(env, accesses), { at, zone, override, held: saved?.mode === 'hold' && !requested });
+  const selected = accesses.find((item) => item.workspace.id === decision.context.workspace.id);
+  if (!selected) throw notFound('Space context is no longer available.');
+  return withWorkspace(env, selected, (client) => buildSpaceView(client, selected, decision));
+}
+
+async function inboxResponse(request: Request, env: RuntimeEnv) {
+  const { value, accesses } = await activeAccesses(request, env);
+  const settled = await Promise.allSettled(accesses.map((current) => withWorkspace(env, current, (client) => readInboxSource(client, current))));
+  const sources = settled.flatMap((result) => result.status === 'fulfilled' ? [result.value] : []);
+  return { sources, groups: groupInbox(sources, value.id), partial: sources.length !== accesses.length };
+}
+
 async function createWorkspace(request: Request, env: RuntimeEnv): Promise<Response> {
   const { value: owner, control } = await identity(request, env);
   const body = await Effect.runPromise(parseJson(request));
@@ -159,6 +202,19 @@ async function handle(request: Request, env: RuntimeEnv, ctx: ExecutionContext):
   if (request.method === 'POST' && channelMatch) return channelRequest(request, env, channelMatch[1] as Provider, ctx);
   if (request.method === 'GET' && path === '/health') return response({ ok: true, service: 'tarharness', now: new Date().toISOString(), tursoProvisioning: Boolean(env.TURSO_PLATFORM_TOKEN && env.TURSO_ORG && !env.TURSO_ORG.startsWith('REPLACE_')) });
   if (request.method === 'GET' && path === '/v1/actions') return response({ actions: actionCatalog.filter((action) => action.id !== 'flow.suggest' || Boolean(env.TYPESAFE_API_KEY)), interfaces: interfaceCatalog });
+  if (request.method === 'GET' && path === '/v1/space') return response(await spaceResponse(request, env, url));
+  if (request.method === 'GET' && path === '/v1/inbox') return response(await inboxResponse(request, env));
+  if (request.method === 'PUT' && path === '/v1/context') {
+    const { value, control, accesses } = await activeAccesses(request, env);
+    const body = await Effect.runPromise(parseJson(request));
+    const mode = body.mode === 'auto' ? 'auto' : body.mode === 'hold' ? 'hold' : null;
+    if (!mode) throw badRequest('Context mode must be auto or hold.');
+    const selected = mode === 'hold' ? accesses.find((item) => item.workspace.slug === body.scope || item.workspace.id === body.scope) : accesses[0];
+    if (!selected) throw forbidden();
+    const duration = typeof body.duration === 'number' && Number.isSafeInteger(body.duration) ? Math.min(Math.max(body.duration, 900_000), 604_800_000) : 43_200_000;
+    await Effect.runPromise(control.saveContext(value.id, selected.workspace.id, mode, mode === 'hold' ? Date.now() + duration : null));
+    return response({ context: { mode, scope: mode === 'hold' ? selected.workspace.slug : null, expires: mode === 'hold' ? Date.now() + duration : null } });
+  }
   if (request.method === 'GET' && path === '/v1/workspaces') {
     const { value, control } = await identity(request, env);
     await ensurePersonalWorkspace(value, control, env);
@@ -169,10 +225,10 @@ async function handle(request: Request, env: RuntimeEnv, ctx: ExecutionContext):
       }
     }
     workspaces = await Effect.runPromise(control.listWorkspaces(value.id));
-    return response({ workspaces: workspaces.map(({ workspace, role }) => ({ id: workspace.id, name: workspace.name, slug: workspace.slug, scope: workspace.slug, role, mode: workspace.mode, state: workspace.state })) });
+    return response({ workspaces: workspaces.map(({ workspace, role, workRole }) => ({ id: workspace.id, name: workspace.name, slug: workspace.slug, scope: workspace.slug, role, workRole, owner: workspace.mode === 'personal' ? 'You' : workspace.ownerName || 'Workspace owner', mode: workspace.mode, state: workspace.state })) });
   }
   if (request.method === 'POST' && path === '/v1/workspaces') return createWorkspace(request, env);
-  const publicSiteMatch = /^\/v1\/sites\/([a-z0-9-]+)$/.exec(path);
+  const publicSiteMatch = /^\/v1\/sites\/([a-z0-9-]+)(\/.*)?$/.exec(path);
   if (request.method === 'GET' && publicSiteMatch) {
     const siteSlug = publicSiteMatch[1];
     const wsRow = await env.CONTROL.prepare("SELECT * FROM workspaces WHERE slug=? AND state='active' LIMIT 1").bind(siteSlug).first<Record<string, unknown>>();
@@ -186,13 +242,21 @@ async function handle(request: Request, env: RuntimeEnv, ctx: ExecutionContext):
       const releases = Array.isArray(siteData.releases) ? siteData.releases : [];
       const currentReleaseId = String(siteData.currentRelease || '');
       const release = releases.find((r: any) => r.id === currentReleaseId) || releases[releases.length - 1];
-      const indexKey = release && Array.isArray(release.files) ? (release.files as Array<{ path?: string; key?: string }>).find((file) => file.path === '/index.html')?.key : undefined;
-      const html = indexKey ? await env.SITE_RELEASES.get(indexKey) : null;
-      if (!html) throw notFound('Site content unavailable.');
-      return new Response(await html.text(), {
+      const requestedPath = (publicSiteMatch[2] || '/').replace(/\/+$/, '') || '/';
+      const releasePath = requestedPath === '/' ? '/index.html' : /\.[a-z0-9]+$/i.test(requestedPath) ? requestedPath : `${requestedPath}/index.html`;
+      const file = release && Array.isArray(release.files) ? (release.files as Array<{ path?: string; key?: string; mime?: string }>).find((item) => item.path === releasePath) : undefined;
+      const artifact = file?.key ? await env.SITE_RELEASES.get(file.key) : null;
+      if (!artifact) throw notFound('Site content unavailable.');
+      const contentType = file?.mime || artifact.httpMetadata?.contentType || 'application/octet-stream';
+      let body = await artifact.text();
+      if (contentType.startsWith('text/html')) {
+        const base = `/v1/sites/${encodeURIComponent(siteSlug)}`;
+        body = body.replaceAll('href="/', `href="${base}/`);
+      }
+      return new Response(body, {
         status: 200,
         headers: {
-          'Content-Type': 'text/html; charset=utf-8',
+          'Content-Type': contentType,
           'Cache-Control': 'public, max-age=60, s-maxage=300',
           'X-Frame-Options': 'SAMEORIGIN',
           'X-Content-Type-Options': 'nosniff',

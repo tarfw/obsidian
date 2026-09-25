@@ -9,6 +9,10 @@
       "distribution": "internal",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_TARHARNESS_URL": "https://tarharness.tar-54d.workers.dev",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "226183831843-5sjvl1hsv4d04aucnqsqn19u83o4f5ku.apps.googleusercontent.com"
       }
     },
     "internal": {
@@ -18,7 +22,7 @@
         "buildType": "app-bundle"
       },
       "env": {
-        "EXPO_PUBLIC_TARAI_URL": "https://tarai.tar-54d.workers.dev",
+        "EXPO_PUBLIC_TARHARNESS_URL": "https://tarharness.tar-54d.workers.dev",
         "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "226183831843-5sjvl1hsv4d04aucnqsqn19u83o4f5ku.apps.googleusercontent.com"
       }
     },
@@ -28,14 +32,14 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_TARAI_URL": "https://tarai.tar-54d.workers.dev",
+        "EXPO_PUBLIC_TARHARNESS_URL": "https://tarharness.tar-54d.workers.dev",
         "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "226183831843-5sjvl1hsv4d04aucnqsqn19u83o4f5ku.apps.googleusercontent.com"
       }
     },
     "production": {
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_TARAI_URL": "https://tarai.tar-54d.workers.dev",
+        "EXPO_PUBLIC_TARHARNESS_URL": "https://tarharness.tar-54d.workers.dev",
         "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "226183831843-5sjvl1hsv4d04aucnqsqn19u83o4f5ku.apps.googleusercontent.com"
       }
     }

@@ -13,7 +13,12 @@ interface Props {
   onSelect: (record: HarnessRecord) => void;
 }
 
-export default function SearchRecordsModal({ visible, scope, onClose, onSelect }: Props) {
+export default function SearchRecordsModal(props: Props) {
+  if (!props.visible) return null;
+  return <SearchRecordsContent {...props} />;
+}
+
+function SearchRecordsContent({ visible, scope, onClose, onSelect }: Props) {
   const insets = useSafeAreaInsets();
   const [search, setSearch] = useState('');
   const [records, setRecords] = useState<HarnessRecord[]>([]);
@@ -25,26 +30,15 @@ export default function SearchRecordsModal({ visible, scope, onClose, onSelect }
   const generation = useRef(0);
 
   useEffect(() => {
-    if (!visible) {
-      setSearch('');
+    const current = ++generation.current;
+    const term = search.trim();
+    const timer = setTimeout(() => {
       setRecords([]);
       setNext(null);
       setError('');
-      setLoading(false);
       setLoadingMore(false);
-      return;
-    }
-
-    const current = ++generation.current;
-    const term = search.trim();
-    setRecords([]);
-    setNext(null);
-    setError('');
-    setLoadingMore(false);
-    if (!term) { setLoading(false); return; }
-
-    setLoading(true);
-    const timer = setTimeout(() => {
+      if (!term) { setLoading(false); return; }
+      setLoading(true);
       void harness.records(scope, undefined, 0, term).then((page) => {
         if (current !== generation.current) return;
         setRecords(page.records);
@@ -54,9 +48,9 @@ export default function SearchRecordsModal({ visible, scope, onClose, onSelect }
       }).finally(() => {
         if (current === generation.current) setLoading(false);
       });
-    }, 220);
+    }, term ? 220 : 0);
     return () => clearTimeout(timer);
-  }, [visible, scope, search, retry]);
+  }, [scope, search, retry]);
 
   const loadMore = async () => {
     if (next === null || loadingMore || !search.trim()) return;

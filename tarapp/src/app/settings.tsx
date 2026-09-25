@@ -1,378 +1,53 @@
-import { useState, useEffect } from "react";
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView } from "react-native";
-import { useRouter } from "expo-router";
-import * as SecureStore from "expo-secure-store";
-import Ionicons from "@expo/vector-icons/Ionicons";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-
-import { useThemeMode } from "@/hooks/use-theme-context";
-import { useTheme } from "@/hooks/use-theme";
-import { getCurrentUser, signOutGoogle, type UserProfile } from "@/lib/auth";
-import { useEmbeddings } from "@/db/embeddings-provider";
-import { useLLM, models } from "react-native-executorch";
-import { isHammerCached, isLfmCached } from "@/lib/hammer";
-import { TarLogo } from "@/components/TarLogo";
+import { useEffect, useState } from 'react';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { useRouter } from 'expo-router';
+import * as SecureStore from 'expo-secure-store';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { TarLogo } from '@/components/TarLogo';
+import { useTheme } from '@/hooks/use-theme';
+import { useThemeMode } from '@/hooks/use-theme-context';
+import { getCurrentUser, signOutGoogle, type UserProfile } from '@/lib/auth';
 
 export default function SettingsScreen() {
-  const router = useRouter();
-  const theme = useTheme();
-  const insets = useSafeAreaInsets();
-  const { themeMode, setThemeMode } = useThemeMode();
-  const { isReady, isLoading, downloadProgress, loadModel } = useEmbeddings();
-  const [user, setUser] = useState<UserProfile | null>(null);
-
-  // Hammer LLM state
-  const [isHammerCachedState, setIsHammerCachedState] = useState(false);
-  const [preventHammerLoad, setPreventHammerLoad] = useState(true);
-
-  // LFM LLM state
-  const [isLfmCachedState, setIsLfmCachedState] = useState(false);
-  const [preventLfmLoad, setPreventLfmLoad] = useState(true);
-
-  useEffect(() => {
-    getCurrentUser().then(setUser);
-    isHammerCached().then(setIsHammerCachedState);
-    isLfmCached().then(setIsLfmCachedState);
-  }, []);
-
-  const hammerLlm = useLLM({
-    model: models.llm.hammer2_1_0_5b(),
-    preventLoad: preventHammerLoad,
-  });
-
-  const lfmLlm = useLLM({
-    model: models.llm.lfm2_5_1_2b_instruct(),
-    preventLoad: preventLfmLoad,
-  });
-
-  const isHammerLoading =
-    !hammerLlm.isReady &&
-    !hammerLlm.error &&
-    !preventHammerLoad &&
-    hammerLlm.downloadProgress < 1;
-
-  const isLfmLoading =
-    !lfmLlm.isReady &&
-    !lfmLlm.error &&
-    !preventLfmLoad &&
-    lfmLlm.downloadProgress < 1;
-
-  useEffect(() => {
-    if (!hammerLlm.isReady) return;
-    const timer = setTimeout(() => setIsHammerCachedState(true), 0);
-    return () => clearTimeout(timer);
-  }, [hammerLlm.isReady]);
-
-  useEffect(() => {
-    if (!lfmLlm.isReady) return;
-    const timer = setTimeout(() => setIsLfmCachedState(true), 0);
-    return () => clearTimeout(timer);
-  }, [lfmLlm.isReady]);
-
-  const handleLoadHammer = () => {
-    setPreventHammerLoad(false);
+  const router = useRouter(); const theme = useTheme(); const insets = useSafeAreaInsets();
+  const { themeMode, setThemeMode } = useThemeMode(); const [user, setUser] = useState<UserProfile | null>(null);
+  useEffect(() => { void getCurrentUser().then(setUser); }, []);
+  const signOut = async () => {
+    if (user?.id) await SecureStore.deleteItemAsync(`onb_${user.id}`);
+    await signOutGoogle(); router.replace('/auth');
   };
-
-  const handleLoadLfm = () => {
-    setPreventLfmLoad(false);
-  };
-
-  const handleSignOut = async () => {
-    try {
-      if (user?.id) {
-        await SecureStore.deleteItemAsync(`onb_${user.id}`);
-      }
-      await signOutGoogle();
-      const { switchUser } = await import("@/lib/db");
-      await switchUser("guest");
-      router.replace("/auth");
-    } catch {
-      router.replace("/auth");
-    }
-  };
-
-  return (
-    <View style={{ flex: 1, backgroundColor: theme.background }}>
-      <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
-        <View style={styles.headerRow}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <TouchableOpacity onPress={() => router.back()} style={{ paddingRight: 4 }}>
-              <Ionicons name="arrow-back" size={24} color={theme.text} />
-            </TouchableOpacity>
-            <Text style={[styles.headerTitle, { color: theme.text }]}>Settings</Text>
-          </View>
-        </View>
-      </View>
-
-      <ScrollView 
-        style={[styles.container, { backgroundColor: theme.background }]}
-        contentContainerStyle={{ paddingTop: 16, paddingBottom: insets.bottom + 16 }}
-      >
-      
-      {/* Section 1: Appearance */}
-      <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>
-        APPEARANCE
-      </Text>
-
+  return <View style={[styles.page, { backgroundColor: theme.background }]}> 
+    <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+      <TouchableOpacity accessibilityLabel="Back" onPress={() => router.back()} style={styles.icon}><Ionicons name="arrow-back" size={23} color={theme.text} /></TouchableOpacity>
+      <Text style={[styles.title, { color: theme.text }]}>Settings</Text>
+    </View>
+    <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 32 }]}>
+      <Text style={[styles.label, { color: theme.textSecondary }]}>APPEARANCE</Text>
       <View style={[styles.card, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
-        <TouchableOpacity
-          style={styles.row}
-          activeOpacity={0.7}
-          onPress={() => setThemeMode(themeMode === "light" ? "dark" : "light")}>
-          <View style={styles.rowLeftWithIcon}>
-            <Ionicons
-              name={themeMode === "light" ? "sunny-outline" : "moon-outline"}
-              size={20}
-              color={themeMode === "light" ? "#FFB800" : "#8B5CF6"}
-              style={styles.rowIcon}
-            />
-            <Text style={[styles.rowTitle, { color: theme.text }]}>Theme Mode</Text>
-          </View>
-          <View style={styles.rowRightContainer}>
-            <Text style={[styles.rowValue, { color: theme.textSecondary }]}>
-              {themeMode === "light" ? "Light" : "Dark"}
-            </Text>
-            <Ionicons name="chevron-forward" size={16} color={theme.textSecondary} style={{ marginLeft: 6 }} />
-          </View>
+        <TouchableOpacity accessibilityRole="button" onPress={() => setThemeMode(themeMode === 'light' ? 'dark' : 'light')} style={styles.row}>
+          <View style={styles.rowLabel}><Ionicons name={themeMode === 'light' ? 'sunny-outline' : 'moon-outline'} size={20} color={theme.primary} /><Text style={[styles.rowText, { color: theme.text }]}>Theme</Text></View>
+          <Text style={[styles.value, { color: theme.textSecondary }]}>{themeMode === 'light' ? 'Light' : 'Dark'}</Text>
         </TouchableOpacity>
       </View>
-
-      {/* Section 2: AI Models & Local Engine */}
-      <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>
-        AI MODELS & ENGINE
-      </Text>
-
-      <View style={[styles.card, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
-        <View style={styles.row}>
-          <View style={styles.rowLeft}>
-            <Text style={[styles.rowTitle, { color: theme.text }]}>Embedding Model</Text>
-            <Text style={[styles.rowSubtitle, { color: theme.textSecondary }]}>384-dim • MiniLM</Text>
-          </View>
-          <View style={styles.rowRight}>
-            {isReady ? (
-              <Text style={[styles.statusText, { color: theme.textSecondary }]}>Ready</Text>
-            ) : isLoading ? (
-              <Text style={[styles.statusText, { color: theme.primary }]}>
-                {Math.round(downloadProgress * 100)}%
-              </Text>
-            ) : (
-              <TouchableOpacity
-                style={[styles.downloadButton, { backgroundColor: theme.primary }]}
-                activeOpacity={0.8}
-                onPress={loadModel}>
-                <Text style={styles.downloadButtonText}>Download</Text>
-              </TouchableOpacity>
-            )}
-          </View>
+      {user ? <>
+        <Text style={[styles.label, { color: theme.textSecondary }]}>ACCOUNT</Text>
+        <View style={[styles.card, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
+          <View style={styles.identity}><Text style={[styles.rowText, { color: theme.text }]}>{user.name || 'User'}</Text><Text style={[styles.value, { color: theme.textSecondary }]}>{user.email}</Text></View>
+          <View style={[styles.divider, { backgroundColor: theme.border }]} />
+          <TouchableOpacity accessibilityRole="button" onPress={() => { void signOut(); }} style={styles.row}><View style={styles.rowLabel}><Ionicons name="log-out-outline" size={20} color="#B42318" /><Text style={[styles.rowText, { color: '#B42318' }]}>Sign out</Text></View></TouchableOpacity>
         </View>
-
-        <View style={[styles.divider, { backgroundColor: theme.border }]} />
-
-        <View style={styles.row}>
-          <View style={styles.rowLeft}>
-            <Text style={[styles.rowTitle, { color: theme.text }]}>Hammer LLM</Text>
-            <Text style={[styles.rowSubtitle, { color: theme.textSecondary }]}>0.5B • Quantized</Text>
-          </View>
-          <View style={styles.rowRight}>
-            {hammerLlm.isReady ? (
-              <Text style={[styles.statusText, { color: theme.textSecondary }]}>Ready</Text>
-            ) : isHammerLoading ? (
-              <Text style={[styles.statusText, { color: theme.primary }]}>
-                {Math.round(hammerLlm.downloadProgress * 100)}%
-              </Text>
-            ) : isHammerCachedState ? (
-              <Text style={[styles.statusText, { color: theme.textSecondary }]}>Cached</Text>
-            ) : (
-              <TouchableOpacity
-                style={[styles.downloadButton, { backgroundColor: theme.primary }]}
-                activeOpacity={0.8}
-                onPress={handleLoadHammer}>
-                <Text style={styles.downloadButtonText}>Download</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        </View>
-
-        <View style={[styles.divider, { backgroundColor: theme.border }]} />
-
-        <View style={styles.row}>
-          <View style={styles.rowLeft}>
-            <Text style={[styles.rowTitle, { color: theme.text }]}>LFM 2.5 LLM</Text>
-            <Text style={[styles.rowSubtitle, { color: theme.textSecondary }]}>1.2B • Instruct</Text>
-          </View>
-          <View style={styles.rowRight}>
-            {lfmLlm.isReady ? (
-              <Text style={[styles.statusText, { color: theme.textSecondary }]}>Ready</Text>
-            ) : isLfmLoading ? (
-              <Text style={[styles.statusText, { color: theme.primary }]}>
-                {Math.round(lfmLlm.downloadProgress * 100)}%
-              </Text>
-            ) : isLfmCachedState ? (
-              <Text style={[styles.statusText, { color: theme.textSecondary }]}>Cached</Text>
-            ) : (
-              <TouchableOpacity
-                style={[styles.downloadButton, { backgroundColor: theme.primary }]}
-                activeOpacity={0.8}
-                onPress={handleLoadLfm}>
-                <Text style={styles.downloadButtonText}>Download</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        </View>
-
-      </View>
-
-      {/* Section 3: Account */}
-      {user && (
-        <>
-          <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>
-            ACCOUNT
-          </Text>
-
-          <View style={[styles.card, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
-            <View style={styles.row}>
-              <View style={styles.rowLeft}>
-                <Text style={[styles.rowTitle, { color: theme.text }]}>{user.name || "User"}</Text>
-                {user.email && (
-                  <Text style={[styles.rowSubtitle, { color: theme.textSecondary }]}>{user.email}</Text>
-                )}
-              </View>
-            </View>
-
-            <View style={[styles.divider, { backgroundColor: theme.border }]} />
-
-            <TouchableOpacity
-              style={styles.row}
-              activeOpacity={0.7}
-              onPress={handleSignOut}>
-              <View style={styles.rowLeftWithIcon}>
-                <Ionicons name="log-out-outline" size={20} color="#FF3B30" style={styles.rowIcon} />
-                <Text style={[styles.rowTitle, { color: "#FF3B30" }]}>Sign Out</Text>
-              </View>
-            </TouchableOpacity>
-          </View>
-        </>
-      )}
-
-      {/* Footer */}
-      <View style={{ alignItems: 'center', marginTop: 32, marginBottom: 48 }}>
-        <TarLogo size={42} color={theme.primary} style={{ marginBottom: 12 }} />
-        <Text style={[styles.footerText, { color: theme.textSecondary, marginTop: 0, marginBottom: 0 }]}>
-          tar. Version 1.0.0
-        </Text>
-      </View>
-
-      </ScrollView>
-    </View>
-  );
+      </> : null}
+      <View style={styles.footer}><TarLogo size={38} color={theme.primary} /><Text style={[styles.value, { color: theme.textSecondary }]}>tar · 1.0.0</Text></View>
+    </ScrollView>
+  </View>;
 }
 
 const styles = StyleSheet.create({
-  header: {
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  headerTitle: {
-    fontSize: 32,
-    fontWeight: '800',
-  },
-  container: {
-    flex: 1,
-    paddingHorizontal: 16,
-  },
-  sectionTitle: {
-    fontSize: 12,
-    fontWeight: '600',
-    letterSpacing: 1,
-    marginTop: 24,
-    marginBottom: 8,
-    paddingLeft: 4,
-  },
-  card: {
-    borderRadius: 16,
-    borderWidth: 1,
-    overflow: 'hidden',
-    marginBottom: 8,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    minHeight: 56,
-  },
-  rowLeft: {
-    flexDirection: 'column',
-    justifyContent: 'center',
-  },
-  rowLeftWithIcon: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  rowIcon: {
-    marginRight: 12,
-  },
-  rowTitle: {
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  rowSubtitle: {
-    fontSize: 13,
-    marginTop: 2,
-  },
-  rowValue: {
-    fontSize: 15,
-  },
-  rowRight: {
-    justifyContent: 'center',
-    alignItems: 'flex-end',
-  },
-  rowRightContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  statusText: {
-    fontSize: 15,
-    fontWeight: '500',
-  },
-  downloadButton: {
-    paddingVertical: 6,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  downloadButtonText: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  actionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  iconButton: {
-    padding: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  divider: {
-    height: 1,
-    width: '100%',
-  },
-  footerText: {
-    fontSize: 12,
-    textAlign: 'center',
-    marginTop: 32,
-    marginBottom: 48,
-  },
+  page: { flex: 1 }, header: { minHeight: 70, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingBottom: 10 },
+  icon: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center' }, title: { fontSize: 28, fontWeight: '800' }, content: { paddingHorizontal: 18 },
+  label: { marginTop: 22, marginBottom: 8, fontSize: 11, fontWeight: '700', letterSpacing: 1 }, card: { borderWidth: 1, borderRadius: 14, overflow: 'hidden' },
+  row: { minHeight: 58, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16 }, rowLabel: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  rowText: { fontSize: 15, fontWeight: '600' }, value: { fontSize: 13 }, identity: { minHeight: 70, justifyContent: 'center', gap: 3, paddingHorizontal: 16 }, divider: { height: StyleSheet.hairlineWidth },
+  footer: { alignItems: 'center', gap: 9, paddingTop: 36 },
 });

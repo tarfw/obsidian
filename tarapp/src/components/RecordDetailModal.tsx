@@ -67,24 +67,25 @@ export default function RecordDetailModal({ visible, record, scope, onClose, onA
   const [books, setBooks] = useState<HarnessFlowBook[]>([]);
   const [consents, setConsents] = useState<Consent[]>([]);
   const [consentError, setConsentError] = useState(false);
+  const contactId = visible && record && ['person', 'organization'].includes(record.type) ? record.id : null;
   useEffect(() => {
-    if (!visible || !record || !['person', 'organization'].includes(record.type)) { setLinks([]); return; }
+    if (!contactId) return;
     let current = true;
-    void harness.links(scope, record.id).then((result) => { if (current) setLinks(result.links); }).catch(() => { if (current) setLinks([]); });
+    void harness.links(scope, contactId).then((result) => { if (current) setLinks(result.links); }).catch(() => { if (current) setLinks([]); });
     return () => { current = false; };
-  }, [record?.id, record?.type, scope, visible]);
+  }, [contactId, scope]);
   useEffect(() => {
-    if (!visible || !record || !['person', 'organization'].includes(record.type)) { setConsents([]); setConsentError(false); return; }
+    if (!contactId) return;
     let current = true;
-    void harness.consents(scope, record.id).then((result) => { if (current) { setConsents(result.consents); setConsentError(false); } }).catch(() => { if (current) { setConsents([]); setConsentError(true); } });
+    void harness.consents(scope, contactId).then((result) => { if (current) { setConsents(result.consents); setConsentError(false); } }).catch(() => { if (current) { setConsents([]); setConsentError(true); } });
     return () => { current = false; };
-  }, [record?.id, record?.type, scope, visible]);
+  }, [contactId, scope]);
   useEffect(() => {
-    if (!visible || !record || !['person', 'organization'].includes(record.type)) { setBooks([]); return; }
+    if (!contactId) return;
     let current = true;
     void harness.flows(scope).then((result) => { if (current) setBooks(result.books); }).catch(() => { if (current) setBooks([]); });
     return () => { current = false; };
-  }, [record?.id, record?.type, scope, visible]);
+  }, [contactId, scope]);
   if (!record) return null;
 
   const type = record.type.toLowerCase();

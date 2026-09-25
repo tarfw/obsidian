@@ -1,7 +1,7 @@
 import { createClient, type Client, type InStatement } from '@libsql/client/web';
 import { Effect } from 'effect';
 import { unavailable } from '../errors.ts';
-import { WORKSPACE_PATCHES, WORKSPACE_SCHEMA } from './schema.ts';
+import { WORKSPACE_SCHEMA } from './schema.ts';
 
 type TursoEnv = { readonly TURSO_ORG: string; readonly TURSO_PLATFORM_TOKEN: string; readonly TURSO_GROUP: string; };
 type Database = { readonly Name: string; readonly Hostname: string; };
@@ -22,18 +22,20 @@ async function token(env: TursoEnv, name: string): Promise<string> {
 async function ensureGroup(env: TursoEnv): Promise<void> {
   const groups = await platform<{ groups: Group[] }>(env, '/groups');
   if (groups.groups.some((group) => group.name === env.TURSO_GROUP)) return;
-
   const locationsResponse = await fetch('https://api.turso.tech/v1/locations', { headers: { Authorization: `Bearer ${env.TURSO_PLATFORM_TOKEN}` } });
   if (!locationsResponse.ok) throw new Error(`Turso Platform API ${locationsResponse.status}`);
   const locations = (await locationsResponse.json() as { locations: Record<string, string> }).locations;
   const location = locations['aws-ap-south-1'] ? 'aws-ap-south-1' : Object.keys(locations)[0];
   if (!location) throw new Error('Turso has no available locations.');
-
   try {
     await platform(env, '/groups', { method: 'POST', body: JSON.stringify({ name: env.TURSO_GROUP, location }) });
   } catch (cause) {
     if (!(cause instanceof Error) || !cause.message.endsWith('409')) throw cause;
   }
+}
+
+async function initialize(client: Client): Promise<void> {
+  for (const statement of WORKSPACE_SCHEMA) await client.execute(statement);
 }
 
 export function provisionWorkspaceDatabase(env: TursoEnv, databaseName: string): Effect.Effect<{ readonly host: string }, ReturnType<typeof unavailable>> {
@@ -48,7 +50,7 @@ export function provisionWorkspaceDatabase(env: TursoEnv, databaseName: string):
         database = (await platform<{ database: Database }>(env, `/databases/${encodeURIComponent(databaseName)}`)).database;
       }
       const client = createClient({ url: `libsql://${database.Hostname}`, authToken: await token(env, database.Name) });
-      try { for (const statement of WORKSPACE_SCHEMA) await client.execute(statement); } finally { client.close(); }
+      try { await initialize(client); } finally { client.close(); }
       return { host: database.Hostname };
     },
     catch: (cause) => {
@@ -58,59 +60,18 @@ export function provisionWorkspaceDatabase(env: TursoEnv, databaseName: string):
   });
 }
 
-export async function ensureRecordColumns(client: Client): Promise<void> {
-  const columns = new Set((await client.execute('PRAGMA table_info(records)')).rows.map((column) => String(column.name)));
-  for (const [name, type] of [['owner', 'TEXT'], ['assignee', 'TEXT'], ['due', 'INTEGER'], ['archived', 'INTEGER']] as const) {
-    if (columns.has(name)) continue;
-    try {
-      await client.execute(`ALTER TABLE records ADD COLUMN ${name} ${type}`);
-    } catch (cause) {
-      const after = await client.execute('PRAGMA table_info(records)');
-      if (!after.rows.some((column) => column.name === name)) throw cause;
-    }
-    columns.add(name);
-  }
-}
-
-export async function ensureLinks(client: Client): Promise<void> {
-  const columns = (await client.execute('PRAGMA table_info(links)')).rows.map((column) => String(column.name));
-  if (columns.length === 0 || ['source', 'target', 'role', 'until'].every((name) => columns.includes(name))) return;
-  const archived = await client.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='archive'");
-  if (archived.rows.length > 0) throw new Error('Cannot preserve legacy links: archive table already exists.');
-  await client.execute('ALTER TABLE links RENAME TO archive');
-}
-
 export function openWorkspaceDatabase(env: TursoEnv, databaseName: string, host: string): Effect.Effect<Client, ReturnType<typeof unavailable>> {
-  return Effect.tryPromise({ try: async () => {
-    let stage = 'authorization';
-    let client: Client | undefined;
-    try {
-      client = createClient({ url: `libsql://${host}`, authToken: await token(env, databaseName) });
-      stage = 'patches';
-      await client.execute('CREATE TABLE IF NOT EXISTS patches (id TEXT PRIMARY KEY, applied INTEGER NOT NULL)');
-      const result = await client.execute('SELECT id FROM patches');
-      const applied = new Set(result.rows.map((item) => String(item[0])));
-      if (!applied.has('recordcolumns')) {
-        stage = 'patch.recordcolumns';
-        await ensureRecordColumns(client);
-        await client.execute({ sql: 'INSERT OR IGNORE INTO patches(id,applied) VALUES(?,?)', args: ['recordcolumns', Date.now()] });
-      }
-      if (!applied.has('links')) {
-        stage = 'patch.legacylinks';
-        await ensureLinks(client);
-      }
-      for (const patch of WORKSPACE_PATCHES) {
-        if (applied.has(patch.id)) continue;
-        stage = `patch.${patch.id}`;
-        await client.batch([...patch.statements.map((sql) => ({ sql, args: [] })), { sql: 'INSERT OR IGNORE INTO patches(id,applied) VALUES(?,?)', args: [patch.id, Date.now()] }], 'write');
-      }
-      return client;
-    } catch (cause) {
-      client?.close();
-      console.error(JSON.stringify({ event: 'workspace.open.failed', stage, error: cause instanceof Error ? cause.message.slice(0, 300) : String(cause).slice(0, 300) }));
-      throw cause;
-    }
-  }, catch: (cause) => unavailable('Workspace database is unavailable.', cause) });
+  return Effect.tryPromise({
+    try: async () => {
+      const client = createClient({ url: `libsql://${host}`, authToken: await token(env, databaseName) });
+      try { await initialize(client); return client; }
+      catch (cause) { client.close(); throw cause; }
+    },
+    catch: (cause) => {
+      console.error(JSON.stringify({ event: 'workspace.open.failed', error: cause instanceof Error ? cause.message.slice(0, 300) : String(cause).slice(0, 300) }));
+      return unavailable('Workspace database is unavailable.', cause);
+    },
+  });
 }
 
 export function query<T extends Record<string, unknown>>(client: Client, statement: InStatement): Effect.Effect<T[], ReturnType<typeof unavailable>> {

@@ -4,9 +4,9 @@ import type { AccessContext, Role } from './types.ts';
 
 export function memberRole(input: Record<string, unknown>): { role: Exclude<Role, 'owner'>; workRole: WorkRole } {
   if (!['admin','member','guest'].includes(String(input.role))) throw badRequest('Choose a valid member role.');
-  const workRole = input.workRole ?? 'general';
-  if (!['general','cook','cashier'].includes(String(workRole)) || (input.role !== 'member' && workRole !== 'general')) throw badRequest('Choose a valid work role.');
-  return { role: input.role as Exclude<Role, 'owner'>, workRole: workRole as WorkRole };
+  const workRole = typeof input.workRole === 'string' ? input.workRole.trim().toLowerCase() : 'general';
+  if (!workRole || workRole.length > 60 || /[\u0000-\u001f\u007f]/.test(workRole) || (input.role !== 'member' && workRole !== 'general')) throw badRequest('Choose a valid work role.');
+  return { role: input.role as Exclude<Role, 'owner'>, workRole };
 }
 
 export const audit = (db: D1Database, ctx: AccessContext, action: string, target: string) => db.prepare(

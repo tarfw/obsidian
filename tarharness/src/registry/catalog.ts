@@ -1,4 +1,5 @@
 import { posActions } from '../pos/catalog.ts';
+import { commerceActions } from '../commerce/catalog.ts';
 export type ActionType = 'app' | 'agent' | 'human';
 export type InterfacePresentation = 'sheet' | 'screen' | 'flow';
 export type FieldKind = 'text' | 'email' | 'number' | 'textarea' | 'record' | 'action-list';
@@ -44,6 +45,7 @@ export const interfaceCatalog = [
 
 export const actionCatalog = [
   ...posActions,
+  ...commerceActions,
   {
     id: 'record.create', version: 1, type: 'app', title: 'Create record',
     description: 'Add information to this workspace.', interfaceKey: 'form',
@@ -52,6 +54,20 @@ export const actionCatalog = [
       { key: 'title', label: 'Name or title', kind: 'text', required: true },
     ],
     output: ['record'], roles: ['owner', 'admin', 'member'], effects: ['record_create'],
+  },
+  {
+    id: 'routine.save', version: 1, type: 'app', title: 'Add Space routine',
+    description: 'Choose when a workspace and role should become your active Space.', interfaceKey: 'form',
+    fields: [
+      { key: 'label', label: 'Context name', kind: 'text', required: true },
+      { key: 'workspace', label: 'Workspace', kind: 'text', required: true },
+      { key: 'role', label: 'Your role', kind: 'text' },
+      { key: 'start', label: 'Start time (HH:MM)', kind: 'text', required: true },
+      { key: 'end', label: 'End time (HH:MM)', kind: 'text', required: true },
+      { key: 'days', label: 'Days (0=Sun, comma separated)', kind: 'text', defaultValue: '0,1,2,3,4,5,6' },
+      { key: 'priority', label: 'Priority', kind: 'number', defaultValue: '0' },
+    ],
+    output: ['record'], roles: ['owner'], effects: ['routine_save'],
   },
   {
     id: 'contact.create', version: 1, type: 'app', title: 'Add person',

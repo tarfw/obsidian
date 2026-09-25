@@ -1,5 +1,5 @@
 /**
- * TAR Site Bot Pure HTML/CSS Static Compiler (parv2.md §2, §6, §7)
+ * TAR Site pure HTML/CSS static compiler.
  *
  * Implements deterministic rendering for 12 Card families and 3 design themes:
  * Navigation, Hero, Content, Collection, Features, Proof, FAQ, Hours, Contact, Form, CTA, Footer.
@@ -420,7 +420,7 @@ export function renderCard(card: CardDefinition, site: SiteDefinition): string {
       return `
 <header class="tar-nav" role="banner">
   <div class="tar-container tar-nav-inner">
-    <a href="#" class="tar-brand">${brand}</a>
+    <a href="/" class="tar-brand">${brand}</a>
     <nav aria-label="Main Navigation">
       <ul class="tar-nav-links">
         ${renderedLinks}

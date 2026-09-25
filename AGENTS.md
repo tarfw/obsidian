@@ -7,9 +7,8 @@ planning or implementing AI judgments for this project. Read the relevant live
 documentation as the skill requires. Keep deterministic business rules in code;
 using the skill does not require adding TypeSafe calls to every workflow.
 
-Use `tarv12.md` as the sole consolidated target architecture. It distinguishes
-proposed work from existing implementation. Earlier architecture versions and
-`techstack.md` are historical inputs, not competing instructions.
+Use `tarv12.md` as the sole consolidated target architecture. `space.md`,
+`commerce.md`, and `site.md` define its three product contracts.
 
 For new tables, columns and internal identifiers, use one semantic word in
 lowercase. Do not use spaces, underscores, hyphens or joined multiword names.

@@ -1,5 +1,5 @@
 /**
- * TAR Site Bot Schema & Minimal Data Contract (parv2.md §5 & §6)
+ * TAR Site schema and minimal data contract.
  */
 
 export const CARD_KINDS = [

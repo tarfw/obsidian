@@ -58,12 +58,7 @@ const exportDirectory = mkdtempSync(join(temporaryRoot, 'tarapp-release-check-')
 
 try {
   run('TypeScript', typescriptCli, ['--noEmit']);
-  run('Release UI lint', eslintCli, [
-    'src/app/auth.tsx',
-    'src/components/TarLogo.tsx',
-    '--max-warnings',
-    '0',
-  ]);
+  run('Application lint', eslintCli, ['src', '--max-warnings', '0']);
   run('Android production bundle', expoCli, ['export', '--platform', 'android', '--output-dir', exportDirectory], {
     env: { NODE_ENV: 'production' },
   });

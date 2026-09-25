@@ -8,8 +8,6 @@ groma:
   code:
     - scanner: typescript
       file: tarharness/src/db/turso.ts
-    - scanner: typescript
-      file: tarharness/src/db/schema.ts
   technology: Turso (libSQL)
 description: Owns each workspace's own records.
 ---

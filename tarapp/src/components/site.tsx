@@ -6,8 +6,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { harness, HARNESS_URL } from '@/lib/harness';
 
 type Phase = 'idle' | 'generating' | 'publishing' | 'error';
-interface SiteSection { id: string; kind: string; title?: string; }
-export interface SiteScreenProps { visible: boolean; onClose: () => void; workspaceName: string; subdomain: string; scope: string; products?: Array<{ title?: string; name?: string }>; }
+interface SiteSection { id: string; kind: string; title?: string; page: string; }
+const siteSections = (pages: { title: string; cards: { id: string; kind: string; title?: string }[] }[]): SiteSection[] => pages.flatMap((page) => page.cards.map((card) => ({ id: card.id, kind: card.kind, title: card.title, page: page.title })));
+export interface SiteScreenProps { visible: boolean; onClose: () => void; workspaceName: string; subdomain: string; scope: string; products?: { title?: string; name?: string }[]; }
 
 function errorText(error: unknown): string { return error instanceof Error ? error.message : 'TAR Harness could not complete this site action.'; }
 
@@ -38,8 +39,7 @@ export default function SiteScreen({ visible, onClose, workspaceName, subdomain,
         const res = await harness.site.get(slug);
         if (!active || closed.current) return;
         if (res.site && res.site.data) {
-          const cards = res.site.data.pages[0]?.cards || [];
-          setSections(cards.map((c) => ({ id: c.id, kind: c.kind, title: c.title })));
+          setSections(siteSections(res.site.data.pages));
           setSiteId(res.site.id);
           if (res.site.state === 'live') {
             setLiveUrl(`${HARNESS_URL}/v1/sites/${encodeURIComponent(subdomain || slug)}`);
@@ -48,7 +48,7 @@ export default function SiteScreen({ visible, onClose, workspaceName, subdomain,
             setMessage('Draft ready. Review its structure, then publish when you are ready.');
           }
         }
-      } catch (err) {
+      } catch {
         // Non-blocking initial fetch
       }
     })();
@@ -66,8 +66,7 @@ export default function SiteScreen({ visible, onClose, workspaceName, subdomain,
       });
       if (closed.current) return;
       setSiteId(res.siteId);
-      const cards = res.site.pages[0]?.cards || [];
-      setSections(cards.map((c) => ({ id: c.id, kind: c.kind, title: c.title })));
+      setSections(siteSections(res.site.pages));
       setMessage('Draft is ready. Review its structure, then publish when you are ready.');
       setPhase('idle');
     } catch (error) {
@@ -118,7 +117,7 @@ export default function SiteScreen({ visible, onClose, workspaceName, subdomain,
           <View style={styles.card}>
             <Text style={styles.eyebrow}>BUSINESS BRIEF</Text>
             <Text style={styles.cardTitle}>{workspaceName || 'Your workspace'}</Text>
-            <Text style={styles.body}>TAR uses verified workspace facts to build a versioned, sanitized site with 12 semantic Card families and zero client-side JavaScript.</Text>
+            <Text style={styles.body}>TAR builds a versioned multi-page site from workspace facts, typed cards, live catalog bindings, and immutable releases.</Text>
           </View>
           <View style={styles.card}>
             <Text style={styles.eyebrow}>SITE STRUCTURE</Text>
@@ -128,7 +127,7 @@ export default function SiteScreen({ visible, onClose, workspaceName, subdomain,
                   <Text style={styles.index}>{index + 1}</Text>
                   <View style={styles.rowCopy}>
                     <Text style={styles.rowTitle}>{section.title || titleize(section.kind)}</Text>
-                    <Text style={styles.rowMeta}>{section.kind}</Text>
+                    <Text style={styles.rowMeta}>{section.page} · {section.kind}</Text>
                   </View>
                   <Ionicons name="checkmark-circle" size={17} color="#16a34a" />
                 </View>

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Animated, Easing, StyleProp, ViewStyle } from 'react-native';
 import { TarLogo } from '@/components/TarLogo';
 
@@ -9,8 +9,8 @@ interface TarLogoLoaderProps {
 }
 
 export function TarLogoLoader({ size = 32, color = '#007AFF', style }: TarLogoLoaderProps) {
-  const pulseAnim = useRef(new Animated.Value(0.35)).current;
-  const scaleAnim = useRef(new Animated.Value(0.88)).current;
+  const [pulseAnim] = useState(() => new Animated.Value(0.35));
+  const [scaleAnim] = useState(() => new Animated.Value(0.88));
 
   useEffect(() => {
     const animation = Animated.loop(

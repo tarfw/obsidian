@@ -11,11 +11,12 @@ function workspace(value: Record<string, unknown>): Workspace {
     id: String(value.id), name: String(value.name), slug: String(value.slug), mode: value.mode === 'personal' ? 'personal' : 'work',
     databaseName: String(value.database_name), databaseHost: typeof value.database_host === 'string' ? value.database_host : null,
     state: String(value.state) as Workspace['state'],
+    ownerName: typeof value.owner_name === 'string' ? value.owner_name : undefined,
   };
 }
 
 function member(value: Record<string, unknown>): Member {
-  return { workspaceId: String(value.workspace_id), userId: String(value.user_id), role: String(value.role) as Role, workRole: value.work_role === 'cook' || value.work_role === 'cashier' ? value.work_role : 'general', state: String(value.state) as Member['state'] };
+  return { workspaceId: String(value.workspace_id), userId: String(value.user_id), role: String(value.role) as Role, workRole: typeof value.work_role === 'string' && value.work_role.trim() ? value.work_role : 'general', state: String(value.state) as Member['state'] };
 }
 
 export class ControlStore {
@@ -39,11 +40,55 @@ export class ControlStore {
     });
   }
 
-  listWorkspaces(userId: string): Effect.Effect<Array<{ workspace: Workspace; role: Role }>, ReturnType<typeof unavailable>> {
+  listWorkspaces(userId: string): Effect.Effect<Array<{ workspace: Workspace; role: Role; workRole: Member['workRole'] }>, ReturnType<typeof unavailable>> {
     return Effect.tryPromise({
-      try: async () => (await this.database.prepare(`SELECT w.*,m.role AS member_role FROM workspaces w JOIN members m ON m.workspace_id=w.id
-        WHERE m.user_id=? AND m.state='active' ORDER BY CASE w.mode WHEN 'personal' THEN 0 ELSE 1 END,w.created_at DESC`).bind(userId).all<Record<string, unknown>>()).results.map((value) => ({ workspace: workspace(value), role: String(value.member_role) as Role })),
+      try: async () => (await this.database.prepare(`SELECT w.*,m.role AS member_role,m.work_role,u.name AS owner_name FROM workspaces w JOIN members m ON m.workspace_id=w.id
+        JOIN users u ON u.id=w.owner_id WHERE m.user_id=? AND m.state='active' AND w.state!='archived'
+        ORDER BY CASE w.mode WHEN 'personal' THEN 0 ELSE 1 END,w.created_at DESC`).bind(userId).all<Record<string, unknown>>()).results.map((value) => ({
+          workspace: workspace(value), role: String(value.member_role) as Role,
+          workRole: member({ workspace_id: value.id, user_id: userId, role: value.member_role, work_role: value.work_role, state: 'active' }).workRole,
+        })),
       catch: (cause) => unavailable('Could not list workspaces.', cause),
+    });
+  }
+
+  listAccess(identity: Identity): Effect.Effect<AccessContext[], ReturnType<typeof unavailable>> {
+    return Effect.map(this.listWorkspaces(identity.id), (items) => items
+      .filter((item) => item.workspace.state === 'active' && Boolean(item.workspace.databaseHost))
+      .map((item) => ({
+        identity,
+        workspace: item.workspace,
+        member: { workspaceId: item.workspace.id, userId: identity.id, role: item.role, workRole: item.workRole, state: 'active' },
+      })));
+  }
+
+  context(user: string): Effect.Effect<{ workspace: string; mode: 'auto' | 'hold'; expires: number | null } | null, ReturnType<typeof unavailable>> {
+    return Effect.tryPromise({
+      try: async () => {
+        const value = await this.database.prepare('SELECT workspace,mode,expires FROM contexts WHERE user=?').bind(user).first<{ workspace: string; mode: 'auto' | 'hold'; expires: number | null }>();
+        if (!value) return null;
+        if (value.expires !== null && value.expires <= now()) {
+          await this.database.prepare('DELETE FROM contexts WHERE user=?').bind(user).run();
+          return null;
+        }
+        return value;
+      },
+      catch: (cause) => unavailable('Could not read Space context.', cause),
+    });
+  }
+
+  saveContext(user: string, workspaceId: string, mode: 'auto' | 'hold', expires: number | null): Effect.Effect<void, ReturnType<typeof unavailable>> {
+    return Effect.tryPromise({
+      try: async () => {
+        if (mode === 'auto') {
+          await this.database.prepare('DELETE FROM contexts WHERE user=?').bind(user).run();
+          return;
+        }
+        await this.database.prepare(`INSERT INTO contexts(user,workspace,mode,expires,updated) VALUES(?,?,?,?,?)
+          ON CONFLICT(user) DO UPDATE SET workspace=excluded.workspace,mode=excluded.mode,expires=excluded.expires,updated=excluded.updated`)
+          .bind(user, workspaceId, mode, expires, now()).run();
+      },
+      catch: (cause) => unavailable('Could not save Space context.', cause),
     });
   }
 

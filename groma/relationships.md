@@ -39,5 +39,4 @@ title: Architecture relationships
 | Source | Target | Description | Technology |
 | --- | --- | --- | --- |
 | [tarapp/src/components/RecordDetailModal.tsx](../tarapp/src/components/RecordDetailModal.tsx) | [tarapp/src/components/HarnessWorkspaceCanvas.tsx](../tarapp/src/components/HarnessWorkspaceCanvas.tsx) | Invokes supplied callbacks: onAction, onClose | react |
-| [tarapp/src/components/SearchRecordsModal.tsx](../tarapp/src/components/SearchRecordsModal.tsx) | [tarapp/src/components/HarnessWorkspaceCanvas.tsx](../tarapp/src/components/HarnessWorkspaceCanvas.tsx) | Invokes supplied callback: onSelect | react |
 | [tarapp/src/components/WorkspaceTeam.tsx](../tarapp/src/components/WorkspaceTeam.tsx) | [tarapp/src/components/HarnessWorkspaceCanvas.tsx](../tarapp/src/components/HarnessWorkspaceCanvas.tsx) | Invokes supplied callback: onChanged | react |

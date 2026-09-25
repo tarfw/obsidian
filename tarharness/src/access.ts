@@ -1,17 +1,19 @@
 import type { Member, RecordItem } from './types.ts';
 import { findAction } from './registry/catalog.ts';
 
-export type WorkRole = 'general' | 'cook' | 'cashier';
+export type WorkRole = string;
 export const managesMembers = (member: Member) => member.state === 'active' && (member.role === 'owner' || member.role === 'admin');
 export const isCook = (member: Member) => member.role === 'member' && member.workRole === 'cook';
 const cookActions = new Set(['task.complete', 'pos.order.item.update']);
-const cashierActions = new Set(['task.create', 'task.complete', 'pos.open', 'pos.customer.save', 'pos.order.save', 'pos.order.cancel', 'pos.checkout', 'pos.register.open', 'pos.register.close']);
+const cashierActions = new Set(['task.create', 'task.complete', 'pos.open', 'pos.customer.save', 'pos.order.save', 'pos.order.cancel', 'pos.checkout', 'pos.register.open', 'pos.register.close', 'order.create', 'order.fulfill', 'order.cancel', 'invoice.issue', 'payment.record']);
 
 export function canExecute(member: Member, actionId: string): boolean {
   const action = findAction(actionId);
   if (member.state !== 'active' || !action || !action.roles.includes(member.role)) return false;
   if (member.role !== 'member' || !member.workRole || member.workRole === 'general') return true;
-  return (member.workRole === 'cook' ? cookActions : cashierActions).has(actionId);
+  if (member.workRole === 'cook') return cookActions.has(actionId);
+  if (member.workRole === 'cashier') return cashierActions.has(actionId);
+  return true;
 }
 
 export function canReadRecord(member: Member, record: Pick<RecordItem, 'type' | 'data' | 'assignee'>): boolean {

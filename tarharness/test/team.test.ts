@@ -28,7 +28,7 @@ const event: ChannelEvent = { provider: 'slack', tenantId: 'T1', channelId: 'C1'
 beforeAll(async () => {
   runtime = new Miniflare(convertV4MiniflareOptions({ name: 'team-test', modules: true, script: 'export default { fetch() { return new Response("ok"); } }', d1Databases: ['CONTROL'], compatibilityDate: '2026-09-05' }));
   db = await runtime.getD1Database('CONTROL');
-  for (const file of ['0001_control.sql','0002_workspace_invites.sql','0003_team_chat.sql','0004_dispatches.sql']) {
+  for (const file of ['0001_control.sql']) {
     const sql = readFileSync(new URL('../migrations/' + file, import.meta.url), 'utf8');
     for (const statement of sql.split(';').filter((item) => item.trim())) await db.prepare(statement).run();
   }
@@ -48,11 +48,12 @@ async function connect() {
 
 describe('one member authority', () => {
   it('invites with a work role and activates through verified Google identity', async () => {
-    await inviteMember(db, owner, { email: 'new@example.com', role: 'member', workRole: 'cashier' });
+    await inviteMember(db, owner, { email: 'new@example.com', role: 'member', workRole: 'courier' });
     const store = new ControlStore(db);
     const identity = { id: 'new', email: 'new@example.com', name: 'New' };
     await Effect.runPromise(store.upsertUser(identity));
-    expect((await Effect.runPromise(store.access(identity, 'restaurant'))).member.workRole).toBe('cashier');
+    expect((await Effect.runPromise(store.access(identity, 'restaurant'))).member.workRole).toBe('courier');
+    expect(canExecute((await Effect.runPromise(store.access(identity, 'restaurant'))).member, 'task.create')).toBe(true);
   });
   it('resolves current authority for a resumed Flow Book and rejects revocation', async () => {
     const store = new ControlStore(db);

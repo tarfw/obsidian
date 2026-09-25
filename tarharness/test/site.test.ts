@@ -37,13 +37,11 @@ const ownerAccess: AccessContext = {
   member: { workspaceId: 'ws_slice', userId: 'owner_1', role: 'owner', state: 'active' },
 };
 
-describe('TAR Site Bot & Pure HTML/CSS Static Compiler (PAR v2)', () => {
-  it('renders all 12 Card families cleanly into semantic accessible HTML with zero client JS', async () => {
-    const site = createDefaultSite('Slice House', 'Authentic wood-fired sourdough pizza in Anna Nagar');
-    expect(site.pages[0].cards.length).toBe(12);
-
-    // Verify all 12 card kinds are represented
-    const kinds = site.pages[0].cards.map((c) => c.kind);
+describe('TAR Site compiler', () => {
+  it('builds a complete multi-page site with every registered card family and zero client JS', async () => {
+    const site = createDefaultSite('Northstar', 'A local business serving its community');
+    expect(site.pages.map((page) => page.path)).toEqual(['/', '/catalog', '/about', '/contact']);
+    const kinds = site.pages.flatMap((page) => page.cards.map((card) => card.kind));
     for (const kind of CARD_KINDS) {
       expect(kinds).toContain(kind);
     }
@@ -53,12 +51,10 @@ describe('TAR Site Bot & Pure HTML/CSS Static Compiler (PAR v2)', () => {
     expect(html).toContain('<html lang="en">');
     expect(html).toContain('<meta property="og:title"');
     expect(html).toContain('application/ld+json');
-    expect(html).toContain('Slice House');
-    expect(html).toContain('Signature Margherita');
-    expect(html).toContain('Stoneground Flour');
-    expect(html).toContain('Operating Hours');
-    expect(html).toContain('Book a Table or Request Catering');
-    expect(html).toContain('Open Now');
+    expect(html).toContain('Northstar');
+    expect(html).toContain('A local business serving its community');
+    expect(html).not.toContain('Signature Margherita');
+    expect(html).not.toContain('Slice House');
     expect(html).not.toContain('<script src='); // Zero client script runtime required
     expect(css).toContain('--color-bg:');
     expect(css).toContain('--color-accent:');

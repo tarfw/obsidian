@@ -7,11 +7,6 @@ groma:
   parent: tar
   code:
     - scanner: react
-      file: tarapp/src/app/_layout.tsx
-    - scanner: typescript
-      file: tarapp/src/app/_layout.tsx
-      symbol: RootLayout
-    - scanner: react
       file: tarapp/src/app/index.tsx
     - scanner: typescript
       file: tarapp/src/app/index.tsx

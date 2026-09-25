@@ -1,5 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { createOperationKey, harness, type HarnessActionField, type HarnessRecord } from '@/lib/harness';
@@ -10,27 +10,29 @@ function initialValues(props: ActionInterfaceProps): Record<string, string> {
 }
 
 export default function ActionFormInterface(props: ActionInterfaceProps) {
+  if (!props.visible) return null;
+  return <ActionForm {...props} />;
+}
+
+function ActionForm(props: ActionInterfaceProps) {
   const insets = useSafeAreaInsets();
   const [values, setValues] = useState<Record<string, string>>(() => initialValues(props));
   const [records, setRecords] = useState<HarnessRecord[]>([]);
   const [picker, setPicker] = useState<HarnessActionField | null>(null);
   const [saving, setSaving] = useState(false);
-  const [operationKey, setOperationKey] = useState(() => createOperationKey(props.action.id));
+  const [operationKey] = useState(() => createOperationKey(props.action.id));
+  const recordTypes = useMemo(
+    () => [...new Set(props.action.fields.filter((field) => field.kind === 'record').map((field) => field.recordType || ''))],
+    [props.action.fields],
+  );
   useEffect(() => {
-    if (!props.visible) return;
-    setValues(initialValues(props));
-    setOperationKey(createOperationKey(props.action.id));
-  }, [props.action.id, props.initialInput, props.visible]);
-  useEffect(() => {
-    if (!props.visible) return;
-    const fields = props.action.fields.filter((field) => field.kind === 'record');
-    if (!fields.length) { setRecords([]); return; }
+    if (!recordTypes.length) return;
     let current = true;
-    void Promise.all([...new Set(fields.map((field) => field.recordType || ''))].map((type) => harness.records(props.scope, type || undefined)))
+    void Promise.all(recordTypes.map((type) => harness.records(props.scope, type || undefined)))
       .then((results) => { if (current) setRecords(results.flatMap((result) => result.records)); })
       .catch(() => { if (current) setRecords([]); });
     return () => { current = false; };
-  }, [props.action.id, props.scope, props.visible]);
+  }, [props.scope, recordTypes]);
   const submit = async () => {
     const missing = props.action.fields.find((field) => field.required && !values[field.key]?.trim());
     if (missing) { Alert.alert('Required information', `Enter ${missing.label.toLowerCase()}.`); return; }

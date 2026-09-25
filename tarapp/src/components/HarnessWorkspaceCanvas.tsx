@@ -8,16 +8,17 @@ import RecordDetailModal from '@/components/RecordDetailModal';
 import SearchRecordsModal from '@/components/SearchRecordsModal';
 import SiteScreen from '@/components/site';
 import WorkspaceTeam from '@/components/WorkspaceTeam';
-import TarLogo from '@/components/TarLogo';
-import { createOperationKey, harness, type HarnessAction, type HarnessCanvasCard, type HarnessFlowBook, type HarnessFlowRun, type HarnessInterfaceContract, type HarnessRecord, type HarnessWorkspace } from '@/lib/harness';
+import { TarLogo } from '@/components/TarLogo';
+import { createOperationKey, harness, type HarnessAction, type HarnessCanvasCard, type HarnessFlowBook, type HarnessFlowRun, type HarnessInboxSource, type HarnessInterfaceContract, type HarnessRecord, type HarnessSpaceContext, type HarnessWorkspace } from '@/lib/harness';
 
 export type WorkspaceTab = 'space' | 'inbox' | 'flows' | 'ask';
 type OrderLine = { productId: string; title: string; quantity: number; status?: 'pending' | 'preparing' | 'ready' };
 type OrderState = 'pending' | 'preparing' | 'ready';
-type InboxSource = { workspace: HarnessWorkspace; tasks: HarnessRecord[]; orders: HarnessRecord[]; permissions?: import('@/lib/harness').InboxPermissions };
+type InboxSource = Omit<HarnessInboxSource, 'permissions'> & { permissions?: HarnessInboxSource['permissions'] };
 type InboxEntry = { kind: 'task' | 'order'; record: HarnessRecord; source: InboxSource };
 interface Props { tab: WorkspaceTab; scope: string; workspaceName: string; role: 'owner' | 'admin' | 'member' | 'guest'; workspaces: HarnessWorkspace[]; onSelectWorkspace: (slug: string) => void; onCreateWorkspace: () => void; }
 interface OpenAction { action: HarnessAction; scope: string; input?: Record<string, unknown>; title?: string; }
+interface AskSuggestion extends Record<string, unknown> { action: string | null; title: string | null; confidence: number | null; review: true; }
 
 const flowPublishAction: HarnessAction = {
   id: 'flow.publish', version: 3, type: 'app', title: 'Create Flow Book',
@@ -53,6 +54,10 @@ export default function HarnessWorkspaceCanvas({ tab, scope, workspaceName, role
   const [selectedRecordScope, setSelectedRecordScope] = useState(scope);
   const [searchOpen, setSearchOpen] = useState(false);
   const [cards, setCards] = useState<HarnessCanvasCard[]>([]);
+  const [spaceContext, setSpaceContext] = useState<HarnessSpaceContext | null>(null);
+  const [spaceDecision, setSpaceDecision] = useState<'automatic' | 'confirm'>('automatic');
+  const [spaceAlternatives, setSpaceAlternatives] = useState<HarnessSpaceContext[]>([]);
+  const [spaceOverride, setSpaceOverride] = useState<string>();
   const [records, setRecords] = useState<HarnessRecord[]>([]);
   const [recordNext, setRecordNext] = useState<number | null>(null);
   const [loadingMoreRecords, setLoadingMoreRecords] = useState(false);
@@ -67,8 +72,9 @@ export default function HarnessWorkspaceCanvas({ tab, scope, workspaceName, role
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [askDraft, setAskDraft] = useState('');
+  const [askSuggestion, setAskSuggestion] = useState<AskSuggestion | null>(null);
+  const [asking, setAsking] = useState(false);
   const currentScope = useRef(scope);
-  currentScope.current = scope;
   const selectRecord = (record: HarnessRecord, recordScope = scope) => {
     setSelectedRecordScope(recordScope);
     setSelectedRecord(record);
@@ -79,61 +85,54 @@ export default function HarnessWorkspaceCanvas({ tab, scope, workspaceName, role
     setLoading(true);
     setError('');
     try {
-      const [registry, nextCanvas, nextRecords, inboxes, flowData] = await Promise.all([
+      const [registry, nextSpace, nextRecords, inbox, flowData] = await Promise.all([
         harness.workspaceRegistry(scope),
-        tab === 'space' ? harness.canvas(scope) : Promise.resolve(null),
+        tab === 'space' ? harness.space(spaceOverride) : Promise.resolve(null),
         tab === 'space' && spaceRecords ? harness.records(scope) : Promise.resolve(null),
-        tab === 'inbox' ? Promise.all(workspaces.map((workspace) => harness.inbox(workspace.slug))) : Promise.resolve([]),
+        tab === 'inbox' ? harness.unifiedInbox() : Promise.resolve(null),
         tab === 'flows' || (tab === 'space' && spaceFlows) ? harness.flows(scope) : Promise.resolve(null),
       ]);
       if (currentScope.current !== scope) return;
-      if (nextCanvas) setCards(nextCanvas.cards);
+      if (nextSpace) {
+        setCards(nextSpace.sections.flatMap((section) => section.cards));
+        setSpaceContext(nextSpace.context);
+        setSpaceDecision(nextSpace.decision);
+        setSpaceAlternatives(nextSpace.alternatives);
+        if (nextSpace.context.workspace.slug !== scope) onSelectWorkspace(nextSpace.context.workspace.slug);
+      }
       if (nextRecords) { setRecords(nextRecords.records); setRecordNext(nextRecords.next); }
       if (flowData) { setBooks(flowData.books); setFlowRuns(flowData.runs); }
       setActions(registry.actions);
       setInterfaces(registry.interfaces);
-      if (tab === 'inbox') {
-        setInboxSources(workspaces.map((workspace, index) => ({
-          workspace,
-          tasks: Array.isArray(inboxes[index].tasks) ? inboxes[index].tasks : [],
-          orders: Array.isArray(inboxes[index].orders) ? inboxes[index].orders : [],
-          permissions: inboxes[index].permissions,
-        })));
-      }
+      if (inbox) setInboxSources(inbox.sources);
     } catch (cause) {
       if (currentScope.current !== scope) return;
       setError(cause instanceof Error ? cause.message : 'Could not load this workspace.');
     } finally {
       if (currentScope.current === scope) setLoading(false);
     }
-  }, [scope, tab, workspaces, spaceRecords, spaceFlows]);
+  }, [scope, tab, spaceOverride, spaceRecords, spaceFlows, onSelectWorkspace]);
 
   useEffect(() => {
-    setCards([]);
-    setRecords([]);
-    setRecordNext(null);
-    setBooks([]);
-    setFlowRuns([]);
-    setSpaceFlows(false);
-    setInboxSources([]);
-    setActions([]);
-    setInterfaces([]);
+    currentScope.current = scope;
+    const timer = setTimeout(() => {
+      setCards([]);
+      setSpaceContext(null);
+      setRecords([]);
+      setRecordNext(null);
+      setBooks([]);
+      setFlowRuns([]);
+      setSpaceFlows(false);
+      setInboxSources([]);
+      setActions([]);
+      setInterfaces([]);
+    }, 0);
+    return () => clearTimeout(timer);
   }, [scope]);
 
   useEffect(() => { const timer = setTimeout(() => { void reload(); }, 0); return () => clearTimeout(timer); }, [reload]);
   useEffect(() => { const subscription = AppState.addEventListener('change', (state) => { if (state === 'active') void reload(); }); return () => subscription.remove(); }, [reload]);
   useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 60_000); return () => clearInterval(timer); }, []);
-
-  const suggestedSource = useMemo(() => {
-    const entries: InboxEntry[] = inboxSources.flatMap((source) => [...source.tasks.map((record) => ({ kind: 'task' as const, record, source })), ...source.orders.map((record) => ({ kind: 'order' as const, record, source }))]);
-    return entries.sort((a, b) => entryPriority(a, now) - entryPriority(b, now) || (scheduledAt(a.record) ?? a.record.updatedAt) - (scheduledAt(b.record) ?? b.record.updatedAt))[0]?.source;
-  }, [inboxSources, now]);
-
-  useEffect(() => {
-    if (tab === 'inbox' && !teamOpen && areaFilter === 'all' && suggestedSource && suggestedSource.workspace.slug !== scope) {
-      onSelectWorkspace(suggestedSource.workspace.slug);
-    }
-  }, [areaFilter, onSelectWorkspace, scope, suggestedSource, tab, teamOpen]);
 
   const open = (actionScope: string, actionId: string, input?: Record<string, unknown>, title?: string) => {
     void (async () => {
@@ -157,12 +156,10 @@ export default function HarnessWorkspaceCanvas({ tab, scope, workspaceName, role
   };
 
   const openOrder = (source: InboxSource, order: HarnessRecord) => {
-    onSelectWorkspace(source.workspace.slug);
     open(source.workspace.slug, 'pos.open', { section: 'sell', orderId: order.id }, `Order ${order.id.slice(-6).toUpperCase()}`);
   };
 
   const updateOrderItem = async (source: InboxSource, order: HarnessRecord, productId: string, status: 'preparing' | 'ready') => {
-    onSelectWorkspace(source.workspace.slug);
     try {
       await harness.executeAction(source.workspace.slug, 'pos.order.item.update', { orderId: order.id, version: order.version, productId, status }, createOperationKey(`pos.order.item:${order.id}:${productId}`));
       await reload();
@@ -211,9 +208,42 @@ export default function HarnessWorkspaceCanvas({ tab, scope, workspaceName, role
     return eligible.has('record.create');
   };
 
-  const chooseArea = (slug: string) => { setAreaFilter(slug); if (slug !== 'all') onSelectWorkspace(slug); };
+  const chooseArea = (slug: string) => {
+    setAreaFilter(slug);
+    if (slug === 'all' || tab === 'inbox') return;
+    if (tab === 'space') {
+      setSpaceOverride(slug);
+      void harness.holdContext(slug).catch((cause) => Alert.alert('Could not hold this Space', cause instanceof Error ? cause.message : 'Try again.'));
+    }
+    onSelectWorkspace(slug);
+  };
+  const resumeAutomaticContext = () => {
+    void harness.resumeContext().then(() => { setSpaceOverride(undefined); void reload(); })
+      .catch((cause) => Alert.alert('Could not resume automatic Space', cause instanceof Error ? cause.message : 'Try again.'));
+  };
   const activeWorkspace = workspaces.find((item) => item.slug === scope) || workspaces[0];
   const canManageSite = activeWorkspace?.mode === 'work' && (role === 'owner' || role === 'admin');
+  const configureRoutine = () => {
+    const personal = workspaces.find((item) => item.mode === 'personal');
+    if (!personal) { Alert.alert('Personal is unavailable', 'Refresh your workspaces and try again.'); return; }
+    open(personal.slug, 'routine.save', {
+      label: workspaceName || activeWorkspace?.name || 'Work', workspace: scope,
+      role: activeWorkspace?.workRole && activeWorkspace.workRole !== 'general' ? activeWorkspace.workRole : '',
+      start: '09:00', end: '17:00', days: '1,2,3,4,5', priority: 0,
+    }, 'When should this Space appear?');
+  };
+  const askTar = async () => {
+    const prompt = askDraft.trim();
+    if (!prompt || asking) return;
+    setAsking(true);
+    try {
+      const suggestion = await harness.executeAction<AskSuggestion>(scope, 'flow.suggest', { prompt }, createOperationKey('flow.suggest'));
+      setAskSuggestion(suggestion);
+      setAskDraft('');
+    } catch (cause) {
+      Alert.alert('Could not decide', cause instanceof Error ? cause.message : 'Try again.');
+    } finally { setAsking(false); }
+  };
 
   return (
       <View style={styles.page}>
@@ -238,6 +268,23 @@ export default function HarnessWorkspaceCanvas({ tab, scope, workspaceName, role
           {tab === 'inbox' ? <AreaRail sources={inboxSources} value={areaFilter} onChange={chooseArea} onCreate={onCreateWorkspace} showAllWorkspaces allowAllAreas onSearch={() => setSearchOpen(true)} onSettings={() => router.push('/settings')} showMembers={activeWorkspace?.mode === 'work'} onMembers={() => setTeamOpen(true)} /> : null}
           {(tab === 'space' || tab === 'ask') && activeWorkspace ? <AreaRail sources={workspaces.map((workspace) => ({ workspace, tasks: [], orders: [] }))} value={scope} onChange={chooseArea} onCreate={onCreateWorkspace} showAllWorkspaces onSearch={() => setSearchOpen(true)} onSettings={() => router.push('/settings')} showMembers={activeWorkspace.mode === 'work'} onMembers={() => setTeamOpen(true)} /> : null}
 
+          {tab === 'space' && spaceContext ? <View style={styles.contextPanel}>
+            <View style={styles.contextCopy}>
+              <Text style={styles.contextTitle}>{spaceContext.label}</Text>
+              <Text style={styles.contextMeta}>{spaceContext.workspace.name} · {spaceContext.role} · Owner: {spaceContext.owner}</Text>
+            </View>
+            <View style={styles.contextControls}>
+              <Pressable accessibilityRole="button" onPress={configureRoutine} style={styles.autoButton}><Text style={styles.autoButtonText}>Schedule</Text></Pressable>
+              {spaceContext.held ? <Pressable accessibilityRole="button" onPress={resumeAutomaticContext} style={styles.autoButton}><Text style={styles.autoButtonText}>Auto</Text></Pressable> : null}
+            </View>
+          </View> : null}
+          {tab === 'space' && spaceDecision === 'confirm' && spaceContext ? <View style={styles.contextQuestion}>
+            <Text style={styles.contextQuestionTitle}>Which Space are you in now?</Text>
+            {[spaceContext, ...spaceAlternatives].map((item) => <Pressable key={item.id} accessibilityRole="button" onPress={() => chooseArea(item.workspace.slug)} style={styles.contextOption}>
+              <Text style={styles.contextOptionTitle}>{item.label}</Text><Text style={styles.contextOptionMeta}>{item.workspace.name} · {item.role}</Text>
+            </Pressable>)}
+          </View> : null}
+
           {error ? <Pressable style={styles.error} onPress={() => { setLoading(true); void reload(); }}><Text style={styles.errorText}>{error} Tap to retry.</Text></Pressable> : null}
 
           {loading && tab !== 'space' ? (
@@ -248,7 +295,8 @@ export default function HarnessWorkspaceCanvas({ tab, scope, workspaceName, role
               {tab === 'ask' ? <View style={styles.askEmpty}>
                 <View style={styles.askMark}><TarLogo size={24} color="#6D45C5" bgColor="#F1ECFA" /></View>
                 <Text style={styles.askTitle}>Ask tar</Text>
-                <Text style={styles.askMessage}>Conversations are coming soon.</Text>
+                <Text style={styles.askMessage}>{askSuggestion ? askSuggestion.title ? `${askSuggestion.title} is the clearest first action${askSuggestion.confidence === null ? '.' : ` (${Math.round(askSuggestion.confidence * 100)}% confidence).`}` : 'No registered action is a clear match. Add detail or create a Flow Book.' : 'Describe an outcome. Jev will rank registered actions and keep execution behind your review.'}</Text>
+                {askSuggestion?.action ? <Pressable accessibilityRole="button" onPress={() => open(scope, askSuggestion.action!, {}, askSuggestion.title || 'Review action')} style={styles.askReview}><Text style={styles.askReviewText}>Review {askSuggestion.title || 'action'}</Text></Pressable> : null}
               </View> : null}
               {tab === 'space' ? spaceRecords ? <>
                 <TouchableOpacity style={styles.workCard} onPress={() => setSpaceRecords(null)} accessibilityRole="button" accessibilityLabel="Back to Space"><Ionicons name="arrow-back" size={20} color={colors.blue} /><Text style={styles.canvasRowTitle}>Space</Text></TouchableOpacity>
@@ -277,11 +325,9 @@ export default function HarnessWorkspaceCanvas({ tab, scope, workspaceName, role
                   onOpenOrder={openOrder}
                   onUpdateOrder={(source, order, productId, status) => void updateOrderItem(source, order, productId, status)}
                   onOpenTask={(source, task) => {
-                    onSelectWorkspace(source.workspace.slug);
                     selectRecord(task, source.workspace.slug);
                   }}
                   onCompleteTask={(source, task) => {
-                    onSelectWorkspace(source.workspace.slug);
                     open(source.workspace.slug, 'task.complete', { taskId: task.id }, task.title);
                   }}
                 />
@@ -291,12 +337,9 @@ export default function HarnessWorkspaceCanvas({ tab, scope, workspaceName, role
         </ScrollView>
         {tab === 'ask' ? <View style={styles.askComposer}>
           <View style={styles.askInputBar}>
-            <Pressable accessibilityRole="button" accessibilityLabel="Add attachment" onPress={() => Alert.alert('Attachments', 'Attachments will be available with conversations.')} style={styles.askControl}>
-              <Ionicons name="add" size={24} color={colors.ink} />
-            </Pressable>
             <TextInput accessibilityLabel="Message tar" value={askDraft} onChangeText={setAskDraft} placeholder="Message" placeholderTextColor="#8B8F99" multiline style={styles.askInput} />
-            <Pressable accessibilityRole="button" accessibilityLabel={askDraft.trim() ? 'Send message' : 'Voice message'} onPress={() => Alert.alert('Coming soon', 'Private conversations are not available yet.')} style={styles.askControl}>
-              <Ionicons name={askDraft.trim() ? 'arrow-up' : 'mic-outline'} size={21} color={askDraft.trim() ? '#7048C8' : colors.muted} />
+            <Pressable accessibilityRole="button" accessibilityLabel="Send message" disabled={!askDraft.trim() || asking} onPress={() => void askTar()} style={styles.askControl}>
+              {asking ? <ActivityIndicator size="small" color="#7048C8" /> : <Ionicons name="arrow-up" size={21} color={askDraft.trim() ? '#7048C8' : colors.faint} />}
             </Pressable>
           </View>
         </View> : null}
@@ -555,10 +598,10 @@ function RecordsSection({
 
   useEffect(() => {
     const generation = ++searchGeneration.current;
-    if (filter !== 'contacts') { setContacts([]); setNext(null); setContactError(''); setSearching(false); return; }
+    if (filter !== 'contacts') return;
     let current = true;
-    setContacts([]); setNext(null); setSearching(true); setContactError('');
     const timer = setTimeout(() => {
+      setContacts([]); setNext(null); setSearching(true); setContactError('');
       void harness.contacts(scope, search).then((page) => {
         if (!current || generation !== searchGeneration.current) return;
         setContacts(page.contacts); setNext(page.next); setContactError('');
@@ -824,12 +867,26 @@ const styles = StyleSheet.create({
   askInput: { flex: 1, maxHeight: 104, paddingVertical: 12, color: colors.ink, fontSize: 15 },
   headerIconButton: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   areaPicker: { alignItems: 'stretch', marginBottom: 12 },
+  contextPanel: { minHeight: 58, flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.line },
+  contextCopy: { flex: 1, gap: 2 },
+  contextTitle: { color: colors.ink, fontSize: 19, lineHeight: 24, fontWeight: '700' },
+  contextMeta: { color: colors.muted, fontSize: 12, lineHeight: 17 },
+  autoButton: { minHeight: 38, justifyContent: 'center', paddingHorizontal: 12, borderRadius: 10, backgroundColor: colors.wash },
+  autoButtonText: { color: colors.blue, fontSize: 13, fontWeight: '700' },
+  contextControls: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  askReview: { marginTop: 4, minHeight: 42, justifyContent: 'center', paddingHorizontal: 16, borderRadius: 12, backgroundColor: '#6D45C5' },
+  askReviewText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
+  contextQuestion: { gap: 8, padding: 12, borderWidth: 1, borderColor: colors.line, borderRadius: 12, backgroundColor: '#FAFBFD' },
+  contextQuestionTitle: { color: colors.ink, fontSize: 14, fontWeight: '700' },
+  contextOption: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 12, borderRadius: 9, backgroundColor: '#FFFFFF' },
+  contextOptionTitle: { color: colors.ink, fontSize: 14, fontWeight: '600' },
+  contextOptionMeta: { color: colors.muted, fontSize: 12 },
   workspaceBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, paddingHorizontal: 18, paddingTop: 12 },
   workspaceActions: { flexDirection: 'row', alignItems: 'center' },
   areaTrigger: { minHeight: 56, maxWidth: 210, minWidth: 0, flexShrink: 1, paddingHorizontal: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start', gap: 10 },
   areaTriggerText: { flexShrink: 1, fontSize: 22, fontWeight: '900', color: colors.ink, letterSpacing: -0.4 },
   sheetOverlay: { flex: 1, justifyContent: 'flex-end' },
-  sheetBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(18, 24, 36, 0.32)' },
+  sheetBackdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(18, 24, 36, 0.32)' },
   workspaceSheet: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingTop: 10, paddingHorizontal: 18, shadowColor: '#111827', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.1, shadowRadius: 14, elevation: 12 },
   sheetHandle: { width: 34, height: 4, borderRadius: 2, backgroundColor: '#C9CDD5', alignSelf: 'center', marginBottom: 12 },
   sheetHeader: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },

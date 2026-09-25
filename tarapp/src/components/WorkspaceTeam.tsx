@@ -12,7 +12,7 @@ const roles: { label: string; role: Exclude<HarnessRole, 'owner'>; workRole: Wor
   { label: 'Manager', role: 'admin', workRole: 'general' },
   { label: 'Guest', role: 'guest', workRole: 'general' },
 ];
-const roleLabel = (member: HarnessMember) => member.role === 'owner' ? 'Owner' : roles.find((item) => item.role === member.role && item.workRole === member.workRole)?.label || 'Member';
+const roleLabel = (member: HarnessMember) => member.role === 'owner' ? 'Owner' : member.role === 'admin' ? 'Manager' : member.role === 'guest' ? 'Guest' : member.workRole && member.workRole !== 'general' ? member.workRole.replace(/\b\w/g, (letter) => letter.toUpperCase()) : 'Member';
 
 export default function WorkspaceTeam({ scope, name, onClose, onChanged }: { scope: string; name: string; onClose: () => void; onChanged: () => void }) {
   const insets = useSafeAreaInsets();
@@ -22,6 +22,7 @@ export default function WorkspaceTeam({ scope, name, onClose, onChanged }: { sco
   const [self, setSelf] = useState('');
   const [email, setEmail] = useState('');
   const [selectedRole, setSelectedRole] = useState(roles[0]);
+  const [workRole, setWorkRole] = useState('general');
   const [editing, setEditing] = useState<HarnessMember | null>(null);
   const [adding, setAdding] = useState(false);
   const [provider, setProvider] = useState<ChatProvider | null>(null);
@@ -88,11 +89,13 @@ export default function WorkspaceTeam({ scope, name, onClose, onChanged }: { sco
     setEditing(member);
     setAdding(true);
     setSelectedRole(roles.find((item) => item.role === member.role && item.workRole === member.workRole) || roles[0]);
+    setWorkRole(member.workRole || 'general');
   };
   const saveMember = () => void run(async () => {
-    if (editing) await harness.updateMember(scope, editing.id, selectedRole);
-    else await harness.inviteMember(scope, email.trim(), selectedRole.role, selectedRole.workRole);
-    setEmail(''); setEditing(null); setAdding(false); setSelectedRole(roles[0]);
+    const access = { role: selectedRole.role, workRole: selectedRole.role === 'member' ? workRole.trim() || 'general' : 'general' };
+    if (editing) await harness.updateMember(scope, editing.id, access);
+    else await harness.inviteMember(scope, email.trim(), access.role, access.workRole);
+    setEmail(''); setEditing(null); setAdding(false); setSelectedRole(roles[0]); setWorkRole('general');
   });
 
   return <Modal visible animationType="slide" onRequestClose={onClose}>
@@ -124,7 +127,7 @@ export default function WorkspaceTeam({ scope, name, onClose, onChanged }: { sco
           {chat.canManage ? <>
             <View style={styles.sectionHeader}>
               <View><Text style={styles.sectionTitle}>Workspace access</Text><Text style={styles.muted}>{activeCount} active · {members.length} total</Text></View>
-              {!adding ? button('Add member', () => { setEditing(null); setAdding(true); }, false, 'primary') : null}
+              {!adding ? button('Add member', () => { setEditing(null); setSelectedRole(roles[0]); setWorkRole('general'); setAdding(true); }, false, 'primary') : null}
             </View>
             <View style={styles.memberList}>
               {members.map((member) => <View key={member.id} style={styles.memberRow}>
@@ -148,7 +151,8 @@ export default function WorkspaceTeam({ scope, name, onClose, onChanged }: { sco
             {adding ? <View style={styles.form}>
               <View style={styles.formHeading}><Text style={styles.sectionTitle}>{editing ? 'Edit access' : 'Invite a member'}</Text><Pressable accessibilityRole="button" accessibilityLabel="Cancel" onPress={() => { setAdding(false); setEditing(null); }} hitSlop={8}><Ionicons name="close" size={20} color={palette.muted} /></Pressable></View>
               {!editing ? <TextInput accessibilityLabel="Member Google email" placeholder="Google account email" placeholderTextColor={palette.faint} autoCapitalize="none" keyboardType="email-address" value={email} onChangeText={setEmail} style={styles.input} /> : <Text style={styles.formEmail}>{editing.email}</Text>}
-              <View style={styles.roleOptions}>{roles.filter((item) => item.role !== 'admin' || chat.role === 'owner').map((item) => <Pressable key={item.label} accessibilityRole="radio" accessibilityState={{ selected: selectedRole.label === item.label }} disabled={busy} onPress={() => setSelectedRole(item)} style={[styles.roleOption, selectedRole.label === item.label && styles.roleOptionSelected]}><Text style={[styles.roleText, selectedRole.label === item.label && styles.roleTextSelected]}>{item.label}</Text></Pressable>)}</View>
+              <View style={styles.roleOptions}>{roles.filter((item) => item.role !== 'admin' || chat.role === 'owner').map((item) => <Pressable key={item.label} accessibilityRole="radio" accessibilityState={{ selected: selectedRole.label === item.label }} disabled={busy} onPress={() => { setSelectedRole(item); setWorkRole(item.workRole); }} style={[styles.roleOption, selectedRole.label === item.label && styles.roleOptionSelected]}><Text style={[styles.roleText, selectedRole.label === item.label && styles.roleTextSelected]}>{item.label}</Text></Pressable>)}</View>
+              {selectedRole.role === 'member' ? <TextInput accessibilityLabel="Work role" placeholder="Work role, for example courier" placeholderTextColor={palette.faint} value={workRole === 'general' ? '' : workRole} onChangeText={(value) => setWorkRole(value || 'general')} style={styles.input} /> : null}
               <Text style={styles.helper}>Access activates when they sign in with this Google email. Share your TAR app link; no email is sent automatically.</Text>
               <View style={styles.formFooter}>{button('Cancel', () => { setAdding(false); setEditing(null); }, false, 'quiet')}{button(editing ? 'Save changes' : 'Send invite', saveMember, !editing && !email.trim(), 'primary')}</View>
             </View> : null}
@@ -210,7 +214,7 @@ const styles = StyleSheet.create({
   loading: { minHeight: 88, alignItems: 'center', justifyContent: 'center', gap: 8 },
   button: { minHeight: 44, paddingHorizontal: 14, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
   primary: { backgroundColor: palette.blue }, quiet: { backgroundColor: palette.wash }, danger: { backgroundColor: palette.redWash },
-  buttonText: { color: palette.muted, fontSize: 13, fontWeight: '650' }, primaryText: { color: '#FFFFFF' }, dangerText: { color: palette.red }, disabled: { opacity: 0.46 }, pressed: { opacity: 0.78 },
+  buttonText: { color: palette.muted, fontSize: 13, fontWeight: '600' }, primaryText: { color: '#FFFFFF' }, dangerText: { color: palette.red }, disabled: { opacity: 0.46 }, pressed: { opacity: 0.78 },
   memberList: { borderTopWidth: 1, borderColor: palette.line }, memberRow: { minHeight: 68, flexDirection: 'row', alignItems: 'center', gap: 10, borderBottomWidth: 1, borderColor: palette.line },
   avatar: { width: 38, height: 38, borderRadius: 19, backgroundColor: palette.blueWash, alignItems: 'center', justifyContent: 'center' }, avatarMuted: { backgroundColor: palette.wash }, avatarText: { color: palette.blue, fontSize: 14, fontWeight: '700' }, avatarTextMuted: { color: palette.faint },
   memberIdentity: { flex: 1, minWidth: 70, gap: 3 }, memberName: { color: palette.ink, fontSize: 14, fontWeight: '600' }, memberMeta: { color: palette.muted, fontSize: 12 },
@@ -224,7 +228,7 @@ const styles = StyleSheet.create({
   formFooter: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8 }, accessNote: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 14, borderRadius: 10, backgroundColor: palette.wash },
   connection: { padding: 14, gap: 12, borderWidth: 1, borderColor: palette.line, borderRadius: 12 }, connectionTop: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 10 }, providerMark: { width: 38, height: 38, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.blueWash },
   connectionCopy: { flex: 1, gap: 2 }, connectionName: { color: palette.ink, fontSize: 14, fontWeight: '700' }, connected: { flexDirection: 'row', alignItems: 'center', gap: 5 }, connectedDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: palette.green }, connectedText: { color: palette.green, fontSize: 11, fontWeight: '600' },
-  divider: { height: 1, backgroundColor: palette.line, marginVertical: 2 }, fieldLabel: { color: palette.ink, fontSize: 13, fontWeight: '650' }, adminLink: { alignItems: 'flex-start', marginTop: 2 },
+  divider: { height: 1, backgroundColor: palette.line, marginVertical: 2 }, fieldLabel: { color: palette.ink, fontSize: 13, fontWeight: '600' }, adminLink: { alignItems: 'flex-start', marginTop: 2 },
   setup: { padding: 14, gap: 13, borderWidth: 1, borderColor: palette.line, borderRadius: 12 }, providerOptions: { gap: 7 }, providerOption: { minHeight: 54, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, borderWidth: 1, borderColor: palette.line, borderRadius: 9 },
   providerOptionSelected: { borderColor: palette.blue, backgroundColor: palette.blueWash }, providerText: { color: palette.ink, fontSize: 13, fontWeight: '600' }, providerTextSelected: { color: palette.blue }, providerAvailability: { color: palette.muted, fontSize: 11 },
   commandBox: { padding: 14, gap: 9, borderRadius: 10, backgroundColor: palette.wash }, commandText: { color: palette.ink, fontFamily: 'monospace', fontSize: 13, lineHeight: 19, padding: 10, borderRadius: 7, backgroundColor: '#FFFFFF' },

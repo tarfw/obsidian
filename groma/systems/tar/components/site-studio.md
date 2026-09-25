@@ -12,8 +12,6 @@ groma:
       file: tarapp/src/components/site.tsx
     - scanner: typescript
       file: tarapp/src/lib/site-schema.ts
-    - scanner: typescript
-      file: tarapp/src/hooks/use-site.ts
 description: Lets an owner generate, publish and roll back the site.
 ---
 

@@ -1,7 +1,12 @@
 import { unavailable } from '../errors.ts';
 import { findAction, type ActionDefinition } from '../registry/catalog.ts';
 
-const choices = ['record.create', 'contact.create', 'organization.create', 'task.create', 'site.generate', 'web.search'] as const;
+const choices = [
+  'record.create', 'contact.create', 'organization.create', 'task.create', 'routine.save',
+  'catalog.item.save', 'catalog.variant.save', 'price.set', 'stock.adjust',
+  'purchase.create', 'order.create', 'invoice.issue', 'payment.record', 'refund.record',
+  'pos.open', 'flow.publish', 'site.generate', 'web.search',
+] as const;
 const object = (value: unknown): Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 
 export async function suggest(apiKey: string | undefined, request: string) {

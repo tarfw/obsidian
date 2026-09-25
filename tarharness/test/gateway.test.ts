@@ -33,6 +33,16 @@ describe('mandatory Gateway execution', () => {
     expect(events.rows).toHaveLength(1);
   });
 
+  it('stores validated Space routines only in Personal', async () => {
+    const client = await workspace();
+    const personal: AccessContext = { ...access, workspace: { ...access.workspace, mode: 'personal' } };
+    const request = { actionId: 'routine.save' as const, idempotencyKey: 'routine-1', input: { label: 'Kitchen shift', workspace: 'northstar', role: 'Chef', start: '09:00', end: '15:00', days: '1,2,3,4,5', priority: 10 } };
+    const result = await Effect.runPromise(executeGateway(client, personal, request));
+    expect(result.record).toMatchObject({ type: 'routine', title: 'Kitchen shift', data: { workspace: 'northstar', role: 'Chef', days: [1, 2, 3, 4, 5] } });
+    expect(await Effect.runPromise(executeGateway(client, personal, request))).toEqual(result);
+    await expect(Effect.runPromise(executeGateway(client, access, { ...request, idempotencyKey: 'routine-work' }))).rejects.toThrow('saved in Personal');
+  });
+
   it('rejects reuse of an operation key with different input', async () => {
     const client = await workspace();
     await Effect.runPromise(executeGateway(client, access, { actionId: 'task.create', idempotencyKey: 'task-1', input: { title: 'Review order' } }));

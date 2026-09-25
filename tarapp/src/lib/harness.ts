@@ -1,10 +1,10 @@
 import { getValidIdToken, invalidateGoogleToken } from './auth';
-import type { ReleaseManifest, SiteDefinition, SitePatchOperation } from './site-schema';
+import type { SiteDefinition, SitePatchOperation } from './site-schema';
 
 export const HARNESS_URL = (process.env.EXPO_PUBLIC_TARHARNESS_URL || 'https://tarharness.tar-54d.workers.dev').replace(/\/$/, '');
 
 export type HarnessRole = 'owner' | 'admin' | 'member' | 'guest';
-export type WorkRole = 'general' | 'cook' | 'cashier';
+export type WorkRole = string;
 export type ChatProvider = 'slack' | 'discord' | 'google-chat';
 export interface HarnessMember { id: string; email: string; name: string | null; role: HarnessRole; workRole: WorkRole; state: 'active' | 'pending' | 'revoked'; }
 export interface InboxPermissions { prepare: boolean; collect: boolean; completeTask: boolean; openOrder: boolean; }
@@ -16,7 +16,7 @@ export interface TeamChatState {
   canManage: boolean; role: HarnessRole; workRole: WorkRole;
   requests: { id: string; provider: ChatProvider; purpose: 'destination' | 'identity'; expiresAt: number; candidate: { userName: string; userId: string; channelName: string; channelId: string } | null }[];
 }
-export interface HarnessWorkspace { id: string; name: string; slug: string; scope: string; role: HarnessRole; mode: 'personal' | 'work'; state: 'provisioning' | 'active' | 'error' | 'archived'; }
+export interface HarnessWorkspace { id: string; name: string; slug: string; scope: string; role: HarnessRole; workRole?: WorkRole; owner?: string; mode: 'personal' | 'work'; state: 'provisioning' | 'active' | 'error' | 'archived'; }
 export interface HarnessRecord { id: string; type: string; title: string; state: string; data: Record<string, unknown>; owner: string | null; assignee: string | null; version: number; createdAt: number; updatedAt: number; }
 export interface HarnessFlowBook { id: string; name: string; version: number; data: Record<string, unknown>; }
 export interface HarnessFlowStep { id: string; action: string; occurrence: number; state: string; input: Record<string, unknown>; output: Record<string, unknown> | null; version: number; created: number; updated: number; }
@@ -31,6 +31,18 @@ export type HarnessCanvasCard =
   | { id: string; kind: 'data'; title: string; display: 'value' | 'report' | 'chart'; value: number | string; caption?: string }
   | { id: string; kind: 'action'; title: string; description: string; actionId: string; initialInput?: Record<string, unknown> }
   | { id: string; kind: 'flow'; title: string; description: string; flowId: string; actionId?: string; initialInput?: Record<string, unknown> };
+export interface HarnessSpaceContext {
+  id: string; label: string; role: string; owner: string; confidence: number;
+  source: 'default' | 'routine' | 'override'; held: boolean;
+  workspace: { id: string; slug: string; name: string; mode: 'personal' | 'work' };
+}
+export interface HarnessSpace {
+  context: HarnessSpaceContext; decision: 'automatic' | 'confirm'; alternatives: HarnessSpaceContext[];
+  sections: { id: string; title: string; cards: HarnessCanvasCard[] }[];
+}
+export interface HarnessInboxSource { workspace: HarnessWorkspace; tasks: HarnessRecord[]; orders: HarnessRecord[]; permissions: InboxPermissions; }
+export interface HarnessInboxItem { kind: 'task' | 'order'; item: HarnessRecord; workspace: HarnessWorkspace; }
+export interface HarnessInbox { sources: HarnessInboxSource[]; groups: { mine: HarnessInboxItem[]; available: HarnessInboxItem[]; waiting: HarnessInboxItem[] }; partial: boolean; }
 export class HarnessRequestError extends Error { constructor(readonly status: number, message: string) { super(message); } }
 export function createOperationKey(prefix: string) { return `${prefix}:${Date.now()}:${Math.random().toString(36).slice(2)}`; }
 
@@ -83,6 +95,15 @@ export const harness = {
   disconnectChat: (slug: string, destination: boolean) => request(workspacePath(slug, 'team-chat/disconnect'), { method: 'POST', body: { destination } }),
   actions: () => request<{ actions: HarnessAction[]; interfaces: HarnessInterfaceContract[] }>('/v1/actions'),
   listWorkspaces: () => request<{ workspaces: HarnessWorkspace[] }>('/v1/workspaces'),
+  space: (scope?: string) => {
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+    const query = new URLSearchParams({ zone, at: String(Date.now()) });
+    if (scope) query.set('scope', scope);
+    return request<HarnessSpace>(`/v1/space?${query.toString()}`);
+  },
+  holdContext: (scope: string, duration = 43_200_000) => request<{ context: { mode: 'hold'; scope: string; expires: number } }>('/v1/context', { method: 'PUT', body: { mode: 'hold', scope, duration } }),
+  resumeContext: () => request<{ context: { mode: 'auto'; scope: null; expires: null } }>('/v1/context', { method: 'PUT', body: { mode: 'auto' } }),
+  unifiedInbox: () => request<HarnessInbox>('/v1/inbox'),
   createWorkspace: (name: string, slug: string) => request<{ workspace: HarnessWorkspace }>('/v1/workspaces', { method: 'POST', body: { name, slug }, key: createOperationKey(`workspace:${slug}`) }),
   inviteMember: (slug: string, email: string, role: Exclude<HarnessRole, 'owner'> = 'member', workRole: WorkRole = 'general') => request<{ invitation: { email: string; role: Exclude<HarnessRole, 'owner'>; state: 'pending' } }>(workspacePath(slug, 'members'), { method: 'POST', body: { email, role, workRole }, key: createOperationKey(`invite:${slug}:${email}`) }),
   canvas: (slug: string) => request<{ cards: HarnessCanvasCard[] }>(workspacePath(slug, 'canvas')),

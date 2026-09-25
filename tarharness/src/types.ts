@@ -2,7 +2,7 @@ export type Role = 'owner' | 'admin' | 'member' | 'guest';
 export type WorkspaceState = 'provisioning' | 'active' | 'error' | 'archived';
 
 export interface Identity { readonly id: string; readonly email: string; readonly name: string | null; }
-export interface Workspace { readonly id: string; readonly name: string; readonly slug: string; readonly mode: 'personal' | 'work'; readonly databaseName: string; readonly databaseHost: string | null; readonly state: WorkspaceState; }
+export interface Workspace { readonly id: string; readonly name: string; readonly slug: string; readonly mode: 'personal' | 'work'; readonly databaseName: string; readonly databaseHost: string | null; readonly state: WorkspaceState; readonly ownerName?: string; }
 export interface Member { readonly workspaceId: string; readonly userId: string; readonly role: Role; readonly workRole?: import('./access.ts').WorkRole; readonly state: 'active' | 'invited' | 'revoked'; }
 export interface AccessContext { readonly identity: Identity; readonly workspace: Workspace; readonly member: Member; }
 

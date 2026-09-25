@@ -28,6 +28,13 @@ Required Worker secrets include Turso provisioning credentials. Jev, search and
 chat provider secrets are optional; their related Actions are unavailable until
 configured. Never put server secrets in Expo variables.
 
+The complete workspace schema is applied when a database is provisioned.
+Ordinary Space and Inbox reads only open the database and query it. Turso
+database tokens are reused briefly per warm Worker instance; a failed token
+request is retried on the next request. Workspace failures are logged with
+`workspace.open.failed` or `workspace.query.failed` and a safe diagnostic code
+is returned to the app.
+
 ```sh
 npm run deploy
 ```

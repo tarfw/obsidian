@@ -31,7 +31,7 @@ const identityKey = (value: string) => value.replace(/[^a-z0-9]/gi, '').toLowerC
 
 function response(value: unknown, status = 200, extra: HeadersInit = {}): Response { return new Response(JSON.stringify(value), { status, headers: { ...jsonHeaders, ...corsHeaders, ...extra } }); }
 function errorResponse(error: unknown): Response {
-  if (error instanceof HarnessError) return response({ error: error.message }, error.status);
+  if (error instanceof HarnessError) return response({ error: error.message, ...(error.code ? { code: error.code } : {}) }, error.status);
   console.error(JSON.stringify({ event: 'tarharness.error', error: error instanceof Error ? error.message : String(error) }));
   return response({ error: 'Internal server error.' }, 500);
 }

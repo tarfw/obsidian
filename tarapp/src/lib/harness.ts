@@ -43,10 +43,13 @@ export interface HarnessSpace {
 export interface HarnessInboxSource { workspace: HarnessWorkspace; tasks: HarnessRecord[]; orders: HarnessRecord[]; permissions: InboxPermissions; }
 export interface HarnessInboxItem { kind: 'task' | 'order'; item: HarnessRecord; workspace: HarnessWorkspace; }
 export interface HarnessInbox { sources: HarnessInboxSource[]; groups: { mine: HarnessInboxItem[]; available: HarnessInboxItem[]; waiting: HarnessInboxItem[] }; partial: boolean; }
-export class HarnessRequestError extends Error { constructor(readonly status: number, message: string) { super(message); } }
+export class HarnessRequestError extends Error { constructor(readonly status: number, message: string, readonly code?: string) { super(message); } }
 export function createOperationKey(prefix: string) { return `${prefix}:${Date.now()}:${Math.random().toString(36).slice(2)}`; }
 
 async function request<T>(path: string, options: { method?: 'GET' | 'POST' | 'PUT'; body?: Record<string, unknown>; key?: string } = {}): Promise<T> {
+  const method = options.method || 'GET';
+  const route = path.split('?')[0];
+  const started = Date.now();
   const controller = new AbortController();
   let timeout: ReturnType<typeof setTimeout> | undefined;
   const deadline = new Promise<never>((_, reject) => {
@@ -60,19 +63,26 @@ async function request<T>(path: string, options: { method?: 'GET' | 'POST' | 'PU
     if (!token) throw new HarnessRequestError(401, 'Your Google sign-in has expired. Please sign in again.');
     let response: Response;
     try {
-      response = await fetch(`${HARNESS_URL}${path}`, { method: options.method || 'GET', headers: { Authorization: `Bearer ${token}`, ...(options.body ? { 'Content-Type': 'application/json' } : {}), ...(options.method === 'POST' || options.method === 'PUT' ? { 'Idempotency-Key': options.key || createOperationKey('tarapp') } : {}) }, body: options.body ? JSON.stringify(options.body) : undefined, signal: controller.signal });
+      response = await fetch(`${HARNESS_URL}${path}`, { method, headers: { Authorization: `Bearer ${token}`, ...(options.body ? { 'Content-Type': 'application/json' } : {}), ...(method === 'POST' || method === 'PUT' ? { 'Idempotency-Key': options.key || createOperationKey('tarapp') } : {}) }, body: options.body ? JSON.stringify(options.body) : undefined, signal: controller.signal });
     } catch (cause) {
       if (controller.signal.aborted) throw new HarnessRequestError(408, 'TAR did not respond in time. Check your connection and retry.');
       throw cause;
     }
     const payload = await response.json().catch(() => ({})) as Record<string, unknown>;
+    if (__DEV__) console.info(`[Harness] ${method} ${route} ${response.status} ${Date.now() - started}ms${response.headers.get('cf-ray') ? ` ray=${response.headers.get('cf-ray')}` : ''}`);
     if (!response.ok) {
       if (response.status === 401) await invalidateGoogleToken();
-      throw new HarnessRequestError(response.status, typeof payload.error === 'string' ? payload.error : 'Harness request failed.');
+      throw new HarnessRequestError(response.status, typeof payload.error === 'string' ? payload.error : 'Harness request failed.', typeof payload.code === 'string' ? payload.code : undefined);
     }
     return payload as T;
   })();
   try { return await Promise.race([operation, deadline]); }
+  catch (cause) {
+    const status = cause instanceof HarnessRequestError ? cause.status : 'network';
+    const code = cause instanceof HarnessRequestError && cause.code ? ` code=${cause.code}` : '';
+    console.error(`[Harness] ${method} ${route} failed status=${status}${code} after ${Date.now() - started}ms: ${cause instanceof Error ? cause.message : String(cause)}`);
+    throw cause;
+  }
   finally { if (timeout) clearTimeout(timeout); }
 }
 

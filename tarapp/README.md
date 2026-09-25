@@ -11,6 +11,13 @@ npm install
 npm start
 ```
 
+The development build uses the deployed TAR Harness unless
+`EXPO_PUBLIC_TARHARNESS_URL` is set. `npx expo start` serves the app bundle; it
+does not run or deploy the Worker. Failed requests print a `[Harness]` line in
+the Expo terminal with the route, status, diagnostic code and elapsed time.
+For backend details, inspect the Worker logs with `npx wrangler tail` from
+`tarharness/`.
+
 ## Release checks
 
 ```sh

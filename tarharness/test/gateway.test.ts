@@ -43,6 +43,44 @@ describe('mandatory Gateway execution', () => {
     await expect(Effect.runPromise(executeGateway(client, access, { ...request, idempotencyKey: 'routine-work' }))).rejects.toThrow('saved in Personal');
   });
 
+  it('edits a routine with its version and owner through the routine action', async () => {
+    const client = await workspace();
+    const personal: AccessContext = { ...access, workspace: { ...access.workspace, mode: 'personal' } };
+    const created = await Effect.runPromise(executeGateway(client, personal, {
+      actionId: 'routine.save', idempotencyKey: 'routine-create',
+      input: { label: 'Morning', workspace: 'test', start: '08:00', end: '11:00' },
+    }));
+    const routine = created.record as { id: string; version: number };
+    const updated = await Effect.runPromise(executeGateway(client, personal, {
+      actionId: 'routine.save', idempotencyKey: 'routine-edit',
+      input: { id: routine.id, baseVersion: routine.version, label: 'Service', workspace: 'test', start: '11:00', end: '16:00' },
+    }));
+    expect(updated.record).toMatchObject({ id: routine.id, version: 2, title: 'Service', data: { start: '11:00' } });
+    expect((await client.execute("SELECT id FROM records WHERE type='routine'")).rows).toHaveLength(1);
+    expect((await client.execute("SELECT id FROM events WHERE action_id='routine.save'")).rows).toHaveLength(2);
+    await expect(Effect.runPromise(executeGateway(client, personal, {
+      actionId: 'routine.save', idempotencyKey: 'routine-stale',
+      input: { id: routine.id, baseVersion: 1, label: 'Old', workspace: 'test', start: '08:00', end: '10:00' },
+    }))).rejects.toThrow('Routine changed');
+    await expect(Effect.runPromise(executeGateway(client, { ...personal, identity: { ...personal.identity, id: 'other' } }, {
+      actionId: 'routine.save', idempotencyKey: 'routine-other',
+      input: { id: routine.id, baseVersion: 2, label: 'Other', workspace: 'test', start: '08:00', end: '10:00' },
+    }))).rejects.toThrow('Space routine not found');
+    await expect(Effect.runPromise(executeGateway(client, personal, {
+      actionId: 'record.update', idempotencyKey: 'routine-bypass',
+      input: { recordId: routine.id, baseVersion: 2, title: 'Bypass' },
+    }))).rejects.toThrow('registered domain action');
+    await expect(Effect.runPromise(executeGateway(client, { ...personal, identity: { ...personal.identity, id: 'other' } }, {
+      actionId: 'routine.remove', idempotencyKey: 'routine-remove-other', input: { id: routine.id, baseVersion: 2 },
+    }))).rejects.toThrow('Space routine not found');
+    const removed = await Effect.runPromise(executeGateway(client, personal, {
+      actionId: 'routine.remove', idempotencyKey: 'routine-remove', input: { id: routine.id, baseVersion: 2 },
+    }));
+    expect(removed).toEqual({ id: routine.id });
+    expect((await client.execute('SELECT state,archived FROM records WHERE id=?', [routine.id])).rows[0]).toMatchObject({ state: 'archived', archived: expect.any(Number) });
+    expect((await client.execute("SELECT id FROM events WHERE action_id='routine.remove'")).rows).toHaveLength(1);
+  });
+
   it('rejects reuse of an operation key with different input', async () => {
     const client = await workspace();
     await Effect.runPromise(executeGateway(client, access, { actionId: 'task.create', idempotencyKey: 'task-1', input: { title: 'Review order' } }));

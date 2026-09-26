@@ -8,9 +8,9 @@ import { HarnessError, badRequest, forbidden, notFound, unavailable } from './er
 import type { AccessContext, RecordItem } from './types.ts';
 import { actionCatalog, interfaceCatalog } from './registry/catalog.ts';
 import { buildWorkspaceCanvas } from './registry/canvas.ts';
-import { posSummary, readPos, readPosInbox } from './pos/store.ts';
+import { posSummary, readPos } from './pos/store.ts';
 import { readProductContent } from './pos/content.ts';
-import { canExecute, canReadRecord, isCook, kitchenOrder, managesMembers } from './access.ts';
+import { canExecute, canReadRecord, isCook, managesMembers } from './access.ts';
 import { inviteMember, listMembers, updateMember } from './team.ts';
 import { providers, providerStatus, verifyEvent, chatResponse, type ChannelEnv, type Provider } from './channels/providers.ts';
 import { beginLink, channelState, confirmLink, disconnect, proveLink, resolveSender } from './channels/store.ts';
@@ -119,11 +119,13 @@ async function spaceResponse(request: Request, env: RuntimeEnv, url: URL) {
   if (!accesses.length) throw notFound('No active workspace is available.');
   const saved = await Effect.runPromise(control.context(value.id));
   const requested = (url.searchParams.get('scope') || '').trim();
-  const override = requested || (saved?.mode === 'hold' ? saved.workspace : undefined);
+  if (requested && !accesses.some((item) => item.workspace.id === requested || item.workspace.slug === requested)) throw forbidden();
+  const hold = saved?.mode === 'hold' && accesses.some((item) => item.workspace.id === saved.workspace) ? saved.workspace : undefined;
+  const override = hold || requested;
   const zone = (url.searchParams.get('zone') || 'Asia/Kolkata').slice(0, 80);
   const suppliedAt = Number(url.searchParams.get('at') || Date.now());
   const at = Number.isSafeInteger(suppliedAt) && Math.abs(suppliedAt - Date.now()) < 86_400_000 ? suppliedAt : Date.now();
-  const decision = resolveContext(accesses, await routines(env, accesses), { at, zone, override, held: saved?.mode === 'hold' && !requested });
+  const decision = resolveContext(accesses, override ? [] : await routines(env, accesses), { at, zone, override, held: Boolean(hold) });
   const selected = accesses.find((item) => item.workspace.id === decision.context.workspace.id);
   if (!selected) throw notFound('Space context is no longer available.');
   return withWorkspace(env, selected, (client) => buildSpaceView(client, selected, decision));
@@ -132,6 +134,9 @@ async function spaceResponse(request: Request, env: RuntimeEnv, url: URL) {
 async function inboxResponse(request: Request, env: RuntimeEnv) {
   const { value, accesses } = await activeAccesses(request, env);
   const settled = await Promise.allSettled(accesses.map((current) => withWorkspace(env, current, (client) => readInboxSource(client, current))));
+  settled.forEach((result, index) => {
+    if (result.status === 'rejected') console.error(JSON.stringify({ event: 'inbox.source.failed', workspace: accesses[index].workspace.id, error: result.reason instanceof Error ? result.reason.message.slice(0, 300) : String(result.reason).slice(0, 300) }));
+  });
   const sources = settled.flatMap((result) => result.status === 'fulfilled' ? [result.value] : []);
   return { sources, groups: groupInbox(sources, value.id), partial: sources.length !== accesses.length };
 }
@@ -387,9 +392,8 @@ async function handle(request: Request, env: RuntimeEnv, ctx: ExecutionContext):
       return response({ run: { id: String(item.id), flowId: String(item.flow_id), flowVersion: Number(item.flow_version), state: String(item.state), actionId: typeof item.action_id === 'string' ? item.action_id : null, recordId: typeof item.record_id === 'string' ? item.record_id : null, context: visibleContext, version: Number(item.version), updatedAt: Number(item.updated_at), steps } });
     }
     if (request.method === 'GET' && nested === 'inbox') {
-      const rows = await Effect.runPromise(query<Record<string, unknown>>(client, { sql: 'SELECT * FROM records WHERE type=\'task\' AND state=\'open\' AND (assignee=? OR assignee IS NULL) AND archived IS NULL ORDER BY updated DESC LIMIT 100', args: [current.identity.id] }));
-      const pos = current.member.role === 'guest' ? { orders: [] } : await readPosInbox(client).catch(() => ({ orders: [] }));
-      return response({ tasks: rows.map(record).filter((item) => canReadRecord(current.member, item)), orders: isCook(current.member) ? pos.orders.map(kitchenOrder) : pos.orders, permissions: { prepare: canExecute(current.member, 'pos.order.item.update'), collect: canExecute(current.member, 'pos.checkout'), completeTask: canExecute(current.member, 'task.complete'), openOrder: canExecute(current.member, 'pos.open') } });
+      const { tasks, orders, permissions } = await readInboxSource(client, current);
+      return response({ tasks, orders, permissions });
     }
     if (request.method === 'GET' && nested === 'canvas') return response({ cards: await workspaceCanvas(client, current.member) });
     if (request.method === 'GET' && nested === 'definitions') return response({ definitions: await listDefinitions(client) });
@@ -397,6 +401,12 @@ async function handle(request: Request, env: RuntimeEnv, ctx: ExecutionContext):
     if (request.method === 'POST' && actionMatch) {
       const key = request.headers.get('Idempotency-Key') || ''; const input = await Effect.runPromise(parseJson(request));
       const actionId = actionMatch[1] as GatewayRequest['actionId'];
+      if (actionId === 'routine.save') {
+        const allowed = await Effect.runPromise(new ControlStore(env.CONTROL).listAccess(current.identity));
+        const target = allowed.find((item) => item.workspace.id === input.workspace || item.workspace.slug === input.workspace);
+        if (!target) throw badRequest('Choose a workspace you can access.');
+        input.workspace = target.workspace.slug;
+      }
       const action = { actionId, idempotencyKey: key, input };
       const result = await Effect.runPromise(executeGateway(client, current, action, { productContent: env.PRODUCT_CONTENT, siteReleases: env.SITE_RELEASES, ai: env.AI, tinyfish: env.TINYFISH_API_KEY, typesafe: env.TYPESAFE_API_KEY }));
       return response(result, 201);

@@ -118,6 +118,7 @@ export function executeGateway(client: Client, context: AccessContext, request: 
 
       if (request.actionId === 'routine.save') {
         if (context.workspace.mode !== 'personal') throw badRequest('Space routines are saved in Personal.');
+        const id = text(request.input.id, 160);
         const label = text(request.input.label, 80); const workspace = text(request.input.workspace, 160); const role = text(request.input.role, 80);
         const start = text(request.input.start, 5); const end = text(request.input.end, 5);
         const validTime = (value: string) => /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
@@ -127,16 +128,45 @@ export function executeGateway(client: Client, context: AccessContext, request: 
         if (!days.length || days.some((value) => !Number.isInteger(value) || value < 0 || value > 6)) throw badRequest('Days must use numbers 0 through 6.');
         const priority = Number(request.input.priority ?? 0);
         if (!Number.isSafeInteger(priority) || priority < 0 || priority > 100) throw badRequest('Priority must be an integer from 0 to 100.');
+        const existing = id ? (await query<Record<string, unknown>>(client, { sql: "SELECT * FROM records WHERE id=? AND type='routine' AND archived IS NULL", args: [id] }).pipe(Effect.runPromise))[0] : null;
+        if (id && (!existing || existing.owner !== context.identity.id)) throw notFound('Space routine not found.');
+        if (existing && Number(existing.version) !== Number(request.input.baseVersion)) throw conflict('Routine changed. Reload Space and try again.');
         const record: RecordItem = {
-          id: `rec_${crypto.randomUUID()}`, type: 'routine', title: label, state: 'active',
+          id: existing ? String(existing.id) : `rec_${crypto.randomUUID()}`, type: 'routine', title: label, state: 'active',
           data: { workspace, label, role, start, end, days, priority }, owner: context.identity.id, assignee: null,
-          version: 1, createdAt: at, updatedAt: at,
+          version: existing ? Number(existing.version) + 1 : 1, createdAt: existing ? Number(existing.created) : at, updatedAt: at,
         };
-        await client.batch([
-          { sql: 'INSERT INTO records (id,type,title,state,data,owner,assignee,due,version,created,updated) VALUES (?,?,?,?,?,?,?,?,1,?,?)', args: [record.id, record.type, record.title, record.state, json(record.data), record.owner, null, null, at, at] },
-          eventStatement({ action: request.actionId, actor: context.identity.id, recordId: record.id, key: request.idempotencyKey, hash, result: { record } }),
-        ], 'write');
+        if (existing) {
+          const committed = await client.batch([
+            { sql: "UPDATE records SET title=?,state='active',data=?,version=version+1,updated=? WHERE id=? AND version=?", args: [label, json(record.data), at, record.id, Number(existing.version)] },
+            { sql: `INSERT INTO events (id,kind,run_id,record_id,action_id,state,actor_id,input_hash,idempotency_key,data,created_at,updated_at)
+              SELECT ?, 'action', NULL, ?, ?, 'accepted', ?, ?, ?, ?, ?, ? WHERE changes()=1`, args: [`evt_${crypto.randomUUID()}`, record.id, request.actionId, context.identity.id, hash, request.idempotencyKey, json({ result: { record } }), at, at] },
+          ], 'write');
+          if (committed[0]?.rowsAffected !== 1 || committed[1]?.rowsAffected !== 1) throw conflict('Routine changed. Reload Space and try again.');
+        } else {
+          await client.batch([
+            { sql: 'INSERT INTO records (id,type,title,state,data,owner,assignee,due,version,created,updated) VALUES (?,?,?,?,?,?,?,?,1,?,?)', args: [record.id, record.type, record.title, record.state, json(record.data), record.owner, null, null, at, at] },
+            eventStatement({ action: request.actionId, actor: context.identity.id, recordId: record.id, key: request.idempotencyKey, hash, result: { record } }),
+          ], 'write');
+        }
         return { record };
+      }
+
+      if (request.actionId === 'routine.remove') {
+        if (context.workspace.mode !== 'personal') throw badRequest('Space routines are saved in Personal.');
+        const id = text(request.input.id, 160); const version = Number(request.input.baseVersion);
+        if (!id || !Number.isSafeInteger(version)) throw badRequest('Routine and version are required.');
+        const found = await query<Record<string, unknown>>(client, { sql: "SELECT owner,version FROM records WHERE id=? AND type='routine' AND archived IS NULL", args: [id] }).pipe(Effect.runPromise);
+        if (!found[0] || found[0].owner !== context.identity.id) throw notFound('Space routine not found.');
+        if (Number(found[0].version) !== version) throw conflict('Routine changed. Reload Space and try again.');
+        const result = { id };
+        const committed = await client.batch([
+          { sql: "UPDATE records SET state='archived',archived=?,version=version+1,updated=? WHERE id=? AND version=? AND archived IS NULL", args: [at, at, id, version] },
+          { sql: `INSERT INTO events (id,kind,run_id,record_id,action_id,state,actor_id,input_hash,idempotency_key,data,created_at,updated_at)
+            SELECT ?, 'action', NULL, ?, ?, 'accepted', ?, ?, ?, ?, ?, ? WHERE changes()=1`, args: [`evt_${crypto.randomUUID()}`, id, request.actionId, context.identity.id, hash, request.idempotencyKey, json({ result }), at, at] },
+        ], 'write');
+        if (committed[0]?.rowsAffected !== 1 || committed[1]?.rowsAffected !== 1) throw conflict('Routine changed. Reload Space and try again.');
+        return result;
       }
 
       if (request.actionId === 'record.create' || request.actionId === 'task.create' || request.actionId === 'contact.create' || request.actionId === 'organization.create') {
@@ -221,7 +251,7 @@ export function executeGateway(client: Client, context: AccessContext, request: 
         const records = await query<Record<string, unknown>>(client, { sql: 'SELECT * FROM records WHERE id=? AND archived IS NULL', args: [recordId] }).pipe(Effect.runPromise);
         const current = records[0]; if (!current) throw notFound('Record not found.');
         const type = String(current.type);
-        if (type.startsWith('pos.') || ['site', 'relationship'].includes(type)) throw badRequest('Use the registered domain action to update this record.');
+        if (type.startsWith('pos.') || ['site', 'relationship', 'routine'].includes(type)) throw badRequest('Use the registered domain action to update this record.');
         if (Number(current.version) !== baseVersion) throw conflict('Record changed. Refresh and try again.');
         const title = text(request.input.title, 240) || String(current.title);
         const patch = object(request.input.data);
@@ -247,7 +277,7 @@ export function executeGateway(client: Client, context: AccessContext, request: 
         const task = records[0]; if (!task) throw notFound('Task not found.');
         if (!canReadRecord(context.member, rowToRecord(task))) throw forbidden();
         if (task.assignee && task.assignee !== context.identity.id && context.member.role !== 'owner' && context.member.role !== 'admin') throw forbidden();
-        if (task.state === 'completed') throw conflict('Task is already complete.');
+        if (task.state !== 'open') throw conflict('Only open tasks can be completed.');
         const transaction = await client.transaction('write');
         try {
           const update = await transaction.execute({ sql: 'UPDATE records SET state=\'completed\',version=version+1,updated=? WHERE id=? AND version=?', args: [at, taskId, Number(task.version)] });

@@ -59,6 +59,8 @@ export const actionCatalog = [
     id: 'routine.save', version: 1, type: 'app', title: 'Add Space routine',
     description: 'Choose when a workspace and role should become your active Space.', interfaceKey: 'form',
     fields: [
+      { key: 'id', label: 'Routine', kind: 'text', hidden: true },
+      { key: 'baseVersion', label: 'Version', kind: 'number', hidden: true },
       { key: 'label', label: 'Context name', kind: 'text', required: true },
       { key: 'workspace', label: 'Workspace', kind: 'text', required: true },
       { key: 'role', label: 'Your role', kind: 'text' },
@@ -68,6 +70,15 @@ export const actionCatalog = [
       { key: 'priority', label: 'Priority', kind: 'number', defaultValue: '0' },
     ],
     output: ['record'], roles: ['owner'], effects: ['routine_save'],
+  },
+  {
+    id: 'routine.remove', version: 1, type: 'app', title: 'Remove Space routine',
+    description: 'Stop this routine from selecting a Space.', interfaceKey: 'confirmation',
+    fields: [
+      { key: 'id', label: 'Routine', kind: 'text', required: true, hidden: true },
+      { key: 'baseVersion', label: 'Version', kind: 'number', required: true, hidden: true },
+    ],
+    output: ['id'], roles: ['owner'], effects: ['routine_remove'],
   },
   {
     id: 'contact.create', version: 1, type: 'app', title: 'Add person',

@@ -49,10 +49,11 @@ function minute(value: string): number | null {
 }
 
 function active(routine: Routine, day: number, current: number): boolean {
-  if (routine.days?.length && !routine.days.includes(day)) return false;
   const start = minute(routine.start); const end = minute(routine.end);
   if (start === null || end === null || start === end) return false;
-  return start < end ? current >= start && current < end : current >= start || current < end;
+  const runsOn = (weekday: number) => !routine.days?.length || routine.days.includes(weekday);
+  if (start < end) return runsOn(day) && current >= start && current < end;
+  return (runsOn(day) && current >= start) || (runsOn((day + 6) % 7) && current < end);
 }
 
 function title(value: string): string {
@@ -93,7 +94,7 @@ export function resolveContext(
   }
 
   const personal = accesses.find((item) => item.workspace.mode === 'personal') || accesses[0];
-  const label = personal.workspace.mode === 'personal' && clock.minute < 12 * 60 ? 'Morning' : personal.workspace.mode === 'personal' ? 'Personal' : personal.workspace.name;
+  const label = personal.workspace.mode === 'personal' ? 'Personal' : personal.workspace.name;
   return { context: view(personal, label, 'default', 1, false), decision: 'automatic', alternatives: [] };
 }
 

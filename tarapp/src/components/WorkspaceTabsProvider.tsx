@@ -79,7 +79,7 @@ export function WorkspaceTabsProvider({ children }: React.PropsWithChildren) {
 }
 
 const styles = StyleSheet.create({
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14, padding: 24, backgroundColor: '#fff' },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14, padding: 24, backgroundColor: '#FFFFFF' },
   error: { color: '#b42318', fontSize: 15, lineHeight: 22, textAlign: 'center' },
   retry: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 18 },
   retryText: { color: tokens.color.accent, fontSize: 15, fontWeight: '700' },

@@ -268,7 +268,7 @@ export default function RecordDetailModal({ visible, record, scope, onClose, onA
         </ScrollView>
 
         <View style={[styles.actionBar, { paddingBottom: Math.max(insets.bottom, 16) }]}>
-          {isTask && record.state !== 'completed' && (
+          {isTask && record.state === 'open' && (
             <Pressable
               style={styles.primaryAction}
               onPress={() => {
@@ -307,7 +307,21 @@ export default function RecordDetailModal({ visible, record, scope, onClose, onA
             </Pressable>
           )}
 
-          <Pressable
+          {type === 'routine' ? <Pressable
+            style={styles.secondaryAction}
+            onPress={() => {
+              onClose();
+              onAction('routine.save', {
+                id: record.id, baseVersion: record.version, label: record.title,
+                workspace: data.workspace, role: data.role || '', start: data.start, end: data.end,
+                days: Array.isArray(data.days) ? data.days.join(',') : '0,1,2,3,4,5,6',
+                priority: data.priority ?? 0,
+              }, 'Edit Space routine');
+            }}
+          >
+            <Ionicons name="pencil-outline" size={16} color={colors.ink} />
+            <Text style={styles.secondaryActionText}>Edit routine</Text>
+          </Pressable> : !isOrder && !isProduct && type !== 'site' && type !== 'relationship' ? <Pressable
             style={[styles.secondaryAction, (isTask || isOrder) && { flex: 1 }]}
             onPress={() => {
               onClose();
@@ -320,7 +334,14 @@ export default function RecordDetailModal({ visible, record, scope, onClose, onA
           >
             <Ionicons name="pencil-outline" size={16} color={colors.ink} />
             <Text style={styles.secondaryActionText}>Edit Record</Text>
-          </Pressable>
+          </Pressable> : null}
+          {type === 'routine' ? <Pressable
+            style={styles.secondaryAction}
+            onPress={() => { onClose(); onAction('routine.remove', { id: record.id, baseVersion: record.version }, `Remove ${record.title}?`); }}
+          >
+            <Ionicons name="trash-outline" size={16} color={colors.red} />
+            <Text style={[styles.secondaryActionText, { color: colors.red }]}>Remove</Text>
+          </Pressable> : null}
         </View>
       </View>
     </Modal>

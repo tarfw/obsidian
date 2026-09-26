@@ -106,7 +106,7 @@ export default function WorkspaceTeam({ scope, name, onClose, onChanged }: { sco
           <Text style={styles.title}>Members & chat</Text>
         </View>
         <Pressable accessibilityRole="button" accessibilityLabel="Close members and chat" onPress={onClose} style={styles.close}>
-          <Ionicons name="close" size={21} color={palette.ink} />
+          <Ionicons name="close" size={22} color={palette.muted} />
         </Pressable>
       </View>
       <View style={styles.tabs} accessibilityRole="tablist">
@@ -130,22 +130,26 @@ export default function WorkspaceTeam({ scope, name, onClose, onChanged }: { sco
               {!adding ? button('Add member', () => { setEditing(null); setSelectedRole(roles[0]); setWorkRole('general'); setAdding(true); }, false, 'primary') : null}
             </View>
             <View style={styles.memberList}>
-              {members.map((member) => <View key={member.id} style={styles.memberRow}>
-                <View style={[styles.avatar, member.state === 'revoked' && styles.avatarMuted]}>
-                  <Text style={[styles.avatarText, member.state === 'revoked' && styles.avatarTextMuted]}>{(member.name || member.email).trim().charAt(0).toUpperCase()}</Text>
-                </View>
-                <View style={styles.memberIdentity}>
-                  <Text numberOfLines={1} style={styles.memberName}>{member.name || member.email}</Text>
-                  <Text numberOfLines={1} style={styles.memberMeta}>{member.name ? `${member.email} · ` : ''}{roleLabel(member)}</Text>
-                </View>
-                <View style={[styles.state, member.state === 'active' ? styles.stateActive : member.state === 'pending' ? styles.statePending : styles.stateRevoked]}>
-                  <Text style={[styles.stateText, member.state === 'active' ? styles.stateActiveText : member.state === 'pending' ? styles.statePendingText : styles.stateRevokedText]}>{member.state}</Text>
-                </View>
-                {member.id !== self && member.role !== 'owner' && (member.role !== 'admin' || chat.role === 'owner') && member.state !== 'revoked' ? <View style={styles.rowActions}>
-                  <Pressable accessibilityRole="button" accessibilityLabel={`Edit ${member.email}`} onPress={() => edit(member)} hitSlop={8} style={styles.iconButton}><Ionicons name="ellipsis-horizontal" size={18} color={palette.muted} /></Pressable>
-                  <Pressable accessibilityRole="button" accessibilityLabel={`Remove ${member.email}`} onPress={() => remove(member)} hitSlop={8} style={styles.iconButton}><Ionicons name="person-remove-outline" size={17} color={palette.red} /></Pressable>
-                </View> : null}
-              </View>)}
+              {members.map((member) => {
+                const editable = member.id !== self && member.role !== 'owner' && (member.role !== 'admin' || chat.role === 'owner') && member.state !== 'revoked';
+                return (
+                  <Pressable key={member.id} accessibilityRole={editable ? 'button' : undefined} accessibilityLabel={editable ? `Edit ${member.email}` : undefined} onPress={editable ? () => edit(member) : undefined} style={styles.memberRow}>
+                    <View style={[styles.avatar, member.state === 'revoked' && styles.avatarMuted]}>
+                      <Text style={[styles.avatarText, member.state === 'revoked' && styles.avatarTextMuted]}>{(member.name || member.email).trim().charAt(0).toUpperCase()}</Text>
+                    </View>
+                    <View style={styles.memberIdentity}>
+                      <Text numberOfLines={1} style={styles.memberName}>{member.name || member.email}</Text>
+                      <Text numberOfLines={1} style={styles.memberMeta}>{member.name ? `${member.email} · ` : ''}{roleLabel(member)}</Text>
+                    </View>
+                    <View style={[styles.state, member.state === 'active' ? styles.stateActive : member.state === 'pending' ? styles.statePending : styles.stateRevoked]}>
+                      <Text style={[styles.stateText, member.state === 'active' ? styles.stateActiveText : member.state === 'pending' ? styles.statePendingText : styles.stateRevokedText]}>{member.state}</Text>
+                    </View>
+                    {editable ? <View style={styles.rowActions}>
+                      <Pressable accessibilityRole="button" accessibilityLabel={`Remove ${member.email}`} onPress={() => remove(member)} hitSlop={8} style={styles.iconButton}><Ionicons name="person-remove-outline" size={17} color={palette.red} /></Pressable>
+                    </View> : null}
+                  </Pressable>
+                );
+              })}
               {members.length === 0 ? <View style={styles.emptyInline}><Text style={styles.muted}>No members to show.</Text></View> : null}
             </View>
             {adding ? <View style={styles.form}>
@@ -199,39 +203,39 @@ export default function WorkspaceTeam({ scope, name, onClose, onChanged }: { sco
   </Modal>;
 }
 
-const palette = { ink: '#191C22', muted: '#656C78', faint: '#9298A3', line: '#E6E8ED', wash: '#F5F6F8', blue: '#3157A8', blueWash: '#EDF2FF', red: '#B54747', redWash: '#FFF0EF', green: '#19734D', greenWash: '#EAF6EF', amber: '#956300', amberWash: '#FFF5DB' };
+const palette = { ink: '#1B1C20', muted: '#626671', faint: '#8B8F99', line: '#E3E7EF', wash: '#F1F3F8', container: '#EAEFF7', blue: '#3157A8', selected: '#173673', selectedWash: '#DCE5FF', red: '#B42318', redWash: '#FFF1F0', green: '#18865B', greenWash: '#E8F7F0', amber: '#A66D00', amberWash: '#FFF7E6' };
 const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: '#FFFFFF' },
-  header: { minHeight: 64, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, paddingVertical: 10 },
-  headerCopy: { flex: 1, gap: 2 }, eyebrow: { color: palette.muted, fontSize: 12, fontWeight: '500' }, title: { color: palette.ink, fontSize: 21, fontWeight: '700', letterSpacing: -0.3 },
-  close: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 22, backgroundColor: palette.wash },
-  tabs: { flexDirection: 'row', gap: 4, paddingHorizontal: 18, borderBottomWidth: 1, borderColor: palette.line },
-  tab: { minWidth: 88, minHeight: 46, alignItems: 'center', justifyContent: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent' },
-  tabSelected: { borderBottomColor: palette.blue }, tabText: { color: palette.muted, fontSize: 14, fontWeight: '600' }, tabTextSelected: { color: palette.blue },
-  content: { paddingHorizontal: 18, paddingTop: 18, gap: 16 },
-  sectionHeader: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
-  sectionTitle: { color: palette.ink, fontSize: 16, fontWeight: '700' }, muted: { color: palette.muted, fontSize: 13, lineHeight: 18 },
+  header: { minHeight: 60, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, paddingVertical: 8 },
+  headerCopy: { flex: 1, gap: 1 }, eyebrow: { color: palette.muted, fontSize: 12, fontWeight: '600' }, title: { color: palette.ink, fontSize: 20, fontWeight: '800', letterSpacing: -0.3 },
+  close: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 20 },
+  tabs: { flexDirection: 'row', gap: 4, alignSelf: 'flex-start', marginLeft: 18, marginBottom: 4, padding: 4, borderRadius: 22, backgroundColor: palette.container },
+  tab: { minHeight: 38, paddingHorizontal: 22, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  tabSelected: { backgroundColor: palette.blue }, tabText: { color: palette.muted, fontSize: 14, fontWeight: '700' }, tabTextSelected: { color: '#FFFFFF' },
+  content: { paddingHorizontal: 18, paddingTop: 16, gap: 14 },
+  sectionHeader: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  sectionTitle: { color: palette.ink, fontSize: 16, fontWeight: '800' }, muted: { color: palette.muted, fontSize: 13, lineHeight: 18 },
   loading: { minHeight: 88, alignItems: 'center', justifyContent: 'center', gap: 8 },
-  button: { minHeight: 44, paddingHorizontal: 14, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
-  primary: { backgroundColor: palette.blue }, quiet: { backgroundColor: palette.wash }, danger: { backgroundColor: palette.redWash },
-  buttonText: { color: palette.muted, fontSize: 13, fontWeight: '600' }, primaryText: { color: '#FFFFFF' }, dangerText: { color: palette.red }, disabled: { opacity: 0.46 }, pressed: { opacity: 0.78 },
-  memberList: { borderTopWidth: 1, borderColor: palette.line }, memberRow: { minHeight: 68, flexDirection: 'row', alignItems: 'center', gap: 10, borderBottomWidth: 1, borderColor: palette.line },
-  avatar: { width: 38, height: 38, borderRadius: 19, backgroundColor: palette.blueWash, alignItems: 'center', justifyContent: 'center' }, avatarMuted: { backgroundColor: palette.wash }, avatarText: { color: palette.blue, fontSize: 14, fontWeight: '700' }, avatarTextMuted: { color: palette.faint },
-  memberIdentity: { flex: 1, minWidth: 70, gap: 3 }, memberName: { color: palette.ink, fontSize: 14, fontWeight: '600' }, memberMeta: { color: palette.muted, fontSize: 12 },
-  state: { borderRadius: 5, paddingHorizontal: 7, paddingVertical: 4 }, stateActive: { backgroundColor: palette.greenWash }, statePending: { backgroundColor: palette.amberWash }, stateRevoked: { backgroundColor: palette.wash },
-  stateText: { fontSize: 10, fontWeight: '700', textTransform: 'capitalize' }, stateActiveText: { color: palette.green }, statePendingText: { color: palette.amber }, stateRevokedText: { color: palette.muted },
-  rowActions: { flexDirection: 'row', alignItems: 'center', gap: 1 }, iconButton: { width: 36, height: 44, alignItems: 'center', justifyContent: 'center' }, emptyInline: { paddingVertical: 18 },
-  form: { padding: 14, gap: 12, borderWidth: 1, borderColor: palette.line, borderRadius: 12, backgroundColor: '#FBFBFC' }, formHeading: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }, formEmail: { color: palette.muted, fontSize: 14 },
-  input: { minHeight: 46, paddingHorizontal: 12, borderWidth: 1, borderColor: palette.line, borderRadius: 9, color: palette.ink, fontSize: 14, backgroundColor: '#FFFFFF' },
-  roleOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 }, roleOption: { minHeight: 38, paddingHorizontal: 11, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: palette.line, borderRadius: 8, backgroundColor: '#FFFFFF' },
-  roleOptionSelected: { borderColor: palette.blue, backgroundColor: palette.blueWash }, roleText: { color: palette.muted, fontSize: 12, fontWeight: '600' }, roleTextSelected: { color: palette.blue }, helper: { color: palette.muted, fontSize: 12, lineHeight: 17 },
-  formFooter: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8 }, accessNote: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 14, borderRadius: 10, backgroundColor: palette.wash },
-  connection: { padding: 14, gap: 12, borderWidth: 1, borderColor: palette.line, borderRadius: 12 }, connectionTop: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 10 }, providerMark: { width: 38, height: 38, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.blueWash },
-  connectionCopy: { flex: 1, gap: 2 }, connectionName: { color: palette.ink, fontSize: 14, fontWeight: '700' }, connected: { flexDirection: 'row', alignItems: 'center', gap: 5 }, connectedDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: palette.green }, connectedText: { color: palette.green, fontSize: 11, fontWeight: '600' },
-  divider: { height: 1, backgroundColor: palette.line, marginVertical: 2 }, fieldLabel: { color: palette.ink, fontSize: 13, fontWeight: '600' }, adminLink: { alignItems: 'flex-start', marginTop: 2 },
-  setup: { padding: 14, gap: 13, borderWidth: 1, borderColor: palette.line, borderRadius: 12 }, providerOptions: { gap: 7 }, providerOption: { minHeight: 54, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, borderWidth: 1, borderColor: palette.line, borderRadius: 9 },
-  providerOptionSelected: { borderColor: palette.blue, backgroundColor: palette.blueWash }, providerText: { color: palette.ink, fontSize: 13, fontWeight: '600' }, providerTextSelected: { color: palette.blue }, providerAvailability: { color: palette.muted, fontSize: 11 },
-  commandBox: { padding: 14, gap: 9, borderRadius: 10, backgroundColor: palette.wash }, commandText: { color: palette.ink, fontFamily: 'monospace', fontSize: 13, lineHeight: 19, padding: 10, borderRadius: 7, backgroundColor: '#FFFFFF' },
-  request: { padding: 14, gap: 10, borderWidth: 1, borderColor: palette.line, borderRadius: 10 }, activity: { gap: 8, paddingTop: 4 }, activityRow: { minHeight: 54, justifyContent: 'center', paddingVertical: 8, borderTopWidth: 1, borderColor: palette.line }, activityCopy: { gap: 3 }, activityState: { color: palette.ink, fontSize: 13, fontWeight: '600', textTransform: 'capitalize' }, refreshRow: { alignItems: 'flex-start' },
-  error: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 11, borderRadius: 9, backgroundColor: palette.redWash }, errorText: { flex: 1, color: palette.red, fontSize: 13, lineHeight: 18 }, empty: { gap: 12, paddingVertical: 20 },
+  button: { minHeight: 42, paddingHorizontal: 18, borderRadius: 21, alignItems: 'center', justifyContent: 'center' },
+  primary: { backgroundColor: palette.blue }, quiet: { backgroundColor: palette.container }, danger: { backgroundColor: palette.redWash },
+  buttonText: { color: palette.ink, fontSize: 13, fontWeight: '700' }, primaryText: { color: '#FFFFFF' }, dangerText: { color: palette.red }, disabled: { opacity: 0.46 }, pressed: { opacity: 0.78 },
+  memberList: { gap: 2 }, memberRow: { minHeight: 64, flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 6, borderRadius: 16 },
+  avatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: palette.selectedWash, alignItems: 'center', justifyContent: 'center' }, avatarMuted: { backgroundColor: palette.wash }, avatarText: { color: palette.selected, fontSize: 15, fontWeight: '800' }, avatarTextMuted: { color: palette.faint },
+  memberIdentity: { flex: 1, minWidth: 70, gap: 2 }, memberName: { color: palette.ink, fontSize: 15, fontWeight: '700' }, memberMeta: { color: palette.muted, fontSize: 12 },
+  state: { borderRadius: 9, paddingHorizontal: 8, paddingVertical: 4 }, stateActive: { backgroundColor: palette.greenWash }, statePending: { backgroundColor: palette.amberWash }, stateRevoked: { backgroundColor: palette.wash },
+  stateText: { fontSize: 10, fontWeight: '800', textTransform: 'capitalize' }, stateActiveText: { color: palette.green }, statePendingText: { color: palette.amber }, stateRevokedText: { color: palette.muted },
+  rowActions: { flexDirection: 'row', alignItems: 'center' }, iconButton: { width: 38, height: 44, alignItems: 'center', justifyContent: 'center' }, emptyInline: { paddingVertical: 18 },
+  form: { padding: 16, gap: 12, borderRadius: 24, backgroundColor: palette.wash }, formHeading: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }, formEmail: { color: palette.muted, fontSize: 14 },
+  input: { minHeight: 48, paddingHorizontal: 14, borderRadius: 14, color: palette.ink, fontSize: 14, backgroundColor: '#FFFFFF' },
+  roleOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 }, roleOption: { minHeight: 38, paddingHorizontal: 14, alignItems: 'center', justifyContent: 'center', borderRadius: 19, backgroundColor: '#FFFFFF' },
+  roleOptionSelected: { backgroundColor: palette.selectedWash }, roleText: { color: palette.muted, fontSize: 13, fontWeight: '700' }, roleTextSelected: { color: palette.selected }, helper: { color: palette.muted, fontSize: 12, lineHeight: 17 },
+  formFooter: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8 }, accessNote: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 14, borderRadius: 16, backgroundColor: palette.container },
+  connection: { padding: 16, gap: 12, borderRadius: 24, backgroundColor: '#FFFFFF', borderWidth: StyleSheet.hairlineWidth, borderColor: palette.line }, connectionTop: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 10 }, providerMark: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.selectedWash },
+  connectionCopy: { flex: 1, gap: 2 }, connectionName: { color: palette.ink, fontSize: 15, fontWeight: '800' }, connected: { flexDirection: 'row', alignItems: 'center', gap: 5 }, connectedDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: palette.green }, connectedText: { color: palette.green, fontSize: 11, fontWeight: '700' },
+  divider: { height: 1, backgroundColor: palette.line, marginVertical: 2 }, fieldLabel: { color: palette.ink, fontSize: 13, fontWeight: '700' }, adminLink: { alignItems: 'flex-start', marginTop: 2 },
+  setup: { padding: 16, gap: 13, borderRadius: 24, backgroundColor: '#FFFFFF', borderWidth: StyleSheet.hairlineWidth, borderColor: palette.line }, providerOptions: { gap: 8 }, providerOption: { minHeight: 54, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, borderRadius: 16, borderWidth: 1, borderColor: palette.line },
+  providerOptionSelected: { borderColor: palette.selectedWash, backgroundColor: palette.selectedWash }, providerText: { color: palette.ink, fontSize: 14, fontWeight: '700' }, providerTextSelected: { color: palette.selected }, providerAvailability: { color: palette.muted, fontSize: 11 },
+  commandBox: { padding: 16, gap: 9, borderRadius: 24, backgroundColor: palette.container }, commandText: { color: palette.ink, fontFamily: 'monospace', fontSize: 13, lineHeight: 19, padding: 12, borderRadius: 14, backgroundColor: '#FFFFFF' },
+  request: { padding: 16, gap: 10, borderRadius: 24, backgroundColor: '#FFFFFF', borderWidth: StyleSheet.hairlineWidth, borderColor: palette.line }, activity: { gap: 6, paddingTop: 4 }, activityRow: { minHeight: 52, justifyContent: 'center', paddingVertical: 8, borderTopWidth: StyleSheet.hairlineWidth, borderColor: palette.line }, activityCopy: { gap: 3 }, activityState: { color: palette.ink, fontSize: 13, fontWeight: '700', textTransform: 'capitalize' }, refreshRow: { alignItems: 'flex-start' },
+  error: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12, borderRadius: 16, backgroundColor: palette.redWash }, errorText: { flex: 1, color: palette.red, fontSize: 13, lineHeight: 18 }, empty: { gap: 12, paddingVertical: 20 },
 });

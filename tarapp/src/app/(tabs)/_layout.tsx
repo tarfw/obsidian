@@ -6,7 +6,7 @@ import { tokens } from '@/components/ds/tokens';
 export default function TabsLayout() {
   return <WorkspaceTabsProvider>
     <NativeTabs
-      backgroundColor={tokens.color.surface}
+      backgroundColor="#FFFFFF"
       tintColor={tokens.color.accentSelected}
       iconColor={{ default: tokens.color.inkMuted, selected: tokens.color.accentSelected }}
       labelStyle={{ default: { color: tokens.color.inkMuted }, selected: { color: tokens.color.accentSelected, fontWeight: '700' } }}
@@ -22,7 +22,7 @@ export default function TabsLayout() {
         <NativeTabs.Trigger.Icon sf={{ default: 'tray', selected: 'tray.fill' }} md="inbox" />
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="ask">
-        <NativeTabs.Trigger.Label>tar</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Label>Ask</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon src={require('../../../assets/images/tabIcons/tar.png')} renderingMode="original" />
       </NativeTabs.Trigger>
     </NativeTabs>

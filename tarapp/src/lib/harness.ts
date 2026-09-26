@@ -30,7 +30,9 @@ export interface HarnessInterfaceContract { key: string; version: number; title:
 export type HarnessCanvasCard =
   | { id: string; kind: 'data'; title: string; display: 'value' | 'report' | 'chart'; value: number | string; caption?: string }
   | { id: string; kind: 'action'; title: string; description: string; actionId: string; initialInput?: Record<string, unknown> }
-  | { id: string; kind: 'flow'; title: string; description: string; flowId: string; actionId?: string; initialInput?: Record<string, unknown> };
+  | { id: string; kind: 'flow'; title: string; description: string; flowId: string; actionId?: string; initialInput?: Record<string, unknown> }
+  | { id: string; kind: 'inbox'; title: string; description: string };
+export interface HarnessSpaceSection { id: string; title: string; cards: HarnessCanvasCard[]; }
 export interface HarnessSpaceContext {
   id: string; label: string; role: string; owner: string; confidence: number;
   source: 'default' | 'routine' | 'override'; held: boolean;
@@ -38,7 +40,7 @@ export interface HarnessSpaceContext {
 }
 export interface HarnessSpace {
   context: HarnessSpaceContext; decision: 'automatic' | 'confirm'; alternatives: HarnessSpaceContext[];
-  sections: { id: string; title: string; cards: HarnessCanvasCard[] }[];
+  sections: HarnessSpaceSection[];
 }
 export interface HarnessInboxSource { workspace: HarnessWorkspace; tasks: HarnessRecord[]; orders: HarnessRecord[]; permissions: InboxPermissions; }
 export interface HarnessInboxItem { kind: 'task' | 'order'; item: HarnessRecord; workspace: HarnessWorkspace; }
@@ -105,10 +107,9 @@ export const harness = {
   disconnectChat: (slug: string, destination: boolean) => request(workspacePath(slug, 'team-chat/disconnect'), { method: 'POST', body: { destination } }),
   actions: () => request<{ actions: HarnessAction[]; interfaces: HarnessInterfaceContract[] }>('/v1/actions'),
   listWorkspaces: () => request<{ workspaces: HarnessWorkspace[] }>('/v1/workspaces'),
-  space: (scope?: string) => {
+  space: () => {
     const zone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
     const query = new URLSearchParams({ zone, at: String(Date.now()) });
-    if (scope) query.set('scope', scope);
     return request<HarnessSpace>(`/v1/space?${query.toString()}`);
   },
   holdContext: (scope: string, duration = 43_200_000) => request<{ context: { mode: 'hold'; scope: string; expires: number } }>('/v1/context', { method: 'PUT', body: { mode: 'hold', scope, duration } }),

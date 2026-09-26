@@ -5,7 +5,7 @@ import { useWorkspaceTabs } from '@/components/WorkspaceTabsProvider';
 
 export default function WorkspaceTabScreen({ tab }: { tab: WorkspaceTab }) {
   const { current, workspaces, selectWorkspace, createWorkspace } = useWorkspaceTabs();
-  return <View style={{ flex: 1, backgroundColor: '#fff' }}>
+  return <View style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
     <HarnessWorkspaceCanvas
       tab={tab}
       scope={current.slug}

@@ -172,4 +172,4 @@ projections or artifacts, not editable business truth.
 - POS retains server pricing, returns, register and stock controls.
 - Space and Inbox consume commerce records through authorized projections.
 
-See [space.md](space.md), [site.md](site.md) and [tarv12.md](tarv12.md).
+See the current [space.md](space.md) goal and linked [site.md](site.md) contract.

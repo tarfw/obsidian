@@ -2,6 +2,7 @@ import type { HarnessAction, HarnessInterfaceContract } from '@/lib/harness';
 
 export interface ActionInterfaceProps {
   visible: boolean;
+  inline?: boolean;
   scope: string;
   action: HarnessAction;
   contract: HarnessInterfaceContract;

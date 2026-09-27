@@ -135,6 +135,7 @@ export default function PosInterface(props: ActionInterfaceProps) {
       setDraftSaving(true);
       void harness.executeAction<{ order: PosRecord }>(props.scope, 'pos.order.save', {
         items: cart.map((line) => ({ productId: line.product.id, version: line.product.version, quantity: line.quantity })), discountBps, customerId: customer?.id || '', orderId: draftRef.current?.id, version: draftRef.current?.version, draftKey: draftKey.current,
+        submitted: false,
       }, createOperationKey('pos.order.save')).then((result) => {
         draftRef.current = { id: result.order.id, version: result.order.version };
         draftSignature.current = signature;
@@ -275,14 +276,15 @@ export default function PosInterface(props: ActionInterfaceProps) {
       { key: 'amount', label: session ? 'Cash counted' : 'Opening cash', numeric: true, value: '0', hint: session ? 'Expected cash: ' + money(session.expected, currency) : 'Cash in the drawer before sales.' },
     ], save: (values) => saveAction(session ? 'pos.register.close' : 'pos.register.open', session ? { counted: minorUnits(values.amount), registerId: session.id } : { opening: minorUnits(values.amount) }) });
   };
-  const saveToInbox = () => {
+  const saveForNow = () => {
     if (!cart.length) return;
     if (!Number.isSafeInteger(discountBps) || discountBps < 0 || discountBps > 10000) { Alert.alert('Invalid discount', 'Enter a percentage from 0 to 100.'); return; }
     setForm({ title: 'Order details', submit: 'Save order', fields: [
       { key: 'orderType', label: 'Order type', value: 'counter', hint: 'counter, dine-in, takeaway or delivery' },
       { key: 'table', label: 'Table number', hint: 'Optional' },
+      { key: 'destination', label: 'Delivery address', hint: 'Required for delivery orders.' },
     ], save: async (values) => {
-      const result = await execute('pos.order.save', { items: cart.map((line) => ({ productId: line.product.id, version: line.product.version, quantity: line.quantity })), discountBps, customerId: customer?.id, orderId: draftRef.current?.id, version: draftRef.current?.version, draftKey: draftKey.current, orderType: values.orderType, table: values.table });
+      const result = await execute('pos.order.save', { items: cart.map((line) => ({ productId: line.product.id, version: line.product.version, quantity: line.quantity })), discountBps, customerId: customer?.id, orderId: draftRef.current?.id, version: draftRef.current?.version, draftKey: draftKey.current, orderType: values.orderType, table: values.table, destination: values.destination, submitted: true });
       const saved = result.order as PosRecord;
       draftRef.current = { id: saved.id, version: saved.version }; draftSignature.current = JSON.stringify({ items: cart.map((line) => [line.product.id, line.product.version, line.quantity]), discountBps, customerId: customer?.id || '' }); setDraftOrderId(saved.id);
     } });
@@ -327,6 +329,41 @@ export default function PosInterface(props: ActionInterfaceProps) {
     const result = await execute('pos.refund', { orderId: sale.id, quantities, reason: values.reason, restock: values.restock.toLowerCase() === 'yes', returned: true, reference: values.reference });
     setOrder(result.order as PosRecord); await refreshAfterSave();
   } });
+  const resumeOrder = async (selected: PosRecord) => {
+    setBusy(true);
+    setError('');
+    try {
+      const lines = Array.isArray(selected.data.lines) ? selected.data.lines as SaleLine[] : [];
+      const products = await Promise.all(lines.map((line) => harness.pos<{ items: PosRecord[] }>(props.scope, 'products', line.productId)));
+      const next = lines.map((line, index) => {
+        const product = products[index].items.find((item) => item.id === line.productId);
+        if (!product) throw new Error(line.title + ' is no longer available.');
+        return { product, quantity: line.quantity };
+      });
+      const customerId = typeof selected.data.customerId === 'string' ? selected.data.customerId : '';
+      const customers = customerId ? await harness.pos<{ items: PosRecord[] }>(props.scope, 'customers', customerId) : null;
+      draftRef.current = { id: selected.id, version: selected.version };
+      draftSignature.current = JSON.stringify({ items: next.map((line) => [line.product.id, line.product.version, line.quantity]),
+        discountBps: Number(selected.data.discountBps || 0), customerId });
+      setDraftOrderId(selected.id); setCart(next); setCustomer(customers?.items.find((item) => item.id === customerId) || null);
+      setDiscount(String(Number(selected.data.discountBps || 0) / 100)); setSection('sell'); setOrder(null); setCartOpen(true);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not open the order.'); }
+    finally { setBusy(false); }
+  };
+  const acceptOrder = async (selected: PosRecord) => {
+    setBusy(true);
+    try {
+      const result = await execute('pos.order.accept', { orderId: selected.id, version: selected.version });
+      setOrder(result.order as PosRecord); await refreshAfterSave();
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not accept the order.'); }
+    finally { setBusy(false); }
+  };
+  const rejectOrder = (selected: PosRecord) => setForm({ title: 'Reject order', submit: 'Reject order', fields: [
+    { key: 'reason', label: 'Reason' },
+  ], save: async (values) => {
+    const result = await execute('pos.order.reject', { orderId: selected.id, version: selected.version, reason: values.reason });
+    setOrder(result.order as PosRecord); await refreshAfterSave();
+  } });
   const shareReceipt = async (sale: PosRecord) => {
     const lines = sale.data.lines as SaleLine[];
     const code = String(sale.data.currency);
@@ -343,7 +380,7 @@ export default function PosInterface(props: ActionInterfaceProps) {
     <View style={styles.panelHeading}><Text style={styles.heading}>Cart · {count}</Text><TouchableOpacity style={styles.touch} onPress={() => { setCart([]); setDiscount('0'); setCustomer(null); }}><Text style={styles.muted}>Clear</Text></TouchableOpacity></View>
     <TouchableOpacity style={styles.customer} onPress={() => chooseSection('customers')}><Ionicons name="person-add-outline" size={18} color="#565b60" /><Text style={styles.body}>{customer?.title || 'Add customer'}</Text></TouchableOpacity>
     <ScrollView style={styles.cartLines}>{cart.map((line) => <View key={line.product.id} style={styles.line}><View style={styles.copy}><Text style={styles.body}>{line.product.title}</Text><Text style={styles.muted}>{money(Number(line.product.data.price), currency)}</Text></View><View style={styles.stepper}><TouchableOpacity accessibilityLabel={'Remove one ' + line.product.title} style={styles.touch} onPress={() => changeQuantity(line.product.id, -1)}><Ionicons name="remove" size={18} /></TouchableOpacity><Text>{line.quantity}</Text><TouchableOpacity accessibilityLabel={'Add one ' + line.product.title} style={styles.touch} onPress={() => changeQuantity(line.product.id, 1)}><Ionicons name="add" size={18} /></TouchableOpacity></View></View>)}{!cart.length ? <Text style={styles.empty}>Add products to start a sale.</Text> : null}</ScrollView>
-    <View style={styles.totals}><View style={styles.totalRow}><Text style={styles.muted}>Discount %</Text><TextInput accessibilityLabel="Discount percentage" style={styles.discount} keyboardType="decimal-pad" value={discount} onChangeText={setDiscount} /></View><Total label="Subtotal" value={money(totals.subtotal, currency)} /><Total label="Discount" value={'−' + money(totals.discount, currency)} /><Total label="Tax" value={money(totals.tax, currency)} /><Total label="Total" value={money(totals.total, currency)} bold /><View style={styles.payments}><Button title="Order details" disabled={!cart.length || busy || draftSaving} secondary onPress={saveToInbox} /><Button title="Cash" disabled={!cart.length || busy || draftSaving} onPress={() => checkout('cash')} /><Button title="UPI" disabled={!cart.length || busy || draftSaving} onPress={() => checkout('upi')} /></View></View>
+    <View style={styles.totals}><View style={styles.totalRow}><Text style={styles.muted}>Discount %</Text><TextInput accessibilityLabel="Discount percentage" style={styles.discount} value={discount} keyboardType="decimal-pad" onChangeText={setDiscount} /></View><Total label="Subtotal" value={money(totals.subtotal, currency)} /><Total label="Discount" value={'−' + money(totals.discount, currency)} /><Total label="Tax" value={money(totals.tax, currency)} /><Total label="Total" value={money(totals.total, currency)} bold /><View style={styles.payments}><Button title="Order details" disabled={!cart.length || busy || draftSaving} secondary onPress={saveForNow} /><Button title="Cash" disabled={!cart.length || busy || draftSaving} onPress={() => checkout('cash')} /><Button title="UPI" disabled={!cart.length || busy || draftSaving} onPress={() => checkout('upi')} /></View></View>
   </View>;
 
   return <Modal visible={props.visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={back}>
@@ -355,9 +392,29 @@ export default function PosInterface(props: ActionInterfaceProps) {
         <View style={styles.copy}><Text numberOfLines={1} style={styles.storeName}>{overview?.settings?.title || 'Point of sale'}</Text><Text style={styles.small}>{overview?.register ? 'Register open' : 'Register closed'}</Text></View>
         {overview?.canManage ? <TouchableOpacity accessibilityLabel="Store options" style={styles.touch} onPress={showStoreMenu}><Ionicons name="ellipsis-horizontal" size={22} /></TouchableOpacity> : null}
       </View>
+      {overview?.settings ? <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.navScroll} contentContainerStyle={styles.nav}>
+        {sections.map((item) => <TouchableOpacity key={item.key} accessibilityRole="tab" accessibilityState={{ selected: section === item.key }}
+          style={[styles.navItem, section === item.key && styles.navItemActive]} onPress={() => chooseSection(item.key)}>
+          <Text style={[styles.navText, section === item.key && styles.navTextActive]}>{item.label}</Text>
+        </TouchableOpacity>)}
+      </ScrollView> : null}
       {error ? <View style={styles.error}><Text style={styles.errorText}>{error}</Text></View> : null}
       {pending && !form ? <View style={styles.recovery}><Text style={styles.body}>An operation needs confirmation.</Text><Button title={busy ? 'Checking…' : 'Resolve pending operation'} disabled={busy} onPress={() => void recover()} /></View> : null}
-      {!overview ? <View style={styles.center}><ActivityIndicator /></View> : !overview.settings ? <View style={styles.center}><Text style={styles.heading}>Set up your store</Text><Text style={styles.empty}>Name, currency and location. Then add your products.</Text>{overview.canManage ? <Button title="Set up POS" onPress={setup} /> : <Text style={styles.muted}>Ask a workspace admin to set up POS.</Text>}</View> : order ? <ScrollView contentContainerStyle={styles.receipt}><Ionicons name={order.state === 'refunded' ? 'return-down-back-outline' : 'checkmark-circle'} size={38} color="#008060" /><Text style={styles.receiptTitle}>{order.state === 'refunded' ? 'Sale returned' : 'Payment recorded'}</Text><Text style={styles.muted}>{order.id.slice(-8).toUpperCase()} · {new Date(order.createdAt).toLocaleString()}</Text>{(order.data.lines as SaleLine[]).map((line) => <Total key={line.productId} label={line.quantity + ' × ' + line.title} value={money(line.total, String(order.data.currency))} />)}<Total label="Total" value={money(Number(order.data.total), String(order.data.currency))} bold /><Total label="Change" value={money(Number(order.data.change), String(order.data.currency))} /><Total label="Returned" value={money(Number(order.data.refundedTotal || 0), String(order.data.currency))} /><Text style={styles.muted}>{String(order.data.method).toUpperCase()}{order.data.customerName ? ' · ' + order.data.customerName : ''}</Text><Button title="Share receipt" onPress={() => { void shareReceipt(order).catch(() => Alert.alert('Could not share receipt')); }} />{overview.canManage && order.state !== 'refunded' ? <Button title="Return sale" secondary onPress={() => refund(order)} /> : null}<Button title="Done" secondary onPress={() => { setOrder(null); setRevision((value) => value + 1); }} /></ScrollView> : <View style={styles.main}>
+      {!overview ? <View style={styles.center}><ActivityIndicator /></View> : !overview.settings ? <View style={styles.center}><Text style={styles.heading}>Set up your store</Text><Text style={styles.empty}>Name, currency and location. Then add your products.</Text>{overview.canManage ? <Button title="Set up POS" onPress={setup} /> : <Text style={styles.muted}>Ask a workspace admin to set up POS.</Text>}</View> : order ? <ScrollView contentContainerStyle={styles.receipt}>
+        <Ionicons name={order.state === 'refunded' || order.state === 'cancelled' ? 'return-down-back-outline' : 'checkmark-circle'} size={38} color={order.state === 'cancelled' ? '#b42318' : '#008060'} />
+        <Text style={styles.receiptTitle}>{order.state === 'open' ? 'Open order' : order.state === 'cancelled' ? 'Order cancelled' : order.state === 'refunded' ? 'Sale returned' : order.state === 'partially_refunded' ? 'Partially returned' : 'Payment recorded'}</Text>
+        <Text style={styles.muted}>{order.id.slice(-8).toUpperCase()} · {new Date(order.createdAt).toLocaleString()}</Text>
+        {order.state === 'open' ? <Text style={styles.muted}>Review: {String(order.data.approval || 'pending')}{order.data.orderType === 'delivery' ? ' · Delivery: ' + String(order.data.delivery || 'unassigned') : ''}</Text> : null}
+        {order.data.table ? <Text style={styles.muted}>Table {String(order.data.table)}</Text> : null}
+        {order.data.destination ? <Text style={styles.muted}>Deliver to {String(order.data.destination)}</Text> : null}
+        {(Array.isArray(order.data.lines) ? order.data.lines as SaleLine[] : []).map((line) => <Total key={line.productId} label={line.quantity + ' × ' + line.title} value={money(line.total, String(order.data.currency))} />)}
+        <Total label="Total" value={money(Number(order.data.total), String(order.data.currency))} bold />
+        {order.state !== 'open' && order.state !== 'cancelled' ? <><Total label="Change" value={money(Number(order.data.change || 0), String(order.data.currency))} /><Total label="Returned" value={money(Number(order.data.refundedTotal || 0), String(order.data.currency))} /><Text style={styles.muted}>{String(order.data.method).toUpperCase()}{order.data.customerName ? ' · ' + order.data.customerName : ''}</Text><Button title="Share receipt" onPress={() => { void shareReceipt(order).catch(() => Alert.alert('Could not share receipt')); }} /></> : null}
+        {order.state === 'open' ? <><Button title="Continue order" disabled={busy} onPress={() => { void resumeOrder(order); }} />
+          {overview.canManage && order.data.approval === 'pending' ? <><Button title="Accept order" disabled={busy} secondary onPress={() => { void acceptOrder(order); }} /><Button title="Reject order" disabled={busy} secondary onPress={() => rejectOrder(order)} /></> : null}</> : null}
+        {overview.canManage && (order.state === 'paid' || order.state === 'partially_refunded') ? <Button title="Return sale" secondary onPress={() => refund(order)} /> : null}
+        <Button title="Done" secondary onPress={() => { setOrder(null); setRevision((value) => value + 1); }} />
+      </ScrollView> : <View style={styles.main}>
         {(section !== 'sell' || wide || !cartOpen) ? <View style={styles.catalog}>
           {section !== 'sell' ? <View style={styles.sectionHeading}><Text style={styles.heading}>{sections.find((item) => item.key === section)?.label}</Text>{section === 'stock' && overview.canManage ? <TouchableOpacity style={styles.touch} onPress={() => productForm()}><Ionicons name="add" size={24} /></TouchableOpacity> : section === 'customers' ? <TouchableOpacity style={styles.touch} onPress={() => customerForm()}><Ionicons name="add" size={24} /></TouchableOpacity> : null}</View> : null}
           {section !== 'register' ? <View style={styles.search}><Ionicons name="search" size={18} color="#6d7175" /><TextInput accessibilityLabel="Search" value={search} onChangeText={setSearch} placeholderTextColor="#6d7175" placeholder={section === 'sell' || section === 'stock' ? 'Search products or barcode' : 'Search ' + section} style={styles.searchInput} /></View> : null}
@@ -379,6 +436,9 @@ function Button({ title, onPress, disabled, secondary }: { title: string; onPres
 
 const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: '#fff' }, header: { height: 60, backgroundColor: '#fff', flexDirection: 'row', alignItems: 'center', gap: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: '#d2d5d8', paddingHorizontal: 8 },
+  navScroll: { flexGrow: 0, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: '#d2d5d8' }, nav: { minHeight: 48, paddingHorizontal: 12, alignItems: 'center', gap: 4 },
+  navItem: { minHeight: 44, paddingHorizontal: 14, alignItems: 'center', justifyContent: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent' },
+  navItemActive: { borderBottomColor: '#2463a7' }, navText: { color: '#6d7175', fontSize: 13, fontWeight: '500' }, navTextActive: { color: '#2463a7', fontWeight: '700' },
   touch: { minWidth: 40, height: 44, alignItems: 'center', justifyContent: 'center' }, copy: { flex: 1 }, storeName: { color: '#202223', fontSize: 16, fontWeight: '600' }, small: { fontSize: 11, color: '#6d7175', marginTop: 2 },
   main: { flex: 1, flexDirection: 'row' }, catalog: { flex: 1 }, sectionHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, height: 54 },
   heading: { fontSize: 17, fontWeight: '600', color: '#202223' }, body: { fontSize: 14, color: '#202223' }, muted: { fontSize: 12, color: '#6d7175', lineHeight: 18 },

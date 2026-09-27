@@ -197,4 +197,5 @@ separate Action from generation.
 - Nested public routing, correct content types and security headers.
 - No hardcoded demo business, fake testimonial, address, price or schedule.
 
-See [space.md](space.md), [commerce.md](commerce.md) and [tarv12.md](tarv12.md).
+See the current [space.md](space.md) goal and linked [commerce.md](commerce.md)
+contract.

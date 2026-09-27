@@ -28,7 +28,7 @@ const event: ChannelEvent = { provider: 'slack', tenantId: 'T1', channelId: 'C1'
 beforeAll(async () => {
   runtime = new Miniflare(convertV4MiniflareOptions({ name: 'team-test', modules: true, script: 'export default { fetch() { return new Response("ok"); } }', d1Databases: ['CONTROL'], compatibilityDate: '2026-09-05' }));
   db = await runtime.getD1Database('CONTROL');
-  for (const file of ['0001_control.sql']) {
+  for (const file of ['0001_control.sql', '0002_roles.sql', '0003_context.sql']) {
     const sql = readFileSync(new URL('../migrations/' + file, import.meta.url), 'utf8');
     for (const statement of sql.split(';').filter((item) => item.trim())) await db.prepare(statement).run();
   }
@@ -54,6 +54,24 @@ describe('one member authority', () => {
     await Effect.runPromise(store.upsertUser(identity));
     expect((await Effect.runPromise(store.access(identity, 'restaurant'))).member.workRole).toBe('courier');
     expect(canExecute((await Effect.runPromise(store.access(identity, 'restaurant'))).member, 'task.create')).toBe(true);
+  });
+  it('persists two role grants and limits permissions to their union', async () => {
+    await inviteMember(db, owner, { email: 'multi@example.com', role: 'member', workRole: 'chef', roles: ['chef', 'cashier'] });
+    const store = new ControlStore(db);
+    const identity = { id: 'multi', email: 'multi@example.com', name: 'Multi' };
+    await Effect.runPromise(store.upsertUser(identity));
+    const member = (await Effect.runPromise(store.access(identity, 'restaurant'))).member;
+    expect(member.roles).toEqual(['chef', 'cashier']);
+    expect(canExecute(member, 'pos.order.item.update')).toBe(true);
+    expect(canExecute(member, 'pos.checkout')).toBe(true);
+    expect(canExecute(member, 'record.update')).toBe(false);
+    expect(canReadRecord(member, { type: 'task', assignee: null, data: { workRole: 'cashier' } })).toBe(true);
+    await updateMember(db, owner, identity.id, { role: 'member', workRole: 'courier', roles: ['courier'] });
+    const updated = (await Effect.runPromise(store.access(identity, 'restaurant'))).member;
+    expect(updated.roles).toEqual(['courier']);
+    expect(canExecute(updated, 'pos.checkout')).toBe(false);
+    expect(canExecute(updated, 'pos.order.deliver')).toBe(true);
+    await expect(inviteMember(db, owner, { email: 'invalid@example.com', role: 'member', workRole: 'chef', roles: ['chef', 'general'] })).rejects.toThrow();
   });
   it('resolves current authority for a resumed Flow Book and rejects revocation', async () => {
     const store = new ControlStore(db);

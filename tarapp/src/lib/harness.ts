@@ -1,3 +1,4 @@
+import { randomUUID } from 'expo-crypto';
 import { getValidIdToken, invalidateGoogleToken } from './auth';
 import type { SiteDefinition, SitePatchOperation } from './site-schema';
 
@@ -6,8 +7,7 @@ export const HARNESS_URL = (process.env.EXPO_PUBLIC_TARHARNESS_URL || 'https://t
 export type HarnessRole = 'owner' | 'admin' | 'member' | 'guest';
 export type WorkRole = string;
 export type ChatProvider = 'slack' | 'discord' | 'google-chat';
-export interface HarnessMember { id: string; email: string; name: string | null; role: HarnessRole; workRole: WorkRole; state: 'active' | 'pending' | 'revoked'; }
-export interface InboxPermissions { prepare: boolean; collect: boolean; completeTask: boolean; openOrder: boolean; }
+export interface HarnessMember { id: string; email: string; name: string | null; role: HarnessRole; workRole: WorkRole; roles?: WorkRole[]; state: 'active' | 'pending' | 'revoked'; }
 export interface TeamChatState {
   commands: { id: string; state: string; result: string | null; createdAt: number }[];
   connection: { provider: ChatProvider; name: string; joinUrl: string } | null;
@@ -16,7 +16,7 @@ export interface TeamChatState {
   canManage: boolean; role: HarnessRole; workRole: WorkRole;
   requests: { id: string; provider: ChatProvider; purpose: 'destination' | 'identity'; expiresAt: number; candidate: { userName: string; userId: string; channelName: string; channelId: string } | null }[];
 }
-export interface HarnessWorkspace { id: string; name: string; slug: string; scope: string; role: HarnessRole; workRole?: WorkRole; owner?: string; mode: 'personal' | 'work'; state: 'provisioning' | 'active' | 'error' | 'archived'; }
+export interface HarnessWorkspace { id: string; name: string; slug: string; scope: string; role: HarnessRole; workRole?: WorkRole; roles?: WorkRole[]; owner?: string; mode: 'personal' | 'work'; state: 'provisioning' | 'active' | 'error' | 'archived'; }
 export interface HarnessRecord { id: string; type: string; title: string; state: string; data: Record<string, unknown>; owner: string | null; assignee: string | null; version: number; createdAt: number; updatedAt: number; }
 export interface HarnessFlowBook { id: string; name: string; version: number; data: Record<string, unknown>; }
 export interface HarnessFlowStep { id: string; action: string; occurrence: number; state: string; input: Record<string, unknown>; output: Record<string, unknown> | null; version: number; created: number; updated: number; }
@@ -31,7 +31,7 @@ export type HarnessCanvasCard =
   | { id: string; kind: 'data'; title: string; display: 'value' | 'report' | 'chart'; value: number | string; caption?: string }
   | { id: string; kind: 'action'; title: string; description: string; actionId: string; initialInput?: Record<string, unknown> }
   | { id: string; kind: 'flow'; title: string; description: string; flowId: string; actionId?: string; initialInput?: Record<string, unknown> }
-  | { id: string; kind: 'inbox'; title: string; description: string };
+  | { id: string; kind: 'now'; title: string; description: string };
 export interface HarnessSpaceSection { id: string; title: string; cards: HarnessCanvasCard[]; }
 export interface HarnessSpaceContext {
   id: string; label: string; role: string; owner: string; confidence: number;
@@ -42,11 +42,20 @@ export interface HarnessSpace {
   context: HarnessSpaceContext; decision: 'automatic' | 'confirm'; alternatives: HarnessSpaceContext[];
   sections: HarnessSpaceSection[];
 }
-export interface HarnessInboxSource { workspace: HarnessWorkspace; tasks: HarnessRecord[]; orders: HarnessRecord[]; permissions: InboxPermissions; }
-export interface HarnessInboxItem { kind: 'task' | 'order'; item: HarnessRecord; workspace: HarnessWorkspace; }
-export interface HarnessInbox { sources: HarnessInboxSource[]; groups: { mine: HarnessInboxItem[]; available: HarnessInboxItem[]; waiting: HarnessInboxItem[] }; partial: boolean; }
+export interface NowRow {
+  id: string; source: string; target: string; kind: 'action' | 'flow' | 'status' | 'artifact';
+  role: string; lane: 'mine' | 'available' | 'waiting'; title: string; parent: string | null;
+  quantity: number | null; state: string; due: number | null; version: number;
+  action: string | null; input: Record<string, unknown>; updated: number; workspace: HarnessWorkspace;
+}
+export interface NowFeed {
+  rows: NowRow[]; partial: boolean; failed: string[]; sync: Record<string, number>;
+  grants?: Record<string, string>;
+  sources: { id: string; name: string; slug: string; mode: 'personal' | 'work'; role: string; owner: string }[];
+  next?: string | null; context?: HarnessSpaceContext; decision?: 'automatic' | 'confirm'; alternatives?: HarnessSpaceContext[];
+}
 export class HarnessRequestError extends Error { constructor(readonly status: number, message: string, readonly code?: string) { super(message); } }
-export function createOperationKey(prefix: string) { return `${prefix}:${Date.now()}:${Math.random().toString(36).slice(2)}`; }
+export function createOperationKey(prefix: string) { return `${prefix}:${randomUUID()}`; }
 
 async function request<T>(path: string, options: { method?: 'GET' | 'POST' | 'PUT'; body?: Record<string, unknown>; key?: string } = {}): Promise<T> {
   const method = options.method || 'GET';
@@ -58,11 +67,11 @@ async function request<T>(path: string, options: { method?: 'GET' | 'POST' | 'PU
     timeout = setTimeout(() => {
       controller.abort();
       reject(new HarnessRequestError(408, 'TAR did not respond in time. Check your connection and retry.'));
-    }, 20_000);
+    }, path.startsWith('/v1/inbox') ? 45_000 : 20_000);
   });
   const operation = (async () => {
     const token = await getValidIdToken();
-    if (!token) throw new HarnessRequestError(401, 'Your Google sign-in has expired. Please sign in again.');
+    if (!token) throw new HarnessRequestError(0, 'Connect and sign in to refresh TAR.', 'offline_auth');
     let response: Response;
     try {
       response = await fetch(`${HARNESS_URL}${path}`, { method, headers: { Authorization: `Bearer ${token}`, ...(options.body ? { 'Content-Type': 'application/json' } : {}), ...(method === 'POST' || method === 'PUT' ? { 'Idempotency-Key': options.key || createOperationKey('tarapp') } : {}) }, body: options.body ? JSON.stringify(options.body) : undefined, signal: controller.signal });
@@ -100,7 +109,7 @@ export const harness = {
   registry: () => request<{ actions: HarnessAction[]; interfaces: HarnessInterfaceContract[] }>('/v1/actions'),
   workspaceRegistry,
   members: (slug: string) => request<{ members: HarnessMember[]; currentUserId: string }>(workspacePath(slug, 'members')),
-  updateMember: (slug: string, id: string, input: { role?: HarnessRole; workRole?: WorkRole; state?: 'revoked' }) => request(workspacePath(slug, `members/${encodeURIComponent(id)}`), { method: 'PUT', body: input }),
+  updateMember: (slug: string, id: string, input: { role?: HarnessRole; workRole?: WorkRole; roles?: WorkRole[]; state?: 'revoked' }) => request(workspacePath(slug, `members/${encodeURIComponent(id)}`), { method: 'PUT', body: input }),
   teamChat: (slug: string) => request<TeamChatState>(workspacePath(slug, 'team-chat')),
   beginChatLink: (slug: string, provider: ChatProvider, purpose: 'destination' | 'identity') => request<{ id: string; command: string; expiresAt: number }>(workspacePath(slug, 'team-chat/link'), { method: 'POST', body: { provider, purpose } }),
   confirmChatLink: (slug: string, id: string, joinUrl: string) => request(workspacePath(slug, 'team-chat/confirm'), { method: 'POST', body: { id, joinUrl } }),
@@ -112,19 +121,26 @@ export const harness = {
     const query = new URLSearchParams({ zone, at: String(Date.now()) });
     return request<HarnessSpace>(`/v1/space?${query.toString()}`);
   },
-  holdContext: (scope: string, duration = 43_200_000) => request<{ context: { mode: 'hold'; scope: string; expires: number } }>('/v1/context', { method: 'PUT', body: { mode: 'hold', scope, duration } }),
+  holdContext: (scope: string, duration = 43_200_000, role?: string) => request<{ context: { mode: 'hold'; scope: string; role: string | null; expires: number } }>('/v1/context', { method: 'PUT', body: { mode: 'hold', scope, duration, role } }),
   resumeContext: () => request<{ context: { mode: 'auto'; scope: null; expires: null } }>('/v1/context', { method: 'PUT', body: { mode: 'auto' } }),
-  unifiedInbox: () => request<HarnessInbox>('/v1/inbox'),
+  now: (refresh?: string) => {
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+    const query = new URLSearchParams({ zone });
+    if (refresh) query.set('refresh', refresh);
+    return request<NowFeed>(`/v1/inbox?${query.toString()}`);
+  },
+  nowReplica: () => request<{ url: string; authToken: string; expiresAt: number; database: string }>('/v1/inbox/replica'),
+  nowDetail: (slug: string, id: string) => request<{ row: NowRow; record: HarnessRecord; workspace: HarnessWorkspace }>(workspacePath(slug, `now/${encodeURIComponent(id)}`)),
   createWorkspace: (name: string, slug: string) => request<{ workspace: HarnessWorkspace }>('/v1/workspaces', { method: 'POST', body: { name, slug }, key: createOperationKey(`workspace:${slug}`) }),
-  inviteMember: (slug: string, email: string, role: Exclude<HarnessRole, 'owner'> = 'member', workRole: WorkRole = 'general') => request<{ invitation: { email: string; role: Exclude<HarnessRole, 'owner'>; state: 'pending' } }>(workspacePath(slug, 'members'), { method: 'POST', body: { email, role, workRole }, key: createOperationKey(`invite:${slug}:${email}`) }),
+  inviteMember: (slug: string, email: string, role: Exclude<HarnessRole, 'owner'> = 'member', workRole: WorkRole = 'general', roles: WorkRole[] = [workRole]) => request<{ invitation: { email: string; role: Exclude<HarnessRole, 'owner'>; state: 'pending' } }>(workspacePath(slug, 'members'), { method: 'POST', body: { email, role, workRole, roles }, key: createOperationKey(`invite:${slug}:${email}`) }),
   canvas: (slug: string) => request<{ cards: HarnessCanvasCard[] }>(workspacePath(slug, 'canvas')),
-  records: (slug: string, type?: string, offset = 0, search = '') => request<{ records: HarnessRecord[]; next: number | null }>(`${workspacePath(slug, 'records')}?${type ? `type=${encodeURIComponent(type)}&` : ''}q=${encodeURIComponent(search)}&offset=${offset}`),
+    records: (slug: string, type?: string, offset = 0, search = '') => request<{ records: HarnessRecord[]; next: number | null }>(`${workspacePath(slug, 'records')}?${type ? `type=${encodeURIComponent(type)}&` : ''}q=${encodeURIComponent(search)}&offset=${offset}`),
+    record: (slug: string, id: string) => request<{ record: HarnessRecord }>(workspacePath(slug, `records/${encodeURIComponent(id)}`)),
   contacts: (slug: string, search = '', offset = 0) => request<{ contacts: HarnessRecord[]; next: number | null }>(`${workspacePath(slug, 'contacts')}?q=${encodeURIComponent(search)}&offset=${offset}`),
   links: (slug: string, id: string) => request<{ links: Link[] }>(workspacePath(slug, `records/${encodeURIComponent(id)}/links`)),
   consents: (slug: string, id: string) => request<{ consents: Consent[] }>(workspacePath(slug, `records/${encodeURIComponent(id)}/consents`)),
   flows: (slug: string) => request<{ books: HarnessFlowBook[]; runs: HarnessFlowRun[] }>(workspacePath(slug, 'flows')),
   flowRun: (slug: string, id: string) => request<{ run: HarnessFlowRun }>(workspacePath(slug, `runs/${encodeURIComponent(id)}`)),
-  inbox: (slug: string) => request<{ tasks: HarnessRecord[]; orders: HarnessRecord[]; permissions: InboxPermissions }>(workspacePath(slug, 'inbox')),
   executeAction: <T extends Record<string, unknown> = Record<string, unknown>>(slug: string, actionId: string, input: Record<string, unknown>, operationKey: string) => request<T>(workspacePath(slug, `actions/${encodeURIComponent(actionId)}`), { method: 'POST', body: input, key: operationKey }),
   createRecord: (slug: string, input: { type: string; title: string; data?: Record<string, unknown> }) => request<{ record: HarnessRecord }>(workspacePath(slug, 'actions/record.create'), { method: 'POST', body: input, key: createOperationKey('record.create') }),
   createTask: (slug: string, title: string) => request<{ record: HarnessRecord }>(workspacePath(slug, 'actions/task.create'), { method: 'POST', body: { title }, key: createOperationKey('task.create') }),

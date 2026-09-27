@@ -27,7 +27,7 @@ async function fixture() {
   const variant = (await run('catalog.variant.save', { item: item.id, name: 'Tea 250g', sku: 'TEA-250' })).variant as { id: string };
   await run('price.set', { variant: variant.id, amount: 12500, currency: 'INR' });
   await run('stock.adjust', { variant: variant.id, quantity: 10, reason: 'Opening count' });
-  return { client, run, supplier, variant };
+  return { client, run, supplier, item, variant };
 }
 
 describe('commerce core', { timeout: 20000 }, () => {
@@ -41,7 +41,7 @@ describe('commerce core', { timeout: 20000 }, () => {
     const paid = await run('payment.record', { invoice: invoice.id, amount: 25000, method: 'upi', reference: 'pay-1' });
     const payment = paid.payment as { id: string };
     expect(paid.invoice).toMatchObject({ state: 'paid', paid: 25000 });
-    expect((await run('refund.record', { payment: payment.id, amount: 5000, reason: 'Partial return', reference: 'refund-1' })).invoice).toMatchObject({ state: 'partial', paid: 20000 });
+    expect((await run('refund.record', { payment: payment.id, amount: 5000, reason: 'Partial return', reference: 'refund-1' })).invoice).toMatchObject({ state: 'paid', paid: 20000, refunded: 5000, net: 20000 });
     const stock = await client.execute({ sql: "SELECT data FROM records WHERE type='stock' AND json_extract(data,'$.variant')=?", args: [variant.id] });
     expect(JSON.parse(String(stock.rows[0].data))).toMatchObject({ onhand: 8, reserved: 0 });
     const postings = await client.execute("SELECT data FROM records WHERE type='posting'");
@@ -51,11 +51,53 @@ describe('commerce core', { timeout: 20000 }, () => {
 
   it('receives a purchase atomically and rejects over-receipt', async () => {
     const { client, run, supplier, variant } = await fixture();
-    const purchase = (await run('purchase.create', { supplier: supplier.id, lines: JSON.stringify([{ variant: variant.id, quantity: 5, cost: 8000 }]) })).purchase as { id: string; version: number };
+    const purchase = (await run('purchase.create', { supplier: supplier.id, currency: 'INR', lines: JSON.stringify([{ variant: variant.id, quantity: 5, cost: 8000 }]) })).purchase as { id: string; version: number };
     await expect(run('purchase.receive', { purchase: purchase.id, version: purchase.version, lines: [{ variant: variant.id, quantity: 6 }] })).rejects.toThrow('exceeds');
-    const received = await run('purchase.receive', { purchase: purchase.id, version: purchase.version });
+    const partial = await run('purchase.receive', { purchase: purchase.id, version: purchase.version, lines: [{ variant: variant.id, quantity: 2 }] });
+    expect(partial.purchase).toMatchObject({ state: 'partial', version: purchase.version + 1 });
+    expect((partial.receipt as { data: { amount: number } }).data.amount).toBe(16000);
+    const received = await run('purchase.receive', { purchase: purchase.id, version: purchase.version + 1 });
     expect(received.purchase).toMatchObject({ state: 'received' });
     const stock = await client.execute({ sql: "SELECT data FROM records WHERE type='stock' AND json_extract(data,'$.variant')=?", args: [variant.id] });
     expect(JSON.parse(String(stock.rows[0].data)).onhand).toBe(15);
+    const posting = await client.execute("SELECT data FROM records WHERE type='posting'");
+    expect(posting.rows).toHaveLength(2);
+    expect(posting.rows.map((row) => JSON.parse(String(row.data)).debit)).toEqual([16000, 24000]);
+  });
+
+  it('revises catalog records with versions and prevents duplicate identifiers', async () => {
+    const { run, item, variant } = await fixture();
+    const current = (await run('catalog.variant.save', { id: variant.id, version: 1, item: item.id, name: 'Tea 250g', sku: 'TEA-250', barcode: '8901', attributes: { size: '250g' } })).variant as { id: string; version: number; data: { barcode: string } };
+    expect(current).toMatchObject({ id: variant.id, version: 2, data: { barcode: '8901' } });
+    await expect(run('catalog.variant.save', { id: variant.id, version: 1, item: item.id, name: 'Stale', sku: 'TEA-250' })).rejects.toThrow('changed');
+    await expect(run('catalog.variant.save', { item: item.id, name: 'Duplicate', sku: 'TEA-250' })).rejects.toThrow('already belongs');
+  });
+
+  it('keeps prices and stock scoped by channel and location, and rejects unavailable lines atomically', async () => {
+    const { client, run, variant } = await fixture();
+    await run('stock.adjust', { variant: variant.id, location: 'warehouse', quantity: 4, reason: 'Opening count' });
+    await run('price.set', { variant: variant.id, amount: 15000, currency: 'INR', channel: 'web' });
+    const web = (await run('order.create', { lines: [{ variant: variant.id, quantity: 3 }], location: 'warehouse', channel: 'web' })).order as { data: { total: number; location: string; channel: string } };
+    expect(web.data).toMatchObject({ total: 45000, location: 'warehouse', channel: 'web' });
+    await expect(run('order.create', { lines: [{ variant: variant.id, quantity: 2 }], location: 'warehouse', channel: 'web' })).rejects.toThrow('insufficient');
+    const stocks = await client.execute({ sql: "SELECT data FROM records WHERE type='stock' AND json_extract(data,'$.variant')=?", args: [variant.id] });
+    expect(stocks.rows.map((row) => JSON.parse(String(row.data)))).toEqual(expect.arrayContaining([
+      expect.objectContaining({ location: 'main', onhand: 10, reserved: 0 }),
+      expect.objectContaining({ location: 'warehouse', onhand: 4, reserved: 3 }),
+    ]));
+  });
+
+  it('deduplicates provider references and keeps invoice balance aligned with refunds', async () => {
+    const { run, variant } = await fixture();
+    const order = (await run('order.create', { lines: [{ variant: variant.id, quantity: 1 }] })).order as { id: string; version: number };
+    await run('order.fulfill', { order: order.id, version: order.version });
+    const invoice = (await run('invoice.issue', { order: order.id })).invoice as { id: string; data: { total: number; lines: unknown[] } };
+    expect(invoice.data.lines).toHaveLength(1);
+    const first = (await run('payment.record', { invoice: invoice.id, amount: 5000, method: 'upi', provider: 'bank', reference: 'u-1' })).payment as { id: string };
+    await expect(run('payment.record', { invoice: invoice.id, amount: 1000, method: 'upi', provider: 'bank', reference: 'u-1' })).rejects.toThrow('already recorded');
+    const second = (await run('payment.record', { invoice: invoice.id, amount: 7500, method: 'cash' })).payment as { id: string };
+    await run('refund.record', { payment: first.id, amount: 2000, reason: 'Return', provider: 'bank', reference: 'r-1' });
+    await expect(run('refund.record', { payment: second.id, amount: 1000, reason: 'Return', provider: 'bank', reference: 'r-1' })).rejects.toThrow('already recorded');
+    await expect(run('payment.record', { invoice: invoice.id, amount: 1, method: 'cash' })).rejects.toThrow('open invoice balance');
   });
 });

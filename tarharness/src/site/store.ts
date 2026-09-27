@@ -1,8 +1,9 @@
-import type { Client, InStatement } from '@libsql/client/web';
+import type { Client } from '@libsql/client/web';
 import { badRequest, conflict, notFound, unavailable } from '../errors.ts';
 import { eventStatement } from '../gateway/commit.ts';
 import type { AccessContext } from '../types.ts';
 import { compileSiteHtml } from './renderer.ts';
+import { chooseSiteTheme } from './judgment.ts';
 import {
   CARD_KINDS, DEFAULT_DESIGN_TOKENS, type CardDefinition, type PageDefinition,
   type ReleaseFile, type ReleaseManifest, type SiteDefinition, type SitePatchOperation, type ThemeName,
@@ -55,7 +56,7 @@ export function createDefaultSite(title: string, prompt: string, theme: ThemeNam
   return {
     schema: '1.0.0', design: DEFAULT_DESIGN_TOKENS[theme] || DEFAULT_DESIGN_TOKENS['editorial-chalk'],
     locale: 'en', timezone: 'Asia/Kolkata', currency: 'INR', pages,
-    journeys: [{ id: 'enquiry', title: 'Customer enquiry', target: 'record.create', version: 1, input: { type: 'enquiry' }, outcome: 'Enquiry appears in the workspace Inbox' }],
+    journeys: [{ id: 'enquiry', title: 'Customer enquiry', target: 'record.create', version: 1, input: { type: 'enquiry' }, outcome: 'Enquiry appears in Now' }],
     variants: [], surfaces: [], policy: { publicOrdering: false, publicEnquiry: false, allowedCurrencies: ['INR'] },
   };
 }
@@ -63,55 +64,134 @@ export function createDefaultSite(title: string, prompt: string, theme: ThemeNam
 export async function getSiteRecord(client: Client, siteId?: string): Promise<{ id: string; version: number; state: string; data: SiteDefinition } | null> {
   const result = await client.execute(siteId
     ? { sql: "SELECT * FROM records WHERE id=? AND type='site' AND archived IS NULL LIMIT 1", args: [siteId] }
-    : "SELECT * FROM records WHERE type='site' AND archived IS NULL ORDER BY updated DESC,created DESC LIMIT 1");
+    : "SELECT * FROM records WHERE type='site' AND archived IS NULL ORDER BY CASE WHEN state='live' THEN 0 ELSE 1 END,updated DESC,created DESC LIMIT 1");
   const row = result.rows[0];
   return row ? { id: String(row.id), version: Number(row.version), state: String(row.state), data: object(JSON.parse(String(row.data))) as unknown as SiteDefinition } : null;
 }
 
 function validateSite(site: SiteDefinition): void {
-  if (site.schema !== '1.0.0' || !site.pages.length || site.pages.length > 50) throw badRequest('Site definition is invalid.');
+  if (!site || site.schema !== '1.0.0' || !Array.isArray(site.pages) || !site.pages.length || site.pages.length > 50
+    || JSON.stringify(site).length > 1_000_000) throw badRequest('Site definition is invalid.');
+  if (site.policy.publicEnquiry || site.policy.publicOrdering) {
+    throw badRequest('Public journeys require a configured public Action Gateway.');
+  }
   const paths = new Set<string>();
   for (const page of site.pages) {
-    if (!/^\/(?:[a-z0-9-]+(?:\/[a-z0-9-]+)*)?$/.test(page.path) || paths.has(page.path) || page.cards.length > 100) throw badRequest('Site page path or card count is invalid.');
+    if (typeof page.path !== 'string' || !/^\/(?:[a-z0-9-]+(?:\/[a-z0-9-]+)*)?$/.test(page.path)
+      || paths.has(page.path) || !Array.isArray(page.cards) || page.cards.length > 100
+      || typeof page.title !== 'string' || !page.title.trim() || page.title.length > 200) throw badRequest('Site page path or card count is invalid.');
     paths.add(page.path);
     const ids = new Set<string>();
     for (const card of page.cards) {
-      if (!CARD_KINDS.includes(card.kind) || !card.id || ids.has(card.id)) throw badRequest('Site card is invalid.');
+      if (!card || !CARD_KINDS.includes(card.kind) || typeof card.id !== 'string' || !/^[a-z][a-z0-9-]{0,79}$/.test(card.id)
+        || ids.has(card.id) || card.version !== 1 || !card.props || typeof card.props !== 'object' || Array.isArray(card.props)) throw badRequest('Site card is invalid.');
       ids.add(card.id);
+      if ((card.kind === 'navigation' || card.kind === 'footer') && card.props.links !== undefined && !Array.isArray(card.props.links)) throw badRequest('Site links are invalid.');
+      for (const link of Array.isArray(card.props.links) ? card.props.links : []) {
+        const href = object(link).href;
+        if (typeof href !== 'string' || !safePublicHref(href)) throw badRequest('Site link must use a page path, HTTPS URL, email or phone link.');
+      }
+      const hrefs = card.kind === 'hero' ? [object(card.props.primaryCta).href, object(card.props.secondaryCta).href]
+        : card.kind === 'cta' ? [card.props.href] : [];
+      if (hrefs.some((href) => href !== undefined && (typeof href !== 'string' || !safePublicHref(href)))) throw badRequest('Site action link is invalid.');
+      for (const binding of card.bindings || []) {
+        if (binding.query !== 'catalog.public' || binding.slot !== 'items' || card.kind !== 'collection'
+          || binding.version !== 1 || binding.access !== 'public' || !Number.isSafeInteger(binding.freshness)
+          || binding.freshness < 0 || binding.freshness > 86_400) throw badRequest('Site binding is not registered.');
+      }
     }
   }
 }
 
-async function compileAll(site: SiteDefinition) {
+function safePublicHref(value: string): boolean {
+  if (!value || /[\u0000-\u001f\u007f\\]/.test(value)) return false;
+  if (value.startsWith('/') && !value.startsWith('//')) return true;
+  if (/^#[a-zA-Z][a-zA-Z0-9_-]*$/.test(value)) return true;
+  try { return ['https:', 'mailto:', 'tel:'].includes(new URL(value).protocol); }
+  catch { return false; }
+}
+
+async function publicCatalog(client: Client): Promise<Record<string, unknown>[]> {
+  const variants = await client.execute(`SELECT v.title AS title,v.data AS variant,p.data AS price FROM records v
+    JOIN records p ON p.type='price' AND p.state='active' AND p.archived IS NULL AND json_extract(p.data,'$.variant')=v.id
+    WHERE v.type='variant' AND v.state='active' AND v.archived IS NULL ORDER BY v.title,v.id LIMIT 100`);
+  if (variants.rows.length) return variants.rows.map((row) => {
+    const variant = object(JSON.parse(String(row.variant)));
+    const price = object(JSON.parse(String(row.price)));
+    const amount = Number(price.amount);
+    return {
+      title: String(row.title), description: text(variant.description, 500),
+      ...(Number.isSafeInteger(amount) && amount >= 0 && /^[A-Z]{3}$/.test(String(price.currency))
+        ? { price: amount, currency: String(price.currency) } : {}),
+    };
+  });
+  const settings = await client.execute("SELECT data FROM records WHERE type='pos.settings' AND archived IS NULL LIMIT 1");
+  const currency = settings.rows[0] ? text(object(JSON.parse(String(settings.rows[0].data))).currency, 3) : '';
+  const products = await client.execute("SELECT title,data FROM records WHERE type='pos.product' AND state='active' AND archived IS NULL ORDER BY title,id LIMIT 100");
+  return products.rows.map((row) => {
+    const product = object(JSON.parse(String(row.data)));
+    const amount = Number(product.price);
+    return {
+      title: String(row.title), description: text(product.shortDescription || product.contentSummary, 500),
+      ...(Number.isSafeInteger(amount) && amount >= 0 && /^[A-Z]{3}$/.test(currency)
+        ? { price: amount, currency } : {}),
+    };
+  });
+}
+
+async function resolveBindings(client: Client, site: SiteDefinition): Promise<{ site: SiteDefinition; itemCount: number }> {
+  if (!site.pages.some((page) => page.cards.some((card) => card.bindings?.length))) return { site, itemCount: 0 };
+  const items = await publicCatalog(client);
+  const pages = site.pages.map((page) => ({ ...page, cards: page.cards.map((card) =>
+    card.bindings?.some((binding) => binding.query === 'catalog.public' && binding.slot === 'items')
+      ? { ...card, props: { ...card.props, items } } : card) }));
+  return { site: { ...site, pages }, itemCount: items.length };
+}
+
+async function compileAll(client: Client, site: SiteDefinition) {
   validateSite(site);
-  const rendered = await Promise.all(site.pages.map(async (page, index) => ({ page, rendered: await compileSiteHtml(site, index) })));
-  const files = rendered.map(({ page, rendered }) => ({ path: filePath(page), mime: 'text/html; charset=utf-8', body: rendered.html, hash: rendered.hash }));
+  const resolved = await resolveBindings(client, site);
+  const rendered = await Promise.all(resolved.site.pages.map(async (page, index) => ({ page, rendered: await compileSiteHtml(resolved.site, index) })));
+  const files = await Promise.all(rendered.map(async ({ page, rendered }) => ({ path: filePath(page), mime: 'text/html; charset=utf-8', body: rendered.html, hash: await hash(rendered.html) })));
   const css = rendered[0].rendered.css;
   files.push({ path: '/style.css', mime: 'text/css; charset=utf-8', body: css, hash: await hash(css) });
-  return { files, hash: await hash(files.map((file) => `${file.path}:${file.hash}`).join('|')) };
+  return { files, hash: await hash(files.map((file) => `${file.path}:${file.hash}`).join('|')), itemCount: resolved.itemCount };
 }
 
 function manifestFile(prefix: string, release: string, file: { path: string; mime: string; body: string; hash: string }): ReleaseFile {
   return { path: file.path, mime: file.mime, bytes: new TextEncoder().encode(file.body).byteLength, hash: file.hash, key: `${prefix}/${release}${file.path}` };
 }
 
-async function saveRelease(bucket: R2Bucket, context: AccessContext, site: { id: string; version: number; data: SiteDefinition }, release: string, generation: number) {
-  const compiled = await compileAll(site.data); const prefix = `workspaces/${context.workspace.id}/sites/${site.id}/releases`;
+async function saveRelease(client: Client, bucket: R2Bucket, context: AccessContext, site: { id: string; version: number; data: SiteDefinition }, release: string, generation: number) {
+  const compiled = await compileAll(client, site.data); const prefix = `workspaces/${context.workspace.id}/sites/${site.id}/releases`;
   const files = compiled.files.map((file) => manifestFile(prefix, release, file));
   for (let index = 0; index < files.length; index += 1) await bucket.put(files[index].key, compiled.files[index].body, { httpMetadata: { contentType: files[index].mime } });
-  return { id: release, siteId: site.id, version: site.version, generation, created: now(), hash: compiled.hash, files } satisfies ReleaseManifest;
+  return { manifest: { id: release, siteId: site.id, version: site.version, generation, created: now(), hash: compiled.hash, files } satisfies ReleaseManifest, itemCount: compiled.itemCount };
 }
 
 async function saveEvent(client: Client, context: AccessContext, action: string, record: string, key: string, inputHash: string, result: Record<string, unknown>) {
   await client.execute(eventStatement({ action, actor: context.identity.id, recordId: record, key, hash: inputHash, result }));
 }
 
-export async function executeSiteGenerate(client: Client, context: AccessContext, input: Record<string, unknown>, key: string, inputHash: string): Promise<Record<string, unknown>> {
+export async function executeSiteGenerate(client: Client, context: AccessContext, input: Record<string, unknown>, key: string, inputHash: string, typesafe?: string): Promise<Record<string, unknown>> {
   const prompt = text(input.prompt ?? input.description, 2000); const title = text(input.title) || context.workspace.name || 'Workspace';
-  const theme = (input.theme === 'streetwear-dark' || input.theme === 'minimal-clean' ? input.theme : 'editorial-chalk') as ThemeName;
-  const site = { ...createDefaultSite(title, prompt, theme), currentRelease: null, releases: [] } satisfies SiteDefinition;
-  const siteId = `site_${crypto.randomUUID()}`; const at = now(); const preview = await compileSiteHtml(site);
-  const result = { siteId, version: 1, state: 'draft', site, preview };
+  if (input.theme !== undefined && !Object.hasOwn(DEFAULT_DESIGN_TOKENS, input.theme as string)) throw badRequest('Choose a registered site theme.');
+  const theme = (input.theme as ThemeName | undefined) || await chooseSiteTheme(typesafe, title, prompt) || 'editorial-chalk';
+  const existing = await getSiteRecord(client);
+  const site = { ...createDefaultSite(title, prompt, theme), currentRelease: existing?.data.currentRelease || null, releases: existing?.data.releases || [] } satisfies SiteDefinition;
+  const siteId = existing?.id || `site_${crypto.randomUUID()}`; const at = now(); const preview = await compileSiteHtml(site);
+  const version = existing ? existing.version + 1 : 1;
+  const state = existing?.state === 'live' ? 'live' : 'draft';
+  const result = { siteId, version, state, site, preview };
+  if (existing) {
+    const saved = await client.batch([
+      { sql: 'UPDATE records SET title=?,data=?,version=?,updated=? WHERE id=? AND version=?', args: [title, JSON.stringify(site), version, at, siteId, existing.version] },
+      { sql: `INSERT INTO events(id,kind,record_id,action_id,state,actor_id,input_hash,idempotency_key,data,created_at,updated_at)
+        SELECT ?, 'action', ?, 'site.generate', 'accepted', ?, ?, ?, ?, ?, ? WHERE changes()=1`, args: [`evt_${crypto.randomUUID()}`, siteId, context.identity.id, inputHash, key, JSON.stringify({ result }), at, at] },
+    ], 'write');
+    if (saved[0].rowsAffected !== 1 || saved[1].rowsAffected !== 1) throw conflict('Site was modified concurrently. Refresh and try again.');
+    return result;
+  }
   await client.batch([
     { sql: "INSERT INTO records(id,type,title,state,data,owner,version,created,updated) VALUES(?,'site',?,'draft',?,?,1,?,?)", args: [siteId, title, JSON.stringify(site), context.identity.id, at, at] },
     eventStatement({ action: 'site.generate', actor: context.identity.id, recordId: siteId, key, hash: inputHash, result }),
@@ -145,9 +225,13 @@ export async function executeSiteUpdate(client: Client, context: AccessContext, 
     } else {
       const index = pageIndex(site, operation); const page = site.pages[index]; let cards = [...page.cards];
       if (operation.op === 'add_card') cards = [...cards, operation.value as CardDefinition];
-      else if (operation.op === 'remove_card' && typeof operation.value === 'string') cards = cards.filter((card) => card.id !== operation.value);
+      else if (operation.op === 'remove_card' && typeof operation.value === 'string') {
+        if (!cards.some((card) => card.id === operation.value)) throw notFound('Site card was not found.');
+        cards = cards.filter((card) => card.id !== operation.value);
+      }
       else if (operation.op === 'update_card') {
         const patch = object(operation.value); const id = text(patch.id, 120);
+        if (!id || !cards.some((card) => card.id === id)) throw notFound('Site card was not found.');
         cards = cards.map((card) => card.id === id ? { ...card, ...patch, props: { ...card.props, ...object(patch.props) } } as CardDefinition : card);
       } else throw badRequest('Site change is invalid.');
       const pages = [...site.pages]; pages[index] = { ...page, cards }; site = { ...site, pages };
@@ -165,46 +249,47 @@ export async function executeSiteUpdate(client: Client, context: AccessContext, 
 
 export async function executeSiteCompile(client: Client, context: AccessContext, input: Record<string, unknown>, key: string, inputHash: string): Promise<Record<string, unknown>> {
   const current = await getSiteRecord(client, text(input.siteId, 160) || undefined); if (!current) throw notFound('Site was not found.');
-  const compiled = await compileAll(current.data); const releaseId = `rel_${crypto.randomUUID()}`;
+  const compiled = await compileAll(client, current.data); const releaseId = `rel_${crypto.randomUUID()}`;
   const manifest: ReleaseManifest = { id: releaseId, siteId: current.id, version: current.version, generation: (current.data.releases?.length || 0) + 1, created: now(), hash: compiled.hash, files: compiled.files.map((file) => ({ path: file.path, mime: file.mime, bytes: new TextEncoder().encode(file.body).byteLength, hash: file.hash, key: '' })) };
   const result = { releaseId, manifest, hash: compiled.hash }; await saveEvent(client, context, 'site.compile', current.id, key, inputHash, result); return result;
 }
 
-export async function executeSitePublish(client: Client, bucket: R2Bucket | undefined, context: AccessContext, input: Record<string, unknown>, key: string, inputHash: string): Promise<Record<string, unknown>> {
+async function publishCurrent(client: Client, bucket: R2Bucket | undefined, context: AccessContext, input: Record<string, unknown>, key: string, inputHash: string, action: 'site.publish' | 'site.refresh'): Promise<Record<string, unknown>> {
   if (!bucket) throw unavailable('Site release storage is not configured.');
   const current = await getSiteRecord(client, text(input.siteId, 160) || undefined); if (!current) throw notFound('Site was not found.');
+  if (action === 'site.refresh' && (current.state !== 'live' || !current.data.currentRelease)) throw badRequest('Publish the site before refreshing its public bindings.');
   const generation = (current.data.releases?.length || 0) + 1; const releaseId = `rel_${crypto.randomUUID()}`;
-  const manifest = await saveRelease(bucket, context, { ...current, version: current.version + 1 }, releaseId, generation);
+  const { manifest, itemCount } = await saveRelease(client, bucket, context, { ...current, version: current.version + 1 }, releaseId, generation);
   const site = { ...current.data, currentRelease: releaseId, releases: [...(current.data.releases || []), manifest] }; const at = now(); const version = current.version + 1;
-  const result = { siteId: current.id, releaseId, liveUrl: `/v1/sites/${encodeURIComponent(text(input.subdomain, 80) || context.workspace.slug)}`, generation, state: 'live' };
+  const common = { siteId: current.id, releaseId, liveUrl: `/v1/sites/${encodeURIComponent(context.workspace.slug)}`, generation, state: 'live' };
+  const result = action === 'site.refresh' ? { ...common, refreshed: true, itemCount } : common;
   const saved = await client.batch([
     { sql: "UPDATE records SET state='live',data=?,version=?,updated=? WHERE id=? AND version=?", args: [JSON.stringify(site), version, at, current.id, current.version] },
     { sql: `INSERT INTO events(id,kind,record_id,action_id,state,actor_id,input_hash,idempotency_key,data,created_at,updated_at)
-      SELECT ?, 'action', ?, 'site.publish', 'accepted', ?, ?, ?, ?, ?, ? WHERE changes()=1`, args: [`evt_${crypto.randomUUID()}`, current.id, context.identity.id, inputHash, key, JSON.stringify({ result }), at, at] },
+      SELECT ?, 'action', ?, ?, 'accepted', ?, ?, ?, ?, ?, ? WHERE changes()=1`, args: [`evt_${crypto.randomUUID()}`, current.id, action, context.identity.id, inputHash, key, JSON.stringify({ result }), at, at] },
+    { sql: "UPDATE records SET state='replaced',version=version+1,updated=? WHERE type='site' AND state='live' AND id<>? AND EXISTS(SELECT 1 FROM events WHERE action_id=? AND idempotency_key=? AND record_id=?)", args: [at, current.id, action, key, current.id] },
   ], 'write');
   if (saved[0].rowsAffected !== 1 || saved[1].rowsAffected !== 1) throw conflict('Site changed while publishing. The stored candidate was not promoted.');
   return result;
+}
+
+export async function executeSitePublish(client: Client, bucket: R2Bucket | undefined, context: AccessContext, input: Record<string, unknown>, key: string, inputHash: string): Promise<Record<string, unknown>> {
+  return publishCurrent(client, bucket, context, input, key, inputHash, 'site.publish');
 }
 
 export async function executeSiteRollback(client: Client, context: AccessContext, input: Record<string, unknown>, key: string, inputHash: string): Promise<Record<string, unknown>> {
   const current = await getSiteRecord(client, text(input.siteId, 160) || undefined); if (!current) throw notFound('Site was not found.');
   const releaseId = text(input.releaseId, 160); if (!current.data.releases?.some((release) => release.id === releaseId)) throw notFound('Site release was not found.');
   const site = { ...current.data, currentRelease: releaseId }; const at = now(); const result = { siteId: current.id, releaseId, rolledBack: true };
-  await client.batch([
-    { sql: 'UPDATE records SET data=?,version=version+1,updated=? WHERE id=?', args: [JSON.stringify(site), at, current.id] },
-    eventStatement({ action: 'site.rollback', actor: context.identity.id, recordId: current.id, key, hash: inputHash, result }),
-  ], 'write'); return result;
+  const saved = await client.batch([
+    { sql: 'UPDATE records SET data=?,version=version+1,updated=? WHERE id=? AND version=?', args: [JSON.stringify(site), at, current.id, current.version] },
+    { sql: `INSERT INTO events(id,kind,record_id,action_id,state,actor_id,input_hash,idempotency_key,data,created_at,updated_at)
+      SELECT ?, 'action', ?, 'site.rollback', 'accepted', ?, ?, ?, ?, ?, ? WHERE changes()=1`, args: [`evt_${crypto.randomUUID()}`, current.id, context.identity.id, inputHash, key, JSON.stringify({ result }), at, at] },
+  ], 'write');
+  if (saved[0].rowsAffected !== 1 || saved[1].rowsAffected !== 1) throw conflict('Site changed while rolling back. Refresh and try again.');
+  return result;
 }
 
-export async function executeSiteRefresh(client: Client, context: AccessContext, input: Record<string, unknown>, key?: string, inputHash?: string): Promise<Record<string, unknown>> {
-  const current = await getSiteRecord(client, text(input.siteId, 160) || undefined); if (!current) throw notFound('Site was not found.');
-  let rows = await client.execute(`SELECT v.title,p.data FROM records v JOIN records p ON p.type='price' AND p.state='active'
-    AND json_extract(p.data,'$.variant')=v.id WHERE v.type='variant' AND v.state='active' AND v.archived IS NULL LIMIT 100`);
-  if (!rows.rows.length) rows = await client.execute("SELECT title,data FROM records WHERE type='pos.product' AND state='active' AND archived IS NULL LIMIT 100");
-  const items = rows.rows.map((row) => { const data = object(JSON.parse(String(row.data))); return { title: String(row.title), price: Number(data.amount ?? data.price ?? 0), description: text(data.description, 500) }; });
-  const site = { ...current.data, pages: current.data.pages.map((page) => ({ ...page, cards: page.cards.map((card) => card.kind === 'collection' ? { ...card, props: { ...card.props, items } } : card) })) };
-  const at = now(); const result = { refreshed: true, itemCount: items.length };
-  const statements: InStatement[] = [{ sql: 'UPDATE records SET data=?,version=version+1,updated=? WHERE id=?', args: [JSON.stringify(site), at, current.id] }];
-  if (key && inputHash) statements.push(eventStatement({ action: 'site.refresh', actor: context.identity.id, recordId: current.id, key, hash: inputHash, result }));
-  await client.batch(statements, 'write'); return result;
+export async function executeSiteRefresh(client: Client, bucket: R2Bucket | undefined, context: AccessContext, input: Record<string, unknown>, key: string, inputHash: string): Promise<Record<string, unknown>> {
+  return publishCurrent(client, bucket, context, input, key, inputHash, 'site.refresh');
 }

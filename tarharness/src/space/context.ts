@@ -60,6 +60,18 @@ function title(value: string): string {
   return value.replace(/[._-]+/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+function roleKey(value: string): string {
+  const role = value.trim().toLowerCase();
+  return role === 'chef' || role === 'cook' || role === 'kitchen' ? 'kitchen' : role;
+}
+
+function canUseRoutineRole(access: AccessContext, routine: Routine): boolean {
+  if (access.member.role !== 'member' || !routine.role?.trim()) return true;
+  const member = access.member as AccessContext['member'] & { readonly roles?: readonly string[] };
+  const granted = member.roles?.length ? member.roles : [member.workRole || 'general'];
+  return granted.some((role) => roleKey(role) === roleKey(routine.role!));
+}
+
 function view(access: AccessContext, label: string, source: SpaceContext['source'], confidence: number, held: boolean, id?: string, role?: string): SpaceContext {
   const memberRole = access.member.workRole && access.member.workRole !== 'general' ? access.member.workRole : access.member.role;
   return {
@@ -74,17 +86,20 @@ function view(access: AccessContext, label: string, source: SpaceContext['source
 export function resolveContext(
   accesses: readonly AccessContext[],
   routines: readonly Routine[],
-  options: { readonly at: number; readonly zone: string; readonly override?: string; readonly held?: boolean },
+  options: { readonly at: number; readonly zone: string; readonly override?: string; readonly role?: string; readonly held?: boolean },
 ): ContextDecision {
   if (!accesses.length) throw new Error('No active workspace is available.');
   const explicit = options.override ? accesses.find((item) => item.workspace.slug === options.override || item.workspace.id === options.override) : undefined;
-  if (explicit) return { context: view(explicit, explicit.workspace.mode === 'personal' ? 'Personal' : explicit.workspace.name, 'override', 1, Boolean(options.held)), decision: 'automatic', alternatives: [] };
+  if (explicit) {
+    const role = options.role && canUseRoutineRole(explicit, { id: '', workspace: explicit.workspace.id, label: '', start: '', end: '', role: options.role }) ? options.role : undefined;
+    return { context: view(explicit, explicit.workspace.mode === 'personal' ? 'Personal' : explicit.workspace.name, 'override', 1, Boolean(options.held), undefined, role), decision: 'automatic', alternatives: [] };
+  }
 
   const clock = localClock(options.at, options.zone);
   const matches = routines
     .filter((routine) => active(routine, clock.day, clock.minute))
     .map((routine) => ({ routine, access: accesses.find((item) => item.workspace.slug === routine.workspace || item.workspace.id === routine.workspace) }))
-    .filter((item): item is { routine: Routine; access: AccessContext } => Boolean(item.access))
+    .filter((item): item is { routine: Routine; access: AccessContext } => Boolean(item.access && canUseRoutineRole(item.access, item.routine)))
     .sort((left, right) => (right.routine.priority || 0) - (left.routine.priority || 0) || left.routine.id.localeCompare(right.routine.id));
   if (matches.length) {
     const best = matches[0];

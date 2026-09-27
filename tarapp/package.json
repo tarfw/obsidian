@@ -6,6 +6,7 @@
     "@expo/ui": "~57.0.13",
     "@expo/vector-icons": "^15.0.2",
     "@react-native-google-signin/google-signin": "^16.1.2",
+    "@tursodatabase/sync-react-native": "0.7.2",
     "expo": "^57.0.9",
     "expo-asset": "~57.0.14",
     "expo-constants": "~57.0.14",

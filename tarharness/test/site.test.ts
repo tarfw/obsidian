@@ -1,16 +1,18 @@
 import { createClient } from '@libsql/client';
 import { Effect } from 'effect';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { WORKSPACE_SCHEMA } from '../src/db/schema.ts';
 import { executeGateway } from '../src/gateway/actions.ts';
 import type { AccessContext } from '../src/types.ts';
 import { CARD_KINDS, THEME_NAMES } from '../src/site/schema.ts';
 import { compileSiteHtml } from '../src/site/renderer.ts';
 import { createDefaultSite } from '../src/site/store.ts';
+import { chooseSiteTheme } from '../src/site/judgment.ts';
 
 const clients: ReturnType<typeof createClient>[] = [];
 afterEach(() => {
   while (clients.length) clients.pop()?.close();
+  vi.unstubAllGlobals();
 });
 
 function releaseBucket(): R2Bucket & { objects: Map<string, string> } {
@@ -68,6 +70,45 @@ describe('TAR Site compiler', () => {
       expect(css).toContain(`--color-bg: ${site.design.colors.bg}`);
       expect(css).toContain(`--color-accent: ${site.design.colors.accent}`);
     }
+  });
+
+  it('uses Jev only for a bounded theme choice when configured', async () => {
+    expect(await chooseSiteTheme(undefined, 'Northstar', 'A supplied business description')).toBeNull();
+    const request = vi.fn().mockResolvedValue(new Response(JSON.stringify({ answers: { theme: { choice: 'minimal-clean' } } }), { status: 200 }));
+    vi.stubGlobal('fetch', request);
+    expect(await chooseSiteTheme('test-key', 'Northstar', 'A supplied business description')).toBe('minimal-clean');
+    expect(JSON.parse(request.mock.calls[0][1].body).questions.theme.criteria).toHaveProperty('minimal-clean');
+  });
+
+  it('omits unavailable public journeys and unsupported claims', async () => {
+    const site = createDefaultSite('Northstar', 'A supplied business description');
+    const catalog = await compileSiteHtml(site, 1);
+    const contact = await compileSiteHtml(site, 3);
+    expect(catalog.html).not.toContain('>Order</a>');
+    expect(contact.html).not.toContain('Open Now');
+    expect(contact.html).not.toContain('<form');
+    expect(contact.html).not.toContain('Monday');
+  });
+
+  it('does not emit unsafe links or executable page metadata', async () => {
+    const site = createDefaultSite('Northstar', 'A supplied business description');
+    const home = site.pages[0];
+    const altered = {
+      ...site,
+      pages: [{
+        ...home,
+        meta: { description: '</script><script>alert(1)</script>' },
+        cards: home.cards.map((card) => card.kind === 'navigation'
+          ? { ...card, props: { ...card.props, links: [{ label: 'Unsafe', href: 'javascript:alert(1)' }] } }
+          : card.kind === 'cta'
+            ? { ...card, props: { ...card.props, href: 'javascript:alert(1)' } }
+            : card),
+      }, ...site.pages.slice(1)],
+    };
+    const { html } = await compileSiteHtml(altered);
+    expect(html).not.toContain('href="javascript:');
+    expect(html).not.toContain('</script><script>alert(1)</script>');
+    expect(html).toContain('\\u003c/script>');
   });
 
   it('executes site.generate through Gateway with idempotency', async () => {
@@ -179,6 +220,16 @@ describe('TAR Site compiler', () => {
     expect(pub.releaseId).toBeDefined();
     expect([...bucket.objects.values()].some((body) => body.includes('Slice House'))).toBe(true);
 
+    const stored = await client.execute({ sql: 'SELECT data FROM records WHERE id=?', args: [siteId] });
+    const manifest = JSON.parse(String(stored.rows[0].data)).releases[0] as { files: { key: string; hash: string }[] };
+    for (const file of manifest.files) {
+      const body = bucket.objects.get(file.key);
+      expect(body).toBeDefined();
+      const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(body));
+      const expected = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+      expect(file.hash).toBe(expected);
+    }
+
     const firstReleaseId = String(pub.releaseId);
 
     // Update and publish second release
@@ -215,6 +266,35 @@ describe('TAR Site compiler', () => {
     expect(roll.releaseId).toBe(firstReleaseId);
   });
 
+  it('uses the workspace slug for the public URL', async () => {
+    const client = await createTestWorkspace();
+    const generated = await Effect.runPromise(executeGateway(client, ownerAccess, {
+      actionId: 'site.generate', idempotencyKey: 'site-url-generate', input: { title: 'Slice House', prompt: 'Pizza' },
+    }));
+    const published = await Effect.runPromise(executeGateway(client, ownerAccess, {
+      actionId: 'site.publish', idempotencyKey: 'site-url-publish', input: { siteId: String(generated.siteId), subdomain: 'unroutable' },
+    }, { siteReleases: releaseBucket() }));
+    expect(published.liveUrl).toBe('/v1/sites/slice-house');
+  });
+
+  it('regenerates the canonical record and retains its published releases', async () => {
+    const client = await createTestWorkspace();
+    const bucket = releaseBucket();
+    const first = await Effect.runPromise(executeGateway(client, ownerAccess, {
+      actionId: 'site.generate', idempotencyKey: 'canonical-first', input: { title: 'Slice House', prompt: 'Pizza' },
+    }));
+    const published = await Effect.runPromise(executeGateway(client, ownerAccess, {
+      actionId: 'site.publish', idempotencyKey: 'canonical-publish', input: { siteId: String(first.siteId) },
+    }, { siteReleases: bucket }));
+    const second = await Effect.runPromise(executeGateway(client, ownerAccess, {
+      actionId: 'site.generate', idempotencyKey: 'canonical-second', input: { title: 'Slice House', prompt: 'Pizza and bread' },
+    }));
+    expect(second.siteId).toBe(first.siteId);
+    expect((second.site as { currentRelease: string }).currentRelease).toBe(published.releaseId);
+    const rows = await client.execute("SELECT COUNT(*) AS count FROM records WHERE type='site' AND state='live'");
+    expect(Number(rows.rows[0].count)).toBe(1);
+  });
+
   it('refreshes public facts without inference charge', async () => {
     const client = await createTestWorkspace();
     const gen = await Effect.runPromise(
@@ -226,8 +306,17 @@ describe('TAR Site compiler', () => {
     );
     const siteId = String(gen.siteId);
 
+    const bucket = releaseBucket();
+    await Effect.runPromise(executeGateway(client, ownerAccess, {
+      actionId: 'site.publish', idempotencyKey: 'site-refresh-initial', input: { siteId },
+    }, { siteReleases: bucket }));
+
     // Insert a product into records
     const at = Date.now();
+    await client.execute({
+      sql: `INSERT INTO records (id, type, title, state, data, owner, version, created, updated)
+            VALUES ('pos.settings', 'pos.settings', 'Store', 'active', '{"currency":"INR"}', 'owner_1', 1, ?, ?)`, args: [at, at],
+    });
     await client.execute({
       sql: `INSERT INTO records (id, type, title, state, data, owner, version, created, updated)
             VALUES ('prod_1', 'pos.product', 'Garlic Bread', 'active', '{"price":15000,"description":"Fresh with herbs"}', 'owner_1', 1, ?, ?)`,
@@ -239,9 +328,16 @@ describe('TAR Site compiler', () => {
         actionId: 'site.refresh',
         idempotencyKey: 'site-refresh-1',
         input: { siteId },
-      })
+      }, { siteReleases: bucket })
     );
     expect(refreshed.refreshed).toBe(true);
-    expect(refreshed.itemCount).toBeGreaterThan(0);
+    expect(refreshed.itemCount).toBe(1);
+    const stored = await client.execute({ sql: 'SELECT data FROM records WHERE id=?', args: [siteId] });
+    const site = JSON.parse(String(stored.rows[0].data));
+    expect(site.pages[1].cards[1].props.items).toEqual([]);
+    expect(site.releases).toHaveLength(2);
+    const catalog = site.releases[1].files.find((file: { path: string }) => file.path === '/catalog/index.html');
+    expect(bucket.objects.get(catalog.key)).toContain('Garlic Bread');
+    expect(bucket.objects.get(catalog.key)).toContain('₹150.00');
   });
 });

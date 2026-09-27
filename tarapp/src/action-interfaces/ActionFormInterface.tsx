@@ -11,6 +11,11 @@ function initialValues(props: ActionInterfaceProps): Record<string, string> {
 
 const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const allDays = '0,1,2,3,4,5,6';
+const routineRole = (value: string) => {
+  const role = value.trim().toLowerCase();
+  return ['chef', 'cook', 'kitchen'].includes(role) ? 'kitchen' : role;
+};
+const grantedRoles = (workspace: HarnessWorkspace) => workspace.roles?.length ? workspace.roles : [workspace.workRole || 'general'];
 
 export default function ActionFormInterface(props: ActionInterfaceProps) {
   if (!props.visible) return null;
@@ -43,7 +48,15 @@ function ActionForm(props: ActionInterfaceProps) {
     if (props.action.id !== 'routine.save') return;
     let current = true;
     void harness.listWorkspaces().then((result) => {
-      if (current) setRoutineWorkspaces(result.workspaces.filter((item) => item.state === 'active'));
+      if (current) {
+        const available = result.workspaces.filter((item) => item.state === 'active');
+        setRoutineWorkspaces(available);
+        setValues((values) => {
+          const selected = available.find((item) => item.slug === values.workspace);
+          return selected?.role === 'member' && !values.role.trim()
+            ? { ...values, role: grantedRoles(selected)[0] || '' } : values;
+        });
+      }
     }).catch(() => { if (current) setRoutineWorkspaces([]); });
     return () => { current = false; };
   }, [props.action.id]);
@@ -59,6 +72,14 @@ function ActionForm(props: ActionInterfaceProps) {
     const missing = props.action.fields.find((field) => field.required && !values[field.key]?.trim());
     if (missing) { Alert.alert('Required information', `Enter ${missing.label.toLowerCase()}.`); return; }
     if (isRoutine && !values.days.trim()) { Alert.alert('Choose days', 'Select at least one day for this routine.'); return; }
+    if (isRoutine && routineWorkspaces.length) {
+      const workspace = routineWorkspaces.find((item) => item.slug === values.workspace);
+      if (!workspace) { Alert.alert('Choose a workspace', 'Select one of your active workspaces.'); return; }
+      if (workspace.role === 'member' && !grantedRoles(workspace).some((role) => routineRole(role) === routineRole(values.role))) {
+        Alert.alert('Choose an assigned role', 'This workspace role is no longer assigned to you. Select one of the available roles.');
+        return;
+      }
+    }
     setSaving(true);
     try {
       const input = Object.fromEntries(props.action.fields.flatMap((field) => { const raw = values[field.key]?.trim(); return raw ? [[field.key, field.kind === 'number' ? Number(raw) : raw]] : []; }));
@@ -104,6 +125,7 @@ function ActionForm(props: ActionInterfaceProps) {
   const startField = byKey('start');
   const endField = byKey('end');
   const priorityField = byKey('priority');
+  const selectedRoutineWorkspace = routineWorkspaces.find((item) => item.slug === values.workspace);
 
   return <Modal visible={props.visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={props.onClose}>
     <KeyboardAvoidingView style={styles.page} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -151,16 +173,27 @@ function ActionForm(props: ActionInterfaceProps) {
               {(routineWorkspaces.length ? routineWorkspaces : [{ id: values.workspace || 'current', slug: values.workspace || '', name: values.workspace || 'Current', mode: 'work' as const, scope: '', role: 'owner' as const, state: 'active' as const }]).map((workspace) => {
                 const selected = values.workspace === workspace.slug;
                 return (
-                  <TouchableOpacity key={workspace.id} accessibilityRole="radio" accessibilityState={{ selected }} disabled={saving} onPress={() => setValue('workspace', workspace.slug)} style={[styles.choice, selected && styles.choiceSelected]}>
+                  <TouchableOpacity key={workspace.id} accessibilityRole="radio" accessibilityState={{ selected }} disabled={saving} onPress={() => setValues((current) => ({ ...current, workspace: workspace.slug,
+                    role: workspace.role === 'member' ? grantedRoles(workspace)[0] || '' : current.role }))} style={[styles.choice, selected && styles.choiceSelected]}>
                     <Text style={[styles.choiceText, selected && styles.choiceTextSelected]}>{workspace.mode === 'personal' ? 'Personal' : workspace.name}</Text>
                   </TouchableOpacity>
                 );
               })}
             </View> : null}
             {roleField || priorityField ? <View style={styles.inlineRow}>
-              {roleField ? <TextInput editable={!saving} value={values.role || ''} onChangeText={(value) => setValue('role', value)} placeholder={roleField.label} placeholderTextColor="#9AA3B2" accessibilityLabel={roleField.label} style={styles.plainInput} /> : null}
+              {roleField && selectedRoutineWorkspace?.role === 'member' ? <View style={styles.roleChoices}>
+                <Text style={styles.label}>Your role</Text>
+                <View style={styles.choices}>{grantedRoles(selectedRoutineWorkspace).map((role) => {
+                  const selected = routineRole(values.role || '') === routineRole(role);
+                  return <TouchableOpacity key={role} accessibilityRole="radio" accessibilityState={{ selected }} disabled={saving} onPress={() => setValue('role', role)} style={[styles.choice, selected && styles.choiceSelected]}>
+                    <Text style={[styles.choiceText, selected && styles.choiceTextSelected]}>{role}</Text>
+                  </TouchableOpacity>;
+                })}</View>
+              </View> : roleField ? <TextInput editable={!saving} value={values.role || ''} onChangeText={(value) => setValue('role', value)} placeholder={roleField.label} placeholderTextColor="#9AA3B2" accessibilityLabel={roleField.label} style={styles.plainInput} /> : null}
               {priorityField ? <TextInput editable={!saving} value={values.priority || ''} onChangeText={(value) => setValue('priority', value)} keyboardType="numeric" placeholder="Priority" placeholderTextColor="#9AA3B2" accessibilityLabel={priorityField.label} style={styles.plainInputShort} /> : null}
             </View> : null}
+            {selectedRoutineWorkspace?.role === 'member' ? <Text style={styles.roleHint}>Only roles assigned to you can select this routine.</Text>
+              : <Text style={styles.roleHint}>The role label describes this context; it does not change workspace permissions.</Text>}
           </View>
         ) : visibleFields.map((item, index) => field(item, index === 0))}
       </ScrollView>
@@ -199,6 +232,8 @@ const styles = StyleSheet.create({
   choiceText: { fontSize: 13, fontWeight: '700', color: '#5F6672' },
   choiceTextSelected: { color: '#173673' },
   inlineRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 12 },
+  roleChoices: { flex: 1, gap: 8 },
+  roleHint: { color: '#5F6672', fontSize: 12, lineHeight: 18 },
   plainInput: { flex: 1, minWidth: 0, minHeight: 44, fontSize: 15, color: '#172033', borderBottomWidth: 1, borderBottomColor: '#C9D2E0', paddingVertical: 8 },
   plainInputShort: { width: 96, minHeight: 44, fontSize: 15, color: '#172033', textAlign: 'center', borderBottomWidth: 1, borderBottomColor: '#C9D2E0', paddingVertical: 8 },
   allText: { fontSize: 13, fontWeight: '800', color: '#3157A8' },

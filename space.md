@@ -45,6 +45,10 @@ time + timezone + routines + manual hold + authorized workspaces
    Space              Inbox              Ask
 ```
 
+The tabs in this sketch show the original navigation idea. The unified signed-in
+screen and navigation plan is [tarscreen.md](tarscreen.md); the Space and Inbox
+behavioral rules below still apply.
+
 The header always says **workspace · role · owner**, so a person knows whose
 system they are acting in. `Schedule` writes a routine to Personal. `Auto`
 releases a manual hold.
@@ -111,6 +115,16 @@ Delivery ─┤                                      |
 Sales ────┘                         Mine / Available / Waiting
 ```
 
+The target Inbox is a **per-user database**: authorized workspace events
+materialize minimal, typed work entries there. Each entry keeps its source
+workspace and record link, role, state, due time and source version. Projection
+updates are idempotent; completion or lost membership retracts stale entries.
+The workspace record remains authoritative, and opening or acting rechecks it.
+
+**Now** is the user-facing screen over that Inbox, the active Space context and
+relevant authorized Artifacts or tools. The default list includes work from
+every authorized workspace. [tarscreen.md](tarscreen.md) defines its layout.
+
 | Group | Contents |
 | --- | --- |
 | Mine | assigned tasks and role-owned operational work |
@@ -129,13 +143,16 @@ customer places order
        +-> owner Inbox: accept / reject
        +-> kitchen Inbox: prepare assigned lines by station
        +-> courier Inbox: reach / collect / deliver
-       +-> customer Inbox: pay / receive / rate
+       +-> customer Inbox: receive / rate after verified cashier payment
 ```
 
 The same parent record creates role-specific projections. A kitchen member sees
 preparation details, a courier sees handoff details, and a customer sees their
 own decisions. Payment or private business data is not copied into projections
 that cannot read it.
+
+Customer self-payment stays disabled until a verified payment adapter is
+configured. Cashier-recorded payment can advance an order to customer receipt.
 
 ## Space, Site and Artifact
 
@@ -172,4 +189,4 @@ Space is correct when it can model the sample day entirely as data, changes
 automatically only on a clear result, labels workspace/role/owner, never expands
 access, and lets Inbox act across workspaces without changing Space.
 
-See [commerce.md](commerce.md), [site.md](site.md) and [tarv12.md](tarv12.md).
+See the linked [commerce.md](commerce.md) and [site.md](site.md) contracts.

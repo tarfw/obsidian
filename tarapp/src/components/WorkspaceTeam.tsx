@@ -9,10 +9,12 @@ const roles: { label: string; role: Exclude<HarnessRole, 'owner'>; workRole: Wor
   { label: 'Member', role: 'member', workRole: 'general' },
   { label: 'Cook', role: 'member', workRole: 'cook' },
   { label: 'Cashier', role: 'member', workRole: 'cashier' },
+  { label: 'Courier', role: 'member', workRole: 'courier' },
+  { label: 'Customer', role: 'member', workRole: 'customer' },
   { label: 'Manager', role: 'admin', workRole: 'general' },
   { label: 'Guest', role: 'guest', workRole: 'general' },
 ];
-const roleLabel = (member: HarnessMember) => member.role === 'owner' ? 'Owner' : member.role === 'admin' ? 'Manager' : member.role === 'guest' ? 'Guest' : member.workRole && member.workRole !== 'general' ? member.workRole.replace(/\b\w/g, (letter) => letter.toUpperCase()) : 'Member';
+const roleLabel = (member: HarnessMember) => member.role === 'owner' ? 'Owner' : member.role === 'admin' ? 'Manager' : member.role === 'guest' ? 'Guest' : (member.roles?.length ? member.roles : [member.workRole || 'general']).map((role) => role === 'general' ? 'Member' : role.replace(/\b\w/g, (letter) => letter.toUpperCase())).join(', ');
 
 export default function WorkspaceTeam({ scope, name, onClose, onChanged }: { scope: string; name: string; onClose: () => void; onChanged: () => void }) {
   const insets = useSafeAreaInsets();
@@ -89,12 +91,14 @@ export default function WorkspaceTeam({ scope, name, onClose, onChanged }: { sco
     setEditing(member);
     setAdding(true);
     setSelectedRole(roles.find((item) => item.role === member.role && item.workRole === member.workRole) || roles[0]);
-    setWorkRole(member.workRole || 'general');
+    setWorkRole((member.roles?.length ? member.roles : [member.workRole || 'general']).join(', '));
   };
   const saveMember = () => void run(async () => {
-    const access = { role: selectedRole.role, workRole: selectedRole.role === 'member' ? workRole.trim() || 'general' : 'general' };
+    const grants = selectedRole.role === 'member' ? workRole.split(',').map((value) => value.trim().toLowerCase()).filter(Boolean) : ['general'];
+    if (!grants.length) grants.push('general');
+    const access = { role: selectedRole.role, workRole: grants[0], roles: grants };
     if (editing) await harness.updateMember(scope, editing.id, access);
-    else await harness.inviteMember(scope, email.trim(), access.role, access.workRole);
+    else await harness.inviteMember(scope, email.trim(), access.role, access.workRole, access.roles);
     setEmail(''); setEditing(null); setAdding(false); setSelectedRole(roles[0]); setWorkRole('general');
   });
 
@@ -156,7 +160,7 @@ export default function WorkspaceTeam({ scope, name, onClose, onChanged }: { sco
               <View style={styles.formHeading}><Text style={styles.sectionTitle}>{editing ? 'Edit access' : 'Invite a member'}</Text><Pressable accessibilityRole="button" accessibilityLabel="Cancel" onPress={() => { setAdding(false); setEditing(null); }} hitSlop={8}><Ionicons name="close" size={20} color={palette.muted} /></Pressable></View>
               {!editing ? <TextInput accessibilityLabel="Member Google email" placeholder="Google account email" placeholderTextColor={palette.faint} autoCapitalize="none" keyboardType="email-address" value={email} onChangeText={setEmail} style={styles.input} /> : <Text style={styles.formEmail}>{editing.email}</Text>}
               <View style={styles.roleOptions}>{roles.filter((item) => item.role !== 'admin' || chat.role === 'owner').map((item) => <Pressable key={item.label} accessibilityRole="radio" accessibilityState={{ selected: selectedRole.label === item.label }} disabled={busy} onPress={() => { setSelectedRole(item); setWorkRole(item.workRole); }} style={[styles.roleOption, selectedRole.label === item.label && styles.roleOptionSelected]}><Text style={[styles.roleText, selectedRole.label === item.label && styles.roleTextSelected]}>{item.label}</Text></Pressable>)}</View>
-              {selectedRole.role === 'member' ? <TextInput accessibilityLabel="Work role" placeholder="Work role, for example courier" placeholderTextColor={palette.faint} value={workRole === 'general' ? '' : workRole} onChangeText={(value) => setWorkRole(value || 'general')} style={styles.input} /> : null}
+              {selectedRole.role === 'member' ? <><TextInput accessibilityLabel="Work roles" placeholder="Roles, for example chef, cashier" placeholderTextColor={palette.faint} value={workRole === 'general' ? '' : workRole} onChangeText={setWorkRole} style={styles.input} /><Text style={styles.helper}>Separate multiple roles with commas. The first is the default; Space follows the active routine.</Text></> : null}
               <Text style={styles.helper}>Access activates when they sign in with this Google email. Share your TAR app link; no email is sent automatically.</Text>
               <View style={styles.formFooter}>{button('Cancel', () => { setAdding(false); setEditing(null); }, false, 'quiet')}{button(editing ? 'Save changes' : 'Send invite', saveMember, !editing && !email.trim(), 'primary')}</View>
             </View> : null}

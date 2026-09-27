@@ -1,6 +1,6 @@
 import type { ActionDefinition } from '../registry/catalog.ts';
 
-export const posActions = [
+const posInterfaceActions = [
   { id: 'pos.open', title: 'Open POS', roles: ['owner', 'admin', 'member'], effects: [] },
   { id: 'pos.setup', title: 'Manage POS', roles: ['owner', 'admin'], effects: ['settings_update'] },
   { id: 'pos.product.save', title: 'Save product', roles: ['owner', 'admin'], effects: ['product_update', 'stock_movement'] },
@@ -8,7 +8,7 @@ export const posActions = [
   { id: 'pos.product.draft', title: 'Draft product with AI', roles: ['owner', 'admin'], effects: ['ai_draft'] },
   { id: 'pos.stock.adjust', title: 'Adjust stock', roles: ['owner', 'admin'], effects: ['stock_movement'] },
   { id: 'pos.customer.save', title: 'Save customer', roles: ['owner', 'admin', 'member'], effects: ['customer_update'] },
-  { id: 'pos.order.save', title: 'Save order to Inbox', roles: ['owner', 'admin', 'member'], effects: ['order_create', 'inbox'] },
+  { id: 'pos.order.save', title: 'Save order for Now', roles: ['owner', 'admin', 'member'], effects: ['order_create', 'inbox'] },
   { id: 'pos.order.item.update', title: 'Update order item', roles: ['owner', 'admin', 'member'], effects: ['order_item_update', 'inbox'] },
   { id: 'pos.order.cancel', title: 'Cancel open order', roles: ['owner', 'admin', 'member'], effects: ['order_cancel', 'inbox'] },
   { id: 'pos.checkout', title: 'Complete sale', roles: ['owner', 'admin', 'member'], effects: ['order_create', 'payment_record', 'stock_movement'] },
@@ -18,3 +18,30 @@ export const posActions = [
 ].map((action) => ({ ...action, version: 1, type: 'app', description: action.title,
   interfaceKey: 'pos', fields: [], output: ['result'],
 })) as readonly ActionDefinition[];
+
+export const posActions: readonly ActionDefinition[] = [
+  ...posInterfaceActions,
+  { id: 'pos.order.accept', version: 1, type: 'app', title: 'Accept order', description: 'Accept an order for preparation or delivery.', interfaceKey: 'confirmation',
+    fields: [{ key: 'orderId', label: 'Order', kind: 'record', required: true, hidden: true }, { key: 'version', label: 'Version', kind: 'number', required: true, hidden: true }],
+    output: ['order'], roles: ['owner', 'admin'], effects: ['order_update', 'inbox'] },
+  { id: 'pos.order.reject', version: 1, type: 'app', title: 'Reject order', description: 'Reject a pending order with a reason.', interfaceKey: 'form',
+    fields: [{ key: 'orderId', label: 'Order', kind: 'record', required: true, hidden: true }, { key: 'version', label: 'Version', kind: 'number', required: true, hidden: true }, { key: 'reason', label: 'Reason', kind: 'textarea', required: true }],
+    output: ['order'], roles: ['owner', 'admin'], effects: ['order_update', 'inbox'] },
+  ...(['reach', 'collect', 'deliver'] as const).map((stage): ActionDefinition => ({
+    id: `pos.order.${stage}`, version: 1, type: 'app', title: stage === 'reach' ? 'Reach pickup' : stage === 'collect' ? 'Collect order' : 'Deliver order',
+    description: stage === 'reach' ? 'Claim this delivery and report arrival at pickup.' : stage === 'collect' ? 'Confirm collection of the claimed order.' : 'Confirm delivery of the claimed order.',
+    interfaceKey: 'confirmation',
+    fields: [{ key: 'orderId', label: 'Order', kind: 'record', required: true, hidden: true }, { key: 'version', label: 'Version', kind: 'number', required: true, hidden: true }],
+    output: ['order'], roles: ['member'], effects: ['delivery_update', 'inbox'],
+  })),
+  { id: 'pos.order.receive', version: 1, type: 'app', title: 'Confirm receipt', description: 'Confirm that you received your paid order.', interfaceKey: 'confirmation',
+    fields: [{ key: 'orderId', label: 'Order', kind: 'record', required: true, hidden: true }, { key: 'version', label: 'Version', kind: 'number', required: true, hidden: true }],
+    output: ['order'], roles: ['member'], effects: ['order_update', 'inbox'] },
+  { id: 'pos.order.handoff', version: 1, type: 'app', title: 'Handoff order', description: 'Confirm every line is ready and hand the order to service or pickup.', interfaceKey: 'confirmation',
+    fields: [{ key: 'orderId', label: 'Order', kind: 'record', required: true, hidden: true }, { key: 'version', label: 'Version', kind: 'number', required: true, hidden: true }],
+    output: ['order'], roles: ['owner', 'admin', 'member'], effects: ['order_update', 'inbox'] },
+  { id: 'pos.order.rate', version: 1, type: 'app', title: 'Rate order', description: 'Rate an order you received.', interfaceKey: 'form',
+    fields: [{ key: 'orderId', label: 'Order', kind: 'record', required: true, hidden: true }, { key: 'version', label: 'Version', kind: 'number', required: true, hidden: true },
+      { key: 'rating', label: 'Rating from 1 to 5', kind: 'number', required: true }, { key: 'comment', label: 'Comment', kind: 'textarea' }],
+    output: ['order'], roles: ['member'], effects: ['order_update', 'inbox'] },
+];

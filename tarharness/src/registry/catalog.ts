@@ -147,7 +147,7 @@ export const actionCatalog = [
   },
   {
     id: 'task.create', version: 1, type: 'human', title: 'Create task',
-    description: 'Assign work that appears in the Inbox.', interfaceKey: 'form',
+    description: 'Assign work that appears in Now.', interfaceKey: 'form',
     fields: [
       { key: 'title', label: 'What needs doing?', kind: 'text', required: true },
       { key: 'assigneeId', label: 'Assignee', kind: 'text' },

@@ -1,0 +1,2 @@
+ALTER TABLE members ADD COLUMN roles TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE workspace_invites ADD COLUMN roles TEXT NOT NULL DEFAULT '[]';

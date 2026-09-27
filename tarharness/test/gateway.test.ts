@@ -90,6 +90,11 @@ describe('mandatory Gateway execution', () => {
   it('requires domain actions for protected record creation and state changes', async () => {
     const client = await workspace();
     await expect(Effect.runPromise(executeGateway(client, access, { actionId: 'record.create', idempotencyKey: 'fake-site', input: { type: 'site', title: 'Unreviewed site' } }))).rejects.toThrow('registered domain action');
+    for (const type of ['item', 'price', 'stock', 'purchase', 'order', 'invoice', 'payment', 'refund', 'posting']) {
+      await expect(Effect.runPromise(executeGateway(client, access, { actionId: 'record.create', idempotencyKey: `fake-${type}`, input: { type, title: 'Bypass' } }))).rejects.toThrow('registered domain action');
+    }
+    await client.execute({ sql: "INSERT INTO records(id,type,title,state,data,version,created,updated) VALUES('legacy-order','order','Order','accepted','{}',1,0,0)" });
+    await expect(Effect.runPromise(executeGateway(client, access, { actionId: 'record.update', idempotencyKey: 'fake-order-update', input: { recordId: 'legacy-order', baseVersion: 1, title: 'Changed' } }))).rejects.toThrow('registered domain action');
     const created = await Effect.runPromise(executeGateway(client, access, { actionId: 'task.create', idempotencyKey: 'safe-task', input: { title: 'Review quote' } }));
     const task = created.record as { id: string; version: number };
     await expect(Effect.runPromise(executeGateway(client, access, { actionId: 'record.update', idempotencyKey: 'fake-complete', input: { recordId: task.id, baseVersion: task.version, state: 'completed' } }))).rejects.toThrow('registered action');

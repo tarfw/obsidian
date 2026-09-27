@@ -44,6 +44,6 @@ export async function processCommand(db: D1Database, id: string, withDatabase: <
   } catch (error) {
     const retry = (!(error instanceof HarnessError) || error.status >= 500) && job.attempts < 5;
     await db.prepare('UPDATE channel_commands SET state=?,result=?,due_at=?,updated_at=? WHERE id=? AND attempts=?')
-      .bind(retry ? 'pending' : 'failed', error instanceof HarnessError && error.status < 500 ? error.message : 'Could not finish. Check your TAR Inbox before trying again.', Date.now() + 30_000 * job.attempts, Date.now(), id, job.attempts).run();
+      .bind(retry ? 'pending' : 'failed', error instanceof HarnessError && error.status < 500 ? error.message : 'Could not finish. Check TAR Now before trying again.', Date.now() + 30_000 * job.attempts, Date.now(), id, job.attempts).run();
   }
 }

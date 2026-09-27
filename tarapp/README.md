@@ -1,8 +1,12 @@
 # TAR App
 
-Expo/React Native client for Space, unified Inbox, Ask TAR, Flow Books, commerce
+Expo/React Native client for Space, Now, Ask TAR, Flow Books, commerce
 interfaces, members and Site Studio. Business state and mutations stay in TAR
-Harness; the app holds only identity/session and transient presentation state.
+Harness. Now keeps a local, read-only Turso replica of a dedicated per-user
+Inbox database. It shows saved work immediately and pulls fresh
+projections after the Gateway refreshes source workspaces. Rows open their
+source for fresh details and use its Gateway for changes. Offline actions are
+unavailable until the source can be reached.
 
 ## Develop
 
@@ -10,6 +14,13 @@ Harness; the app holds only identity/session and transient presentation state.
 npm install
 npm start
 ```
+
+The Now replica uses `@tursodatabase/sync-react-native`, a native module.
+Rebuild the Expo development client after installing dependencies; Expo Go and
+an older development client cannot load it. The app requests short-lived,
+read-only replica credentials from `GET /v1/inbox/replica`. They are held in
+memory and never saved to the device. Signing out removes the local snapshot
+and replica files.
 
 The development build uses the deployed TAR Harness unless
 `EXPO_PUBLIC_TARHARNESS_URL` is set. `npx expo start` serves the app bundle; it
@@ -33,4 +44,5 @@ configuration must match the Android package and EAS project in `app.json`.
 npx eas build --platform android --profile production
 ```
 
-See [tarv12.md](../tarv12.md) for the system contract.
+See [space.md](../space.md) for the current Space contract and its linked
+[commerce.md](../commerce.md) and [site.md](../site.md) contracts.

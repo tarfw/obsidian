@@ -8,17 +8,11 @@ import RecordDetailModal from '@/components/RecordDetailModal';
 import SearchRecordsModal from '@/components/SearchRecordsModal';
 import SiteScreen from '@/components/site';
 import WorkspaceTeam from '@/components/WorkspaceTeam';
-import { TarLogo } from '@/components/TarLogo';
-import { createOperationKey, harness, type HarnessAction, type HarnessCanvasCard, type HarnessFlowBook, type HarnessFlowRun, type HarnessInbox, type HarnessInboxSource, type HarnessInterfaceContract, type HarnessRecord, type HarnessSpaceContext, type HarnessSpaceSection, type HarnessWorkspace } from '@/lib/harness';
+import { createOperationKey, harness, type HarnessAction, type HarnessCanvasCard, type HarnessFlowBook, type HarnessFlowRun, type HarnessInterfaceContract, type HarnessRecord, type HarnessSpaceContext, type HarnessSpaceSection, type HarnessWorkspace } from '@/lib/harness';
 
-export type WorkspaceTab = 'space' | 'inbox' | 'flows' | 'ask';
-type OrderLine = { productId: string; title: string; quantity: number; status?: 'pending' | 'preparing' | 'ready' };
-type OrderState = 'pending' | 'preparing' | 'ready';
-type InboxSource = Omit<HarnessInboxSource, 'permissions'> & { permissions?: HarnessInboxSource['permissions'] };
-type InboxEntry = { kind: 'task' | 'order'; record: HarnessRecord; source: InboxSource };
-interface Props { tab: WorkspaceTab; scope: string; workspaceName: string; role: 'owner' | 'admin' | 'member' | 'guest'; workspaces: HarnessWorkspace[]; onSelectWorkspace: (slug: string) => void; onCreateWorkspace: () => void; }
+export type WorkspaceTab = 'space' | 'flows';
+interface Props { tab: WorkspaceTab; scope: string; workspaceName: string; role: 'owner' | 'admin' | 'member' | 'guest'; workspaces: HarnessWorkspace[]; onSelectWorkspace: (slug: string) => void; onCreateWorkspace: () => void; underHeader?: boolean; }
 interface OpenAction { action: HarnessAction; scope: string; input?: Record<string, unknown>; title?: string; }
-interface AskSuggestion extends Record<string, unknown> { action: string | null; title: string | null; confidence: number | null; review: true; }
 
 const flowPublishAction: HarnessAction = {
   id: 'flow.publish', version: 3, type: 'app', title: 'Create Flow Book',
@@ -29,8 +23,6 @@ const flowBuilderContract: HarnessInterfaceContract = { key: 'flow-builder', ver
 
 const colors = { ink: '#1B1C20', muted: '#626671', faint: '#8B8F99', line: '#D8DBE3', wash: '#F1F3F8', surface: '#FFFFFF', container: '#EAEFF7', outline: '#C9D2E0', blue: '#3157A8', selected: '#173673', selectedWash: '#DCE5FF', green: '#18865B', amber: '#A66D00', personal: '#D5654F' };
 const titleCase = (value: string) => value.replace(/[_-]+/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
-const orderLines = (order: HarnessRecord) => Array.isArray(order.data.lines) ? order.data.lines as OrderLine[] : [];
-const stateIcon = (state: OrderState): keyof typeof Ionicons.glyphMap => state === 'ready' ? 'checkmark-circle' : state === 'preparing' ? 'time' : 'ellipse-outline';
 const stateColor = (state: string) => {
   const s = state.toLowerCase();
   if (s === 'ready' || s === 'active' || s === 'completed' || s === 'won' || s === 'paid' || s === 'live') return colors.green;
@@ -38,36 +30,42 @@ const stateColor = (state: string) => {
   if (s === 'failed' || s === 'cancelled' || s === 'lost' || s === 'archived') return '#D54F4F';
   return colors.muted;
 };
-const workspaceTint = (workspace: HarnessWorkspace) => workspace.mode === 'personal' ? colors.personal : colors.blue;
 
 type SpacePayload = { sections: HarnessSpaceSection[]; context: HarnessSpaceContext | null; decision: 'automatic' | 'confirm'; alternatives: HarnessSpaceContext[] };
-type InboxPayload = { sources: InboxSource[]; groups: HarnessInbox['groups']; partial: boolean };
 type FlowPayload = { books: HarnessFlowBook[]; runs: HarnessFlowRun[] };
 type RegistryPayload = { actions: HarnessAction[]; interfaces: HarnessInterfaceContract[] };
 type RecordsPayload = { records: HarnessRecord[]; next: number | null };
-type CachedPayload = SpacePayload | InboxPayload | FlowPayload | RegistryPayload | RecordsPayload;
+type CachedPayload = SpacePayload | FlowPayload | RegistryPayload | RecordsPayload;
 
-// Survives tab remounts so returning to a tab renders instantly and refreshes in the background.
+// Reuses cached workspace data when returning from Now and refreshes in the background.
 const payloadCache = new Map<string, CachedPayload>();
-const cached = <T extends CachedPayload>(key: string): T | undefined => payloadCache.get(key) as T | undefined;
+export function clearWorkspacePayloadCache() { payloadCache.clear(); }
+const cacheKey = (personalId: string | undefined, key: string) => personalId ? `${personalId}:${key}` : null;
+const cached = <T extends CachedPayload>(personalId: string | undefined, key: string): T | undefined => {
+  const identityKey = cacheKey(personalId, key);
+  return identityKey ? payloadCache.get(identityKey) as T | undefined : undefined;
+};
+const cache = (personalId: string | undefined, key: string, value: CachedPayload) => {
+  const identityKey = cacheKey(personalId, key);
+  if (identityKey) payloadCache.set(identityKey, value);
+};
 const flowsKey = (scope: string) => `flows:${scope}`;
 const registryKey = (scope: string) => `registry:${scope}`;
 const recordsKey = (scope: string) => `records:${scope}`;
 
-export default function HarnessWorkspaceCanvas({ tab, scope, workspaceName, role, workspaces, onSelectWorkspace, onCreateWorkspace }: Props) {
+export default function HarnessWorkspaceCanvas({ tab, scope, workspaceName, role, workspaces, onSelectWorkspace, onCreateWorkspace, underHeader = false }: Props) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const [areaFilter, setAreaFilter] = useState('all');
+  const personalId = workspaces.find((item) => item.mode === 'personal')?.id;
   const [teamOpen, setTeamOpen] = useState(false);
   const [siteOpen, setSiteOpen] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<HarnessRecord | null>(null);
   const [selectedRecordScope, setSelectedRecordScope] = useState(scope);
   const [searchOpen, setSearchOpen] = useState(false);
-  const spaceSeed = cached<SpacePayload>('space');
-  const inboxSeed = cached<InboxPayload>('inbox');
-  const flowSeed = cached<FlowPayload>(flowsKey(scope));
-  const registrySeed = cached<RegistryPayload>(registryKey(scope));
-  const recordsSeed = cached<RecordsPayload>(recordsKey(scope));
+  const spaceSeed = cached<SpacePayload>(personalId, 'space');
+  const flowSeed = cached<FlowPayload>(personalId, flowsKey(scope));
+  const registrySeed = cached<RegistryPayload>(personalId, registryKey(scope));
+  const recordsSeed = cached<RecordsPayload>(personalId, recordsKey(scope));
   const [sections, setSections] = useState<HarnessSpaceSection[]>(spaceSeed?.sections ?? []);
   const [spaceContext, setSpaceContext] = useState<HarnessSpaceContext | null>(spaceSeed?.context ?? null);
   const [spaceDecision, setSpaceDecision] = useState<'automatic' | 'confirm'>(spaceSeed?.decision ?? 'automatic');
@@ -79,19 +77,17 @@ export default function HarnessWorkspaceCanvas({ tab, scope, workspaceName, role
   const [spaceFlows, setSpaceFlows] = useState(false);
   const [books, setBooks] = useState<HarnessFlowBook[]>(flowSeed?.books ?? []);
   const [flowRuns, setFlowRuns] = useState<HarnessFlowRun[]>(flowSeed?.runs ?? []);
-  const [inboxSources, setInboxSources] = useState<InboxSource[]>(inboxSeed?.sources ?? []);
-  const [inboxGroups, setInboxGroups] = useState<HarnessInbox['groups']>(inboxSeed?.groups ?? { mine: [], available: [], waiting: [] });
-  const [inboxPartial, setInboxPartial] = useState(inboxSeed?.partial ?? false);
   const [browseOpen, setBrowseOpen] = useState(false);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [routineRecords, setRoutineRecords] = useState<HarnessRecord[]>([]);
+  const [routineLoading, setRoutineLoading] = useState(false);
+  const [routineError, setRoutineError] = useState('');
   const [actions, setActions] = useState<HarnessAction[]>(registrySeed?.actions ?? []);
   const [interfaces, setInterfaces] = useState<HarnessInterfaceContract[]>(registrySeed?.interfaces ?? []);
   const [openAction, setOpenAction] = useState<OpenAction | null>(null);
-  const [loading, setLoading] = useState(!(tab === 'inbox' ? inboxSeed : tab === 'flows' ? flowSeed : spaceSeed));
+  const [loading, setLoading] = useState(!(tab === 'flows' ? flowSeed : spaceSeed));
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
-  const [askDraft, setAskDraft] = useState('');
-  const [askSuggestion, setAskSuggestion] = useState<AskSuggestion | null>(null);
-  const [asking, setAsking] = useState(false);
   const currentScope = useRef(scope);
   const selectRecord = (record: HarnessRecord, recordScope = scope) => {
     setSelectedRecordScope(recordScope);
@@ -102,28 +98,26 @@ export default function HarnessWorkspaceCanvas({ tab, scope, workspaceName, role
     if (currentScope.current !== scope) return;
     if (!silent) { setLoading(true); setError(''); }
     try {
-      const [registry, nextSpace, nextRecords, inbox, flowData] = await Promise.all([
+      const [registry, nextSpace, nextRecords, flowData] = await Promise.all([
         tab === 'flows' || (tab === 'space' && (spaceRecords || spaceFlows)) ? harness.workspaceRegistry(scope) : Promise.resolve(null),
         tab === 'space' ? harness.space() : Promise.resolve(null),
         tab === 'space' && spaceRecords ? harness.records(scope) : Promise.resolve(null),
-        tab === 'inbox' ? harness.unifiedInbox() : Promise.resolve(null),
         tab === 'flows' || (tab === 'space' && spaceFlows) ? harness.flows(scope) : Promise.resolve(null),
       ]);
       if (currentScope.current !== scope) return;
       if (nextSpace) {
         setError('');
         const payload: SpacePayload = { sections: nextSpace.sections, context: nextSpace.context, decision: nextSpace.decision, alternatives: nextSpace.alternatives };
-        payloadCache.set('space', payload);
+        cache(personalId, 'space', payload);
         setSections(nextSpace.sections);
         setSpaceContext(nextSpace.context);
         setSpaceDecision(nextSpace.decision);
         setSpaceAlternatives(nextSpace.alternatives);
-        if (nextSpace.context.workspace.slug !== scope) onSelectWorkspace(nextSpace.context.workspace.slug);
+        if (nextSpace.decision === 'automatic' && nextSpace.context.workspace.slug !== scope) onSelectWorkspace(nextSpace.context.workspace.slug);
       }
-      if (nextRecords) { payloadCache.set(recordsKey(scope), { records: nextRecords.records, next: nextRecords.next }); setRecords(nextRecords.records); setRecordNext(nextRecords.next); }
-      if (flowData) { payloadCache.set(flowsKey(scope), { books: flowData.books, runs: flowData.runs }); setBooks(flowData.books); setFlowRuns(flowData.runs); }
-      if (registry) { payloadCache.set(registryKey(scope), { actions: registry.actions, interfaces: registry.interfaces }); setActions(registry.actions); setInterfaces(registry.interfaces); }
-      if (inbox) { payloadCache.set('inbox', { sources: inbox.sources, groups: inbox.groups, partial: inbox.partial }); setInboxSources(inbox.sources); setInboxGroups(inbox.groups); setInboxPartial(inbox.partial); }
+      if (nextRecords) { cache(personalId, recordsKey(scope), { records: nextRecords.records, next: nextRecords.next }); setRecords(nextRecords.records); setRecordNext(nextRecords.next); }
+      if (flowData) { cache(personalId, flowsKey(scope), { books: flowData.books, runs: flowData.runs }); setBooks(flowData.books); setFlowRuns(flowData.runs); }
+      if (registry) { cache(personalId, registryKey(scope), { actions: registry.actions, interfaces: registry.interfaces }); setActions(registry.actions); setInterfaces(registry.interfaces); }
     } catch (cause) {
       if (currentScope.current !== scope) return;
       if (tab === 'space') setSections([]);
@@ -131,14 +125,14 @@ export default function HarnessWorkspaceCanvas({ tab, scope, workspaceName, role
     } finally {
       if (!silent && currentScope.current === scope) setLoading(false);
     }
-  }, [scope, tab, spaceRecords, spaceFlows, onSelectWorkspace]);
+  }, [scope, tab, spaceRecords, spaceFlows, onSelectWorkspace, personalId]);
 
   const [seededScope, setSeededScope] = useState(scope);
   if (seededScope !== scope) {
     setSeededScope(scope);
-    const flows = cached<FlowPayload>(flowsKey(scope));
-    const registry = cached<RegistryPayload>(registryKey(scope));
-    const page = cached<RecordsPayload>(recordsKey(scope));
+    const flows = cached<FlowPayload>(personalId, flowsKey(scope));
+    const registry = cached<RegistryPayload>(personalId, registryKey(scope));
+    const page = cached<RecordsPayload>(personalId, recordsKey(scope));
     setBooks(flows?.books ?? []);
     setFlowRuns(flows?.runs ?? []);
     setActions(registry?.actions ?? []);
@@ -152,10 +146,11 @@ export default function HarnessWorkspaceCanvas({ tab, scope, workspaceName, role
 
   useEffect(() => {
     currentScope.current = scope;
-    const seedKey = tab === 'inbox' ? 'inbox' : tab === 'flows' ? flowsKey(scope) : 'space';
-    const timer = setTimeout(() => { void reload(payloadCache.has(seedKey)); }, 0);
+    const seedKey = tab === 'flows' ? flowsKey(scope) : 'space';
+    const key = cacheKey(personalId, seedKey);
+    const timer = setTimeout(() => { void reload(Boolean(key && payloadCache.has(key))); }, 0);
     return () => clearTimeout(timer);
-  }, [reload, tab, scope]);
+  }, [reload, tab, scope, personalId]);
   useEffect(() => { const subscription = AppState.addEventListener('change', (state) => { if (state === 'active') void reload(true); }); return () => subscription.remove(); }, [reload]);
   useEffect(() => {
     if (tab !== 'space' || spaceRecords || spaceFlows) return;
@@ -185,20 +180,7 @@ export default function HarnessWorkspaceCanvas({ tab, scope, workspaceName, role
     const source = spaceContext?.workspace.slug || scope;
     if (card.kind === 'action') open(source, card.actionId, card.initialInput, card.title);
     else if (card.kind === 'flow') open(source, card.actionId || 'flow.start', card.initialInput || { flowId: card.flowId }, card.title);
-    else if (card.kind === 'inbox') router.push('/(tabs)/inbox');
-  };
-
-  const openOrder = (source: InboxSource, order: HarnessRecord) => {
-    open(source.workspace.slug, 'pos.open', { section: 'sell', orderId: order.id }, `Order ${order.id.slice(-6).toUpperCase()}`);
-  };
-
-  const updateOrderItem = async (source: InboxSource, order: HarnessRecord, productId: string, status: 'preparing' | 'ready') => {
-    try {
-      await harness.executeAction(source.workspace.slug, 'pos.order.item.update', { orderId: order.id, version: order.version, productId, status }, createOperationKey(`pos.order.item:${order.id}:${productId}`));
-      await reload(true);
-    } catch (cause) {
-      Alert.alert('Could not update item', cause instanceof Error ? cause.message : 'Reload the Inbox and try again.');
-    }
+    else if (card.kind === 'now') router.push('/(home)/now');
   };
 
   const handleCreateRecord = (category?: string) => {
@@ -241,11 +223,10 @@ export default function HarnessWorkspaceCanvas({ tab, scope, workspaceName, role
     return eligible.has('record.create');
   };
 
-  const chooseArea = (slug: string) => {
-    if (tab === 'inbox') { setAreaFilter(slug); return; }
+  const chooseArea = (slug: string, chosenRole?: string) => {
     if (slug === 'all') return;
     if (tab === 'space') {
-      void harness.holdContext(slug).then(() => {
+      void harness.holdContext(slug, 43_200_000, chosenRole).then(() => {
         onSelectWorkspace(slug);
         if (slug === scope) void reload();
       }).catch((cause) => Alert.alert('Could not hold this Space', cause instanceof Error ? cause.message : 'Try again.'));
@@ -260,70 +241,67 @@ export default function HarnessWorkspaceCanvas({ tab, scope, workspaceName, role
   const activeWorkspace = workspaces.find((item) => item.slug === scope) || workspaces[0];
   const canManageSite = activeWorkspace?.mode === 'work' && (role === 'owner' || role === 'admin');
   const workspaceSources = workspaces.map((workspace) => ({ workspace, tasks: [], orders: [] }));
-  const inboxFilterWorkspace = inboxSources.find((source) => source.workspace.slug === areaFilter)?.workspace;
-  const inboxTitle = areaFilter === 'all' ? 'All areas' : inboxFilterWorkspace ? (inboxFilterWorkspace.mode === 'personal' ? 'Personal' : inboxFilterWorkspace.name) : 'Inbox';
-  const contextTitle = spaceContext?.label || workspaceName;
+  const contextTitle = spaceDecision === 'confirm' ? 'Choose a Space' : spaceContext?.label || workspaceName;
   const contextWorkspaceName = spaceContext ? (spaceContext.workspace.mode === 'personal' ? 'Personal' : spaceContext.workspace.name) : '';
-  const contextMeta = spaceContext ? [contextWorkspaceName === contextTitle ? '' : contextWorkspaceName, spaceContext.role, `Owner: ${spaceContext.owner}`].filter(Boolean).join(' · ') : null;
-  const configureRoutine = async (editCurrent = false) => {
+  const contextMeta = spaceDecision === 'confirm'
+    ? [activeWorkspace?.mode === 'personal' ? 'Personal' : activeWorkspace?.name || workspaceName,
+      titleCase(activeWorkspace?.workRole || role), `Owner: ${activeWorkspace?.owner || 'Workspace owner'}`].join(' · ')
+    : spaceContext ? [contextWorkspaceName, spaceContext.role, `Owner: ${spaceContext.owner}`].join(' · ') : null;
+  const configureRoutine = (existing?: HarnessRecord) => {
     const personal = workspaces.find((item) => item.mode === 'personal');
     if (!personal) { Alert.alert('Personal is unavailable', 'Refresh your workspaces and try again.'); return; }
     const clock = new Date();
     const time = (offset: number) => `${String((clock.getHours() + offset) % 24).padStart(2, '0')}:${String(clock.getMinutes()).padStart(2, '0')}`;
-    const source = spaceContext?.workspace.slug || scope;
+    const source = spaceDecision === 'confirm' ? scope : spaceContext?.workspace.slug || scope;
+    const targetWorkspace = workspaces.find((item) => item.slug === source) || activeWorkspace;
     let input: Record<string, unknown> = {
-      label: spaceContext?.workspace.name || workspaceName || activeWorkspace?.name || 'Work', workspace: source,
-      role: activeWorkspace?.workRole && activeWorkspace.workRole !== 'general' ? activeWorkspace.workRole : '',
+      label: spaceDecision === 'confirm' ? targetWorkspace?.name || workspaceName : spaceContext?.label || targetWorkspace?.name || 'Work', workspace: source,
+      role: spaceDecision === 'confirm' ? targetWorkspace?.workRole || '' : spaceContext?.role || targetWorkspace?.workRole || '',
       start: time(0), end: time(1), days: '0,1,2,3,4,5,6', priority: 0,
     };
-    if (editCurrent && spaceContext?.source === 'routine') {
-      try {
-        let offset = 0;
-        let found: HarnessRecord | undefined;
-        do {
-          const page = await harness.records(personal.slug, 'routine', offset);
-          found = page.records.find((item) => item.id === spaceContext.id);
-          if (found || page.next === null) break;
-          offset = page.next;
-        } while (true);
-        if (!found) throw new Error('This routine is no longer available. Reload Space and try again.');
-        input = { id: found.id, baseVersion: found.version, label: found.title, workspace: found.data.workspace,
-          role: found.data.role || '', start: found.data.start, end: found.data.end,
-          days: Array.isArray(found.data.days) ? found.data.days.join(',') : '0,1,2,3,4,5,6',
-          priority: found.data.priority ?? 0 };
-      } catch (cause) {
-        Alert.alert('Could not load routine', cause instanceof Error ? cause.message : 'Try again.');
-        return;
-      }
+    if (existing) {
+      input = { id: existing.id, baseVersion: existing.version, label: existing.title, workspace: existing.data.workspace,
+        role: existing.data.role || '', start: existing.data.start, end: existing.data.end,
+        days: Array.isArray(existing.data.days) ? existing.data.days.join(',') : '0,1,2,3,4,5,6',
+        priority: existing.data.priority ?? 0 };
     }
-    open(personal.slug, 'routine.save', input, 'Schedule Space');
+    setScheduleOpen(false);
+    open(personal.slug, 'routine.save', input, existing ? 'Edit Space routine' : 'Schedule Space');
   };
-  const scheduleRoutine = () => {
-    if (spaceContext?.source !== 'routine') { void configureRoutine(); return; }
-    Alert.alert('Schedule Space', 'Add another routine or edit the one active now.', [
-      { text: 'Add routine', onPress: () => { void configureRoutine(); } },
-      { text: 'Edit current', onPress: () => { void configureRoutine(true); } },
+  const loadRoutines = async () => {
+    const personal = workspaces.find((item) => item.mode === 'personal');
+    if (!personal) { setRoutineError('Personal is unavailable. Refresh your workspaces and try again.'); return; }
+    setRoutineLoading(true); setRoutineError('');
+    try {
+      const all: HarnessRecord[] = [];
+      let offset: number | null = 0;
+      while (offset !== null) {
+        const page = await harness.records(personal.slug, 'routine', offset);
+        all.push(...page.records);
+        offset = page.next;
+      }
+      setRoutineRecords(all);
+    } catch (cause) { setRoutineError(cause instanceof Error ? cause.message : 'Could not load routines.'); }
+    finally { setRoutineLoading(false); }
+  };
+  const scheduleRoutine = () => { setScheduleOpen(true); void loadRoutines(); };
+  const removeRoutine = (record: HarnessRecord) => {
+    const personal = workspaces.find((item) => item.mode === 'personal');
+    if (!personal) return;
+    Alert.alert('Remove Space routine?', `Remove “${record.title}” from your schedule?`, [
       { text: 'Cancel', style: 'cancel' },
+      { text: 'Remove', style: 'destructive', onPress: () => {
+        void harness.executeAction(personal.slug, 'routine.remove', { id: record.id, baseVersion: record.version }, createOperationKey(`routine.remove:${record.id}`))
+          .then(async () => { await loadRoutines(); await reload(true); })
+          .catch((cause) => Alert.alert('Could not remove routine', cause instanceof Error ? cause.message : 'Try again.'));
+      } },
     ]);
   };
-  const askTar = async () => {
-    const prompt = askDraft.trim();
-    if (!prompt || asking) return;
-    setAsking(true);
-    try {
-      const suggestion = await harness.executeAction<AskSuggestion>(scope, 'flow.suggest', { prompt }, createOperationKey('flow.suggest'));
-      setAskSuggestion(suggestion);
-      setAskDraft('');
-    } catch (cause) {
-      Alert.alert('Could not decide', cause instanceof Error ? cause.message : 'Try again.');
-    } finally { setAsking(false); }
-  };
-
   return (
       <View style={styles.page}>
       {teamOpen ? <WorkspaceTeam key={scope} scope={scope} name={workspaceName} onClose={() => setTeamOpen(false)} onChanged={() => { void reload(true); }} /> : null}
       {tab === 'flows' ? (
-        <View style={[styles.tabBody, { paddingTop: insets.top }]}>
+        <View style={[styles.tabBody, { paddingTop: underHeader ? 0 : insets.top }]}>
           <WorkspaceHeader sources={workspaceSources} value={scope} onChange={chooseArea} onCreate={onCreateWorkspace} onSearch={() => setSearchOpen(true)} onSettings={() => router.push('/settings')} showMembers={activeWorkspace?.mode === 'work'} onMembers={() => setTeamOpen(true)} title={workspaceName} />
           <ScrollView style={styles.scroll} contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 24 }]}>
           <FlowBooks
@@ -338,13 +316,12 @@ export default function HarnessWorkspaceCanvas({ tab, scope, workspaceName, role
         </View>
       ) : (
         <KeyboardAvoidingView style={styles.tabBody} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); void reload(true).finally(() => setRefreshing(false)); }} />} style={styles.scroll} contentContainerStyle={[styles.content, tab === 'ask' && styles.askContent, { paddingTop: insets.top + 12, paddingBottom: tab === 'ask' ? 16 : insets.bottom + 24 }]}>
-          {tab === 'inbox' ? <WorkspaceHeader sources={inboxSources} value={areaFilter} onChange={chooseArea} onCreate={onCreateWorkspace} allowAllAreas onSearch={() => setSearchOpen(true)} onSettings={() => router.push('/settings')} showMembers={activeWorkspace?.mode === 'work'} onMembers={() => setTeamOpen(true)} title={inboxTitle} /> : null}
-          {(tab === 'ask' || (tab === 'space' && !spaceRecords && !spaceFlows)) && activeWorkspace ? <WorkspaceHeader sources={workspaceSources} value={scope} onChange={chooseArea} onCreate={onCreateWorkspace} onSearch={() => setSearchOpen(true)} onSettings={() => router.push('/settings')} showMembers={activeWorkspace.mode === 'work'} onMembers={() => setTeamOpen(true)} title={tab === 'space' ? contextTitle : workspaceName} meta={tab === 'space' ? contextMeta : null} chips={tab === 'space' ? [{ label: 'Schedule', onPress: scheduleRoutine }, ...(spaceContext?.held ? [{ label: 'Auto', onPress: resumeAutomaticContext }] : [])] : undefined} /> : null}
+        <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); void reload(true).finally(() => setRefreshing(false)); }} />} style={styles.scroll} contentContainerStyle={[styles.content, { paddingTop: (underHeader ? 0 : insets.top) + 12, paddingBottom: insets.bottom + 24 }]}>
+          {tab === 'space' && !spaceRecords && !spaceFlows && activeWorkspace ? <WorkspaceHeader sources={workspaceSources} value={scope} onChange={chooseArea} onCreate={onCreateWorkspace} onSearch={() => setSearchOpen(true)} onSettings={() => router.push('/settings')} showMembers={activeWorkspace.mode === 'work'} onMembers={() => setTeamOpen(true)} title={contextTitle} meta={contextMeta} chips={[{ label: 'Schedule', onPress: scheduleRoutine }, ...(spaceContext?.held ? [{ label: 'Auto', onPress: resumeAutomaticContext }] : [])]} /> : null}
           {tab === 'space' && !spaceRecords && !spaceFlows && spaceDecision === 'confirm' && spaceContext ? <View style={styles.contextQuestion}>
             <Text style={styles.contextQuestionTitle}>Which Space are you in now?</Text>
-            {[spaceContext, ...spaceAlternatives].map((item) => <Pressable key={item.id} accessibilityRole="button" onPress={() => chooseArea(item.workspace.slug)} style={styles.contextOption}>
-              <Text style={styles.contextOptionTitle}>{item.label}</Text><Text style={styles.contextOptionMeta}>{item.workspace.name} · {item.role}</Text>
+            {[spaceContext, ...spaceAlternatives].map((item) => <Pressable key={item.id} accessibilityRole="button" onPress={() => chooseArea(item.workspace.slug, item.role)} style={styles.contextOption}>
+              <Text style={styles.contextOptionTitle}>{item.label}</Text><Text style={styles.contextOptionMeta}>{item.workspace.name} · {item.role} · Owner: {item.owner}</Text>
             </Pressable>)}
           </View> : null}
 
@@ -355,12 +332,6 @@ export default function HarnessWorkspaceCanvas({ tab, scope, workspaceName, role
           ) : (
             <>
               {tab === 'space' && loading ? <View style={styles.progress}><ActivityIndicator size="small" color={colors.blue} /><Text style={styles.progressText}>Loading this space…</Text></View> : null}
-              {tab === 'ask' ? <View style={styles.askEmpty}>
-                <View style={styles.askMark}><TarLogo size={24} color="#6D45C5" bgColor="#F1ECFA" /></View>
-                <Text style={styles.askTitle}>Ask tar</Text>
-                <Text style={styles.askMessage}>{askSuggestion ? askSuggestion.title ? `Suggested action: ${askSuggestion.title}.` : 'No matching action. Try a more specific request.' : 'Describe what you want to do. Review the suggested action before it runs.'}</Text>
-                {askSuggestion?.action ? <Pressable accessibilityRole="button" onPress={() => open(scope, askSuggestion.action!, {}, askSuggestion.title || 'Review action')} style={styles.askReview}><Text style={styles.askReviewText}>Review {askSuggestion.title || 'action'}</Text></Pressable> : null}
-              </View> : null}
               {tab === 'space' ? spaceRecords ? (
                 <RecordsSection
                   key={spaceRecords}
@@ -427,35 +398,49 @@ export default function HarnessWorkspaceCanvas({ tab, scope, workspaceName, role
                   </View>
                 </>
               ) : null}
-              {tab === 'inbox' ? (
-                <UnifiedInbox
-                  sources={inboxSources}
-                  groups={inboxGroups}
-                  partial={inboxPartial}
-                  filter={areaFilter}
-                  onOpenOrder={openOrder}
-                  onUpdateOrder={(source, order, productId, status) => void updateOrderItem(source, order, productId, status)}
-                  onOpenTask={(source, task) => {
-                    selectRecord(task, source.workspace.slug);
-                  }}
-                  onCompleteTask={(source, task) => {
-                    open(source.workspace.slug, 'task.complete', { taskId: task.id }, task.title);
-                  }}
-                />
-              ) : null}
             </>
           )}
         </ScrollView>
-        {tab === 'ask' ? <View style={styles.askComposer}>
-          <View style={styles.askInputBar}>
-            <TextInput accessibilityLabel="Message tar" value={askDraft} onChangeText={setAskDraft} placeholder="Message" placeholderTextColor="#8B8F99" multiline style={styles.askInput} />
-            <Pressable accessibilityRole="button" accessibilityLabel="Send message" disabled={!askDraft.trim() || asking} onPress={() => void askTar()} style={styles.askControl}>
-              {asking ? <ActivityIndicator size="small" color="#7048C8" /> : <Ionicons name="arrow-up" size={21} color={askDraft.trim() ? '#7048C8' : colors.faint} />}
-            </Pressable>
-          </View>
-        </View> : null}
         </KeyboardAvoidingView>
       )}
+
+      <Modal visible={scheduleOpen} transparent animationType="slide" presentationStyle="overFullScreen" statusBarTranslucent onRequestClose={() => setScheduleOpen(false)}>
+        <View style={styles.sheetOverlay}>
+          <Pressable style={styles.sheetBackdrop} onPress={() => setScheduleOpen(false)} accessibilityRole="button" accessibilityLabel="Close Space schedule" />
+          <View style={[styles.scheduleSheet, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+            <View style={styles.sheetHandle} />
+            <View style={styles.sheetHeader}>
+              <Text style={styles.sheetTitle}>Space schedule</Text>
+              <Pressable onPress={() => setScheduleOpen(false)} style={styles.sheetClose} accessibilityRole="button" accessibilityLabel="Close">
+                <Ionicons name="close" size={20} color={colors.muted} />
+              </Pressable>
+            </View>
+            <Text style={styles.scheduleHint}>Routines are saved in Personal. Space switches automatically when one routine has the highest priority.</Text>
+            <Pressable accessibilityRole="button" onPress={() => configureRoutine()} style={styles.scheduleAdd}>
+              <Ionicons name="add-circle-outline" size={20} color={colors.blue} />
+              <Text style={styles.scheduleAddText}>Add routine</Text>
+            </Pressable>
+            {routineLoading ? <View style={styles.progress}><ActivityIndicator size="small" color={colors.blue} /><Text style={styles.progressText}>Loading routines…</Text></View> : null}
+            {routineError ? <Pressable accessibilityRole="button" onPress={() => void loadRoutines()} style={styles.error}><Text style={styles.errorText}>{routineError} Tap to retry.</Text></Pressable> : null}
+            {!routineLoading && !routineError && !routineRecords.length ? <Text style={styles.empty}>No routines scheduled yet.</Text> : null}
+            <ScrollView style={styles.scheduleList} showsVerticalScrollIndicator={false}>
+              {routineRecords.map((record) => {
+                const workspace = workspaces.find((item) => item.slug === record.data.workspace || item.id === record.data.workspace);
+                const days = Array.isArray(record.data.days) ? record.data.days.join(', ') : 'Every day';
+                return <View key={record.id} style={styles.routineRow}>
+                  <View style={styles.routineCopy}>
+                    <Text style={styles.parentTitle}>{record.title}</Text>
+                    <Text style={styles.scheduleHint}>{workspace?.name || String(record.data.workspace || 'Unavailable workspace')} · {String(record.data.start || '')}–{String(record.data.end || '')}</Text>
+                    <Text style={styles.scheduleHint}>Days: {days} · Priority: {String(record.data.priority ?? 0)}</Text>
+                  </View>
+                  <Pressable accessibilityRole="button" accessibilityLabel={`Edit ${record.title}`} onPress={() => configureRoutine(record)} style={styles.scheduleControl}><Ionicons name="create-outline" size={19} color={colors.blue} /></Pressable>
+                  <Pressable accessibilityRole="button" accessibilityLabel={`Remove ${record.title}`} onPress={() => removeRoutine(record)} style={styles.scheduleControl}><Ionicons name="trash-outline" size={19} color="#B42318" /></Pressable>
+                </View>;
+              })}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
 
       <ActionInterfaceHost
         action={openAction?.action || null}
@@ -493,7 +478,7 @@ export default function HarnessWorkspaceCanvas({ tab, scope, workspaceName, role
   );
 }
 
-function WorkspaceHeader({ sources, value, onChange, onCreate, allowAllAreas = false, onSearch, onSettings, showMembers = false, onMembers, title, meta = null, chips }: { sources: InboxSource[]; value: string; onChange: (slug: string) => void; onCreate: () => void; allowAllAreas?: boolean; onSearch: () => void; onSettings: () => void; showMembers?: boolean; onMembers: () => void; title: string; meta?: string | null; chips?: { label: string; onPress: () => void }[] }) {
+function WorkspaceHeader({ sources, value, onChange, onCreate, onSearch, onSettings, showMembers = false, onMembers, title, meta = null, chips }: { sources: { workspace: HarnessWorkspace }[]; value: string; onChange: (slug: string) => void; onCreate: () => void; onSearch: () => void; onSettings: () => void; showMembers?: boolean; onMembers: () => void; title: string; meta?: string | null; chips?: { label: string; onPress: () => void }[] }) {
   const insets = useSafeAreaInsets();
   const { height: screenHeight } = useWindowDimensions();
   const [open, setOpen] = useState(false);
@@ -503,7 +488,7 @@ function WorkspaceHeader({ sources, value, onChange, onCreate, allowAllAreas = f
   return (
     <View style={styles.header}>
       <View style={styles.headerRow}>
-        <TouchableOpacity onPress={() => setOpen(true)} style={styles.headerTitleButton} accessibilityRole="button" accessibilityLabel={`Switch workspace. Current: ${title}`} accessibilityState={{ expanded: open }}>
+        <TouchableOpacity onPress={() => setOpen(true)} style={styles.headerTitleButton} accessibilityRole="button" accessibilityLabel={`Switch workspace. Current: ${title}${meta ? `. ${meta}` : ''}`} accessibilityState={{ expanded: open }}>
           <Text numberOfLines={1} style={styles.headerTitle}>{title}</Text>
           <Ionicons name="chevron-down" size={13} color={colors.faint} />
         </TouchableOpacity>
@@ -514,7 +499,7 @@ function WorkspaceHeader({ sources, value, onChange, onCreate, allowAllAreas = f
         </View>
       </View>
       {meta || (chips && chips.length) ? <View style={styles.headerMetaRow}>
-        {meta ? <Text numberOfLines={1} style={styles.headerMeta}>{meta}</Text> : <View style={styles.headerMetaSpacer} />}
+        {meta ? <Text style={styles.headerMeta}>{meta}</Text> : <View style={styles.headerMetaSpacer} />}
         {chips && chips.length ? <View style={styles.headerChips}>
           {chips.map((chip) => <Pressable key={chip.label} accessibilityRole="button" onPress={chip.onPress} style={styles.headerChip}><Text style={styles.headerChipText}>{chip.label}</Text></Pressable>)}
         </View> : null}
@@ -532,10 +517,6 @@ function WorkspaceHeader({ sources, value, onChange, onCreate, allowAllAreas = f
               </Pressable>
             </View>
             <ScrollView style={[styles.workspaceList, { maxHeight: Math.max(120, sheetMaxHeight - 150 - insets.bottom) }]} showsVerticalScrollIndicator={false}>
-              {allowAllAreas ? <TouchableOpacity activeOpacity={0.7} onPress={() => choose('all')} style={[styles.workspaceOption, value === 'all' && styles.workspaceOptionSelected]} accessibilityRole="button" accessibilityState={{ selected: value === 'all' }}>
-                <Text style={[styles.workspaceOptionText, value === 'all' && styles.workspaceOptionTextSelected]}>All areas</Text>
-                {value === 'all' ? <Ionicons name="checkmark-circle" size={20} color={colors.blue} /> : null}
-              </TouchableOpacity> : null}
               {sources.map(({ workspace }) => {
                 const selectedWorkspace = value === workspace.slug;
                 return <TouchableOpacity key={workspace.id} activeOpacity={0.7} onPress={() => choose(workspace.slug)} style={[styles.workspaceOption, selectedWorkspace && styles.workspaceOptionSelected]} accessibilityRole="button" accessibilityState={{ selected: selectedWorkspace }}>
@@ -552,68 +533,6 @@ function WorkspaceHeader({ sources, value, onChange, onCreate, allowAllAreas = f
         </View>
       </Modal>
     </View>
-  );
-}
-
-function UnifiedInbox({
-  sources,
-  groups,
-  partial,
-  filter,
-  onOpenOrder,
-  onUpdateOrder,
-  onOpenTask,
-  onCompleteTask,
-}: {
-  sources: InboxSource[];
-  groups: HarnessInbox['groups'];
-  partial: boolean;
-  filter: string;
-  onOpenOrder: (source: InboxSource, order: HarnessRecord) => void;
-  onUpdateOrder: (source: InboxSource, order: HarnessRecord, productId: string, status: 'preparing' | 'ready') => void;
-  onOpenTask: (source: InboxSource, task: HarnessRecord) => void;
-  onCompleteTask: (source: InboxSource, task: HarnessRecord) => void;
-}) {
-  const visibleSources = filter === 'all' ? sources : sources.filter((source) => source.workspace.slug === filter);
-  const showWorkspace = filter === 'all' && visibleSources.filter((source) => source.tasks.length || source.orders.length).length > 1;
-  const sourcesById = new Map(visibleSources.map((source) => [source.workspace.id, source]));
-  const sections = (['mine', 'available', 'waiting'] as const).map((key) => ({
-    label: key === 'mine' ? 'Mine' : key === 'available' ? 'Available' : 'Waiting',
-    entries: groups[key].flatMap((item): InboxEntry[] => {
-      const source = sourcesById.get(item.workspace.id);
-      return source ? [{ kind: item.kind, record: item.item, source }] : [];
-    }),
-  })).filter((section) => section.entries.length);
-
-  return (
-    <>
-      {partial ? <Text style={styles.partialNotice}>Some workspaces could not load. Pull down to retry.</Text> : null}
-      {!sections.length ? <Empty text="Nothing needs your attention here." /> : null}
-      {sections.map((group) => (
-        <View key={group.label} style={styles.inboxGroup}>
-          <Text style={styles.inboxGroupLabel}>{group.label}</Text>
-          {group.entries.map((entry) => entry.kind === 'order' ? (
-            <OrderRow
-              key={`${entry.source.workspace.id}:${entry.record.id}`}
-              source={entry.source}
-              order={entry.record}
-              showWorkspace={showWorkspace}
-              onOpen={() => onOpenOrder(entry.source, entry.record)}
-              onUpdate={(productId, status) => onUpdateOrder(entry.source, entry.record, productId, status)}
-            />
-          ) : (
-            <TaskRow
-              key={`${entry.source.workspace.id}:${entry.record.id}`}
-              source={entry.source}
-              task={entry.record}
-              showWorkspace={showWorkspace}
-              onOpen={() => onOpenTask(entry.source, entry.record)}
-              onComplete={() => onCompleteTask(entry.source, entry.record)}
-            />
-          ))}
-        </View>
-      ))}
-    </>
   );
 }
 
@@ -637,7 +556,7 @@ function FlowBooks({ books, runs, canCreate, onCreate, onStart, onResume, onBack
 
 const spaceCardIcon = (card: HarnessCanvasCard): { name: keyof typeof Ionicons.glyphMap; color: string } => {
   if (card.kind === 'flow') return { name: 'time-outline', color: colors.amber };
-  if (card.kind === 'inbox') return { name: 'receipt-outline', color: colors.blue };
+  if (card.kind === 'now') return { name: 'receipt-outline', color: colors.blue };
   return { name: 'checkbox-outline', color: '#7C3AED' };
 };
 
@@ -876,109 +795,11 @@ function RecordsSection({
   );
 }
 
-function WorkspaceLabel({ workspace }: { workspace: HarnessWorkspace }) {
-  return (
-    <View style={styles.workspaceLabel}>
-      <View style={[styles.workspaceLabelDot, { backgroundColor: workspaceTint(workspace) }]} />
-      <Text numberOfLines={1} style={styles.workspaceLabelText}>{workspace.mode === 'personal' ? 'Personal' : workspace.name}</Text>
-    </View>
-  );
-}
-
-function TaskRow({ source, task, showWorkspace, onOpen, onComplete }: { source: InboxSource; task: HarnessRecord; showWorkspace: boolean; onOpen: () => void; onComplete: () => void }) {
-  return (
-    <View style={styles.parentBlock}>
-      <View style={styles.parentRow}>
-        <Pressable accessibilityRole="button" onPress={onOpen} style={styles.parentCopy}>
-          <Text numberOfLines={2} style={styles.parentTitle}>{task.title}</Text>
-          {showWorkspace ? <WorkspaceLabel workspace={source.workspace} /> : null}
-        </Pressable>
-        {task.state === 'open' && source.permissions?.completeTask ? <Pressable onPress={onComplete} hitSlop={8} style={styles.rowAction} accessibilityLabel={`Complete ${task.title}`}>
-          <Text style={styles.rowActionText}>Done</Text>
-          <Ionicons name="ellipse-outline" size={16} color={colors.blue} />
-        </Pressable> : <Text style={styles.waitingState}>{task.state === 'blocked' ? 'Blocked' : task.state === 'waiting' ? 'Waiting' : 'Open'}</Text>}
-      </View>
-    </View>
-  );
-}
-
-function OrderRow({
-  source,
-  order,
-  showWorkspace,
-  onOpen,
-  onUpdate,
-}: {
-  source: InboxSource;
-  order: HarnessRecord;
-  showWorkspace: boolean;
-  onOpen: () => void;
-  onUpdate: (productId: string, status: 'preparing' | 'ready') => void;
-}) {
-  const lines = orderLines(order);
-  const type = String(order.data.orderType || 'counter').toLowerCase();
-  const table = String(order.data.table || '').trim();
-  const typeCode = type === 'delivery' ? 'D' : type === 'table' || table ? `T${table || ''}` : 'C';
-  const orderKey = `#${typeCode}-${order.id.slice(-6).toUpperCase()}`;
-  const total = Number(order.data.total || 0);
-  const currency = String(order.data.currency || 'INR');
-  const amount = new Intl.NumberFormat('en-IN', { style: 'currency', currency }).format(total / 100);
-
-  return (
-    <View style={styles.parentBlock}>
-      <Pressable onPress={onOpen} disabled={!source.permissions?.openOrder} accessibilityRole="button" style={({ pressed }) => [styles.parentRow, pressed && styles.orderPressed]}>
-        <View style={styles.parentCopy}>
-          <Text style={styles.parentTitle}>{orderKey}</Text>
-          {showWorkspace ? <WorkspaceLabel workspace={source.workspace} /> : null}
-        </View>
-      </Pressable>
-      {lines.map((line) => {
-        const status = line.status || 'pending';
-        const next = status === 'pending' ? 'preparing' as const : status === 'preparing' ? 'ready' as const : null;
-        const label = status === 'pending' ? 'Start' : status === 'preparing' ? 'Ready' : 'Ready';
-        return (
-          <View key={line.productId} style={styles.childRow}>
-            <View style={styles.childCopy}>
-              <Text numberOfLines={2} style={styles.childTitle}>{line.quantity} × {line.title}</Text>
-            </View>
-            <Pressable disabled={!next || !source.permissions?.prepare} onPress={() => { if (next) onUpdate(line.productId, next); }} hitSlop={6} style={styles.childAction}>
-              <Text style={[styles.childStatus, { color: stateColor(status) }]}>{label}</Text>
-              <Ionicons name={stateIcon(status)} size={16} color={stateColor(status)} />
-            </Pressable>
-          </View>
-        );
-      })}
-      {total > 0 && source.permissions?.collect ? (
-        <Pressable onPress={onOpen} style={styles.childRow} accessibilityLabel={`Collect ${amount}`}>
-          <View style={styles.childCopy}>
-            <Text style={styles.childTitle}>Payment · {amount}</Text>
-          </View>
-          <View style={styles.childAction}>
-            <Text style={styles.collectText}>Collect</Text>
-            <Ionicons name="arrow-forward" size={14} color={colors.blue} />
-          </View>
-        </Pressable>
-      ) : null}
-    </View>
-  );
-}
-
-function Empty({ text }: { text: string }) { return <Text style={styles.empty}>{text}</Text>; }
-
 const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: colors.surface },
   scroll: { flex: 1 },
   tabBody: { flex: 1 },
   content: { paddingHorizontal: 18 },
-  askContent: { flexGrow: 1 },
-  askEmpty: { flex: 1, minHeight: 240, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 28, paddingBottom: 60 },
-  askMark: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 14, backgroundColor: '#F1ECFA' },
-  askTitle: { color: colors.ink, fontSize: 20, fontWeight: '700', marginTop: 14 },
-  askMessage: { color: colors.muted, fontSize: 14, lineHeight: 21, marginTop: 8, textAlign: 'center', maxWidth: 280 },
-  askComposer: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8, backgroundColor: colors.surface },
-  askInputBar: { minHeight: 54, flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 7, borderRadius: 27, backgroundColor: '#E7EBF3' },
-  askControl: { width: 36, height: 40, alignItems: 'center', justifyContent: 'center' },
-  askInput: { flex: 1, maxHeight: 104, paddingVertical: 12, color: colors.ink, fontSize: 15 },
   headerIconButton: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   header: { marginBottom: 4 },
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, paddingTop: 12 },
@@ -991,8 +812,6 @@ const styles = StyleSheet.create({
   headerChip: { minHeight: 36, justifyContent: 'center', paddingHorizontal: 16, borderRadius: 18, backgroundColor: colors.selectedWash },
   headerChipText: { color: colors.selected, fontSize: 13, fontWeight: '800' },
   headerDivider: { height: 0, marginTop: 4 },
-  askReview: { marginTop: 4, minHeight: 42, justifyContent: 'center', paddingHorizontal: 16, borderRadius: 12, backgroundColor: '#6D45C5' },
-  askReviewText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
   contextQuestion: { gap: 8, padding: 12, borderRadius: 24, backgroundColor: '#fff', borderWidth: StyleSheet.hairlineWidth, borderColor: '#E3E7EF' },
   contextQuestionTitle: { color: colors.ink, fontSize: 14, fontWeight: '700' },
   contextOption: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 12, borderRadius: 16, backgroundColor: colors.container },
@@ -1002,6 +821,14 @@ const styles = StyleSheet.create({
   sheetOverlay: { flex: 1, justifyContent: 'flex-end' },
   sheetBackdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(18, 24, 36, 0.32)' },
   workspaceSheet: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingTop: 10, paddingHorizontal: 18, shadowColor: '#111827', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.1, shadowRadius: 14, elevation: 12 },
+  scheduleSheet: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingTop: 10, paddingHorizontal: 18, maxHeight: '80%' },
+  scheduleHint: { color: colors.muted, fontSize: 12, lineHeight: 18 },
+  scheduleAdd: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12, paddingHorizontal: 8 },
+  scheduleAddText: { color: colors.blue, fontSize: 14, fontWeight: '700' },
+  scheduleList: { flexGrow: 0, marginTop: 8 },
+  routineRow: { minHeight: 72, flexDirection: 'row', alignItems: 'center', gap: 4, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },
+  routineCopy: { flex: 1, paddingVertical: 10 },
+  scheduleControl: { minWidth: 40, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   sheetHandle: { width: 34, height: 4, borderRadius: 2, backgroundColor: '#C9CDD5', alignSelf: 'center', marginBottom: 12 },
   sheetHeader: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
   sheetTitle: { color: colors.ink, fontSize: 17, fontWeight: '700' },
@@ -1013,26 +840,7 @@ const styles = StyleSheet.create({
   workspaceOptionTextSelected: { color: colors.selected, fontWeight: '800' },
   createWorkspaceOption: { minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 8, marginTop: 4, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },
   createWorkspaceText: { color: colors.blue, fontSize: 15, fontWeight: '700' },
-  inboxGroup: { backgroundColor: '#fff', borderRadius: 24, paddingHorizontal: 6, paddingVertical: 6, marginBottom: 16, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: '#E3E7EF' },
-  inboxGroupLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 1.2, color: colors.faint, marginBottom: 7, paddingHorizontal: 10, paddingTop: 6 },
-  partialNotice: { color: '#7C5300', backgroundColor: '#FFF7E8', borderRadius: 8, padding: 12, marginBottom: 18, fontSize: 13, lineHeight: 19 },
-  parentBlock: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },
-  parentRow: { minHeight: 48, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 4 },
-  orderPressed: { backgroundColor: colors.wash },
-  parentCopy: { flex: 1, minWidth: 0, paddingRight: 10 },
   parentTitle: { fontSize: 14, lineHeight: 19, fontWeight: '700', color: colors.ink },
-  workspaceLabel: { marginTop: 2, flexDirection: 'row', alignItems: 'center', gap: 5 },
-  workspaceLabelDot: { width: 5, height: 5, borderRadius: 3 },
-  workspaceLabelText: { maxWidth: 140, fontSize: 10, fontWeight: '600', color: colors.muted },
-  rowAction: { minHeight: 38, flexDirection: 'row', alignItems: 'center', gap: 5, paddingLeft: 10 },
-  rowActionText: { fontSize: 12, fontWeight: '700', color: colors.blue },
-  waitingState: { color: colors.muted, fontSize: 12, fontWeight: '600' },
-  childRow: { minHeight: 42, paddingLeft: 16, flexDirection: 'row', alignItems: 'stretch', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },
-  childCopy: { flex: 1, minWidth: 0, justifyContent: 'center', paddingVertical: 8, paddingRight: 8 },
-  childTitle: { fontSize: 13, lineHeight: 18, color: '#59606C' },
-  childAction: { width: 88, minHeight: 41, flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 5 },
-  childStatus: { fontSize: 11, fontWeight: '700', textAlign: 'right' },
-  collectText: { fontSize: 11, fontWeight: '700', color: colors.blue },
   center: { minHeight: 180, justifyContent: 'center', alignItems: 'center' },
   progress: { flexDirection: 'row', alignItems: 'center', gap: 9, paddingVertical: 12 },
   progressText: { color: colors.muted, fontSize: 13 },

@@ -2,11 +2,18 @@ import { badRequest, forbidden, notFound } from './errors.ts';
 import { managesMembers, type WorkRole } from './access.ts';
 import type { AccessContext, Role } from './types.ts';
 
-export function memberRole(input: Record<string, unknown>): { role: Exclude<Role, 'owner'>; workRole: WorkRole } {
+export function memberRole(input: Record<string, unknown>): { role: Exclude<Role, 'owner'>; workRole: WorkRole; roles: WorkRole[] } {
   if (!['admin','member','guest'].includes(String(input.role))) throw badRequest('Choose a valid member role.');
   const workRole = typeof input.workRole === 'string' ? input.workRole.trim().toLowerCase() : 'general';
   if (!workRole || workRole.length > 60 || /[\u0000-\u001f\u007f]/.test(workRole) || (input.role !== 'member' && workRole !== 'general')) throw badRequest('Choose a valid work role.');
-  return { role: input.role as Exclude<Role, 'owner'>, workRole };
+  const roles = input.roles === undefined ? [workRole] : Array.isArray(input.roles)
+    ? input.roles.map((value) => typeof value === 'string' ? value.trim().toLowerCase() : '') : [];
+  if (!roles.length || roles.length > 12 || roles.some((value) => !value || value.length > 60 || /[\u0000-\u001f\u007f]/.test(value))
+    || new Set(roles).size !== roles.length || !roles.includes(workRole)
+    || (roles.includes('general') && roles.length > 1) || (input.role !== 'member' && (roles.length !== 1 || roles[0] !== 'general'))) {
+    throw badRequest('Choose valid work roles.');
+  }
+  return { role: input.role as Exclude<Role, 'owner'>, workRole, roles };
 }
 
 export const audit = (db: D1Database, ctx: AccessContext, action: string, target: string) => db.prepare(
@@ -15,16 +22,21 @@ export const audit = (db: D1Database, ctx: AccessContext, action: string, target
 
 export async function listMembers(db: D1Database, ctx: AccessContext) {
   if (!managesMembers(ctx.member)) throw forbidden();
-  return (await db.prepare(`SELECT m.user_id AS id,u.email,u.name,m.role,m.work_role AS workRole,m.state
+  return (await db.prepare(`SELECT m.user_id AS id,u.email,u.name,m.role,m.work_role AS workRole,m.roles,m.state
     FROM members m JOIN users u ON u.id=m.user_id WHERE m.workspace_id=?
-    UNION ALL SELECT i.id,i.email,NULL,i.role,i.work_role,'pending' FROM workspace_invites i
+    UNION ALL SELECT i.id,i.email,NULL,i.role,i.work_role,i.roles,'pending' FROM workspace_invites i
     WHERE i.workspace_id=? AND i.state='pending'
-    ORDER BY email`).bind(ctx.workspace.id, ctx.workspace.id).all()).results;
+    ORDER BY email`).bind(ctx.workspace.id, ctx.workspace.id).all<Record<string, unknown>>()).results.map((item) => {
+      let roles: string[];
+      try { const parsed = JSON.parse(String(item.roles || '[]')); roles = Array.isArray(parsed) ? parsed.filter((role): role is string => typeof role === 'string') : []; }
+      catch { roles = []; }
+      return { ...item, roles: roles.length ? roles : [String(item.workRole || 'general')] };
+    });
 }
 
 export async function inviteMember(db: D1Database, ctx: AccessContext, input: Record<string, unknown>) {
   if (!managesMembers(ctx.member) || ctx.workspace.mode !== 'work') throw forbidden();
-  const { role, workRole } = memberRole(input);
+  const { role, workRole, roles } = memberRole(input);
   if (role === 'admin' && ctx.member.role !== 'owner') throw forbidden();
   const email = typeof input.email === 'string' ? input.email.trim().toLowerCase() : '';
   if (email.length > 254 || !/^\S+@\S+\.\S+$/.test(email)) throw badRequest('A valid email is required.');
@@ -33,12 +45,12 @@ export async function inviteMember(db: D1Database, ctx: AccessContext, input: Re
   if (existing?.state === 'active') throw badRequest('This member already belongs to the workspace. Edit their role instead.');
   const stamp = Date.now();
   await db.batch([
-    db.prepare(`INSERT INTO workspace_invites(id,workspace_id,email,role,work_role,invited_by,state,created_at,updated_at)
-      VALUES(?,?,?,?,?,?,'pending',?,?) ON CONFLICT(workspace_id,email) DO UPDATE SET role=excluded.role,work_role=excluded.work_role,invited_by=excluded.invited_by,state='pending',updated_at=excluded.updated_at`)
-      .bind('inv_' + crypto.randomUUID(), ctx.workspace.id, email, role, workRole, ctx.identity.id, stamp, stamp),
+    db.prepare(`INSERT INTO workspace_invites(id,workspace_id,email,role,work_role,roles,invited_by,state,created_at,updated_at)
+      VALUES(?,?,?,?,?,?,?,'pending',?,?) ON CONFLICT(workspace_id,email) DO UPDATE SET role=excluded.role,work_role=excluded.work_role,roles=excluded.roles,invited_by=excluded.invited_by,state='pending',updated_at=excluded.updated_at`)
+      .bind('inv_' + crypto.randomUUID(), ctx.workspace.id, email, role, workRole, JSON.stringify(roles), ctx.identity.id, stamp, stamp),
     audit(db, ctx, 'member.invite', email),
   ]);
-  return { email, role, workRole, state: 'pending' };
+  return { email, role, workRole, roles, state: 'pending' };
 }
 
 export async function updateMember(db: D1Database, ctx: AccessContext, id: string, input: Record<string, unknown>) {
@@ -49,13 +61,13 @@ export async function updateMember(db: D1Database, ctx: AccessContext, id: strin
   if (!target && !invitation) throw notFound('Member not found.');
   if ((target || invitation)?.role === 'owner' || ((target || invitation)?.role === 'admin' && ctx.member.role !== 'owner')) throw forbidden();
   const revoke = input.state === 'revoked';
-  const next = revoke ? { role: 'member' as const, workRole: 'general' as const } : memberRole(input);
+  const next = revoke ? { role: 'member' as const, workRole: 'general' as const, roles: ['general'] } : memberRole(input);
   if (next.role === 'admin' && ctx.member.role !== 'owner') throw forbidden();
   const table = target ? 'members' : 'workspace_invites';
   const key = target ? 'user_id' : 'id';
   const statements = [revoke
     ? db.prepare(`UPDATE ${table} SET state='revoked',updated_at=? WHERE workspace_id=? AND ${key}=?`).bind(Date.now(), ctx.workspace.id, id)
-    : db.prepare(`UPDATE ${table} SET role=?,work_role=?,updated_at=? WHERE workspace_id=? AND ${key}=?`).bind(next.role, next.workRole, Date.now(), ctx.workspace.id, id),
+    : db.prepare(`UPDATE ${table} SET role=?,work_role=?,roles=?,updated_at=? WHERE workspace_id=? AND ${key}=?`).bind(next.role, next.workRole, JSON.stringify(next.roles), Date.now(), ctx.workspace.id, id),
     audit(db, ctx, revoke ? 'member.revoke' : 'member.role', id),
   ];
   if (revoke && target) statements.push(

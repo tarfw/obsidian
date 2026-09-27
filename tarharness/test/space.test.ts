@@ -58,4 +58,18 @@ describe('Space context', () => {
       expect(result).toMatchObject({ decision: 'automatic', context: { label, workspace: { slug: workspace } } });
     }
   });
+
+  it('switches granted roles within one workspace and ignores an ungranted routine role', () => {
+    const workspace = access('northstar', 'work', 'chef');
+    const member = { ...workspace, member: { ...workspace.member, roles: ['chef', 'cashier'] } } as AccessContext;
+    const routines = [
+      { id: 'kitchen', workspace: 'northstar', label: 'Kitchen', role: 'Chef', start: '09:00', end: '12:00', priority: 10 },
+      { id: 'counter', workspace: 'northstar', label: 'Counter', role: 'Cashier', start: '12:00', end: '15:00', priority: 10 },
+      { id: 'spoof', workspace: 'northstar', label: 'Private office', role: 'Owner', start: '09:00', end: '15:00', priority: 100 },
+    ];
+    expect(resolveContext([member], routines, { at: Date.parse('2026-09-25T10:00:00Z'), zone: 'UTC' }).context.role).toBe('Chef');
+    expect(resolveContext([member], routines, { at: Date.parse('2026-09-25T13:00:00Z'), zone: 'UTC' }).context.role).toBe('Cashier');
+    expect(resolveContext([member], routines, { at: 0, zone: 'UTC', override: 'northstar', role: 'Cashier', held: true }).context).toMatchObject({ role: 'Cashier', held: true });
+    expect(resolveContext([member], routines, { at: 0, zone: 'UTC', override: 'northstar', role: 'Owner', held: true }).context.role).toBe('Chef');
+  });
 });

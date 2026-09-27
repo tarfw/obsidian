@@ -1,7 +1,7 @@
 import type { Client, Transaction } from '@libsql/client/web';
 import { badRequest, conflict, forbidden, notFound } from '../errors.ts';
 import type { AccessContext } from '../types.ts';
-import { isCook } from '../access.ts';
+import { hasWorkRole, isCook } from '../access.ts';
 import { eventStatement, findReplay } from '../gateway/commit.ts';
 
 type DB = Pick<Client, 'execute'>;
@@ -46,7 +46,8 @@ export async function posSummary(db: DB) {
   return { sales: Number(result.rows[0].sales), orders: Number(orders.rows[0].count), lowStock: Number(stock.rows[0].count), currency: String(settings?.data.currency || 'INR'), businessDate: today };
 }
 export async function readPos(db: DB, context: AccessContext, section: string, search = '', offset = 0) {
-  if (isCook(context.member)) throw forbidden();
+  if (isCook(context.member) || !(context.member.role === 'owner' || context.member.role === 'admin'
+    || (context.member.role === 'member' && hasWorkRole(context.member, 'cashier')))) throw forbidden();
   if (section === 'products' || section === 'orders' || section === 'customers') {
     const types = { products: 'pos.product', orders: 'pos.order', customers: 'pos.customer' };
     return { items: await list(db, types[section], search.slice(0, 100), offset), nextOffset: offset + 100 };
@@ -57,14 +58,25 @@ export async function readPos(db: DB, context: AccessContext, section: string, s
 }
 
 export async function readPosInbox(db: DB) {
-  const result = await db.execute({ sql: "SELECT * FROM records WHERE type='pos.order' AND state='open' AND archived IS NULL ORDER BY updated DESC,id LIMIT 100" });
-  return { orders: result.rows.map(decode) };
+  const result = await db.execute({ sql: "SELECT * FROM records WHERE type='pos.order' AND state IN ('open','paid') AND json_extract(data,'$.submitted')=1 AND archived IS NULL ORDER BY updated DESC,id" });
+  return { orders: result.rows.map(decode).filter((order) => order.state === 'open' || order.data.approval === 'pending'
+    || (order.data.approval === 'accepted' && !order.data.handedOffAt)
+    || (order.data.orderType === 'delivery' && order.data.delivery !== 'delivered')
+    || (['dine-in', 'takeaway'].includes(String(order.data.orderType)) && Array.isArray(order.data.lines)
+      && order.data.lines.some((line) => object(line).status !== 'ready'))
+    || (Boolean(order.data.customerEmail) && !order.data.rating)) };
 }
 
 async function movement(db: DB, product: PosRecord, delta: number, reason: string, actor: string, reference?: string) {
   const stock = integer(Number(product.data.stock) + delta, 'Stock');
   await put(db, 'pos.product', product.title, { ...product.data, stock }, actor, product.id);
   await put(db, 'pos.movement', reason, { productId: product.id, delta, balance: stock, reference: reference || null }, actor);
+}
+async function posting(db: DB, reference: string, lines: Data[], actor: string) {
+  const debit = lines.reduce((sum, line) => sum + Number(line.debit || 0), 0);
+  const credit = lines.reduce((sum, line) => sum + Number(line.credit || 0), 0);
+  if (!Number.isSafeInteger(debit) || !Number.isSafeInteger(credit) || debit < 0 || debit !== credit) throw badRequest('Unbalanced POS posting.');
+  return put(db, 'posting', `Posting ${reference}`, { reference, lines, debit, credit }, actor, undefined, 'posted');
 }
 export async function executePos(client: Client, context: AccessContext, actionId: string, input: Data, key: string, hash: string): Promise<Data> {
   const tx = await client.transaction('write');
@@ -132,11 +144,13 @@ async function mutate(db: Transaction, context: AccessContext, action: string, i
   }
   if (action === 'pos.customer.save') {
     if (!text(input.title)) throw badRequest('Customer name is required.');
+    const email = text(input.email, 254).toLowerCase();
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw badRequest('Customer email is invalid.');
     const id = text(input.id);
     const current = id ? await get(db, id, 'pos.customer') : null;
     if (id && !current) throw notFound('Customer not found.');
     if (current && current.version !== input.version) throw conflict('Customer changed. Reload before saving.');
-    return { customer: await put(db, 'pos.customer', text(input.title), { email: text(input.email), phone: text(input.phone) }, actor, id || undefined) };
+    return { customer: await put(db, 'pos.customer', text(input.title), { email, phone: text(input.phone) }, actor, id || undefined) };
   }
   if (action === 'pos.register.open') {
     if (await register(db)) throw conflict('A register is already open.');
@@ -152,7 +166,7 @@ async function mutate(db: Transaction, context: AccessContext, action: string, i
     }
     if (orderId && (!current || current.state !== 'open')) throw conflict('This order is no longer open.');
     if (current && current.state !== 'open') throw conflict('This order is no longer open.');
-    if (current && orderId && current.version !== input.version) throw conflict('Order changed. Reload the Inbox.');
+    if (current && orderId && current.version !== input.version) throw conflict('Order changed. Reload Now.');
     const cart = Array.isArray(input.items) ? input.items.map(object) : [];
     if (!cart.length || cart.length > 100) throw badRequest('Add between 1 and 100 products.');
     if (new Set(cart.map((line) => line.productId)).size !== cart.length) throw badRequest('Combine duplicate products into one line.');
@@ -175,18 +189,40 @@ async function mutate(db: Transaction, context: AccessContext, action: string, i
     const customerId = text(input.customerId) || text(current?.data.customerId);
     const customer = customerId ? await get(db, customerId, 'pos.customer') : null;
     if (customerId && !customer) throw notFound('Customer not found.');
+    if (current?.data.submitted === true && current.data.customerId !== (customerId || null)) throw conflict('Customer cannot change after an order is submitted.');
+    const customerEmail = current?.data.submitted === true ? text(current.data.customerEmail, 254).toLowerCase() || null
+      : text(customer?.data.email, 254).toLowerCase() || null;
     const requestedType = text(input.orderType) || text(current?.data.orderType);
     const orderType = ['counter', 'dine-in', 'takeaway', 'delivery'].includes(requestedType) ? requestedType : 'counter';
+    const table = text(input.table, 80) || current?.data.table || null;
+    const destination = orderType === 'delivery' ? text(input.destination, 500) || text(current?.data.destination, 500) : '';
+    const submitted = current?.data.submitted === true || input.submitted !== false;
+    if (submitted && orderType === 'delivery' && !destination) throw badRequest('A delivery destination is required.');
+    const previousLines = Array.isArray(current?.data.lines) ? current.data.lines.map(object) : [];
+    const changed = Boolean(current) && (previousLines.length !== lines.length || previousLines.some((line, index) =>
+      line.productId !== lines[index].productId || line.quantity !== lines[index].quantity || line.price !== lines[index].price || line.total !== lines[index].total)
+      || current?.data.customerId !== (customerId || null) || current?.data.orderType !== orderType || current?.data.table !== table
+      || current?.data.destination !== destination || current?.data.discountBps !== discountBps);
+    if (changed && current && (current.data.delivery === 'reached' || current.data.delivery === 'collected' || current.data.delivery === 'delivered'
+      || previousLines.some((line) => line.status === 'preparing' || line.status === 'ready'))) {
+      throw conflict('This order is already in progress. Create a new order for changes.');
+    }
+    const approval = !submitted ? 'draft' : orderType === 'counter' || orderType === 'takeaway' ? 'accepted'
+      : !changed && current?.data.approval === 'accepted' ? 'accepted' : 'pending';
+    if (changed) for (const line of lines) line.status = 'pending';
+    const delivery = orderType === 'delivery' ? !changed && typeof current?.data.delivery === 'string' ? current.data.delivery : 'unassigned' : null;
     const total = integer(subtotal - discount + tax, 'Sale total');
     const order = await put(db, 'pos.order', 'Open order', { ...current?.data, draftKey: clientDraftKey || current?.data.draftKey || null, lines, subtotal, discount, discountBps, tax, total, currency: settings.data.currency,
-      paymentStatus: 'unpaid', customerId: customerId || null, customerName: customer?.title || null, table: text(input.table, 80) || current?.data.table || null, orderType,
+      paymentStatus: 'unpaid', customerId: customerId || null, customerName: customer?.title || null, customerEmail, table, destination, orderType, submitted, approval, delivery,
+      courier: changed ? null : current?.data.courier || null,
       storeName: settings.title, location: settings.data.location }, actor, current?.id, 'open');
     return { order };
   }
   if (action === 'pos.order.item.update') {
     const order = await get(db, text(input.orderId), 'pos.order');
-    if (!order || order.state !== 'open') throw notFound('Open order not found.');
-    if (order.version !== input.version) throw conflict('Order changed. Reload the Inbox.');
+    if (!order || !['open', 'paid'].includes(order.state)) throw notFound('Active order not found.');
+    if (order.version !== input.version) throw conflict('Order changed. Reload Now.');
+    if (order.data.submitted !== true || order.data.approval !== 'accepted') throw conflict('The order must be accepted before preparation.');
     const productId = text(input.productId);
     const next = text(input.status, 40);
     const transitions: Record<string, readonly string[]> = { pending: ['preparing'], preparing: ['ready'], ready: [] };
@@ -198,11 +234,70 @@ async function mutate(db: Transaction, context: AccessContext, action: string, i
     line.status = next;
     return { order: await put(db, 'pos.order', order.title, { ...order.data, lines }, actor, order.id, order.state) };
   }
+  if (action === 'pos.order.handoff') {
+    const order = await get(db, text(input.orderId), 'pos.order');
+    if (!order || !['open', 'paid'].includes(order.state) || order.data.submitted !== true || order.data.approval !== 'accepted') throw notFound('Active order not found.');
+    if (order.version !== input.version) throw conflict('Order changed. Reload Now.');
+    if (order.data.handedOffAt) throw conflict('This order was already handed off.');
+    if (order.data.orderType === 'delivery') throw conflict('Courier collection records delivery handoff.');
+    const ready = Array.isArray(order.data.lines) && order.data.lines.length > 0 && order.data.lines.every((line) => object(line).status === 'ready');
+    if (!ready) throw conflict('Every order line must be ready before handoff.');
+    return { order: await put(db, 'pos.order', order.title, { ...order.data, handedOffAt: Date.now(), handedOffBy: actor }, actor, order.id, order.state) };
+  }
   if (action === 'pos.order.cancel') {
     const order = await get(db, text(input.orderId), 'pos.order');
     if (!order || order.state !== 'open') throw notFound('Open order not found.');
-    if (order.version !== input.version) throw conflict('Order changed. Reload the Inbox.');
+    if (order.version !== input.version) throw conflict('Order changed. Reload Now.');
+    if (order.data.courier) throw conflict('A courier has claimed this order.');
     return { order: await put(db, 'pos.order', order.title, { ...order.data, cancelledAt: Date.now() }, actor, order.id, 'cancelled') };
+  }
+  if (action === 'pos.order.accept' || action === 'pos.order.reject') {
+    const order = await get(db, text(input.orderId), 'pos.order');
+    if (!order || !['open', 'paid'].includes(order.state) || order.data.submitted !== true) throw notFound('Pending order not found.');
+    if (order.version !== input.version) throw conflict('Order changed. Reload Now.');
+    if (order.data.approval !== 'pending') throw conflict('This order has already been reviewed.');
+    if (action === 'pos.order.reject') {
+      if (order.state !== 'open') throw conflict('A paid order needs a reviewed refund.');
+      const reason = text(input.reason, 500);
+      if (!reason) throw badRequest('A rejection reason is required.');
+      return { order: await put(db, 'pos.order', order.title, { ...order.data, approval: 'rejected', reason, reviewer: actor, reviewed: Date.now() }, actor, order.id, 'cancelled') };
+    }
+    return { order: await put(db, 'pos.order', order.title, { ...order.data, approval: 'accepted', reviewer: actor, reviewed: Date.now() }, actor, order.id, order.state) };
+  }
+  if (action === 'pos.order.reach' || action === 'pos.order.collect' || action === 'pos.order.deliver') {
+    if (context.member.role !== 'member' || !hasWorkRole(context.member, 'courier')) throw forbidden();
+    const order = await get(db, text(input.orderId), 'pos.order');
+    if (!order || !['open', 'paid'].includes(order.state) || order.data.submitted !== true || order.data.orderType !== 'delivery' || order.data.approval !== 'accepted') throw notFound('Available delivery order not found.');
+    if (order.version !== input.version) throw conflict('Order changed. Reload Now.');
+    const stage = action.slice('pos.order.'.length);
+    const previous = { reach: 'unassigned', collect: 'reached', deliver: 'collected' }[stage];
+    if (order.data.delivery !== previous) throw conflict('This delivery is at a different stage.');
+    if (stage === 'reach' ? order.data.courier : order.data.courier !== actor) throw forbidden();
+    if (stage === 'collect' && (order.state !== 'paid' || !Array.isArray(order.data.lines)
+      || order.data.lines.some((line) => object(line).status !== 'ready'))) {
+      throw conflict('Payment and preparation must finish before collection.');
+    }
+    return { order: await put(db, 'pos.order', order.title, { ...order.data, delivery: stage === 'reach' ? 'reached' : stage === 'collect' ? 'collected' : 'delivered',
+      courier: stage === 'reach' ? actor : order.data.courier,
+      ...(stage === 'collect' ? { handedOffAt: Date.now(), handedOffBy: actor } : {}), [stage]: Date.now() }, actor, order.id, order.state) };
+  }
+  if (action === 'pos.order.receive' || action === 'pos.order.rate') {
+    if (context.member.role !== 'member' || !hasWorkRole(context.member, 'customer')) throw forbidden();
+    const order = await get(db, text(input.orderId), 'pos.order');
+    if (!order || order.data.submitted !== true || order.state !== 'paid') throw notFound('Paid customer order not found.');
+    if (order.version !== input.version) throw conflict('Order changed. Reload Now.');
+    if (!order.data.customerEmail || String(order.data.customerEmail).trim().toLowerCase() !== context.identity.email.trim().toLowerCase()) throw forbidden();
+    const ready = Array.isArray(order.data.lines) && order.data.lines.length > 0 && order.data.lines.every((line) => object(line).status === 'ready');
+    if (action === 'pos.order.receive') {
+      if (order.data.receivedAt) throw conflict('This order was already received.');
+      if (order.data.orderType === 'delivery' ? order.data.delivery !== 'delivered' : !ready || !order.data.handedOffAt) throw conflict('This order is not ready to receive.');
+      return { order: await put(db, 'pos.order', order.title, { ...order.data, receivedAt: Date.now(), receivedBy: actor }, actor, order.id, order.state) };
+    }
+    if (!order.data.receivedAt || order.data.receivedBy !== actor) throw conflict('Confirm receipt before rating this order.');
+    if (order.data.rating) throw conflict('This order was already rated.');
+    const rating = integer(input.rating, 'Rating', 1, 5);
+    const comment = text(input.comment, 500);
+    return { order: await put(db, 'pos.order', order.title, { ...order.data, rating, comment, ratedAt: Date.now() }, actor, order.id, order.state) };
   }
   const session = await register(db);
   if (!session) throw badRequest('Open the register first.');
@@ -231,7 +326,7 @@ async function mutate(db: Transaction, context: AccessContext, action: string, i
     if (draft) {
       const savedLines = Array.isArray(draft.data.lines) ? draft.data.lines.map(object) : [];
       const sameCart = savedLines.length === cart.length && savedLines.every((line) => cart.some((item) => String(item.productId) === String(line.productId) && Number(item.quantity) === Number(line.quantity)));
-      if (!sameCart || discountBps !== Number(draft.data.discountBps || 0)) throw conflict('Order changed. Return to the Inbox and save the updated cart.');
+      if (!sameCart || discountBps !== Number(draft.data.discountBps || 0)) throw conflict('Order changed. Return to Now and save the updated cart.');
     }
     const lines: Data[] = [];
     let subtotal = 0, discount = 0, tax = 0;
@@ -245,7 +340,8 @@ async function mutate(db: Transaction, context: AccessContext, action: string, i
       const lineDiscount = Math.round(gross * discountBps / 10000);
       const lineTax = Math.round((gross - lineDiscount) * Number(product.data.taxBps) / 10000);
       subtotal += gross; discount += lineDiscount; tax += lineTax;
-      lines.push({ productId: product.id, title: product.title, quantity, price: product.data.price, discount: lineDiscount, tax: lineTax, total: gross - lineDiscount + lineTax });
+      const saved = Array.isArray(draft?.data.lines) ? draft.data.lines.map(object).find((item) => item.productId === product.id) : undefined;
+      lines.push({ productId: product.id, title: product.title, quantity, price: product.data.price, discount: lineDiscount, tax: lineTax, total: gross - lineDiscount + lineTax, status: text(saved?.status, 40) || 'pending' });
     }
     const total = integer(subtotal - discount + tax, 'Sale total');
     if (input.expectedTotal !== total) throw conflict('Total changed. Review the cart.');
@@ -259,7 +355,9 @@ async function mutate(db: Transaction, context: AccessContext, action: string, i
       paymentStatus: 'paid', registerId: session.id, storeName: settings.title, location: settings.data.location, receiptFooter: settings.data.receiptFooter }, actor, draft?.id, 'paid');
     for (const line of lines) await movement(db, (await get(db, String(line.productId), 'pos.product'))!, -Number(line.quantity), 'Sale', actor, order.id);
     await put(db, 'pos.payment', 'Sale payment', { orderId: order.id, amount: total, method: input.method, reference: reference || null, registerId: session.id, businessDate }, actor);
-    return { order };
+    const ledger = await posting(db, order.id, [{ account: input.method === 'cash' ? 'cash' : 'bank', debit: total },
+      { account: 'revenue', credit: subtotal - discount }, { account: 'tax', credit: tax }], actor);
+    return { order, posting: ledger };
   }
   if (action === 'pos.refund') {
     const order = await get(db, text(input.orderId), 'pos.order');
@@ -277,12 +375,14 @@ async function mutate(db: Transaction, context: AccessContext, action: string, i
     const quantities = input.quantities === undefined ? Object.fromEntries(lines.map((line) => [String(line.productId), Number(line.quantity) - Number(returned[String(line.productId)] || 0)])) : object(input.quantities);
     if (Object.keys(quantities).some((id) => !lines.some((line) => line.productId === id))) throw badRequest('Unknown return item.');
     let refundTotal = 0;
+    let refundTax = 0;
     const changes: { line: Data; quantity: number }[] = [];
     for (const line of lines) {
       const id = String(line.productId);
       const before = Number(returned[id] || 0);
       const quantity = integer(quantities[id] ?? 0, 'Return quantity', 0, Number(line.quantity) - before);
       refundTotal += Math.round(Number(line.total) * (before + quantity) / Number(line.quantity)) - Math.round(Number(line.total) * before / Number(line.quantity));
+      refundTax += Math.round(Number(line.tax || 0) * (before + quantity) / Number(line.quantity)) - Math.round(Number(line.tax || 0) * before / Number(line.quantity));
       returned[id] = before + quantity;
       if (quantity) changes.push({ line, quantity });
     }
@@ -297,7 +397,9 @@ async function mutate(db: Transaction, context: AccessContext, action: string, i
     const fullyReturned = lines.every((line) => returned[String(line.productId)] === line.quantity);
     const updated = await put(db, 'pos.order', order.title, { ...order.data, returnedQuantities: returned, refundedTotal: Number(order.data.refundedTotal || 0) + refundTotal, refundReason: text(input.reason), refundedAt: Date.now(), restocked: input.restock === true }, actor, order.id, fullyReturned ? 'refunded' : 'partially_refunded');
     await put(db, 'pos.payment', 'Refund', { orderId: order.id, amount: -refundTotal, method: order.data.method, reference: text(input.reference) || null, quantities, registerId: session.id, businessDate }, actor);
-    return { order: updated };
+    const ledger = await posting(db, updated.id, [{ account: 'returns', debit: refundTotal - refundTax }, { account: 'tax', debit: refundTax },
+      { account: order.data.method === 'cash' ? 'cash' : 'bank', credit: refundTotal }], actor);
+    return { order: updated, posting: ledger };
   }
   throw badRequest('Unsupported POS action.');
 }

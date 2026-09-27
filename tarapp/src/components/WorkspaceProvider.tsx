@@ -5,23 +5,25 @@ import { useRouter } from 'expo-router';
 import CreateWorkspace from '@/components/CreateWorkspace';
 import { tokens } from '@/components/ds/tokens';
 import { HarnessRequestError, harness, type HarnessWorkspace } from '@/lib/harness';
+import { cachedWorkspaces } from '@/lib/now-replica';
 
-interface WorkspaceTabsValue {
+interface WorkspaceValue {
   current: HarnessWorkspace;
   workspaces: HarnessWorkspace[];
   selectWorkspace: (slug: string) => void;
   createWorkspace: () => void;
 }
 
-const WorkspaceTabsContext = createContext<WorkspaceTabsValue | null>(null);
+const WorkspaceContext = createContext<WorkspaceValue | null>(null);
+const sameWorkspaces = (left: HarnessWorkspace[], right: HarnessWorkspace[]) => JSON.stringify(left) === JSON.stringify(right);
 
-export function useWorkspaceTabs() {
-  const value = useContext(WorkspaceTabsContext);
-  if (!value) throw new Error('useWorkspaceTabs must be used inside WorkspaceTabsProvider.');
+export function useWorkspace() {
+  const value = useContext(WorkspaceContext);
+  if (!value) throw new Error('useWorkspace must be used inside WorkspaceProvider.');
   return value;
 }
 
-export function WorkspaceTabsProvider({ children }: React.PropsWithChildren) {
+export function WorkspaceProvider({ children }: React.PropsWithChildren) {
   const router = useRouter();
   const [workspaces, setWorkspaces] = useState<HarnessWorkspace[]>([]);
   const [current, setCurrent] = useState<HarnessWorkspace | null>(null);
@@ -35,7 +37,7 @@ export function WorkspaceTabsProvider({ children }: React.PropsWithChildren) {
     setError('');
     try {
       const result = await harness.listWorkspaces();
-      setWorkspaces(result.workspaces);
+      setWorkspaces((previous) => sameWorkspaces(previous, result.workspaces) ? previous : result.workspaces);
       setCurrent((previous) => result.workspaces.find((item) => item.slug === preferredSlug)
         || result.workspaces.find((item) => item.id === previous?.id)
         || result.workspaces[0]
@@ -53,11 +55,19 @@ export function WorkspaceTabsProvider({ children }: React.PropsWithChildren) {
   }, [router]);
 
   useEffect(() => {
-    const timer = setTimeout(() => { void reload(); }, 0);
-    return () => clearTimeout(timer);
+    let active = true;
+    void cachedWorkspaces().then((saved) => {
+      if (active && saved?.length) {
+        setWorkspaces((previous) => sameWorkspaces(previous, saved) ? previous : saved);
+        setCurrent(saved[0]);
+        setLoaded(true);
+        setLoading(false);
+      }
+    }).finally(() => { if (active) void reload(); });
+    return () => { active = false; };
   }, [reload]);
 
-  const value = useMemo<WorkspaceTabsValue | null>(() => current ? ({
+  const value = useMemo<WorkspaceValue | null>(() => current ? ({
     current,
     workspaces,
     selectWorkspace: (slug) => {
@@ -67,15 +77,15 @@ export function WorkspaceTabsProvider({ children }: React.PropsWithChildren) {
     createWorkspace: () => setCreating(true),
   }) : null, [current, workspaces]);
 
-  if (loading) return <View style={styles.center}><ActivityIndicator size="large" color={tokens.color.accent} /></View>;
-  if (error) return <View style={styles.center}><Text style={styles.error}>{error}</Text><Pressable accessibilityRole="button" onPress={() => { void reload(); }} style={styles.retry}><Text style={styles.retryText}>Try again</Text></Pressable></View>;
+  if (loading && !value) return <View style={styles.center}><ActivityIndicator size="large" color={tokens.color.accent} /></View>;
+  if (error && !value) return <View style={styles.center}><Text style={styles.error}>{error}</Text><Pressable accessibilityRole="button" onPress={() => { void reload(); }} style={styles.retry}><Text style={styles.retryText}>Try again</Text></Pressable></View>;
   if (loaded && workspaces.length === 0) return <CreateWorkspace visible canClose={false} existingSlugs={[]} onClose={() => undefined} onSuccess={async (slug) => { await reload(slug); }} />;
   if (!value) return <View style={styles.center}><ActivityIndicator size="large" color={tokens.color.accent} /></View>;
 
-  return <WorkspaceTabsContext.Provider value={value}>
+  return <WorkspaceContext.Provider value={value}>
     {children}
     <CreateWorkspace visible={creating} canClose existingSlugs={workspaces.map((workspace) => workspace.slug)} onClose={() => setCreating(false)} onSuccess={async (slug) => { setCreating(false); await reload(slug); }} />
-  </WorkspaceTabsContext.Provider>;
+  </WorkspaceContext.Provider>;
 }
 
 const styles = StyleSheet.create({

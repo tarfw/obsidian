@@ -32,6 +32,7 @@ const rowToRecord = (row: Record<string, unknown>): RecordItem => ({
 });
 const bookActions = new Set(['record.create', 'contact.create', 'organization.create', 'task.create', 'site.generate', 'web.search']);
 const unattendedActions = new Set(['record.create', 'contact.create', 'organization.create', 'task.create']);
+const managedCommerceTypes = new Set(['item', 'variant', 'price', 'stock', 'purchase', 'order', 'invoice', 'payment', 'refund', 'posting', 'movement', 'receipt']);
 function validateContactDetails(values: Record<string, unknown>): void {
   for (const [key, value] of Object.entries(values)) {
     if (!['email', 'phone', 'website'].includes(key) || value === null || value === '') continue;
@@ -70,12 +71,12 @@ export function executeGateway(client: Client, context: AccessContext, request: 
       }
       if (request.actionId.startsWith('pos.')) return executePos(client, context, request.actionId, request.input, request.idempotencyKey, hash);
       if (commerceActionIds.has(request.actionId)) return executeCommerce(client, context, request.actionId, request.input, request.idempotencyKey, hash);
-      if (request.actionId === 'site.generate') return executeSiteGenerate(client, context, request.input, request.idempotencyKey, hash);
+      if (request.actionId === 'site.generate') return executeSiteGenerate(client, context, request.input, request.idempotencyKey, hash, services.typesafe);
       if (request.actionId === 'site.update') return executeSiteUpdate(client, context, request.input, request.idempotencyKey, hash);
       if (request.actionId === 'site.compile') return executeSiteCompile(client, context, request.input, request.idempotencyKey, hash);
       if (request.actionId === 'site.publish') return executeSitePublish(client, services.siteReleases, context, request.input, request.idempotencyKey, hash);
       if (request.actionId === 'site.rollback') return executeSiteRollback(client, context, request.input, request.idempotencyKey, hash);
-      if (request.actionId === 'site.refresh') return executeSiteRefresh(client, context, request.input, request.idempotencyKey, hash);
+      if (request.actionId === 'site.refresh') return executeSiteRefresh(client, services.siteReleases, context, request.input, request.idempotencyKey, hash);
       if (request.actionId === 'web.search') {
         const claimed = await claimTurn(client, request.idempotencyKey, hash);
         if (claimed.result) return claimed.result;
@@ -173,7 +174,7 @@ export function executeGateway(client: Client, context: AccessContext, request: 
         const type = request.actionId === 'task.create' ? 'task' : request.actionId === 'contact.create' ? 'person' : request.actionId === 'organization.create' ? 'organization' : text(request.input.type, 80);
         const title = text(request.actionId === 'contact.create' || request.actionId === 'organization.create' ? request.input.name : request.input.title, 240);
         if (!type || !title) throw badRequest('Record type and title are required.');
-        if (request.actionId === 'record.create' && (!/^[a-z][a-z0-9.]{0,79}$/.test(type) || ['person', 'organization', 'relationship', 'task', 'routine', 'site', 'flow', 'run', 'event'].includes(type) || type.startsWith('pos.'))) throw badRequest('Use the registered domain action for this record type.');
+        if (request.actionId === 'record.create' && (!/^[a-z][a-z0-9.]{0,79}$/.test(type) || ['person', 'organization', 'relationship', 'task', 'routine', 'site', 'flow', 'run', 'event'].includes(type) || managedCommerceTypes.has(type) || type.startsWith('pos.'))) throw badRequest('Use the registered domain action for this record type.');
         const assignee = request.actionId === 'task.create' ? text(request.input.assigneeId, 160) || context.identity.id : text(request.input.assigneeId, 160) || null;
         const data = request.actionId === 'record.create' || request.actionId === 'task.create' ? object(request.input.data) : Object.fromEntries(['email', 'phone', 'website'].flatMap((key) => { const value = text(request.input[key], 500); return value ? [[key, value]] : []; }));
         if (type === 'person' || type === 'organization') validateContactDetails(data);
@@ -251,7 +252,7 @@ export function executeGateway(client: Client, context: AccessContext, request: 
         const records = await query<Record<string, unknown>>(client, { sql: 'SELECT * FROM records WHERE id=? AND archived IS NULL', args: [recordId] }).pipe(Effect.runPromise);
         const current = records[0]; if (!current) throw notFound('Record not found.');
         const type = String(current.type);
-        if (type.startsWith('pos.') || ['site', 'relationship', 'routine'].includes(type)) throw badRequest('Use the registered domain action to update this record.');
+        if (type.startsWith('pos.') || managedCommerceTypes.has(type) || ['site', 'relationship', 'routine'].includes(type)) throw badRequest('Use the registered domain action to update this record.');
         if (Number(current.version) !== baseVersion) throw conflict('Record changed. Refresh and try again.');
         const title = text(request.input.title, 240) || String(current.title);
         const patch = object(request.input.data);

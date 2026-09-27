@@ -19,10 +19,24 @@ function escapeHtml(text: unknown): string {
     .replace(/'/g, '&#039;');
 }
 
-function formatMoney(minorUnits: number, currency: string): string {
-  const major = minorUnits / 100;
-  const symbol = currency === 'INR' ? '₹' : currency === 'USD' ? '$' : currency === 'EUR' ? '€' : `${currency} `;
-  return `${symbol}${major.toFixed(2)}`;
+function safeHref(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const href = value.trim();
+  if (!href || /[\u0000-\u001f\u007f\\]/.test(href)) return null;
+  if (href.startsWith('/') && !href.startsWith('//')) return escapeHtml(href);
+  if (/^#[a-zA-Z][a-zA-Z0-9_-]*$/.test(href)) return escapeHtml(href);
+  try {
+    const parsed = new URL(href);
+    if (['https:', 'mailto:', 'tel:'].includes(parsed.protocol)) return escapeHtml(href);
+  } catch { /* Relative and malformed links are not public navigation targets. */ }
+  return null;
+}
+
+function formatMoney(minorUnits: number, currency: string, locale: string): string {
+  try {
+    const formatter = new Intl.NumberFormat(locale, { style: 'currency', currency });
+    return formatter.format(minorUnits / 10 ** (formatter.resolvedOptions().maximumFractionDigits ?? 2));
+  } catch { return ''; }
 }
 
 export function compileCss(tokens: DesignTokens): string {
@@ -415,7 +429,10 @@ export function renderCard(card: CardDefinition, site: SiteDefinition): string {
       const brand = escapeHtml(p.brand || site.pages[0]?.title || 'TAR Site');
       const links = Array.isArray(p.links) ? p.links : [{ label: 'Home', href: '#' }, { label: 'Contact', href: '#contact' }];
       const renderedLinks = links
-        .map((link: any) => `<li><a href="${escapeHtml(link.href)}">${escapeHtml(link.label)}</a></li>`)
+        .map((link: any) => {
+          const href = safeHref(link?.href);
+          return href ? `<li><a href="${href}">${escapeHtml(link.label)}</a></li>` : '';
+        })
         .join('');
       return `
 <header class="tar-nav" role="banner">
@@ -434,8 +451,10 @@ export function renderCard(card: CardDefinition, site: SiteDefinition): string {
       const badge = p.badge ? `<div class="tar-hero-badge">${escapeHtml(p.badge)}</div>` : '';
       const headline = escapeHtml(p.headline || card.title || 'Welcome');
       const subtext = escapeHtml(p.subtext || '');
-      const primaryCta = p.primaryCta ? `<a href="${escapeHtml((p.primaryCta as any).href || '#contact')}" class="tar-btn tar-btn-primary">${escapeHtml((p.primaryCta as any).label || 'Get Started')}</a>` : '';
-      const secondaryCta = p.secondaryCta ? `<a href="${escapeHtml((p.secondaryCta as any).href || '#menu')}" class="tar-btn tar-btn-secondary">${escapeHtml((p.secondaryCta as any).label || 'Learn More')}</a>` : '';
+      const primaryHref = safeHref((p.primaryCta as any)?.href);
+      const secondaryHref = safeHref((p.secondaryCta as any)?.href);
+      const primaryCta = primaryHref ? `<a href="${primaryHref}" class="tar-btn tar-btn-primary">${escapeHtml((p.primaryCta as any).label || 'Explore')}</a>` : '';
+      const secondaryCta = secondaryHref ? `<a href="${secondaryHref}" class="tar-btn tar-btn-secondary">${escapeHtml((p.secondaryCta as any).label || 'Learn more')}</a>` : '';
 
       return `
 <section class="tar-section tar-hero" id="${escapeHtml(card.id)}">
@@ -468,7 +487,8 @@ export function renderCard(card: CardDefinition, site: SiteDefinition): string {
       const items = Array.isArray(p.items) ? p.items : [];
       const renderedItems = items.map((item: any) => {
         const itemTitle = escapeHtml(item.title || item.name || 'Item');
-        const price = typeof item.price === 'number' ? formatMoney(item.price, site.currency) : '';
+        const price = Number.isSafeInteger(item.price) && item.price >= 0 && typeof item.currency === 'string'
+          ? formatMoney(item.price, item.currency, site.locale) : '';
         const desc = escapeHtml(item.description || '');
         return `
       <div class="tar-card">
@@ -479,11 +499,10 @@ export function renderCard(card: CardDefinition, site: SiteDefinition): string {
           </div>
           ${desc ? `<p class="tar-card-desc">${desc}</p>` : ''}
         </div>
-        <div>
-          <a href="#contact" class="tar-btn tar-btn-outline" style="width: 100%;">Order</a>
-        </div>
       </div>`;
       }).join('');
+
+      if (!renderedItems) return '';
 
       return `
 <section class="tar-section" id="${escapeHtml(card.id)}">
@@ -499,6 +518,7 @@ export function renderCard(card: CardDefinition, site: SiteDefinition): string {
     case 'features': {
       const title = card.title ? `<h2>${escapeHtml(card.title)}</h2>` : '<h2>Why Choose Us</h2>';
       const features = Array.isArray(p.features) ? p.features : [];
+      if (!features.length) return '';
       const renderedFeatures = features.map((feat: any) => {
         const fTitle = escapeHtml(feat.title || 'Feature');
         const fDesc = escapeHtml(feat.description || '');
@@ -525,6 +545,7 @@ export function renderCard(card: CardDefinition, site: SiteDefinition): string {
     case 'proof': {
       const title = card.title ? `<h2>${escapeHtml(card.title)}</h2>` : '<h2>What Our Customers Say</h2>';
       const testimonials = Array.isArray(p.testimonials) ? p.testimonials : [];
+      if (!testimonials.length) return '';
       const renderedQuotes = testimonials.map((item: any) => {
         const quote = escapeHtml(item.quote || item.text || '');
         const author = escapeHtml(item.author || item.name || 'Verified Customer');
@@ -550,6 +571,7 @@ export function renderCard(card: CardDefinition, site: SiteDefinition): string {
     case 'faq': {
       const title = card.title ? `<h2>${escapeHtml(card.title)}</h2>` : '<h2>Frequently Asked Questions</h2>';
       const items = Array.isArray(p.items) ? p.items : [];
+      if (!items.length) return '';
       const renderedFaq = items.map((faq: any) => {
         const question = escapeHtml(faq.q || faq.question || '');
         const answer = escapeHtml(faq.a || faq.answer || '');
@@ -573,10 +595,8 @@ export function renderCard(card: CardDefinition, site: SiteDefinition): string {
 
     case 'hours': {
       const title = card.title ? `<h2>${escapeHtml(card.title)}</h2>` : '<h2>Hours & Location</h2>';
-      const schedule = Array.isArray(p.schedule) ? p.schedule : [
-        { days: 'Monday – Friday', hours: '11:00 AM – 10:00 PM' },
-        { days: 'Saturday – Sunday', hours: '10:00 AM – 11:00 PM' },
-      ];
+      const schedule = Array.isArray(p.schedule) ? p.schedule : [];
+      if (!schedule.length) return '';
       const renderedSchedule = schedule.map((row: any) => `
       <tr>
         <td>${escapeHtml(row.days)}</td>
@@ -586,7 +606,6 @@ export function renderCard(card: CardDefinition, site: SiteDefinition): string {
       return `
 <section class="tar-section" id="${escapeHtml(card.id)}" style="text-align: center;">
   <div class="tar-container">
-    <div class="tar-status-badge">● Open Now</div>
     ${title}
     <table class="tar-hours-table">
       <tbody>
@@ -602,6 +621,7 @@ export function renderCard(card: CardDefinition, site: SiteDefinition): string {
       const address = p.address ? `<div class="tar-contact-row"><span>📍</span><span>${escapeHtml(p.address)}</span></div>` : '';
       const phone = p.phone ? `<div class="tar-contact-row"><span>📞</span><a href="tel:${escapeHtml(p.phone)}" style="color: inherit;">${escapeHtml(p.phone)}</a></div>` : '';
       const email = p.email ? `<div class="tar-contact-row"><span>✉️</span><a href="mailto:${escapeHtml(p.email)}" style="color: inherit;">${escapeHtml(p.email)}</a></div>` : '';
+      if (!address && !phone && !email) return '';
 
       return `
 <section class="tar-section" id="${escapeHtml(card.id)}">
@@ -617,39 +637,19 @@ export function renderCard(card: CardDefinition, site: SiteDefinition): string {
     }
 
     case 'form': {
-      const title = card.title ? `<h2>${escapeHtml(card.title)}</h2>` : '<h2>Send an Enquiry</h2>';
-      const submitLabel = escapeHtml(p.submitLabel || 'Submit');
-
-      return `
-<section class="tar-section" id="${escapeHtml(card.id)}">
-  <div class="tar-container">
-    <div class="tar-form">
-      ${title}
-      <form action="#submitted" method="POST">
-        <div class="tar-field">
-          <label class="tar-label" for="form-name">Name</label>
-          <input class="tar-input" id="form-name" name="name" type="text" required />
-        </div>
-        <div class="tar-field">
-          <label class="tar-label" for="form-contact">Email or Phone</label>
-          <input class="tar-input" id="form-contact" name="contact" type="text" required />
-        </div>
-        <div class="tar-field">
-          <label class="tar-label" for="form-message">Message</label>
-          <textarea class="tar-textarea" id="form-message" name="message" required></textarea>
-        </div>
-        <button type="submit" class="tar-btn tar-btn-primary" style="width: 100%;">${submitLabel}</button>
-      </form>
-    </div>
-  </div>
-</section>`;
+      // A public form requires an abuse-checked Gateway route. The static Site
+      // delivery endpoint is read-only, so it must not advertise a dead submit.
+      if (!site.policy.publicEnquiry) return '';
+      throw new Error('Public enquiry requires a configured public Action Gateway.');
     }
 
     case 'cta': {
       const headline = escapeHtml(p.headline || card.title || 'Ready to Get Started?');
       const text = escapeHtml(p.text || '');
       const buttonLabel = escapeHtml(p.buttonLabel || 'Contact Us');
-      const href = escapeHtml(p.href || '#contact');
+      const href = safeHref(p.href);
+
+      if (!href) return '';
 
       return `
 <section class="tar-section" id="${escapeHtml(card.id)}">
@@ -669,7 +669,10 @@ export function renderCard(card: CardDefinition, site: SiteDefinition): string {
       const text = escapeHtml(p.text || `© ${year} ${brand}. Built on TAR.`);
       const links = Array.isArray(p.links) ? p.links : [{ label: 'Privacy', href: '#' }, { label: 'Terms', href: '#' }];
       const renderedLinks = links
-        .map((link: any) => `<li><a href="${escapeHtml(link.href)}">${escapeHtml(link.label)}</a></li>`)
+        .map((link: any) => {
+          const href = safeHref(link?.href);
+          return href ? `<li><a href="${href}">${escapeHtml(link.label)}</a></li>` : '';
+        })
         .join('');
 
       return `
@@ -694,13 +697,14 @@ export async function compileSiteHtml(site: SiteDefinition, pageIndex = 0): Prom
   const cardMarkup = page.cards.map((card) => renderCard(card, site)).join('\n');
 
   const pageTitle = escapeHtml(page.title ? `${page.title} — ${site.pages[0]?.title || 'TAR'}` : 'TAR Site');
-  const metaDesc = escapeHtml(page.meta?.description || 'Built on TAR.');
+  const description = page.meta?.description || 'Built on TAR.';
+  const metaDesc = escapeHtml(description);
 
   const structuredData = {
     '@context': 'https://schema.org',
     '@type': 'WebSite',
     name: pageTitle,
-    description: metaDesc,
+    description,
     inLanguage: site.locale,
   };
 
@@ -715,7 +719,7 @@ export async function compileSiteHtml(site: SiteDefinition, pageIndex = 0): Prom
   <meta property="og:description" content="${metaDesc}">
   <meta property="og:type" content="website">
   <script type="application/ld+json">
-${JSON.stringify(structuredData, null, 2)}
+${JSON.stringify(structuredData, null, 2).replace(/</g, '\\u003c')}
   </script>
   <style>
 ${css}

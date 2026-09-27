@@ -5,16 +5,24 @@ import { useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { TarLogo } from '@/components/TarLogo';
+import { clearWorkspacePayloadCache } from '@/components/HarnessWorkspaceCanvas';
+import { clearNowCache } from '@/components/NowScreen';
 import { useTheme } from '@/hooks/use-theme';
 import { useThemeMode } from '@/hooks/use-theme-context';
 import { getCurrentUser, signOutGoogle, type UserProfile } from '@/lib/auth';
+import { clearNowStorage } from '@/lib/now-replica';
 
 export default function SettingsScreen() {
   const router = useRouter(); const theme = useTheme(); const insets = useSafeAreaInsets();
   const { themeMode, setThemeMode } = useThemeMode(); const [user, setUser] = useState<UserProfile | null>(null);
   useEffect(() => { void getCurrentUser().then(setUser); }, []);
   const signOut = async () => {
-    if (user?.id) await SecureStore.deleteItemAsync(`onb_${user.id}`);
+    if (user?.id) {
+      await SecureStore.deleteItemAsync(`onb_${user.id}`);
+      await clearNowStorage(user.id);
+    }
+    clearWorkspacePayloadCache();
+    clearNowCache();
     await signOutGoogle(); router.replace('/auth');
   };
   return <View style={[styles.page, { backgroundColor: theme.background }]}> 

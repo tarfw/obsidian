@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'expo-router';
-import { getValidIdToken } from '@/lib/auth';
+import { getCurrentUser, getValidIdToken } from '@/lib/auth';
 
 export default function Index() {
   const router = useRouter();
@@ -9,8 +9,8 @@ export default function Index() {
   useEffect(() => {
     let active = true;
     void getValidIdToken()
-      .then((token) => { if (active) setTarget(token ? '/(tabs)/space' : '/auth'); })
-      .catch(() => { if (active) setTarget('/auth'); });
+      .then(async (token) => { if (active) setTarget(token || await getCurrentUser() ? '/(home)/now' : '/auth'); })
+      .catch(async () => { if (active) setTarget(await getCurrentUser() ? '/(home)/now' : '/auth'); });
     return () => { active = false; };
   }, []);
 

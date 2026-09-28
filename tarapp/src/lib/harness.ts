@@ -1,6 +1,6 @@
 import { randomUUID } from 'expo-crypto';
 import { getValidIdToken, invalidateGoogleToken } from './auth';
-import type { SiteDefinition, SitePatchOperation } from './site-schema';
+import type { AskOutcome, Asset, AssetSummary, Checks, EditOutcome, ReleaseManifest, SiteDocument, SiteSnapshot } from './site-schema';
 
 export const HARNESS_URL = (process.env.EXPO_PUBLIC_TARHARNESS_URL || 'https://tarharness.tar-54d.workers.dev').replace(/\/$/, '');
 
@@ -145,17 +145,49 @@ export const harness = {
   createTask: (slug: string, title: string) => request<{ record: HarnessRecord }>(workspacePath(slug, 'actions/task.create'), { method: 'POST', body: { title }, key: createOperationKey('task.create') }),
   completeTask: (slug: string, taskId: string) => request<{ taskId: string; state: 'completed' }>(workspacePath(slug, 'actions/task.complete'), { method: 'POST', body: { taskId }, key: createOperationKey(`task.complete:${taskId}`) }),
   site: {
-    get: (slug: string) => request<{ site: { id: string; version: number; state: string; data: SiteDefinition } | null; publicUrl: string | null; liveRelease: string | null; publicationState: string | null }>(workspacePath(slug, 'site')),
+    get: (slug: string) => request<SiteSnapshot>(workspacePath(slug, 'site')),
     available: (slug: string) => request<{ site: unknown | null }>(workspacePath(slug, 'site'), { missingRouteOk: true }),
-    generate: (slug: string, input: { title?: string; prompt?: string; theme?: string }, operationKey?: string) =>
-      request<{ siteId: string; version: number; state: string; site: SiteDefinition; preview: { html: string; css: string; hash: string } }>(
+    generate: (slug: string, input: { title?: string; prompt?: string; theme?: string; audience?: string; tone?: string; records?: string[] }, operationKey?: string) =>
+      request<{ siteId: string; version: number; state: string; site: SiteDocument; preview: { html: string; css: string; hash: string }; composed: boolean; note?: string }>(
         workspacePath(slug, 'actions/site.generate'),
         { method: 'POST', body: input, key: operationKey || createOperationKey('site.generate') }
       ),
-    update: (slug: string, siteId: string, baseVersion: number, operations: SitePatchOperation[], operationKey?: string) =>
-      request<{ siteId: string; version: number; site: SiteDefinition }>(
-        workspacePath(slug, 'actions/site.update'),
-        { method: 'POST', body: { siteId, baseVersion, operations }, key: operationKey || createOperationKey('site.update') }
+    ask: (slug: string, siteId: string, command: string, target?: string, operationKey?: string) =>
+      request<AskOutcome>(
+        workspacePath(slug, 'actions/site.ask'),
+        { method: 'POST', body: { siteId, command, ...(target ? { target } : {}) }, key: operationKey || createOperationKey('site.ask') }
+      ),
+    edit: (slug: string, siteId: string, base: number, operations: unknown[], summary?: string, operationKey?: string) =>
+      request<EditOutcome>(
+        workspacePath(slug, 'actions/site.edit'),
+        { method: 'POST', body: { siteId, base, operations, ...(summary ? { summary } : {}) }, key: operationKey || createOperationKey('site.edit') }
+      ),
+    undo: (slug: string, siteId: string, revision?: number, operationKey?: string) =>
+      request<EditOutcome & { undone: number }>(
+        workspacePath(slug, 'actions/site.undo'),
+        { method: 'POST', body: { siteId, ...(revision === undefined ? {} : { revision }) }, key: operationKey || createOperationKey('site.undo') }
+      ),
+    assetUpload: (slug: string, input: { siteId: string; mime: string; kind?: string; data: string; alt?: string; width?: number; height?: number; rights?: { source?: string; license?: string; approved?: boolean } }, operationKey?: string) =>
+      request<{ siteId: string; revision: number; site: SiteDocument; assets: Asset[] }>(
+        workspacePath(slug, 'actions/site.asset.upload'),
+        { method: 'POST', body: input, key: operationKey || createOperationKey('site.asset.upload') }
+      ),
+    assetGenerate: (slug: string, siteId: string, prompt: string, operationKey?: string) =>
+      request<{ siteId: string; revision: number; site: SiteDocument; assets: Asset[] }>(
+        workspacePath(slug, 'actions/site.asset.generate'),
+        { method: 'POST', body: { siteId, prompt }, key: operationKey || createOperationKey('site.asset.generate') }
+      ),
+    assets: (slug: string, siteId: string) =>
+      request<{ siteId: string; revision: number; assets: AssetSummary[] }>(workspacePath(slug, 'actions/site.assets'), { method: 'POST', body: { siteId }, key: createOperationKey('site.assets') }),
+    designImport: (slug: string, siteId: string, markdown: string, operationKey?: string) =>
+      request<{ siteId: string; revision: number; design: SiteDocument['design']; decisions: { area: string; question: string; choice: string }[]; notes: string[]; designMarkdown: string }>(
+        workspacePath(slug, 'actions/site.design.import'),
+        { method: 'POST', body: { siteId, markdown }, key: operationKey || createOperationKey('site.design.import') }
+      ),
+    checks: (slug: string, siteId: string, releaseId?: string) =>
+      request<{ siteId: string; releaseId: string; checks: Checks | null; created: number | null }>(
+        workspacePath(slug, 'actions/site.checks'),
+        { method: 'POST', body: { siteId, ...(releaseId ? { releaseId } : {}) }, key: createOperationKey('site.checks') }
       ),
     compile: (slug: string, siteId: string, operationKey?: string) =>
       request<{ releaseId: string; hash: string; version: number; previewUrl?: string }>(
@@ -168,7 +200,7 @@ export const harness = {
         { method: 'POST', body: { siteId, releaseId, hash }, key: operationKey || createOperationKey('site.publish') }
       ),
     rollback: (slug: string, siteId: string, releaseId: string, operationKey?: string) =>
-      request<{ siteId: string; releaseId: string; rolledBack: boolean }>(
+      request<{ siteId: string; releaseId: string; rolledBack: boolean; publicUrl?: string }>(
         workspacePath(slug, 'actions/site.rollback'),
         { method: 'POST', body: { siteId, releaseId }, key: operationKey || createOperationKey('site.rollback') }
       ),
@@ -182,5 +214,7 @@ export const harness = {
         workspacePath(slug, 'actions/site.unpublish'),
         { method: 'POST', body: { siteId }, key: operationKey || createOperationKey('site.unpublish') }
       ),
+    releases: (slug: string, siteId: string) =>
+      request<{ siteId: string; revision: number; releases: ReleaseManifest[] }>(workspacePath(slug, 'actions/site.releases'), { method: 'POST', body: { siteId }, key: createOperationKey('site.releases') }),
   },
 };

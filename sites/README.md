@@ -1,7 +1,8 @@
 # Shared Sites Worker
 
-The initial public address is
-`https://tar-sites.tar-54d.workers.dev/<workspace>/`. No purchased domain, wildcard
+The site contract is [AI Sites](../aisites.md). The initial public address is
+`https://tar-sites.tar-54d.workers.dev/<workspace>/`, using the workspace's unique
+reserved slug. No purchased domain, wildcard
 DNS or customer certificate is needed. The account subdomain comes from the
 existing app configuration; verify it in the deployment output.
 
@@ -30,8 +31,8 @@ npm run deploy
 Review migration effects and test results before running the remote migration or
 deploying. The standalone Sites Worker can be deployed independently after its
 serving and D1/R2 integration tests pass; the main harness deployment requires
-the full release gates. Deployment does not make incomplete Site v2 features
-complete; the release gates are tracked in `../sitev2-implementation.md`.
+the full release gates. Deployment does not complete the planned editor; delivery
+and acceptance are tracked in [AI Sites](../aisites.md#7-delivery-and-acceptance).
 
 Generate a draft, compile it, review every candidate page, then confirm Publish.
 Verify the returned HTTPS URL, navigation, catalog, canonical metadata and
@@ -55,11 +56,13 @@ rollback. Monitor `sites.serve.error`, 503 responses and publication failures.
 
 ## Adding a domain later
 
-Hostname routing remains available. Add a real base domain, wildcard DNS/TLS and
-a route to this Worker; set `SITE_BASE_DOMAIN` and remove `SITE_WORKER_ORIGIN`.
-Compile and review a new candidate because its canonical URL changes. Customer
-domains still require ownership and certificate verification before activation;
-the retained hostname route is not a complete custom-domain onboarding system.
+The domain is expected next week. Keep the Worker address until the verified
+domain works over HTTPS. Hostname routing remains available, but moving to it
+requires reviewed candidates with the new canonical URL and tested redirects
+from workspace-prefixed links to equivalent page routes. Switch origin
+configuration only with that transition ready. Customer domains still require
+ownership and certificate verification before activation; the retained hostname
+route is not a complete custom-domain onboarding system.
 
 Cloudflare [recommends routes or custom domains](https://developers.cloudflare.com/workers/configuration/routing/)
 for business-critical production traffic rather than Workers.dev. Treat this address as the user's chosen initial

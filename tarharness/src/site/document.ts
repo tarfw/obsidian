@@ -1,7 +1,7 @@
 /**
  * TAR Site document v2 - the typed, versioned source of truth for a site.
  *
- * Sketches of this model live in sitev2.md section 2. Fields and identifiers
+ * The document contract lives in aisites.md section 2. Fields and identifiers
  * use one lowercase semantic word; structure supplies qualification.
  * The v1 card model in schema.ts remains readable through adapt.ts.
  */
@@ -243,6 +243,8 @@ export interface SiteDocument {
   redirects: Redirect[];
   locks: Lock[];
   policy: SitePolicy;
+  /** Prose claims checked against supplied evidence; unresolved claims block publish. */
+  claims?: { text: string; verdict: 'supported' | 'contradicted' | 'unsupported'; evidence?: string[] }[];
   /** Compatibility projection of the live release. CONTROL D1 remains the authority. */
   currentRelease?: string | null;
   releases?: ReleaseManifest[];

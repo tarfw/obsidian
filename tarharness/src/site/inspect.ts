@@ -115,7 +115,7 @@ export function inspectDocument(doc: SiteDocument, options: InspectOptions = {})
     if (!page.meta?.description) add('advisory', 'seo', page.id, 'Pages read better with a meta description.');
   }
 
-  for (const claim of options.claims || []) {
+  for (const claim of options.claims || doc.claims || []) {
     if (claim.verdict === 'unsupported') add('advisory', 'claim', 'claims', `Unresolved claim needs review: ${claim.text.slice(0, 90)}`);
     if (claim.verdict === 'contradicted') add('blocking', 'claim', 'claims', `Claim contradicts its evidence: ${claim.text.slice(0, 90)}`);
   }
@@ -161,7 +161,7 @@ export function inspectDocument(doc: SiteDocument, options: InspectOptions = {})
       files: compiled?.files.length || 0,
       html, css, js,
       items: compiled?.itemCount || 0,
-      claims: (options.claims || []).length,
+      claims: (options.claims || doc.claims || []).length,
     },
   };
 }

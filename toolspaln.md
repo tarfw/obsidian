@@ -1,136 +1,86 @@
-# Tools plan — from workspace to each member
+## 1. Workspace definition and tool group selection by Jev
 
-Target concept. The screens illustrate the intended behavior; they do not claim every role and Flow Book control is implemented today.
-
-## 1. Owner creates a workspace
-
-```text
-┌──────────────────────────────────────────┐
-│ Create workspace                         │
-│ Name  [ Northstar Kitchen             ]  │
-│                         [ Create ]       │
-└──────────────────────────────────────────┘
-                    ↓
-┌──────────────────────────────────────────┐
-│ Northstar Kitchen · Owner: You           │
-│ Records (0)                   [+ Record] │
-│ Title        Type      State     Assigned│
-│ ─────────────────────────────────────────│
-│             Empty workspace              │
-│                                          │
-│ Setup: People · Modules · Flow Books     │
-└──────────────────────────────────────────┘
-```
-
-| Comes with every workspace | Meaning |
+| Step | Definition |
 | --- | --- |
-| **Records** | One empty, user-facing table over the shared `records` store. It holds facts, not permissions. |
-| **Owner membership** | The creator can manage the workspace and invite people. |
-| **Core Actions** | Basic records, tasks, people, and Flow Book creation. |
-| **Built-in commerce kernel** | TAR already ships the shared item, order, stock, price, payment, and refund logic. The owner enables the relevant business capability when needed. |
+| Brief | Describe the work, people and duties freely. One workspace may combine several capabilities. |
+| Registry | All 68 currently registered Actions are grouped below; launcher metadata comes from [Tools](tarharness/src/registry/tools.ts), operations from [Actions](tarharness/src/registry/catalog.ts), [POS](tarharness/src/pos/catalog.ts) and [Commerce](tarharness/src/commerce/catalog.ts). |
+| Jev Choice | Code supplies eligible groups and descriptions. Batch one Choice per optional group: `include / skip / unsure`; several groups may fit. |
+| Save | Owner reviews; code validates dependencies and saves enabled capabilities with available default role bundles. Members receive grants in step 2. |
+| Status | Target setup flow; table reflects current Actions. New domains need registered implementations. Manual selection works without Jev. |
+| Product | [Space](space.md) owns context; [Inbox](inbox.md) owns Now; [Commerce](commerce.md) owns business truth; [AI Sites](aisites.md) owns site editing and publication. |
 
-Commerce is built into TAR; enabling it does not install another system or create separate tables for each category. A new workspace has no sample orders or pre-enabled POS launcher. Restaurant roles and dining tables are added when needed. `Orders` and `Menu` can later be filtered views of Records.
-
-## 2. Owner enables work and invites people
-
-```text
-NORTHSTAR / SET UP
-  Capabilities   [✓] Commerce / POS   [✓] Kitchen   [ ] Site
-  People         Maya  → Chef
-                 Ravi  → Cashier
-                 Ali   → Manager
-
-  Access         Chef     → read kitchen lines, prepare food
-                 Cashier  → take payment, use POS, start close
-                 Manager  → review close, reports
-                         [ Save ]
-```
-
-Each enabled capability supplies **record types + registered Actions + a few entry screens**. It may suggest editable roles; the owner chooses who gets them. After the owner adds items and prices, opens a register, and receives an order, the same table contains:
-
-```text
-NORTHSTAR / RECORDS
-  Title             Type          State       Assigned
-  Chicken tikka     item          active      —
-  Order #41         order         accepted    —
-  Register #7       pos.register  open        —
-```
-
-Both rows live in the same workspace Records store. Opening a row shows its type-specific fields and permitted Actions. The member's role controls which rows, fields, and Actions they may see or use.
-
-## 3. Owner publishes a Flow Book
-
-A **Flow Book** is a reusable, versioned recipe of registered Actions. It stores the steps and responsible roles; a **run** is one execution of that recipe against a record such as Register #7. The recipe is separate from the Records table; its steps read or change records through Actions.
-
-```text
-NORTHSTAR / FLOW BOOK
-  Name       [ Close register             ]
-  Start      Cashier, manually
-
-  1  Count drawer       → Cashier  → record the count
-  2  Review and close   → Manager  → approve and close
-
-  [ Save draft ]                         [ Publish ]
-```
-
-Publishing makes **Start Close register** available in Tools to permitted cashiers. Starting it creates a run: Ravi receives step 1 in Now; after he completes it, Ali receives step 2. A book started by a record event would create the run directly and need no Tools entry. Each step uses its registered Action and checks access when opened and completed.
-
-## 4. What each role sees
-
-```text
-┌──────────────────────────────────────────┐
-│ MAYA · CHEF / NOW · 09:10                │
-│ Prepare 2 × Chicken tikka · Order #41  › │
-│ TOOLS / Northstar                        │
-│ Kitchen display                        › │
-└──────────────────────────────────────────┘
-
-┌──────────────────────────────────────────┐
-│ RAVI · CASHIER / NOW · 18:00             │
-│ Take payment · Order #41               › │
-│ Count drawer · Close register, step 1  › │
-│ TOOLS / Northstar                        │
-│ Point of sale                          › │
-│ Start Close register                   › │
-└──────────────────────────────────────────┘
-
-┌──────────────────────────────────────────┐
-│ ALI · MANAGER / NOW · 18:05              │
-│ Review close · Register #7             › │
-│ TOOLS / Northstar                        │
-│ Reports                                › │
-└──────────────────────────────────────────┘
-```
-
-| View | Rule |
+| Tool / work group | Registered Actions |
 | --- | --- |
-| **Tools** | A small set of launch screens and manually started Flow Books allowed by the active role. Individual operations stay inside their screen. |
-| **Inbox → Now** | Concrete assigned steps from records or Flow Book runs, including work from other authorized workspaces. |
-| **Space** | Picks the current workspace and duty focus; it does not change access or hide other Now work. |
-
-## The complete method
+| Records | `record.create`, `record.update` |
+| People and relationships | `contact.create`, `organization.create`, `relationship.create`, `relationship.end`, `consent.record` |
+| Tasks | `task.create`, `task.complete` |
+| Routines | `routine.save`, `routine.remove` |
+| Flow Books | `flow.start`, `flow.publish`, `flow.advance`, `flow.suggest` |
+| Capability setup | `capability.save` |
+| Web search | `web.search` |
+| POS launcher/setup | `pos.open`, `pos.setup` |
+| POS catalog/stock | `pos.product.save`, `pos.product.content.save`, `pos.product.draft`, `pos.stock.adjust` |
+| POS customers | `pos.customer.save` |
+| POS orders/kitchen | `pos.order.save`, `pos.order.item.update`, `pos.order.cancel`, `pos.order.accept`, `pos.order.reject`, `pos.order.handoff` |
+| POS sales/returns | `pos.checkout`, `pos.refund` |
+| POS register | `pos.register.open`, `pos.register.count`, `pos.register.close` |
+| Delivery | `pos.order.reach`, `pos.order.collect`, `pos.order.deliver` |
+| Customer receipt/rating | `pos.order.receive`, `pos.order.rate` |
+| Commerce catalog/stock | `catalog.item.save`, `catalog.variant.save`, `price.set`, `stock.adjust` |
+| Purchasing | `purchase.create`, `purchase.receive` |
+| Commerce orders | `order.create`, `order.fulfill`, `order.cancel` |
+| Billing | `invoice.issue`, `payment.record`, `refund.record` |
+| Site authoring | `site.generate`, `site.update`, `site.edit`, `site.ask`, `site.undo`, `site.design.import` |
+| Site assets | `site.asset.upload`, `site.asset.generate`, `site.assets` |
+| Site releases | `site.releases`, `site.checks`, `site.compile`, `site.publish`, `site.rollback`, `site.refresh`, `site.unpublish` |
 
 ```text
-Workspace source
-  Records + registered Actions + published Flow Books
-  Members + role assignments (optional access dates/hours)
-                         │
-             one source access rule
-               /                  \
-    permitted launchers       assigned steps
-       → cached Tools          → Inbox → Now
-               \                  /
-                tap → source checks again
+Workspace brief + registry descriptions
+                 |
+       Jev Choices: include / skip / unsure
+                 |
+          owner reviews -> saves
+                 |
+   enabled capabilities + default role bundles
 ```
 
-| Decision | Simple rule |
-| --- | --- |
-| Access | Check membership, active role assignment, enabled Action, record scope/state, and source time on reads and execution. An assignment to work cannot grant permission. |
-| Time | Roles normally stay stable. Duty schedules assign work and order Tools. Set access hours in the workspace time zone only when authority itself must expire. |
-| Two roles | Combine the currently active Actions; Space highlights the current duty without removing other granted access. |
-| Revoke | The source denies the next read or Action immediately; sync removes obsolete Tools and Now entries. |
-| Flow handoff | The starter needs permission to start; each later actor needs permission for their own step. If nobody qualifies, the run waits for reassignment. |
-| Fast Tools | Show saved launcher names/icons immediately, hide known expiries, and refresh changed workspaces independently through existing sync. First use still needs a fetch. The source always rechecks access. |
-| Jev | Optionally match an owner's wording to registered Actions while drafting a book, or match a person's request to already allowed Tools. The owner reviews and publishes; code decides access and commits. |
+## 2. Add members and define roles with Jev
 
-**Minimum to build:** the existing Records store and Action registry, owner-controlled role assignments, Flow Book definitions/runs, derived Tools, assigned Inbox work, and one source check at use. No separate Tools permission list is needed.
+| Step | Definition |
+| --- | --- |
+| Add | Owner invites a person as a member and describes their duties. `contact.create` stores a business contact; it does not add a member. |
+| Authority | Code excludes team/admin operations from ordinary member candidates. Becoming an admin is an explicit authorized membership change; Jev never infers it from job duties. |
+| Candidates | Code supplies delegable registered Actions from enabled capabilities. The registry defines required dependencies and default data access. |
+| Jev Choice | Match duties to an available role bundle + `none`; `none` allows an owner-defined role. Explicit restrictions match predefined policy options. |
+| Jev Noul | For a custom role or proposed changes, ask per eligible Action whether the duties require it. Several Actions can be proposed together. |
+| Data access | Current workspace is implicit. Selected Actions supply necessary read/write fields and default record scope; no routine field picker. Interpret stated restrictions and clarify ambiguity. |
+| Review | Owner sees a short role/permission summary; details expand on demand. Ask about unclear or unsupported duties; role names never grant access. |
+| Save | Code validates and audits the role definition and member assignment. Grants are workspace-scoped data; owner/admin authority remains explicit. |
+| Reuse | Other members can receive the same saved role without rerunning Jev; multiple roles combine grants with their scope conditions. |
+
+```text
+Owner: "Ravi can cashier and manage products"
+  Choice -> cashier bundle; Noul -> pos.product.save
+  Code   -> inherited data access; Ravi remains a member
+  Owner saves -> explicit member grants
+                             |
+     enabled capabilities + saved grants + interfaces
+                             |
+                shared source access policy
+                  /                     \
+            allowed Tools          Inbox -> Now
+                  \                     /
+                   tap -> source recheck
+```
+
+| Shared rule | Result |
+| --- | --- |
+| Access | Every read/commit checks membership, capability, grants, scope, state and access windows. Unknown roles deny; revocation blocks the next source use. |
+| Projection | Code derives Tools without AI or a second permission list. Now retains work across authorized workspaces; Space changes focus, not authority. |
+| AI | Choice selects one option with confidence; Noul returns yes-probability. Batch independent questions; dependent choices need updated state. Evaluate thresholds; manual setup survives AI failure. |
+| Freshness | Cache by identity/access, source and registry versions, context/request and question/model version. Refresh relevant changes; cached results never authorize source use. |
+| Core | Reuse Records, registered Actions, idempotency/audit, Commerce and existing Flows. Step approvals and site publication remain source rules. |
+| Meaning | Approving a refund and issuing it need distinct registered Actions when they are separate business steps. Missing operations ask for clarification; no substitute execution. |
+| Build | Implement shared grants and both setup steps; migrate delegable business Actions from fixed owner/admin checks while preserving existing access. New behavior needs registered code. |
+| Naming | New internal identifiers use one lowercase semantic word; preserve existing interfaces and external spellings. |
+| Jev docs | [Choice](https://docs.typesafe.ai/primitives/choice), [Noul](https://docs.typesafe.ai/primitives/noul), [Confidence](https://docs.typesafe.ai/confidence), [Batching](https://docs.typesafe.ai/patterns/fan-out). |

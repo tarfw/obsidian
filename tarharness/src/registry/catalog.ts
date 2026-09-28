@@ -295,6 +295,14 @@ export const actionCatalog = [
     output: ['siteId', 'revision', 'assets'], roles: ['owner', 'admin'], effects: [],
   },
   {
+    id: 'site.releases', version: 1, type: 'app', title: 'List site releases',
+    description: 'List retained immutable releases available for rollback.', interfaceKey: 'confirmation',
+    fields: [
+      { key: 'siteId', label: 'Site', kind: 'record', required: true },
+    ],
+    output: ['siteId', 'revision', 'releases'], roles: ['owner', 'admin'], effects: [],
+  },
+  {
     id: 'site.compile', version: 2, type: 'app', title: 'Compile site candidate',
     description: 'Compile frozen site definition into release candidate manifest.', interfaceKey: 'confirmation',
     fields: [

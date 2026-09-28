@@ -5,11 +5,13 @@ import type { AccessContext } from '../types.ts';
 import { compileSiteHtml } from './renderer.ts';
 import { compileDocument, type CompiledFile } from './compile.ts';
 import { validateDocument } from './validate.ts';
-import { applyLegacyOperations, isV2, readDocument, upgrade, type LegacyOperation } from './adapt.ts';
+import { applyLegacyOperations, isV2, readDocument, upgrade, THEMES, type LegacyOperation } from './adapt.ts';
 import { inspectDocument } from './inspect.ts';
 import { assetReader } from './asset.ts';
+import { DEFAULT_DESIGN, type Design } from './design.ts';
+import { BudgetExceeded, ModelRunner, SITE_MODEL_FALLBACKS, composeSite, planSite } from './model.ts';
 import { slugify } from './html.ts';
-import { chooseSiteTheme } from './judgment.ts';
+import { checkClaim, chooseSiteTheme } from './judgment.ts';
 import {
   CARD_KINDS, DEFAULT_DESIGN_TOKENS, type CardDefinition, type PageDefinition,
   type ReleaseFile, type ReleaseManifest, type SiteDefinition, type SitePatchOperation, type ThemeName,
@@ -359,13 +361,25 @@ async function saveEvent(client: Client, context: AccessContext, action: string,
   await client.execute(eventStatement({ action, actor: context.identity.id, recordId: record, key, hash: inputHash, result }));
 }
 
-export async function executeSiteGenerate(client: Client, context: AccessContext, input: Record<string, unknown>, key: string, inputHash: string, typesafe?: string): Promise<Record<string, unknown>> {
+export async function executeSiteGenerate(client: Client, context: AccessContext, input: Record<string, unknown>, key: string, inputHash: string, typesafe?: string, ai?: Ai, control?: D1Database, model?: string): Promise<Record<string, unknown>> {
   const prompt = text(input.prompt ?? input.description, 2000); const title = text(input.title) || context.workspace.name || 'Workspace';
   if (input.theme !== undefined && !Object.hasOwn(DEFAULT_DESIGN_TOKENS, input.theme as string)) throw badRequest('Choose a registered site theme.');
   const theme = (input.theme as ThemeName | undefined) || await chooseSiteTheme(typesafe, title, prompt) || 'editorial-chalk';
   const existing = await getSiteRecord(client);
   const previous = existing ? readDocument(existing.data).doc : null;
-  const site = upgrade({ ...createDefaultSite(title, prompt, theme), currentRelease: previous?.currentRelease ?? null, releases: previous?.releases || [] });
+  const design = input.theme ? THEMES[String(input.theme)] || DEFAULT_DESIGN : previous?.design || DEFAULT_DESIGN;
+  const facts = await publicFacts(client, input);
+  const attempt = ai && prompt
+    ? await tryCompose(ai, model, { goal: prompt, audience: text(input.audience, 200), tone: text(input.tone, 120) }, facts, design, typesafe, control, context)
+    : { document: null, note: '' };
+  const composed = attempt.document;
+  const site = composed || upgrade({
+    ...createDefaultSite(title, prompt, theme),
+    currentRelease: previous?.currentRelease ?? null,
+    releases: previous?.releases || [],
+  });
+  if (composed && previous) { site.currentRelease = previous.currentRelease ?? null; site.releases = previous.releases || []; }
+  if (!composed) site.claims = previous?.claims || [];
   validateDocument(site);
   const siteId = existing?.id || `site_${crypto.randomUUID()}`; const at = now();
   const compiled = await compileDocument(site);
@@ -376,7 +390,7 @@ export async function executeSiteGenerate(client: Client, context: AccessContext
   };
   const version = existing ? existing.version + 1 : 1;
   const state = existing?.state === 'live' ? 'live' : 'draft';
-  const result = { siteId, version, state, site, preview };
+  const result = { siteId, version, state, site, preview, composed: Boolean(composed), ...(attempt.note ? { note: attempt.note } : {}) };
   if (existing) {
     const saved = await client.batch([
       { sql: 'UPDATE records SET title=?,data=?,version=?,updated=? WHERE id=? AND version=?', args: [title, JSON.stringify(site), version, at, siteId, existing.version] },
@@ -549,6 +563,63 @@ export async function executeSiteUnpublish(client: Client, context: AccessContex
   ], 'write');
   if (saved[0].rowsAffected !== 1 || saved[1].rowsAffected !== 1) throw conflict('Site changed while unpublishing. Public serving is blocked; refresh to reconcile the draft.');
   return result;
+}
+
+/** Approved public facts only: private workspace records never reach a model or a draft. */
+async function publicFacts(client: Client, input: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const records = Array.isArray(input.records) ? (input.records as unknown[]).filter((id): id is string => typeof id === 'string').slice(0, 40) : [];
+  const facts: Record<string, unknown> = {};
+  if (typeof input.goal === 'string') facts.goal = text(input.goal, 300);
+  if (!records.length) return facts;
+  const collected = await publicRecords(client, records, 'pos.product');
+  if (collected.length) facts.catalog = collected.slice(0, 20);
+  return facts;
+}
+
+/**
+ * One bounded plan -> compose pass, followed by evidence checks on prose claims.
+ * A model outage keeps the product usable: the retained generator drafts the
+ * site and the reason is reported instead of failing the request.
+ */
+async function tryCompose(
+  ai: Ai,
+  model: string | undefined,
+  brief: { goal: string; audience: string; tone: string },
+  facts: Record<string, unknown>,
+  design: Design,
+  typesafe: string | undefined,
+  control: D1Database | undefined,
+  context: AccessContext,
+): Promise<{ document: SiteDocument | null; note: string }> {
+  const runner = new ModelRunner(ai, model || SITE_MODEL_FALLBACKS[0]);
+  try {
+    const plan = await planSite(runner, { brief, facts, design });
+    const composed = await composeSite(runner, plan, { brief, facts, design });
+    const document = composed.document;
+    document.brief = brief;
+    document.design = design;
+    const cache = { control, workspace: context.workspace.id, version: 'claims-1' };
+    const checked: NonNullable<SiteDocument['claims']> = [];
+    for (const claim of composed.claims.slice(0, 8)) {
+      const verdict = typesafe ? await checkClaim(typesafe, cache, { claim: claim.text, evidence: claim.evidence || [] }) : { verdict: 'unsupported' as const, confidence: null };
+      checked.push({ text: claim.text, verdict: verdict.verdict, ...(claim.evidence?.length ? { evidence: [...claim.evidence] } : {}) });
+    }
+    document.claims = checked;
+    return { document, note: '' };
+  } catch (error) {
+    const reason = error instanceof BudgetExceeded
+      ? 'The model budget for this run was reached.'
+      : 'The model was unavailable, so the standard structure was used.';
+    return { document: null, note: reason };
+  }
+}
+
+/** Release history retained for rollback, newest last. */
+export async function executeSiteReleases(client: Client, context: AccessContext, input: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const current = await getSiteRecord(client, text(input.siteId, 160) || undefined);
+  if (!current) throw notFound('Site was not found.');
+  const document = readDocument(current.data).doc;
+  return { siteId: current.id, revision: document.revision, releases: document.releases || [] };
 }
 
 /** Read the stored release checks. Report files sit outside manifest.files and are never served. */

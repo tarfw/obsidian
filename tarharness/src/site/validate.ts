@@ -376,6 +376,15 @@ export function collectIssues(doc: SiteDocument): Issue[] {
   });
   if (totalNodes > 1000) issues.push({ level: 'blocking', area: 'node', path: 'pages', message: 'The site holds too many nodes for one build.' });
 
+  if (doc.claims !== undefined) {
+    if (!Array.isArray(doc.claims) || doc.claims.length > 40) issues.push({ level: 'blocking', area: 'claim', path: 'claims', message: 'Claims must be a list of at most 40 entries.' });
+    else doc.claims.forEach((claim, index) => {
+      const at = `claims[${index}]`;
+      checkText(issues, claim?.text, 300, 'Claim text', at, true);
+      if (!['supported', 'contradicted', 'unsupported'].includes(String(claim?.verdict))) issues.push({ level: 'blocking', area: 'claim', path: at, message: 'Claim verdict must be supported, contradicted or unsupported.' });
+    });
+  }
+
   const redirects = new Set<string>();
   doc.redirects.forEach((redirect, index) => {
     const at = `redirects[${index}]`;

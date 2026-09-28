@@ -10,7 +10,8 @@
     "OIDC_JWKS_URL": "https://www.googleapis.com/oauth2/v3/certs",
     "TURSO_ORG": "tarfwrk",
     "TURSO_GROUP": "default",
-    "SITE_WORKER_ORIGIN": "https://tar-sites.tar-54d.workers.dev"
+    "SITE_WORKER_ORIGIN": "https://tar-sites.tar-54d.workers.dev",
+    "SITE_MODEL": "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
   },
   "workers_dev": true,
   "preview_urls": false,

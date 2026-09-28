@@ -7,14 +7,16 @@ import { harness, type ChatProvider, type HarnessMember, type HarnessRole, type 
 type TeamTab = 'members' | 'chat';
 const roles: { label: string; role: Exclude<HarnessRole, 'owner'>; workRole: WorkRole }[] = [
   { label: 'Member', role: 'member', workRole: 'general' },
-  { label: 'Cook', role: 'member', workRole: 'cook' },
+  { label: 'Kitchen', role: 'member', workRole: 'chef' },
   { label: 'Cashier', role: 'member', workRole: 'cashier' },
+  { label: 'Manager', role: 'member', workRole: 'manager' },
+  { label: 'Service', role: 'member', workRole: 'server' },
   { label: 'Courier', role: 'member', workRole: 'courier' },
   { label: 'Customer', role: 'member', workRole: 'customer' },
-  { label: 'Manager', role: 'admin', workRole: 'general' },
+  { label: 'Workspace admin', role: 'admin', workRole: 'general' },
   { label: 'Guest', role: 'guest', workRole: 'general' },
 ];
-const roleLabel = (member: HarnessMember) => member.role === 'owner' ? 'Owner' : member.role === 'admin' ? 'Manager' : member.role === 'guest' ? 'Guest' : (member.roles?.length ? member.roles : [member.workRole || 'general']).map((role) => role === 'general' ? 'Member' : role.replace(/\b\w/g, (letter) => letter.toUpperCase())).join(', ');
+const roleLabel = (member: HarnessMember) => member.role === 'owner' ? 'Owner' : member.role === 'admin' ? 'Workspace admin' : member.role === 'guest' ? 'Guest' : (member.roles?.length ? member.roles : [member.workRole || 'general']).map((role) => role === 'general' ? 'Member' : role.replace(/\b\w/g, (letter) => letter.toUpperCase())).join(', ');
 
 export default function WorkspaceTeam({ scope, name, onClose, onChanged }: { scope: string; name: string; onClose: () => void; onChanged: () => void }) {
   const insets = useSafeAreaInsets();
@@ -164,7 +166,7 @@ export default function WorkspaceTeam({ scope, name, onClose, onChanged }: { sco
               <Text style={styles.helper}>Access activates when they sign in with this Google email. Share your TAR app link; no email is sent automatically.</Text>
               <View style={styles.formFooter}>{button('Cancel', () => { setAdding(false); setEditing(null); }, false, 'quiet')}{button(editing ? 'Save changes' : 'Send invite', saveMember, !editing && !email.trim(), 'primary')}</View>
             </View> : null}
-          </> : <View style={styles.accessNote}><Ionicons name="lock-closed-outline" size={18} color={palette.muted} /><Text style={styles.muted}>Workspace member management is available to an owner or manager.</Text></View>}
+          </> : <View style={styles.accessNote}><Ionicons name="lock-closed-outline" size={18} color={palette.muted} /><Text style={styles.muted}>Workspace member management is available to the owner or a workspace admin.</Text></View>}
         </> : null}
 
         {loaded && chat && tab === 'chat' ? <>
@@ -188,7 +190,7 @@ export default function WorkspaceTeam({ scope, name, onClose, onChanged }: { sco
               {selectedProvider.installUrl ? button(`Open ${selectedProvider.name} setup`, () => openUrl(selectedProvider.installUrl), false, 'quiet') : null}
               {button('Connect a team channel', () => begin('destination'), false, 'primary')}
             </> : <Text style={styles.helper}>{selectedProvider?.name || 'This provider'} needs deployment configuration before it can connect.</Text>}
-          </View> : <View style={styles.accessNote}><Ionicons name="lock-closed-outline" size={18} color={palette.muted} /><Text style={styles.muted}>An owner or manager can connect the workspace channel.</Text></View>}
+          </View> : <View style={styles.accessNote}><Ionicons name="lock-closed-outline" size={18} color={palette.muted} /><Text style={styles.muted}>The owner or a workspace admin can connect the workspace channel.</Text></View>}
 
           {command ? <View style={styles.commandBox}><Text style={styles.fieldLabel}>Send this command to TAR in your channel</Text><Text selectable style={styles.commandText}>{command}</Text><Text style={styles.helper}>This link expires after 10 minutes. Follow your provider’s command format.</Text></View> : null}
           {chat.requests.filter((item) => item.provider === selectedProviderId).map((item) => <View key={item.id} style={styles.request}>

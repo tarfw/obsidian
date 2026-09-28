@@ -1,6 +1,6 @@
 import type { Client } from '@libsql/client/web';
 import { Effect } from 'effect';
-import { canExecute, canReadRecord, hasWorkRole, isCook, isCourier, isCustomer, kitchenOrder, managesMembers } from '../access.ts';
+import { canExecute, canReadRecord, canRunFlowStep, hasWorkRole, isCook, isCourier, isCustomer, kitchenOrder, managesMembers } from '../access.ts';
 import { query } from '../db/turso.ts';
 import { readPosInbox } from '../pos/store.ts';
 import type { CanvasCard } from '../registry/canvas.ts';
@@ -203,14 +203,16 @@ export async function buildSpaceView(client: Client, access: AccessContext, deci
   const visibleRuns = await Promise.all(runRows.map(async (row): Promise<SpaceCard | null> => {
     if (active.member.role === 'guest') return null;
     const context = object(JSON.parse(String(row.context)));
-    if (context.startedBy !== active.identity.id && !managesMembers(active.member)) {
-      if (typeof row.record_id !== 'string') return null;
+    const actions = Array.isArray(context.actions) ? context.actions.map(object) : [];
+    const step = Number(context.step || 0);
+    const current = Number.isSafeInteger(step) && step >= 0 ? actions[step] : undefined;
+    if (!current || !canRunFlowStep(active.member, current, String(context.startedBy || ''))) return null;
+    if (context.startedBy !== active.identity.id && !managesMembers(active.member) && typeof row.record_id === 'string') {
       const linked = await Effect.runPromise(query<Record<string, unknown>>(client, {
         sql: 'SELECT * FROM records WHERE id=? AND archived IS NULL', args: [row.record_id],
       }));
       if (!linked[0] || !canReadRecord(active.member, record(linked[0]))) return null;
     }
-    const step = Number(context.step || 0);
     const flowId = String(row.flow_id);
     return { id: String(row.id), kind: 'flow', title: typeof row.name === 'string' ? row.name : 'Flow Book', description: row.state === 'blocked' ? `Waiting at step ${step + 1}` : `Continue at step ${step + 1}`, flowId, actionId: 'flow.start', initialInput: { flowId, runId: String(row.id) } };
   }));
@@ -257,8 +259,11 @@ export async function readInboxSource(client: Client, access: AccessContext) {
   });
   const runs = (await Promise.all(runRows.map(async (row) => {
     const context = object(JSON.parse(String(row.context)));
-    if (context.startedBy !== access.identity.id && !managesMembers(access.member)) {
-      if (typeof row.record_id !== 'string') return null;
+    const actions = Array.isArray(context.actions) ? context.actions.map(object) : [];
+    const step = Number(context.step || 0);
+    const current = Number.isSafeInteger(step) && step >= 0 ? actions[step] : undefined;
+    if (!current || !canRunFlowStep(access.member, current, String(context.startedBy || ''))) return null;
+    if (context.startedBy !== access.identity.id && !managesMembers(access.member) && typeof row.record_id === 'string') {
       const linked = await Effect.runPromise(query<Record<string, unknown>>(client, {
         sql: 'SELECT * FROM records WHERE id=? AND archived IS NULL', args: [row.record_id],
       }));
@@ -266,6 +271,7 @@ export async function readInboxSource(client: Client, access: AccessContext) {
     }
     return { id: String(row.id), flow: String(row.flow_id), title: typeof row.name === 'string' ? row.name : 'Flow Book',
       state: String(row.state), step: Number(context.step || 0), version: Number(row.version), updated: Number(row.updated_at),
+      role: typeof current.role === 'string' && current.role !== 'any' ? current.role : access.member.workRole || 'general',
       parent: typeof row.record_id === 'string' ? row.record_id : null };
   }))).filter((item): item is NonNullable<typeof item> => item !== null);
   return {

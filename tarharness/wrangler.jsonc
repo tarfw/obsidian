@@ -9,7 +9,8 @@
     "OIDC_AUDIENCE": "226183831843-5sjvl1hsv4d04aucnqsqn19u83o4f5ku.apps.googleusercontent.com",
     "OIDC_JWKS_URL": "https://www.googleapis.com/oauth2/v3/certs",
     "TURSO_ORG": "tarfwrk",
-    "TURSO_GROUP": "default"
+    "TURSO_GROUP": "default",
+    "SITE_WORKER_ORIGIN": "https://tar-sites.tar-54d.workers.dev"
   },
   "workers_dev": true,
   "preview_urls": false,

@@ -22,6 +22,7 @@ async function fixture() {
   const client = createClient({ url: pathToFileURL(join(directory, 'workspace.db')).href }); clients.push(client);
   for (const sql of WORKSPACE_SCHEMA) await client.execute(sql);
   const run = (actionId: string, input: Record<string, unknown>, key: string = crypto.randomUUID()) => Effect.runPromise(executeGateway(client, access, { actionId, input, idempotencyKey: key }));
+  await run('capability.save', { module: 'commerce', enabled: true, baseVersion: 0 });
   const supplier = (await run('organization.create', { name: 'Supplier' })).record as { id: string };
   const item = (await run('catalog.item.save', { name: 'Tea', sku: 'TEA' })).item as { id: string };
   const variant = (await run('catalog.variant.save', { item: item.id, name: 'Tea 250g', sku: 'TEA-250' })).variant as { id: string };

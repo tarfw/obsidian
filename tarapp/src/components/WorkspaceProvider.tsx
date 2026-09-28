@@ -5,7 +5,7 @@ import { useRouter } from 'expo-router';
 import CreateWorkspace from '@/components/CreateWorkspace';
 import { tokens } from '@/components/ds/tokens';
 import { HarnessRequestError, harness, type HarnessWorkspace } from '@/lib/harness';
-import { cachedWorkspaces } from '@/lib/now-replica';
+import { cachedWorkspaces } from '@/lib/now-sync';
 
 interface WorkspaceValue {
   current: HarnessWorkspace;
@@ -79,12 +79,13 @@ export function WorkspaceProvider({ children }: React.PropsWithChildren) {
 
   if (loading && !value) return <View style={styles.center}><ActivityIndicator size="large" color={tokens.color.accent} /></View>;
   if (error && !value) return <View style={styles.center}><Text style={styles.error}>{error}</Text><Pressable accessibilityRole="button" onPress={() => { void reload(); }} style={styles.retry}><Text style={styles.retryText}>Try again</Text></Pressable></View>;
-  if (loaded && workspaces.length === 0) return <CreateWorkspace visible canClose={false} existingSlugs={[]} onClose={() => undefined} onSuccess={async (slug) => { await reload(slug); }} />;
+  const openRecords = (slug: string) => router.push({ pathname: '/(home)/records', params: { source: slug } });
+  if (loaded && workspaces.length === 0) return <CreateWorkspace visible canClose={false} existingSlugs={[]} onClose={() => undefined} onSuccess={async (slug) => { await reload(slug); openRecords(slug); }} />;
   if (!value) return <View style={styles.center}><ActivityIndicator size="large" color={tokens.color.accent} /></View>;
 
   return <WorkspaceContext.Provider value={value}>
     {children}
-    <CreateWorkspace visible={creating} canClose existingSlugs={workspaces.map((workspace) => workspace.slug)} onClose={() => setCreating(false)} onSuccess={async (slug) => { setCreating(false); await reload(slug); }} />
+    <CreateWorkspace visible={creating} canClose existingSlugs={workspaces.map((workspace) => workspace.slug)} onClose={() => setCreating(false)} onSuccess={async (slug) => { setCreating(false); await reload(slug); openRecords(slug); }} />
   </WorkspaceContext.Provider>;
 }
 

@@ -140,11 +140,17 @@ export interface ReleaseFile {
 export interface ReleaseManifest {
   readonly id: string;
   readonly siteId: string;
+  readonly host?: string;
+  readonly epoch?: number;
   readonly version: number;
   readonly generation: number;
   readonly created: number;
   readonly hash: string;
   readonly files: ReleaseFile[];
+  /** Compiler schema that produced this release; absent means the v1 compiler. */
+  readonly compiler?: string;
+  readonly redirects?: readonly { readonly from: string; readonly to: string; readonly status: 308 }[];
+  readonly checks?: { readonly blocking: number; readonly advisory: number };
 }
 
 export interface SiteDefinition {

@@ -1,0 +1,396 @@
+/**
+ * Typed, reviewable patches over a v2 site document.
+ *
+ * Every patch carries the base revision it was built against; stale patches
+ * conflict instead of overwriting newer work. Locked sections, nodes, tokens and
+ * components are excluded before any generator or judgment runs, and rejected
+ * here if a patch tries to change them.
+ */
+
+import { badRequest, conflict, notFound } from '../errors.ts';
+import { resolveToken, TOKENS } from './design.ts';
+import type { Journey, Lock, Node, Section, SiteDocument, StyleSet } from './document.ts';
+
+export type PatchOperation =
+  | { op: 'set_text'; target: string; value: string }
+  | { op: 'set_props'; target: string; value: Record<string, unknown> }
+  | { op: 'set_style'; target: string; value: StyleSet | null }
+  | { op: 'move_node'; target: string; before?: string; after?: string }
+  | { op: 'move_section'; target: string; index: number }
+  | { op: 'add_section'; page: string; section: Section; index?: number }
+  | { op: 'remove_section'; target: string }
+  | { op: 'add_node'; parent: string; node: Node; index?: number }
+  | { op: 'remove_node'; target: string }
+  | { op: 'swap_component'; target: string; component: string; variant?: string }
+  | { op: 'set_token'; token: string; value: string | number }
+  | { op: 'set_journey'; journey: Journey }
+  | { op: 'remove_journey'; target: string }
+  | { op: 'set_redirect'; from: string; to: string | null }
+  | { op: 'set_page'; page: string; value: { title?: string; description?: string; path?: string } }
+  | { op: 'set_brief'; value: Partial<SiteDocument['brief']> }
+  | { op: 'set_policy'; value: Partial<SiteDocument['policy']> }
+  | { op: 'set_asset_rights'; target: string; value: { approved?: boolean; license?: string; source?: string; alt?: string } }
+  | { op: 'add_asset'; asset: SiteDocument['assets'][number] }
+  | { op: 'remove_asset'; target: string }
+  | { op: 'lock'; target: string; kind: Lock['kind'] }
+  | { op: 'unlock'; target: string };
+
+export interface PatchInput {
+  base: number;
+  operations: readonly PatchOperation[];
+  /** Locks are advisory for user-requested edits and enforced for regeneration. */
+  respectLocks?: boolean;
+}
+
+export interface DiffEntry {
+  target: string;
+  kind: 'text' | 'prop' | 'style' | 'structure' | 'token' | 'journey' | 'policy' | 'lock' | 'brief' | 'asset';
+  from: string;
+  to: string;
+}
+
+interface FoundNode {
+  node: Node;
+  parent: Node[] | null;
+  index: number;
+  section: Section;
+}
+
+interface FoundSection {
+  section: Section;
+  page: SiteDocument['pages'][number];
+  index: number;
+}
+
+function findSection(doc: SiteDocument, id: string): FoundSection | null {
+  for (const page of doc.pages) {
+    const index = page.sections.findIndex((section) => section.id === id);
+    if (index >= 0) return { section: page.sections[index], page, index };
+  }
+  return null;
+}
+
+function findNode(doc: SiteDocument, id: string): FoundNode | null {
+  const walk = (nodes: Node[], section: Section, parent: Node[] | null): FoundNode | null => {
+    for (let index = 0; index < nodes.length; index += 1) {
+      const node = nodes[index];
+      if (node.id === id) return { node, parent: nodes, index, section };
+      if (node.children) {
+        const nested = walk(node.children, section, node.children);
+        if (nested) return nested;
+      }
+    }
+    return null;
+  };
+  for (const page of doc.pages) {
+    for (const section of page.sections) {
+      const found = walk(section.nodes, section, section.nodes);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+function findContainer(doc: SiteDocument, id: string): Node[] | null {
+  if (doc.pages.some((page) => page.sections.some((section) => section.id === id))) {
+    return null;
+  }
+  const node = findNode(doc, id);
+  return node ? node.node.children || null : null;
+}
+
+export function lockedTargets(doc: SiteDocument): Set<string> {
+  const locked = new Set<string>(doc.locks.map((lock) => lock.target));
+  const walk = (nodes: Node[], inside: boolean) => {
+    for (const node of nodes) {
+      if (inside || locked.has(node.id)) locked.add(node.id);
+      walk(node.children || [], inside || locked.has(node.id));
+    }
+  };
+  for (const page of doc.pages) for (const section of page.sections) {
+    const sectionLocked = locked.has(section.id);
+    if (sectionLocked) locked.add(section.id);
+    walk(section.nodes, sectionLocked);
+  }
+  return locked;
+}
+
+function guard(locked: Set<string>, target: string, respect: boolean): void {
+  if (respect && locked.has(target)) throw conflict('That part of the site is locked. Unlock it before editing.');
+}
+
+export function applyPatch(doc: SiteDocument, input: PatchInput): SiteDocument {
+  if (!Number.isSafeInteger(input.base) || input.base !== doc.revision) {
+    throw conflict('Site changed since this patch was prepared. Refresh and try again.');
+  }
+  if (input.operations.length > 200) throw badRequest('Too many site changes.');
+  const respect = input.respectLocks !== false;
+  const locked = lockedTargets(doc);
+  const next = structuredClone(doc) as SiteDocument;
+  for (const operation of input.operations) {
+    switch (operation.op) {
+      case 'set_text': {
+        guard(locked, operation.target, respect);
+        const found = findNode(next, operation.target) ?? sectionHeading(next, operation.target);
+        if (!found || (found.node.kind !== 'heading' && found.node.kind !== 'text')) throw notFound('Site text target was not found.');
+        found.node.props = { ...found.node.props, text: String(operation.value).slice(0, 4000) };
+        break;
+      }
+      case 'set_props': {
+        guard(locked, operation.target, respect);
+        const found = findNode(next, operation.target);
+        if (!found) throw notFound('Site node was not found.');
+        found.node.props = { ...found.node.props, ...operation.value };
+        break;
+      }
+      case 'set_style': {
+        guard(locked, operation.target, respect);
+        const section = findSection(next, operation.target);
+        if (section) {
+          if (operation.value === null) delete section.section.style;
+          else section.section.style = operation.value;
+          break;
+        }
+        const found = findNode(next, operation.target);
+        if (!found) throw notFound('Site node was not found.');
+        if (operation.value === null) delete found.node.style;
+        else found.node.style = operation.value;
+        break;
+      }
+      case 'move_node': {
+        guard(locked, operation.target, respect);
+        const found = findNode(next, operation.target);
+        if (!found || !found.parent) throw notFound('Site node was not found.');
+        const [node] = found.parent.splice(found.index, 1);
+        const anchorId = operation.before || operation.after;
+        const anchor = anchorId ? findNode(next, anchorId) : null;
+        if (anchorId && (!anchor || !anchor.parent)) throw notFound('Site node anchor was not found.');
+        if (anchor && anchor.parent) {
+          const at = operation.before ? anchor.index : anchor.index + 1;
+          anchor.parent.splice(at, 0, node);
+        } else {
+          const section = findSection(next, found.section.id);
+          if (!section) throw notFound('Site section was not found.');
+          section.section.nodes.push(node);
+        }
+        break;
+      }
+      case 'move_section': {
+        guard(locked, operation.target, respect);
+        const found = findSection(next, operation.target);
+        if (!found) throw notFound('Site section was not found.');
+        const [section] = found.page.sections.splice(found.index, 1);
+        const at = Math.max(0, Math.min(found.page.sections.length, Number(operation.index) || 0));
+        found.page.sections.splice(at, 0, section);
+        break;
+      }
+      case 'add_section': {
+        const page = next.pages.find((entry) => entry.id === operation.page || entry.path === operation.page);
+        if (!page) throw notFound('Site page was not found.');
+        if (page.sections.some((section) => section.id === operation.section.id)) throw badRequest('Site section id already exists.');
+        const at = Math.max(0, Math.min(page.sections.length, operation.index ?? page.sections.length));
+        page.sections.splice(at, 0, structuredClone(operation.section));
+        break;
+      }
+      case 'remove_section': {
+        guard(locked, operation.target, respect);
+        const found = findSection(next, operation.target);
+        if (!found) throw notFound('Site section was not found.');
+        if (found.page.sections.length <= 1) throw badRequest('A page keeps at least one section.');
+        found.page.sections.splice(found.index, 1);
+        break;
+      }
+      case 'add_node': {
+        guard(locked, operation.parent, respect);
+        const section = findSection(next, operation.parent);
+        const container = section ? section.section.nodes : findContainer(next, operation.parent);
+        if (!container) throw notFound('Site container was not found.');
+        const at = Math.max(0, Math.min(container.length, operation.index ?? container.length));
+        container.splice(at, 0, structuredClone(operation.node));
+        break;
+      }
+      case 'remove_node': {
+        guard(locked, operation.target, respect);
+        const found = findNode(next, operation.target);
+        if (!found || !found.parent) throw notFound('Site node was not found.');
+        found.parent.splice(found.index, 1);
+        break;
+      }
+      case 'swap_component': {
+        guard(locked, operation.target, respect);
+        const found = findNode(next, operation.target);
+        if (!found) throw notFound('Site node was not found.');
+        const component = next.components.find((entry) => entry.id === operation.component);
+        if (!component) throw badRequest('Choose a registered component.');
+        found.node.component = component.id;
+        if (operation.variant !== undefined) {
+          if (!Object.hasOwn(component.variants, operation.variant)) throw badRequest('Choose a registered component variant.');
+          found.node.variant = operation.variant;
+        } else {
+          delete found.node.variant;
+        }
+        break;
+      }
+      case 'set_token': {
+        guard(locked, operation.token, respect);
+        const [group, key] = operation.token.replace(/^token:/, '').split('.');
+        const entry = TOKENS.find((token) => token.group === group && token.key === key);
+        if (!entry) throw badRequest('Choose a registered design token.');
+        const groupValue = (next.design as unknown as Record<string, Record<string, unknown>>)[group];
+        if (!groupValue) throw badRequest('Choose a registered design token.');
+        const current = groupValue[key];
+        if (entry.kind === 'color' && (typeof operation.value !== 'string' || !/^#[0-9a-f]{6}$/i.test(operation.value))) throw badRequest('Colour tokens use a hex value.');
+        if ((entry.kind === 'number') && (typeof operation.value !== 'number' || !Number.isFinite(operation.value))) throw badRequest('Numeric tokens use a number.');
+        if (entry.kind === 'font' && typeof operation.value !== 'string') throw badRequest('Font tokens use a font stack.');
+        if (entry.kind === 'enum' && (typeof operation.value !== 'string' || !['linear', 'ease', 'easeout', 'easeinout'].includes(operation.value))) throw badRequest('Choose a registered easing value.');
+        groupValue[key] = current === undefined ? operation.value : operation.value;
+        break;
+      }
+      case 'set_journey': {
+        const index = next.journeys.findIndex((entry) => entry.id === operation.journey.id);
+        if (index >= 0) next.journeys[index] = structuredClone(operation.journey);
+        else next.journeys.push(structuredClone(operation.journey));
+        break;
+      }
+      case 'remove_journey': {
+        const index = next.journeys.findIndex((entry) => entry.id === operation.target);
+        if (index < 0) throw notFound('Site journey was not found.');
+        next.journeys.splice(index, 1);
+        break;
+      }
+      case 'set_redirect': {
+        const index = next.redirects.findIndex((entry) => entry.from === operation.from);
+        if (operation.to === null) {
+          if (index >= 0) next.redirects.splice(index, 1);
+        } else if (index >= 0) next.redirects[index] = { from: operation.from, to: operation.to, status: 308 };
+        else next.redirects.push({ from: operation.from, to: operation.to, status: 308 });
+        break;
+      }
+      case 'set_page': {
+        const page = next.pages.find((entry) => entry.id === operation.page || entry.path === operation.page);
+        if (!page) throw notFound('Site page was not found.');
+        if (typeof operation.value.title === 'string' && operation.value.title.trim()) page.title = operation.value.title.trim().slice(0, 200);
+        if (typeof operation.value.path === 'string' && operation.value.path !== page.path) {
+          if (next.pages.some((entry) => entry.path === operation.value.path)) throw badRequest('Site page path already exists.');
+          next.redirects.push({ from: page.path, to: operation.value.path, status: 308 });
+          page.path = operation.value.path;
+        }
+        if (typeof operation.value.description === 'string') page.meta = { ...page.meta, description: operation.value.description.trim().slice(0, 300) };
+        break;
+      }
+      case 'set_brief':
+        next.brief = { ...next.brief, ...operation.value };
+        break;
+      case 'set_policy':
+        next.policy = { ...next.policy, ...operation.value };
+        break;
+      case 'set_asset_rights': {
+        const asset = next.assets.find((entry) => entry.id === operation.target);
+        if (!asset) throw notFound('Site asset was not found.');
+        const value = operation.value;
+        if (typeof value.approved === 'boolean') asset.rights = { ...asset.rights, approved: value.approved };
+        if (typeof value.license === 'string') asset.rights = { ...asset.rights, license: value.license.slice(0, 120) };
+        if (typeof value.source === 'string') asset.rights = { ...asset.rights, source: value.source.slice(0, 200) };
+        if (typeof value.alt === 'string') asset.alt = value.alt.slice(0, 300);
+        break;
+      }
+      case 'add_asset': {
+        const asset = operation.asset;
+        if (!asset || next.assets.some((entry) => entry.id === asset.id)) throw badRequest('Site asset is invalid or already exists.');
+        next.assets.push(structuredClone(asset));
+        break;
+      }
+      case 'remove_asset': {
+        const index = next.assets.findIndex((entry) => entry.id === operation.target);
+        if (index < 0) throw notFound('Site asset was not found.');
+        next.assets.splice(index, 1);
+        break;
+      }
+      case 'lock': {
+        if (!['section', 'node', 'token', 'component', 'brand'].includes(operation.kind)) throw badRequest('Choose a registered lock kind.');
+        const exists = operation.kind === 'token'
+          ? typeof resolveToken(next.design, operation.target) !== 'undefined'
+          : operation.kind === 'component'
+            ? next.components.some((entry) => entry.id === operation.target)
+            : operation.kind === 'brand'
+              ? true
+              : Boolean(findSection(next, operation.target) || findNode(next, operation.target));
+        if (!exists) throw notFound('Locked target was not found.');
+        if (!next.locks.some((entry) => entry.target === operation.target)) next.locks.push({ target: operation.target, kind: operation.kind, at: Date.now() });
+        break;
+      }
+      case 'unlock': {
+        next.locks = next.locks.filter((entry) => entry.target !== operation.target);
+        break;
+      }
+      default:
+        throw badRequest('Site change is invalid.');
+    }
+  }
+  next.revision = doc.revision + 1;
+  return next;
+}
+
+function sectionHeading(doc: SiteDocument, id: string): FoundNode | null {
+  const section = findSection(doc, id);
+  if (!section) return null;
+  const node = section.section.nodes.find((entry) => entry.kind === 'heading');
+  return node ? { node, parent: section.section.nodes, index: section.section.nodes.indexOf(node), section: section.section } : null;
+}
+
+const text = (value: unknown): string => typeof value === 'string' ? value : '';
+
+/** Human-readable change list for review before a patch is applied. */
+export function diffSummary(before: SiteDocument, after: SiteDocument): DiffEntry[] {
+  const entries: DiffEntry[] = [];
+  const push = (target: string, kind: DiffEntry['kind'], from: unknown, to: unknown) => {
+    const left = typeof from === 'object' ? JSON.stringify(from) : text(from);
+    const right = typeof to === 'object' ? JSON.stringify(to) : text(to);
+    if (left === right) return;
+    entries.push({ target, kind, from: left.slice(0, 160), to: right.slice(0, 160) });
+  };
+  push('brief', 'brief', before.brief, after.brief);
+  push('policy', 'policy', before.policy, after.policy);
+  for (const token of TOKENS) {
+    const left = (before.design as unknown as Record<string, Record<string, unknown>>)[token.group]?.[token.key];
+    const right = (after.design as unknown as Record<string, Record<string, unknown>>)[token.group]?.[token.key];
+    if (left !== right) entries.push({ target: `token:${token.group}.${token.key}`, kind: 'token', from: text(left), to: text(right) });
+  }
+  const beforeNodes = new Map<string, Node>();
+  const collect = (doc: SiteDocument) => {
+    const map = new Map<string, Node>();
+    const walk = (nodes: Node[]) => nodes.forEach((node) => { map.set(node.id, node); walk(node.children || []); });
+    doc.pages.forEach((page) => page.sections.forEach((section) => walk(section.nodes)));
+    return map;
+  };
+  collect(before).forEach((node, id) => beforeNodes.set(id, node));
+  const afterNodes = collect(after);
+  for (const [id, node] of afterNodes) {
+    const previous = beforeNodes.get(id);
+    if (!previous) { entries.push({ target: id, kind: 'structure', from: '', to: `added ${node.kind}` }); continue; }
+    push(id, 'style', previous.style, node.style);
+    const keys = new Set([...Object.keys(previous.props), ...Object.keys(node.props)]);
+    for (const key of keys) {
+      if (key === 'items') continue;
+      const left = previous.props[key];
+      const right = node.props[key];
+      if (JSON.stringify(left) !== JSON.stringify(right)) entries.push({ target: id, kind: key === 'text' ? 'text' : 'prop', from: text(left), to: text(right) });
+    }
+  }
+  for (const [id] of beforeNodes) if (!afterNodes.has(id)) entries.push({ target: id, kind: 'structure', from: 'removed', to: '' });
+  const sectionsOf = (doc: SiteDocument) => new Map(doc.pages.flatMap((page) => page.sections.map((section) => [`${page.id}:${section.id}`, section] as const)));
+  const beforeSections = sectionsOf(before);
+  const afterSections = sectionsOf(after);
+  for (const [key, section] of afterSections) {
+    const previous = beforeSections.get(key);
+    if (!previous) { entries.push({ target: section.id, kind: 'structure', from: '', to: 'added section' }); continue; }
+    push(section.id, 'style', previous.style, section.style);
+    push(section.id, 'prop', previous.layout, section.layout);
+  }
+  for (const [key, section] of beforeSections) if (!afterSections.has(key)) entries.push({ target: section.id, kind: 'structure', from: 'removed section', to: '' });
+  if (JSON.stringify(before.journeys) !== JSON.stringify(after.journeys)) entries.push({ target: 'journeys', kind: 'journey', from: `${before.journeys.length}`, to: `${after.journeys.length}` });
+  if (JSON.stringify(before.redirects) !== JSON.stringify(after.redirects)) entries.push({ target: 'redirects', kind: 'structure', from: `${before.redirects.length}`, to: `${after.redirects.length}` });
+  if (JSON.stringify(before.locks) !== JSON.stringify(after.locks)) entries.push({ target: 'locks', kind: 'lock', from: `${before.locks.length}`, to: `${after.locks.length}` });
+  if (JSON.stringify(before.assets) !== JSON.stringify(after.assets)) entries.push({ target: 'assets', kind: 'asset', from: `${before.assets.length}`, to: `${after.assets.length}` });
+  return entries;
+}

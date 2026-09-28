@@ -1,0 +1,436 @@
+import { createClient } from '@libsql/client';
+import { Effect } from 'effect';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { WORKSPACE_SCHEMA } from '../src/db/schema.ts';
+import { executeGateway } from '../src/gateway/actions.ts';
+import type { AccessContext } from '../src/types.ts';
+import { DEFAULT_DESIGN, auditDesign, exportDesign, parseDesign } from '../src/site/design.ts';
+import { DOCUMENT_VERSION, type Asset, type SiteDocument } from '../src/site/document.ts';
+import { compileDocument } from '../src/site/compile.ts';
+import { collectIssues, validateDocument } from '../src/site/validate.ts';
+import { upgrade } from '../src/site/adapt.ts';
+import { createDefaultSite } from '../src/site/store.ts';
+
+const clients: ReturnType<typeof createClient>[] = [];
+afterEach(() => {
+  while (clients.length) clients.pop()?.close();
+  vi.unstubAllGlobals();
+});
+
+function releaseBucket(): R2Bucket & { objects: Map<string, string> } {
+  const objects = new Map<string, string>();
+  return {
+    objects,
+    put: async (key: string, value: string) => { objects.set(key, String(value)); return {} as R2Object; },
+    get: async (key: string) => { const value = objects.get(key); return value === undefined ? null : ({ text: async () => value } as unknown as R2ObjectBody); },
+  } as unknown as R2Bucket & { objects: Map<string, string> };
+}
+
+async function createTestWorkspace() {
+  const client = createClient({ url: 'file::memory:' });
+  clients.push(client);
+  for (const statement of WORKSPACE_SCHEMA) {
+    await client.execute(statement);
+  }
+  const at = Date.now();
+  await client.execute({ sql: "INSERT INTO records(id,type,title,state,data,owner,version,created,updated) VALUES('capability','capability','Capabilities','active',?, 'owner_1',1,?,?)",
+    args: [JSON.stringify({ site: true, pos: false, commerce: false }), at, at] });
+  return client;
+}
+
+const ownerAccess: AccessContext = {
+  identity: { id: 'owner_1', email: 'owner@slicehouse.in', name: 'Muthu' },
+  workspace: { id: 'ws_slice', name: 'Slice House', slug: 'slice-house', mode: 'work', databaseName: 'slice', databaseHost: 'slice', state: 'active' },
+  member: { workspaceId: 'ws_slice', userId: 'owner_1', role: 'owner', state: 'active' },
+};
+
+const asset: Asset = {
+  id: 'logo', kind: 'image', key: 'workspaces/ws_slice/sites/site_1/assets/logo.png', mime: 'image/png',
+  bytes: 128, hash: 'a'.repeat(64), width: 512, height: 512, alt: 'Slice House logo',
+  rights: { source: 'workspace upload', license: 'owned', approved: true },
+};
+
+function document(overrides: Partial<SiteDocument> = {}): SiteDocument {
+  return {
+    schema: DOCUMENT_VERSION,
+    revision: 3,
+    brief: { goal: 'sell pizza', audience: 'local diners', tone: 'warm' },
+    locale: 'en', timezone: 'Asia/Kolkata', currency: 'INR',
+    design: structuredClone(DEFAULT_DESIGN),
+    assets: [structuredClone(asset)],
+    components: [],
+    pages: [{
+      id: 'home', path: '/', title: 'Home', meta: { description: 'Wood fired pizza' },
+      sections: [
+        { id: 'navigation', purpose: 'chrome', layout: { kind: 'flow' }, nodes: [{ id: 'nav', kind: 'navigation', props: { brand: 'Slice House', links: [{ label: 'Menu', href: '/catalog' }] } }] },
+        {
+          id: 'hero', purpose: 'introduction', layout: { kind: 'stack' },
+          nodes: [
+            { id: 'hero-title', kind: 'heading', props: { text: 'Slice House', level: 1 } },
+            { id: 'hero-text', kind: 'text', props: { text: 'Wood fired pizza in Chennai' } },
+            { id: 'hero-image', kind: 'image', props: { asset: 'logo' }, style: { base: { radius: 'token:shape.lg', aspect: 'wide' }, small: { pad: 'sm' }, medium: { radius: 'token:shape.md' }, large: { pad: 'lg' } } },
+            { id: 'hero-actions', kind: 'flex', props: {}, children: [
+              { id: 'hero-primary', kind: 'button', props: { label: 'See the menu', href: '/catalog' } },
+            ] },
+          ],
+        },
+        { id: 'footer', purpose: 'chrome', layout: { kind: 'flow' }, nodes: [{ id: 'foot', kind: 'footer', props: { brand: 'Slice House', links: [] } }] },
+      ],
+    }],
+    journeys: [], redirects: [], locks: [], policy: {},
+    ...overrides,
+  };
+}
+
+describe('site document v2 validation', () => {
+  it('accepts a complete document and rejects structural mistakes', () => {
+    expect(() => validateDocument(document())).not.toThrow();
+
+    const unknownKind = document();
+    unknownKind.pages[0].sections[1].nodes[0] = { id: 'bad', kind: 'marquee' as never, props: {} };
+    expect(collectIssues(unknownKind).some((issue) => issue.message.includes('Unknown node kind'))).toBe(true);
+
+    const badStyle = document();
+    badStyle.pages[0].sections[1].nodes[0].style = { base: { position: 'fixed' } as never };
+    expect(collectIssues(badStyle).some((issue) => issue.message.includes('not allowed'))).toBe(true);
+
+    const badToken = document();
+    badToken.pages[0].sections[1].nodes[0].style = { base: { color: 'token:color.neon' } };
+    expect(collectIssues(badToken).some((issue) => issue.message.includes('Unknown colour token'))).toBe(true);
+
+    const missingComponent = document();
+    missingComponent.pages[0].sections[1].nodes.push({ id: 'promo', kind: 'card', props: {}, component: 'missing', children: [{ id: 'promo-a', kind: 'text', props: { text: 'x' } }] });
+    expect(collectIssues(missingComponent).some((issue) => issue.message.includes('Unknown component'))).toBe(true);
+
+    const cycle = document();
+    cycle.components = [
+      { id: 'a', name: 'A', slots: [], variants: {}, nodes: [{ id: 'card-a', kind: 'card', props: {}, component: 'b', children: [{ id: 'a-inner', kind: 'text', props: { text: 'a' } }] }] },
+      { id: 'b', name: 'B', slots: [], variants: {}, nodes: [{ id: 'card-b', kind: 'card', props: {}, component: 'a', children: [{ id: 'b-inner', kind: 'text', props: { text: 'b' } }] }] },
+    ];
+    expect(collectIssues(cycle).some((issue) => issue.message.includes('cycle'))).toBe(true);
+
+    const twoHeadings = document();
+    twoHeadings.pages[0].sections[1].nodes.push({ id: 'hero-title-2', kind: 'heading', props: { text: 'Another', level: 1 } });
+    expect(collectIssues(twoHeadings).some((issue) => issue.message.includes('exactly one level-one heading'))).toBe(true);
+
+    const duplicateIds = document();
+    duplicateIds.pages[0].sections[1].nodes.push({ id: 'hero-text', kind: 'text', props: { text: 'duplicate' } });
+    expect(collectIssues(duplicateIds).some((issue) => issue.message.includes('unique'))).toBe(true);
+  });
+
+  it('validates bindings, journeys, redirects and locks', () => {
+    const bound = document();
+    bound.pages[0].sections.push({
+      id: 'catalog', purpose: 'collection', layout: { kind: 'grid' },
+      nodes: [{ id: 'items', kind: 'collection', props: { title: 'Menu', slot: 'items', items: [] } }],
+      bindings: [{ id: 'catalog-items', slot: 'items', query: 'catalog.public', version: 1, access: 'public', freshness: 300, params: { records: ['prod_1'], channel: 'web' } }],
+    });
+    expect(() => validateDocument(bound)).not.toThrow();
+
+    const unregistered = structuredClone(bound);
+    unregistered.pages[0].sections[3].bindings = [{ id: 'bad', slot: 'items', query: 'secret.query' as never, version: 1, access: 'public', freshness: 300 }];
+    expect(collectIssues(unregistered).some((issue) => issue.message.includes('not registered'))).toBe(true);
+
+    const orphanBinding = structuredClone(bound);
+    orphanBinding.pages[0].sections[3].nodes = [{ id: 'text', kind: 'text', props: { text: 'no collection' } }];
+    expect(collectIssues(orphanBinding).some((issue) => issue.message.includes('collection node'))).toBe(true);
+
+    const journey = document();
+    journey.pages[0].sections.push({
+      id: 'enquiry', purpose: 'enquiry', layout: { kind: 'stack' },
+      nodes: [{ id: 'form', kind: 'form', props: { journey: 'enquiry' } }],
+    });
+    journey.policy = { publicEnquiry: true };
+    journey.journeys = [{
+      id: 'enquiry', title: 'Enquiry', target: 'record.create', version: 1, input: { type: 'enquiry' }, outcome: 'Appears in Now',
+      enabled: true, kind: 'enquiry', fields: [{ key: 'name', label: 'Name', kind: 'text', required: true }],
+    }];
+    expect(() => validateDocument(journey)).not.toThrow();
+
+    const badTarget = structuredClone(journey);
+    badTarget.journeys[0].target = 'admin.delete';
+    expect(collectIssues(badTarget).some((issue) => issue.message.includes('registered target'))).toBe(true);
+
+    const disabledPolicy = structuredClone(journey);
+    disabledPolicy.policy = {};
+    expect(collectIssues(disabledPolicy).some((issue) => issue.message.includes('policy enables'))).toBe(true);
+
+    const redirect = document();
+    redirect.redirects = [{ from: '/old', to: '/catalog', status: 308 }];
+    expect(() => validateDocument(redirect)).not.toThrow();
+    const looped = structuredClone(redirect);
+    looped.redirects = [{ from: '/old', to: '/old', status: 308 }];
+    expect(collectIssues(looped).some((issue) => issue.message.includes('different path'))).toBe(true);
+
+    const locked = document();
+    locked.locks = [{ target: 'hero', kind: 'section', at: 1 }];
+    expect(() => validateDocument(locked)).not.toThrow();
+    const badLock = structuredClone(locked);
+    badLock.locks = [{ target: 'ghost', kind: 'section', at: 1 }];
+    expect(collectIssues(badLock).some((issue) => issue.message.includes('does not exist'))).toBe(true);
+  });
+
+  it('rejects assets without provenance and unsafe asset types', () => {
+    const badMime = document();
+    badMime.assets = [{ ...asset, mime: 'application/javascript' }];
+    expect(collectIssues(badMime).some((issue) => issue.message.includes('not allowed'))).toBe(true);
+
+    const noRights = document();
+    noRights.assets = [{ ...asset, rights: { source: '', license: '', approved: false } }];
+    expect(collectIssues(noRights).some((issue) => issue.message.includes('provenance'))).toBe(true);
+  });
+});
+
+describe('site design system', () => {
+  it('parses design.md into typed tokens with recorded conflicts', () => {
+    const markdown = `# Design
+## Direction
+- audience: local families
+- voice: warm and plain
+- density: airy
+## Foundations
+- canvas: #ffffff
+- ink: #0b0b0c
+- accent: #4d49fc
+- surface: #f7f7f8
+- border: #e6e6ea
+- muted: #5b6169
+- accentink: #ffffff
+## Typography
+- display: Georgia serif
+- body: System sans
+- base: 16px
+- scale: 1.25
+## Spacing
+- unit: 4px
+- section: 96px
+- container: 1140px
+## Shape
+- radius: 8px, 50px, 9999px
+## Motion
+- duration: 200ms
+- easing: easeout
+- reduce: true
+## Guidance
+- Keep a single accent colour.
+`;
+    const parsed = parseDesign(markdown);
+    expect(parsed.design.color.accent).toBe('#4d49fc');
+    expect(parsed.design.space.unit).toBe(4);
+    expect(parsed.design.space.section).toBe(96);
+    expect(parsed.design.shape.pill).toBe(9999);
+    expect(parsed.design.direction.density).toBe('airy');
+    expect(parsed.design.guidance).toContain('Keep a single accent colour.');
+
+    const fourRadii = parseDesign('## Shape\n- radius: 2px, 4px, 8px, 16px\n');
+    expect(fourRadii.decisions.some((decision) => decision.area === 'shape')).toBe(true);
+
+    const lowType = parseDesign('## Typography\n- base: 13px\n');
+    expect(lowType.design.type.base).toBe(16);
+    expect(lowType.decisions.some((decision) => decision.question.includes('readable minimum'))).toBe(true);
+
+    const figma = parseDesign('## Typography\n- heading font: Figma Brand Sans\n');
+    expect(figma.decisions.some((decision) => decision.question.includes('Substitute named fonts'))).toBe(true);
+
+    const exported = exportDesign(parsed.design);
+    expect(exported).toContain('## Foundations');
+    expect(exported).toContain('accent: #4d49fc');
+    const roundTrip = parseDesign(exported, parsed.design);
+    expect(roundTrip.design.color.accent).toBe(parsed.design.color.accent);
+  });
+
+  it('flags unreadable contrast as blocking', () => {
+    const low = structuredClone(DEFAULT_DESIGN);
+    low.color.ink = '#cccccc';
+    expect(auditDesign(low).some((report) => report.level === 'blocking' && report.message.includes('Body text contrast'))).toBe(true);
+  });
+});
+
+describe('site v2 compiler', () => {
+  it('renders every node kind with semantic HTML and progressive runtime', async () => {
+    const doc = document();
+    doc.pages[0].sections[1].nodes.push(
+      { id: 'list', kind: 'list', props: { items: ['Hot honey', 'Margherita'] } },
+      { id: 'icon', kind: 'icon', props: { name: 'star' } },
+      { id: 'divider', kind: 'divider', props: {} },
+      { id: 'spacer', kind: 'spacer', props: {} },
+      { id: 'tabs', kind: 'tabs', props: {}, children: [
+        { id: 'tab-one', kind: 'stack', props: { label: 'Menu' }, children: [{ id: 'tab-one-text', kind: 'text', props: { text: 'Hot honey' } }] },
+      ] },
+      { id: 'accordion', kind: 'accordion', props: {}, children: [
+        { id: 'faq-one', kind: 'stack', props: { label: 'Delivery?' }, children: [{ id: 'faq-one-text', kind: 'text', props: { text: 'Within 5km' } }] },
+      ] },
+      { id: 'gallery', kind: 'gallery', props: { assets: ['logo'] } },
+      { id: 'menu', kind: 'menu', props: { links: [{ label: 'Menu', href: '/catalog' }] } },
+    );
+    const compiled = await compileDocument(doc, { origin: 'https://slice.example.test' });
+    const home = String(compiled.files.find((file) => file.path === '/index.html')?.body || '');
+    expect(home).toContain('<html lang="en">');
+    expect(home).toContain('alt="Slice House logo"');
+    expect(home).toContain('width="512"');
+    expect(home).toContain('<details class="tar-acc">');
+    expect(home).toContain('role="tabpanel"');
+    expect(home).toContain('aria-selected="true"');
+    expect(home).toContain('<ul id="list"');
+    expect(home).toContain('/media/logo.png');
+    expect(home).toContain('href="https://slice.example.test/"');
+    const runtime = compiled.files.find((file) => file.path === '/site.js');
+    expect(runtime).toBeDefined();
+    expect(String(runtime?.body)).toContain('tar-menu-btn');
+    const css = String(compiled.files.find((file) => file.path === '/style.css')?.body || '');
+    expect(css).toContain('--color-accent: #4d49fc');
+    expect(css).toContain('border-radius:16px');
+    expect(css).toContain('@media (max-width: 640px)');
+    expect(css).toContain('@media (min-width: 641px) and (max-width: 1024px)');
+    expect(css).toContain('@media (min-width: 1025px)');
+    expect(css).toContain('prefers-reduced-motion');
+    const sitemap = String(compiled.files.find((file) => file.path === '/sitemap.xml')?.body || '');
+    expect(sitemap).toContain('<loc>https://slice.example.test/</loc>');
+    expect(sitemap).not.toContain('//</loc>');
+  });
+
+  it('escapes content and never emits inline handlers or scripts from data', async () => {
+    const doc = document();
+    doc.pages[0].sections[1].nodes = [
+      { id: 'hero-title', kind: 'heading', props: { text: '</script><script>alert(1)</script>', level: 1 } },
+      { id: 'hero-text', kind: 'text', props: { text: 'Safe & sound' } },
+      { id: 'link', kind: 'link', props: { label: 'Unsafe', href: 'javascript:alert(1)' } },
+      { id: 'button', kind: 'button', props: { label: 'Unsafe', href: 'javascript:alert(1)' } },
+    ];
+    const compiled = await compileDocument(doc);
+    const home = String(compiled.files.find((file) => file.path === '/index.html')?.body || '');
+    expect(home).not.toContain('<script>alert(1)</script>');
+    expect(home).toContain('&lt;/script&gt;');
+    expect(home).not.toContain('javascript:');
+    expect(home).not.toContain('onclick');
+    expect(compiled.files.find((file) => file.path === '/site.js')).toBeUndefined();
+  });
+
+  it('expands collection detail templates and pagination at compile time', async () => {
+    const doc = document();
+    doc.pages.push({
+      id: 'catalog', path: '/catalog', title: 'Menu',
+      sections: [{
+        id: 'items-section', purpose: 'collection', layout: { kind: 'grid' },
+        nodes: [{
+          id: 'items', kind: 'collection', props: {
+            title: 'Menu', slot: 'items',
+            items: [
+              { id: 'p1', slug: 'garlic-bread', title: 'Garlic Bread', price: 15000, currency: 'INR' },
+              { id: 'p2', slug: 'hot-honey', title: 'Hot Honey', price: 20000, currency: 'INR' },
+              { id: 'p3', slug: 'margherita', title: 'Margherita', price: 25000, currency: 'INR' },
+            ],
+          },
+          children: [{ id: 'item-title', kind: 'heading', props: { text: '', level: 2, field: 'title' } }],
+        }],
+        bindings: [{ id: 'items-binding', slot: 'items', query: 'catalog.public', version: 1, access: 'public', freshness: 300, params: { records: ['p1', 'p2', 'p3'] }, paginate: { size: 2 }, detail: { path: '/catalog/:item' } }],
+      }],
+    });
+    const compiled = await compileDocument(doc, { origin: 'https://slice.example.test' });
+    const paths = compiled.files.map((file) => file.path);
+    expect(paths).toContain('/catalog/garlic-bread/index.html');
+    expect(paths).toContain('/catalog/page/2/index.html');
+    const detail = String(compiled.files.find((file) => file.path === '/catalog/garlic-bread/index.html')?.body || '');
+    expect(detail).toContain('Garlic Bread');
+    const sitemap = String(compiled.files.find((file) => file.path === '/sitemap.xml')?.body || '');
+    expect(sitemap).toContain('<loc>https://slice.example.test/catalog/garlic-bread</loc>');
+  });
+});
+
+describe('v1 migration', () => {
+  it('upgrades every card family and keeps the retained v1 compiler working', async () => {
+    const empty = createDefaultSite('Northstar', 'A local business');
+    const emptyKinds = upgrade(empty).pages.flatMap((page) => page.sections.flatMap((section) => section.nodes.map((node) => node.kind)));
+    expect(emptyKinds).not.toContain('accordion');
+    expect(emptyKinds).not.toContain('list');
+
+    const v1 = createDefaultSite('Northstar', 'A local business');
+    type MutableCard = { kind: string; props: Record<string, unknown> };
+    type MutablePage = { id: string; cards: MutableCard[] };
+    const pages = (v1 as unknown as { pages: MutablePage[] }).pages;
+    const home = pages.find((page) => page.id === 'home')!;
+    home.cards = home.cards.map((card) => card.kind === 'features'
+      ? { ...card, props: { features: [{ icon: 'star', title: 'Fast', description: 'Ready in 20 minutes' }] } }
+      : card.kind === 'proof'
+        ? { ...card, props: { testimonials: [{ quote: 'Best slice', author: 'Ravi' }] } }
+        : card);
+    const catalog = pages.find((page) => page.id === 'catalog')!;
+    catalog.cards = catalog.cards.map((card) => card.kind === 'faq'
+      ? { ...card, props: { items: [{ q: 'Delivery?', a: 'Within 5km' }] } } : card);
+    const contact = pages.find((page) => page.id === 'contact')!;
+    contact.cards = contact.cards.map((card) => card.kind === 'hours'
+      ? { ...card, props: { schedule: [{ days: 'Mon-Fri', hours: '9-5' }] } }
+      : card.kind === 'contact'
+        ? { ...card, props: { address: '12 Beach Road', phone: '+91 90000 00000', email: 'hi@slice.test' } }
+        : card);
+
+    const upgraded = upgrade(v1);
+    expect(upgraded.schema).toBe(DOCUMENT_VERSION);
+    expect(upgraded.pages.map((page) => page.path)).toEqual(['/', '/catalog', '/about', '/contact']);
+    const kindsOf = (list: { kind: string; children?: unknown[] }[]): string[] =>
+      list.flatMap((node) => [node.kind, ...kindsOf((node.children || []) as { kind: string; children?: unknown[] }[])]);
+    const kinds = upgraded.pages.flatMap((page) => page.sections.flatMap((section) => kindsOf(section.nodes)));
+    for (const kind of ['navigation', 'heading', 'text', 'button', 'collection', 'form', 'footer', 'grid', 'card', 'icon', 'accordion', 'list']) {
+      expect(kinds).toContain(kind);
+    }
+    expect(() => validateDocument(upgraded)).not.toThrow();
+
+    const client = await createTestWorkspace();
+    const bucket = releaseBucket();
+    const generated = await Effect.runPromise(executeGateway(client, ownerAccess, {
+      actionId: 'site.generate', idempotencyKey: 'v2-generate', input: { title: 'Slice House', prompt: 'Pizza' },
+    }));
+    const siteId = String(generated.siteId);
+    const compiled = await Effect.runPromise(executeGateway(client, ownerAccess, {
+      actionId: 'site.compile', idempotencyKey: 'v2-compile', input: { siteId },
+    }, { siteReleases: bucket }));
+    const prefix = `workspaces/${ownerAccess.workspace.id}/sites/${siteId}/releases/${compiled.releaseId}`;
+
+    // A generated draft is a v2 document compiled by the v2 compiler.
+    const stored = await client.execute({ sql: 'SELECT data FROM records WHERE id=?', args: [siteId] });
+    expect(JSON.parse(String(stored.rows[0].data)).schema).toBe(DOCUMENT_VERSION);
+    const manifest = JSON.parse(bucket.objects.get(`${prefix}/manifest.json`)!);
+    expect(manifest.compiler).toBe('2.0.0');
+    expect(bucket.objects.get(`${prefix}/index.html`)).toContain('<!DOCTYPE html>');
+
+    // A retained v1 record still compiles with the frozen v1 compiler.
+    const at = Date.now();
+    await client.execute({
+      sql: "INSERT INTO records(id,type,title,state,data,owner,version,created,updated) VALUES('site_legacy','site','Legacy','draft',?, 'owner_1',1,?,?)",
+      args: [JSON.stringify(createDefaultSite('Legacy', 'Old release')), at, at],
+    });
+    const legacy = await Effect.runPromise(executeGateway(client, ownerAccess, {
+      actionId: 'site.compile', idempotencyKey: 'v1-compile', input: { siteId: 'site_legacy' },
+    }, { siteReleases: bucket }));
+    const legacyPrefix = `workspaces/${ownerAccess.workspace.id}/sites/site_legacy/releases/${legacy.releaseId}`;
+    expect(JSON.parse(bucket.objects.get(`${legacyPrefix}/manifest.json`)!).compiler).toBe('1.0.0');
+    expect(bucket.objects.get(`${legacyPrefix}/index.html`)).toContain('<style>');
+  });
+
+  it('applies retained card operations to the upgraded document', async () => {
+    const client = await createTestWorkspace();
+    const generated = await Effect.runPromise(executeGateway(client, ownerAccess, {
+      actionId: 'site.generate', idempotencyKey: 'legacy-generate', input: { title: 'Slice House', prompt: 'Pizza' },
+    }));
+    const siteId = String(generated.siteId);
+    await Effect.runPromise(executeGateway(client, ownerAccess, {
+      actionId: 'site.update', idempotencyKey: 'legacy-edit', input: {
+        siteId, baseVersion: 1,
+        operations: [
+          { op: 'update_card', path: 'home', value: { id: 'hero', props: { headline: 'Chennai’s Best Slice', subtext: 'Wood fired daily' } } },
+          { op: 'update_card', path: 'catalog', value: { id: 'catalog', bindings: [{ slot: 'items', query: 'catalog.public', version: 1, access: 'public', freshness: 300, params: { records: ['prod_1'], channel: 'web' } }] } },
+        ],
+      },
+    }));
+    const stored = await client.execute({ sql: 'SELECT data FROM records WHERE id=?', args: [siteId] });
+    const site = JSON.parse(String(stored.rows[0].data));
+    const hero = site.pages[0].sections.find((section: { id: string }) => section.id === 'hero');
+    expect(hero.nodes.find((node: { kind: string }) => node.kind === 'heading').props.text).toBe('Chennai’s Best Slice');
+    expect(hero.nodes.find((node: { kind: string }) => node.kind === 'text').props.text).toBe('Wood fired daily');
+    const catalog = site.pages[1].sections.find((section: { id: string }) => section.id === 'catalog');
+    expect(catalog.bindings[0].query).toBe('catalog.public');
+    expect(catalog.bindings[0].params.records).toEqual(['prod_1']);
+    expect(site.schema).toBe(DOCUMENT_VERSION);
+    expect(site.revision).toBe(2);
+  });
+});

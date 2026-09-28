@@ -2,15 +2,19 @@ import { Effect } from 'effect';
 import type { Client } from '@libsql/client/web';
 import { verifyGoogleIdentity } from './auth/google.ts';
 import { ControlStore } from './db/control.ts';
-import { ensureNowDatabase, mintReplicaToken, openWorkspaceDatabase, provisionWorkspaceDatabase, query } from './db/turso.ts';
+import { ensureNowDatabase, mintNowSyncToken, openWorkspaceDatabase, provisionWorkspaceDatabase, query } from './db/turso.ts';
 import { executeGateway, type GatewayRequest } from './gateway/actions.ts';
 import { HarnessError, badRequest, forbidden, notFound, unavailable } from './errors.ts';
 import type { AccessContext, RecordItem } from './types.ts';
 import { actionCatalog, interfaceCatalog } from './registry/catalog.ts';
+import { moduleForAction, readCapabilities, readWorkspaceTools } from './registry/tools.ts';
 import { buildWorkspaceCanvas } from './registry/canvas.ts';
 import { posSummary, readPos } from './pos/store.ts';
 import { readProductContent } from './pos/content.ts';
-import { canExecute, canReadRecord, isCook, managesMembers } from './access.ts';
+import { serveSitePreview } from './site/preview.ts';
+import { isV2 } from './site/adapt.ts';
+import { exportDesign } from './site/design.ts';
+import { canExecute, canReadRecord, canRunFlowStep, canUseWorkRole, isCook, managesMembers, workRoleNames } from './access.ts';
 import { inviteMember, listMembers, updateMember } from './team.ts';
 import { providers, providerStatus, verifyEvent, chatResponse, type ChannelEnv, type Provider } from './channels/providers.ts';
 import { beginLink, channelState, confirmLink, disconnect, proveLink, resolveSender } from './channels/store.ts';
@@ -23,7 +27,7 @@ import { authorityKey, ensureNowSchema, projectNow, readNow, replaceSource, retr
 import { nextInTie } from './inbox/rank.ts';
 export { FlowWorkflow } from './flows/workflow.ts';
 
-type RuntimeEnv = Env & ChannelEnv & { readonly TURSO_PLATFORM_TOKEN?: string; readonly TINYFISH_API_KEY?: string; readonly TYPESAFE_API_KEY?: string };
+type RuntimeEnv = Env & ChannelEnv & { readonly TURSO_PLATFORM_TOKEN?: string; readonly TINYFISH_API_KEY?: string; readonly TYPESAFE_API_KEY?: string; readonly SITE_BASE_DOMAIN?: string; readonly SITE_WORKER_ORIGIN?: string };
 const jsonHeaders = { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' };
 const corsHeaders = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Authorization, Content-Type, Idempotency-Key', 'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS' };
 const now = () => Date.now();
@@ -67,8 +71,8 @@ async function siteSecurityHeaders(html: string, contentType: string): Promise<R
   }
   return {
     'Content-Security-Policy': [
-      "default-src 'none'", "base-uri 'none'", "object-src 'none'", "form-action 'none'", "frame-ancestors 'none'",
-      `script-src ${scriptHashes.length ? scriptHashes.join(' ') : "'none'"}`,
+      "default-src 'none'", "base-uri 'none'", "object-src 'none'", "form-action 'self'", "frame-ancestors 'none'",
+      `script-src 'self'${scriptHashes.length ? ` ${scriptHashes.join(' ')}` : ''}`,
       "style-src 'self' 'unsafe-inline'", "img-src 'self' https: data:", "font-src 'self' data:", "connect-src 'none'",
     ].join('; '),
     'X-Frame-Options': 'DENY',
@@ -84,6 +88,13 @@ async function runVisible(client: Client, member: AccessContext['member'], actor
   if (typeof recordId !== 'string') return false;
   const rows = await Effect.runPromise(query<Record<string, unknown>>(client, { sql: 'SELECT * FROM records WHERE id=? AND archived IS NULL', args: [recordId] }));
   return Boolean(rows[0] && canReadRecord(member, record(rows[0])));
+}
+
+function canContinueRun(member: AccessContext['member'], context: Record<string, unknown>) {
+  const actions = Array.isArray(context.actions) ? context.actions.map(object) : [];
+  const step = Number(context.step || 0);
+  const current = Number.isSafeInteger(step) && step >= 0 ? actions[step] : undefined;
+  return Boolean(current && canRunFlowStep(member, current, String(context.startedBy || '')));
 }
 
 async function identity(request: Request, env: RuntimeEnv) {
@@ -298,8 +309,13 @@ async function handle(request: Request, env: RuntimeEnv, ctx: ExecutionContext):
   if (request.method === 'POST' && channelMatch) return channelRequest(request, env, channelMatch[1] as Provider, ctx);
   if (request.method === 'GET' && path === '/health') return response({ ok: true, service: 'tarharness', now: new Date().toISOString(), tursoProvisioning: Boolean(env.TURSO_PLATFORM_TOKEN && env.TURSO_ORG && !env.TURSO_ORG.startsWith('REPLACE_')) });
   if (request.method === 'GET' && path === '/v1/actions') return response({ actions: actionCatalog.filter((action) => action.id !== 'flow.suggest' || Boolean(env.TYPESAFE_API_KEY)), interfaces: interfaceCatalog });
+  const previewMatch = /^\/v1\/site-previews\/([a-f0-9-]{36})(\/.*)?$/.exec(path);
+  if (request.method === 'GET' && previewMatch) return serveSitePreview(previewMatch[1], previewMatch[2] || '/', env.CONTROL, env.SITE_RELEASES, siteSecurityHeaders, {
+    frame: url.searchParams.get('frame'),
+    embed: url.searchParams.get('embed') === '1',
+  });
   if (request.method === 'GET' && path === '/v1/space') return response(await spaceResponse(request, env, url));
-  if (request.method === 'GET' && path === '/v1/inbox/replica') {
+  if (request.method === 'GET' && (path === '/v1/inbox/sync' || path === '/v1/inbox/replica')) {
     const { value, accesses } = await activeAccesses(request, env);
     const personal = accesses.find((current) => current.workspace.mode === 'personal');
     if (!personal) throw notFound('Personal Now database is unavailable.');
@@ -314,7 +330,7 @@ async function handle(request: Request, env: RuntimeEnv, ctx: ExecutionContext):
       }
     });
     const database = await ensureNowDatabase(tursoEnv(env), value.id);
-    const authToken = await mintReplicaToken(tursoEnv(env), database.Name);
+    const authToken = await mintNowSyncToken(tursoEnv(env), database.Name);
     return response({ url: `libsql://${database.Hostname}`, authToken,
       expiresAt: Date.now() + 9 * 60_000, database: personal.workspace.id }, 200, { 'Cache-Control': 'no-store' });
   }
@@ -355,43 +371,15 @@ async function handle(request: Request, env: RuntimeEnv, ctx: ExecutionContext):
     const siteSlug = publicSiteMatch[1];
     const wsRow = await env.CONTROL.prepare("SELECT * FROM workspaces WHERE slug=? AND state='active' LIMIT 1").bind(siteSlug).first<Record<string, unknown>>();
     if (!wsRow) throw notFound('Site not found.');
-    const ws = { id: String(wsRow.id), name: String(wsRow.name), slug: String(wsRow.slug), mode: wsRow.mode === 'personal' ? 'personal' as const : 'work' as const, databaseName: String(wsRow.database_name), databaseHost: typeof wsRow.database_host === 'string' ? wsRow.database_host : null, state: 'active' as const };
-    const client = await Effect.runPromise(openWorkspaceDatabase(tursoEnv(env), ws.databaseName, ws.databaseHost!));
-    try {
-      const siteRows = await client.execute("SELECT id,data FROM records WHERE type='site' AND state='live' AND archived IS NULL ORDER BY updated DESC LIMIT 1");
-      if (!siteRows.rows.length) throw notFound('No published site found.');
-      const siteData = object(JSON.parse(String(siteRows.rows[0].data)));
-      const releases = Array.isArray(siteData.releases) ? siteData.releases : [];
-      const currentReleaseId = String(siteData.currentRelease || '');
-      const siteId = String(siteRows.rows[0].id);
-      const release = currentReleaseId ? releases.map(object).find((item) => item.id === currentReleaseId && item.siteId === siteId) : undefined;
-      if (!release) throw notFound('Published site release not found.');
-      const requestedPath = (publicSiteMatch[2] || '/').replace(/\/+$/, '') || '/';
-      const releasePath = requestedPath === '/' ? '/index.html' : /\.[a-z0-9]+$/i.test(requestedPath) ? requestedPath : `${requestedPath}/index.html`;
-      const file = Array.isArray(release.files) ? release.files.map(object).find((item) => item.path === releasePath) : undefined;
-      const prefix = `workspaces/${ws.id}/sites/${siteId}/releases/${currentReleaseId}/`;
-      const key = typeof file?.key === 'string' && file.key.startsWith(prefix) ? file.key : null;
-      const artifact = key ? await env.SITE_RELEASES.get(key) : null;
-      if (!artifact) throw notFound('Site content unavailable.');
-      const contentType = typeof file?.mime === 'string' ? file.mime : artifact.httpMetadata?.contentType || 'application/octet-stream';
-      if (!contentType.startsWith('text/html') && !contentType.startsWith('text/css')) throw notFound('Site content unavailable.');
-      let body = await artifact.text();
-      if (contentType.startsWith('text/html')) {
-        const base = `/v1/sites/${encodeURIComponent(siteSlug)}`;
-        body = body.replaceAll('href="/', `href="${base}/`);
-      }
-      const securityHeaders = await siteSecurityHeaders(body, contentType);
-      return new Response(body, {
-        status: 200,
-        headers: {
-          'Content-Type': contentType,
-          'Cache-Control': 'public, max-age=0, s-maxage=30, must-revalidate',
-          ...securityHeaders,
-        },
-      });
-    } finally {
-      client.close();
-    }
+    const authority = await env.CONTROL.withSession('first-primary').prepare('SELECT release,status,domain,mode FROM sites WHERE workspace=?')
+      .bind(String(wsRow.id)).first<{ release: string; status: string; domain: string; mode: string }>();
+    if (!authority || authority.status !== 'active' || !authority.release) throw notFound('Site is not published.');
+    if (!/^(?:[a-z0-9-]+\.)+[a-z0-9-]+$/.test(authority.domain)) throw unavailable('Published address is unavailable.');
+    const requestedPath = publicSiteMatch[2] || '/';
+    if (/%(?:2f|5c|00|25)/i.test(requestedPath) || /[\\\u0000-\u001f]/.test(requestedPath) || requestedPath.split('/').some((part) => part === '.' || part === '..')) throw badRequest('Invalid site path.');
+    const target = new URL(`https://${authority.domain}${authority.mode === 'path' ? `/${siteSlug}` : ''}${requestedPath}`);
+    target.search = url.search;
+    return new Response(null, { status: 308, headers: { Location: target.toString(), 'Cache-Control': 'no-store' } });
   }
   const match = /^\/v1\/workspaces\/([a-z0-9-]+)(?:\/(.*))?$/.exec(path);
   if (!match) throw notFound('Route not found.');
@@ -422,7 +410,10 @@ async function handle(request: Request, env: RuntimeEnv, ctx: ExecutionContext):
     const body = await Effect.runPromise(parseJson(request));
     return response(await disconnect(env.CONTROL, current, body.destination === true));
   }
-    if (request.method === 'GET' && nested === 'actions') return response({ actions: actionCatalog.filter((action) => canExecute(current.member, action.id) && (action.id !== 'flow.suggest' || Boolean(env.TYPESAFE_API_KEY))), interfaces: interfaceCatalog });
+    if (request.method === 'GET' && nested === 'actions') return response({ actions: actionCatalog.filter((action) => canExecute(current.member, action.id)
+      && (action.id !== 'flow.suggest' || Boolean(env.TYPESAFE_API_KEY))
+      && (action.id !== 'web.search' || Boolean(env.TINYFISH_API_KEY)))
+      .map((action) => ({ ...action, workRoles: workRoleNames.filter((role) => canUseWorkRole(role, action.id)) })), interfaces: interfaceCatalog });
   if (request.method === 'POST' && /^actions\/flow\.(start|advance)$/.test(nested)) {
     const key = request.headers.get('Idempotency-Key') || '';
     const input = await Effect.runPromise(parseJson(request));
@@ -432,6 +423,7 @@ async function handle(request: Request, env: RuntimeEnv, ctx: ExecutionContext):
     return response(result, 201);
   }
   return withWorkspace(env, current, async (client) => {
+    if (request.method === 'GET' && nested === 'tools') return response(await readWorkspaceTools(client, current, { search: Boolean(env.TINYFISH_API_KEY) }));
     const nowMatch = /^now\/(.+)$/.exec(nested);
     if (request.method === 'GET' && nowMatch) {
       const id = decodeURIComponent(nowMatch[1]);
@@ -462,7 +454,18 @@ async function handle(request: Request, env: RuntimeEnv, ctx: ExecutionContext):
       const siteRows = await Effect.runPromise(query<Record<string, unknown>>(client, { sql: "SELECT * FROM records WHERE type='site' AND archived IS NULL ORDER BY updated DESC LIMIT 1" }));
       if (!siteRows.length) return response({ site: null });
       const row = siteRows[0];
-      return response({ site: { id: String(row.id), version: Number(row.version), state: String(row.state), data: object(typeof row.data === 'string' ? JSON.parse(row.data) : row.data) } });
+      const publication = await env.CONTROL.withSession('first-primary').prepare('SELECT domain,mode,release,status FROM sites WHERE workspace=? AND site=?')
+        .bind(current.workspace.id, String(row.id)).first<{ domain: string; mode: string; release: string; status: string }>();
+      const stored = object(typeof row.data === 'string' ? JSON.parse(row.data) : row.data);
+      const history = Array.isArray((stored as { history?: unknown[] }).history) ? (stored as { history: unknown[] }).history : [];
+      const designMarkdown = isV2(stored) ? exportDesign(stored.design) : null;
+      return response({ site: { id: String(row.id), version: Number(row.version), state: String(row.state), data: stored },
+        schema: isV2(stored) ? '2.0.0' : '1.0.0',
+        history,
+        designMarkdown,
+        publicUrl: publication?.status === 'active' ? `https://${publication.domain}${publication.mode === 'path' ? `/${slug}` : ''}` : null,
+        liveRelease: publication?.status === 'active' ? publication.release : null,
+        publicationState: publication?.status || null });
     }
     if (request.method === 'GET' && nested === 'records') {
       const type = url.searchParams.get('type');
@@ -518,16 +521,28 @@ async function handle(request: Request, env: RuntimeEnv, ctx: ExecutionContext):
     if (request.method === 'GET' && nested === 'flows') {
       const definitions = await Effect.runPromise(query<Record<string, unknown>>(client, { sql: "SELECT id,name,version,state,data FROM definitions WHERE kind='flow' AND state='published' ORDER BY name COLLATE NOCASE" }));
       const runs = await Effect.runPromise(query<Record<string, unknown>>(client, { sql: "SELECT * FROM runs WHERE state IN ('ready','blocked') ORDER BY updated_at DESC LIMIT 100" }));
-      const books = definitions.map((item) => ({ id: String(item.id), name: String(item.name), version: Number(item.version), data: object(JSON.parse(String(item.data))) }));
+      const enabled = (await readCapabilities(client)).enabled;
+      const allBooks = definitions.map((item) => ({ id: String(item.id), name: String(item.name), version: Number(item.version), data: object(JSON.parse(String(item.data))) }))
+        .filter((book) => {
+          const actions = Array.isArray(book.data.actions) ? book.data.actions.map(object) : [];
+          return actions.every((action) => { const module = moduleForAction(String(action.id || '')); return module === null || enabled[module]; });
+        });
+      const startable = allBooks.filter((book) => {
+        const actions = Array.isArray(book.data.actions) ? book.data.actions.map(object) : [];
+        return Boolean(actions[0] && canRunFlowStep(current.member, actions[0], current.identity.id));
+      });
       const active = await Promise.all(runs.map(async (item) => {
         const context = object(JSON.parse(String(item.context)));
         const owner = String(context.startedBy || '');
-        if (!(await runVisible(client, current.member, owner, item.record_id))) return null;
-        const book = books.find((candidate) => candidate.id === String(item.flow_id));
+        if (!(await runVisible(client, current.member, owner, item.record_id)) && !canContinueRun(current.member, context)) return null;
+        const book = allBooks.find((candidate) => candidate.id === String(item.flow_id));
         if (!book) return null;
         return { id: String(item.id), flowId: String(item.flow_id), name: book.name, flowVersion: Number(item.flow_version), state: String(item.state), actionId: typeof item.action_id === 'string' ? item.action_id : null, recordId: typeof item.record_id === 'string' ? item.record_id : null, step: Number(context.step || 0), version: Number(item.version), updatedAt: Number(item.updated_at) };
       }));
-      return response({ books, runs: active.filter((item): item is NonNullable<typeof item> => item !== null) });
+      const visibleRuns = active.filter((item): item is NonNullable<typeof item> => item !== null);
+      const visibleBookIds = new Set([...startable.map((book) => book.id), ...visibleRuns.map((run) => run.flowId)]);
+      const books = allBooks.filter((book) => visibleBookIds.has(book.id));
+      return response({ books, runs: visibleRuns });
     }
     const runMatch = /^runs\/([A-Za-z0-9_-]+)$/.exec(nested);
     if (request.method === 'GET' && runMatch) {
@@ -535,11 +550,11 @@ async function handle(request: Request, env: RuntimeEnv, ctx: ExecutionContext):
       const item = rows[0]; if (!item) throw notFound('Flow Book run not found.');
       const runContext = object(JSON.parse(String(item.context)));
       const owner = String(runContext.startedBy || '');
-      if (!(await runVisible(client, current.member, owner, item.record_id))) throw forbidden();
+      if (!(await runVisible(client, current.member, owner, item.record_id)) && !canContinueRun(current.member, runContext)) throw forbidden();
       const full = owner === current.identity.id || managesMembers(current.member);
       const saved = await Effect.runPromise(query<Record<string, unknown>>(client, { sql: 'SELECT id,action,occurrence,state,input,output,version,created,updated FROM steps WHERE run=? ORDER BY occurrence', args: [String(item.id)] }));
       const steps = saved.map((row) => ({ id: String(row.id), action: String(row.action), occurrence: Number(row.occurrence), state: String(row.state), input: full ? object(JSON.parse(String(row.input))) : {}, output: full && row.output !== null ? object(JSON.parse(String(row.output))) : null, version: Number(row.version), created: Number(row.created), updated: Number(row.updated) }));
-      const visibleContext = full ? runContext : { source: runContext.source, step: runContext.step, actions: Array.isArray(runContext.actions) ? runContext.actions.map((entry) => { const action = object(entry); return { id: action.id, version: action.version, auto: action.auto }; }) : [] };
+      const visibleContext = full ? runContext : { source: runContext.source, step: runContext.step, actions: Array.isArray(runContext.actions) ? runContext.actions.map((entry) => { const action = object(entry); return { id: action.id, version: action.version, auto: action.auto, role: action.role }; }) : [] };
       return response({ run: { id: String(item.id), flowId: String(item.flow_id), flowVersion: Number(item.flow_version), state: String(item.state), actionId: typeof item.action_id === 'string' ? item.action_id : null, recordId: typeof item.record_id === 'string' ? item.record_id : null, context: visibleContext, version: Number(item.version), updatedAt: Number(item.updated_at), steps } });
     }
     if (request.method === 'GET' && nested === 'canvas') return response({ cards: await workspaceCanvas(client, current.member) });
@@ -560,7 +575,7 @@ async function handle(request: Request, env: RuntimeEnv, ctx: ExecutionContext):
         input.workspace = target.workspace.slug;
       }
       const action = { actionId, idempotencyKey: key, input };
-      const result = await Effect.runPromise(executeGateway(client, current, action, { productContent: env.PRODUCT_CONTENT, siteReleases: env.SITE_RELEASES, ai: env.AI, tinyfish: env.TINYFISH_API_KEY, typesafe: env.TYPESAFE_API_KEY }));
+      const result = await Effect.runPromise(executeGateway(client, current, action, { productContent: env.PRODUCT_CONTENT, siteReleases: env.SITE_RELEASES, publication: env.CONTROL, siteDomain: env.SITE_WORKER_ORIGIN || env.SITE_BASE_DOMAIN, ai: env.AI, tinyfish: env.TINYFISH_API_KEY, typesafe: env.TYPESAFE_API_KEY }));
       ctx.waitUntil(enqueueInboxSync(env, current.workspace.id).catch((error) => console.error(JSON.stringify({ event: 'inbox.queue.failed', error: error instanceof Error ? error.message.slice(0, 300) : String(error).slice(0, 300) }))));
       return response(result, 201);
     }
@@ -580,7 +595,7 @@ export default {
       }
       if (body.kind !== 'chat.command' || typeof body.id !== 'string') { message.ack(); continue; }
       try {
-        await processCommand(env.CONTROL, body.id, (current, work) => withWorkspace(env, current, work), { productContent: env.PRODUCT_CONTENT, siteReleases: env.SITE_RELEASES, ai: env.AI, typesafe: env.TYPESAFE_API_KEY });
+        await processCommand(env.CONTROL, body.id, (current, work) => withWorkspace(env, current, work), { productContent: env.PRODUCT_CONTENT, siteReleases: env.SITE_RELEASES, publication: env.CONTROL, siteDomain: env.SITE_WORKER_ORIGIN || env.SITE_BASE_DOMAIN, ai: env.AI, typesafe: env.TYPESAFE_API_KEY });
         const completed = await env.CONTROL.prepare("SELECT workspace_id FROM channel_commands WHERE id=? AND state='completed'").bind(body.id).first<{ workspace_id: string }>();
         if (completed) await enqueueInboxSync(env, completed.workspace_id);
         message.ack();
@@ -589,6 +604,7 @@ export default {
   },
   async scheduled(_controller: ScheduledController, env: RuntimeEnv): Promise<void> {
     await sweepFlowDispatches(env);
+    await env.CONTROL.prepare('DELETE FROM previews WHERE expires<=?').bind(Date.now()).run();
     await env.CONTROL.prepare('DELETE FROM channel_link_requests WHERE expires_at<=?').bind(Date.now()).run();
     await env.CONTROL.prepare("UPDATE channel_commands SET state='failed',result='Processing interrupted. Check TAR before retrying.' WHERE state='processing' AND attempts>=5 AND due_at<=?").bind(Date.now()).run();
     const due = await env.CONTROL.prepare("SELECT id FROM channel_commands WHERE state IN ('pending','processing') AND due_at<=? AND attempts<5 ORDER BY due_at LIMIT 100").bind(Date.now()).all<{id: string}>();

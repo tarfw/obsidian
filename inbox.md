@@ -17,6 +17,96 @@
 | Find | Search Now; optional workspace or state filters appear only when chosen |
 | Ask TAR | Request help or review a proposed registered Action |
 
+## Complete concept: Now, Space and Tools by role
+
+The source workspace declares which capabilities are enabled and which roles may
+use them. The app builds Tools from those declarations and the person's current
+membership; it does not ship a fixed POS/KDS/site menu for every workspace.
+Personal has personal tools unless a business capability was deliberately enabled
+there. Global controls such as Settings and workspace management are separate.
+
+~~~text
+PERSON'S AUTHORIZED WORKSPACES (1..n)
+  Personal + Northstar Restaurant + My Delivery Work
+       | each source owns facts, capabilities, role grants,
+       | membership, registered interfaces and Gateway
+       |
+       +-- concrete actor steps -> per-user Inbox DB -> NOW
+       |                           source refs + state   all eligible rows
+       |
+       +-- enabled capability + person's role grant
+       |   + working interface -> TOOLS by source
+       |
+       +-- source Gateway <- Now row tap or Tool tap
+                              fresh facts + access check
+
+  SPACE -> current workspace/role/owner header; may order Tools.
+           Changing Space does not change access or hide Now work.
+  Jev   -> optional safe-tie rank or Ask TAR Tool match, after eligibility.
+  Code/source -> permission, coverage, final visibility and commits.
+~~~
+
+One person can be in Personal while restaurant work remains in Now and restaurant
+launchers remain in Tools. Opening a tool keeps the current Space; Back restores
+the same Now context and scroll. A generic launcher is never counted as Inbox work.
+
+~~~text
++----------------------------------------------+
+| NOW / 07:00                  Find > Tools >   |
+| Personal / Individual / Owner: You           |
+| Morning / Auto                     Change >   |
+|----------------------------------------------|
+| [A] Call home                     DUE 07:10 > |
+|     Personal / family reminder               |
+| [A] 2x Chicken tikka              DUE 09:11 > |
+|     Northstar / Chef / Order #41              |
+| Ask TAR...                                 >  |
++----------------------------------------------+
+| TOOLS / available to this person             |
+| Personal: Create task, Add routine           |
+| Northstar / Chef: Kitchen display            |
+| My Delivery Work / Courier: Delivery tool    |
+| (only registered, enabled, granted tools)    |
++----------------------------------------------+
+  Tap Chicken -> Northstar Gateway -> prep Action
+  Tap Kitchen display -> Northstar source Tool
+  Back -> Personal Now; context and scroll retained
+~~~
+
+Restaurant example: Northstar enables only the capabilities it actually uses.
+The source grants each person one or more roles. The rows below are examples of
+different people's projections of the same restaurant, not one universal menu.
+
+~~~text
++------------+----------------------------+-----------------------------+
+| Role       | Now: concrete work         | Tools: enabled + granted    |
++------------+----------------------------+-----------------------------+
+| Owner      | Approve refund #18         | Reports, catalog, Site      |
+|            | Accept order #41           | Studio, POS if granted      |
+| Chef       | 2x Chicken tikka / #41     | Kitchen display if granted  |
+| KDS lead   | Handoff ticket #40         | Kitchen display             |
+| Cashier    | Record payment #41         | POS, orders, register       |
+| Server     | Serve table 12             | Floor tool if registered    |
+| Courier    | Collect order #41          | Delivery tool if registered |
+| Customer   | Receive order #41          | Customer tool if registered |
++------------+----------------------------+-----------------------------+
+
+NOW / Northstar / Chef / 09:10    TOOLS / Northstar / Chef
+  [A] 2x Chicken tikka / #41       Kitchen display >
+  [S] 1x Salad ready / #41         (no POS or owner reports)
+  [A] Call home / Personal
+
+NOW / Northstar / Cashier / 12:00 TOOLS / Northstar / Cashier
+  [A] Record payment #41           Open POS >
+  [F] Close register / step 1/4    Orders >  Register >
+  [A] Call home / Personal         (no kitchen or owner tools)
+~~~
+
+Jev can suggest or order tools only after code forms this authorized set. A clear
+request such as "open the register" may select Northstar's registered POS
+launcher; an ambiguous request asks the person to choose. Jev never enables a
+capability, grants a role, creates a Now row or commits an Action.
+
 ## Name and data path
 
 | Name | Meaning |
@@ -112,7 +202,7 @@ EXAMPLE SOURCES: Personal + Restaurant + Delivery + Sales
 | Sync | Source events idempotently upsert/retract entries. Completion or access change refreshes/removes them. No raw records or mail are copied. |
 | One order | Separate chef lines and role entries for owner, cashier, courier and customer. A ready line stays as status until handoff, not a second obligation. |
 | Delay | Keep known rows, mark Now partial/stale, never claim all-clear. |
-| Context | Space supplies header and tools. Switching context keeps all authorized work in Now; due Personal and office Actions can interleave. |
+| Context | Space supplies the header and may prioritize tools; source capabilities and roles decide tool eligibility. Switching context keeps all authorized work in Now; due Personal and office Actions can interleave. |
 | Mail | Unread mail stays at source. Only an assigned, created or pinned reply enters Now; `Tools >` opens the authorized mailbox from any context. |
 
 ## Chef: order lines directly in Now

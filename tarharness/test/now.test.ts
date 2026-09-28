@@ -82,7 +82,10 @@ describe('Now projection', () => {
     const db = await database();
     try {
       await db.execute("INSERT INTO definitions(id,kind,name,version,state,data,created_at,updated_at) VALUES ('book','flow','Close register',1,'published','{}',0,0)");
-      await db.execute("INSERT INTO runs(id,flow_id,flow_version,occurrence,state,context,version,created_at,updated_at) VALUES ('run','book',1,'once','ready','{\"startedBy\":\"person\",\"step\":2,\"secret\":\"private\"}',1,0,10)");
+      await db.execute({
+        sql: "INSERT INTO runs(id,flow_id,flow_version,occurrence,state,context,version,created_at,updated_at) VALUES ('run','book',1,'once','ready',?,1,0,10)",
+        args: [JSON.stringify({ startedBy: 'person', step: 2, secret: 'private', actions: [{ id: 'task.complete' }, { id: 'task.complete' }, { id: 'task.complete' }] })],
+      });
       const rows = projectNow(await readInboxSource(db, base), 'person');
       expect(rows).toEqual([expect.objectContaining({ kind: 'flow', title: 'Close register', state: 'STEP 3', action: 'flow.start' })]);
       expect(JSON.stringify(rows)).not.toContain('private');

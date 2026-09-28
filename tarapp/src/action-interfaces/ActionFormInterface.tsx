@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Linking, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { createOperationKey, harness, type HarnessActionField, type HarnessRecord, type HarnessWorkspace } from '@/lib/harness';
 import type { ActionInterfaceProps } from './types';
@@ -16,6 +16,7 @@ const routineRole = (value: string) => {
   return ['chef', 'cook', 'kitchen'].includes(role) ? 'kitchen' : role;
 };
 const grantedRoles = (workspace: HarnessWorkspace) => workspace.roles?.length ? workspace.roles : [workspace.workRole || 'general'];
+type SearchSource = { title: string; url: string; snippet: string; date: string | null };
 
 export default function ActionFormInterface(props: ActionInterfaceProps) {
   if (!props.visible) return null;
@@ -29,7 +30,8 @@ function ActionForm(props: ActionInterfaceProps) {
   const [routineWorkspaces, setRoutineWorkspaces] = useState<HarnessWorkspace[]>([]);
   const [picker, setPicker] = useState<HarnessActionField | null>(null);
   const [saving, setSaving] = useState(false);
-  const [operationKey] = useState(() => createOperationKey(props.action.id));
+  const [searchSources, setSearchSources] = useState<SearchSource[] | null>(null);
+  const attempt = useRef<{ body: string; key: string } | null>(null);
   const isRoutine = props.action.id === 'routine.save';
   const visibleFields = useMemo(() => props.action.fields.filter((field) => !field.hidden), [props.action.fields]);
   const recordTypes = useMemo(
@@ -60,10 +62,13 @@ function ActionForm(props: ActionInterfaceProps) {
     }).catch(() => { if (current) setRoutineWorkspaces([]); });
     return () => { current = false; };
   }, [props.action.id]);
-  const setValue = (key: string, value: string) => setValues((current) => ({ ...current, [key]: value }));
+  const setValue = (key: string, value: string) => {
+    if (props.action.id === 'web.search') setSearchSources(null);
+    setValues((current) => ({ ...current, [key]: value }));
+  };
   const toggleDay = (day: number) => {
     setValues((current) => {
-      const chosen = new Set(current.days.split(',').map(Number).filter((value) => Number.isInteger(value) && value >= 0 && value <= 6));
+      const chosen = new Set((current.days || '').split(',').filter(Boolean).map(Number).filter((value) => Number.isInteger(value) && value >= 0 && value <= 6));
       if (chosen.has(day)) chosen.delete(day); else chosen.add(day);
       return { ...current, days: [...chosen].sort((left, right) => left - right).join(',') };
     });
@@ -71,7 +76,7 @@ function ActionForm(props: ActionInterfaceProps) {
   const submit = async () => {
     const missing = props.action.fields.find((field) => field.required && !values[field.key]?.trim());
     if (missing) { Alert.alert('Required information', `Enter ${missing.label.toLowerCase()}.`); return; }
-    if (isRoutine && !values.days.trim()) { Alert.alert('Choose days', 'Select at least one day for this routine.'); return; }
+    if (isRoutine && !values.days?.trim()) { Alert.alert('Choose days', 'Select at least one day for this routine.'); return; }
     if (isRoutine && routineWorkspaces.length) {
       const workspace = routineWorkspaces.find((item) => item.slug === values.workspace);
       if (!workspace) { Alert.alert('Choose a workspace', 'Select one of your active workspaces.'); return; }
@@ -83,9 +88,14 @@ function ActionForm(props: ActionInterfaceProps) {
     setSaving(true);
     try {
       const input = Object.fromEntries(props.action.fields.flatMap((field) => { const raw = values[field.key]?.trim(); return raw ? [[field.key, field.kind === 'number' ? Number(raw) : raw]] : []; }));
-      const result = await harness.executeAction(props.scope, props.action.id, input, operationKey);
-      props.onSuccess(result);
-    } catch (cause) { Alert.alert('Could not save', cause instanceof Error ? cause.message : 'Try again.'); }
+      const body = JSON.stringify(input);
+      if (attempt.current?.body !== body) attempt.current = { body, key: createOperationKey(props.action.id) };
+      const result = await harness.executeAction(props.scope, props.action.id, input, attempt.current.key);
+      if (props.action.id === 'web.search') {
+        setSearchSources(Array.isArray(result.sources) ? result.sources.filter((source): source is SearchSource =>
+          source !== null && typeof source === 'object' && typeof source.url === 'string' && /^https?:\/\//.test(source.url)) : []);
+      } else props.onSuccess(result);
+    } catch (cause) { Alert.alert(props.action.id === 'web.search' ? 'Could not search' : 'Could not save', cause instanceof Error ? cause.message : 'Try again.'); }
     finally { setSaving(false); }
   };
 
@@ -118,7 +128,7 @@ function ActionForm(props: ActionInterfaceProps) {
   );
   const byKey = (key: string) => visibleFields.find((item) => item.key === key);
 
-  const selectedDays = values.days.split(',');
+  const selectedDays = isRoutine ? (values.days || '').split(',').filter(Boolean) : [];
   const nameField = byKey('label');
   const workspaceField = byKey('workspace');
   const roleField = byKey('role');
@@ -132,8 +142,8 @@ function ActionForm(props: ActionInterfaceProps) {
       <View style={[styles.header, { paddingTop: insets.top }]}>
         <TouchableOpacity style={styles.iconButton} onPress={props.onClose} accessibilityLabel="Close"><Ionicons name="close" size={22} color="#68758c" /></TouchableOpacity>
         <View style={styles.headerCopy}><Text numberOfLines={1} style={styles.title}>{props.contextTitle || props.action.title}</Text></View>
-        <TouchableOpacity disabled={saving} style={styles.saveButton} onPress={() => void submit()} accessibilityLabel={props.contract.submitLabel}>
-          {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.saveText}>{props.contract.submitLabel}</Text>}
+        <TouchableOpacity disabled={saving} style={styles.saveButton} onPress={() => void submit()} accessibilityLabel={props.action.id === 'web.search' ? 'Search' : props.contract.submitLabel}>
+          {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.saveText}>{props.action.id === 'web.search' ? 'Search' : props.contract.submitLabel}</Text>}
         </TouchableOpacity>
       </View>
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={[styles.form, { paddingBottom: insets.bottom + 32 }]}>
@@ -196,6 +206,14 @@ function ActionForm(props: ActionInterfaceProps) {
               : <Text style={styles.roleHint}>The role label describes this context; it does not change workspace permissions.</Text>}
           </View>
         ) : visibleFields.map((item, index) => field(item, index === 0))}
+        {searchSources ? <View style={styles.results}>
+          <Text style={styles.resultsTitle}>{searchSources.length ? 'Sources' : 'No sources found'}</Text>
+          {searchSources.map((source) => <TouchableOpacity key={source.url} accessibilityRole="link" onPress={() => void Linking.openURL(source.url).catch(() => Alert.alert('Could not open source'))} style={styles.source}>
+            <Text style={styles.sourceTitle}>{source.title || source.url}</Text>
+            {source.snippet ? <Text style={styles.sourceSnippet}>{source.snippet}</Text> : null}
+            <Text style={styles.sourceUrl} numberOfLines={1}>{source.url}</Text>
+          </TouchableOpacity>)}
+        </View> : null}
       </ScrollView>
       <Modal visible={Boolean(picker)} transparent animationType="slide" onRequestClose={() => setPicker(null)}><View style={styles.pickerBackdrop}><View style={[styles.picker, { paddingBottom: insets.bottom + 16 }]}><Text style={styles.pickerTitle}>{picker?.label || 'Choose a record'}</Text><ScrollView>{records.filter((record) => !picker?.recordType || record.type === picker.recordType).map((record) => <TouchableOpacity key={record.id} style={styles.pickerRow} onPress={() => { if (picker) setValue(picker.key, record.id); setPicker(null); }}><Text style={styles.pickerName}>{record.title}</Text><Text style={styles.pickerType}>{record.type}</Text></TouchableOpacity>)}</ScrollView><TouchableOpacity onPress={() => setPicker(null)} style={styles.cancel}><Text style={styles.cancelText}>Cancel</Text></TouchableOpacity></View></View></Modal>
     </KeyboardAvoidingView>
@@ -249,4 +267,10 @@ const styles = StyleSheet.create({
   pickerType: { fontSize: 12, color: '#5F6672', marginTop: 2 },
   cancel: { height: 52, alignItems: 'flex-end', justifyContent: 'center', paddingHorizontal: 24 },
   cancelText: { fontSize: 15, fontWeight: '800', color: '#3157A8' },
+  results: { marginTop: 24, gap: 8 },
+  resultsTitle: { fontSize: 18, fontWeight: '800', color: '#172033' },
+  source: { paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: '#C9D2E0', gap: 5 },
+  sourceTitle: { fontSize: 15, fontWeight: '700', color: '#3157A8' },
+  sourceSnippet: { fontSize: 13, lineHeight: 19, color: '#172033' },
+  sourceUrl: { fontSize: 12, color: '#5F6672' },
 });

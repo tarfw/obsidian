@@ -47,6 +47,16 @@ export const actionCatalog = [
   ...posActions,
   ...commerceActions,
   {
+    id: 'capability.save', version: 1, type: 'app', title: 'Manage tools',
+    description: 'Enable or disable workspace capabilities.', interfaceKey: 'form',
+    fields: [
+      { key: 'module', label: 'Capability', kind: 'text', required: true },
+      { key: 'enabled', label: 'Enabled', kind: 'text', required: true },
+      { key: 'baseVersion', label: 'Version', kind: 'number', required: true },
+    ],
+    output: ['enabled', 'version'], roles: ['owner', 'admin'], effects: ['record_update'],
+  },
+  {
     id: 'record.create', version: 1, type: 'app', title: 'Create record',
     description: 'Add information to this workspace.', interfaceKey: 'form',
     fields: [
@@ -215,18 +225,90 @@ export const actionCatalog = [
     output: ['siteId', 'version'], roles: ['owner', 'admin'], effects: ['record_update'],
   },
   {
-    id: 'site.compile', version: 1, type: 'app', title: 'Compile site candidate',
+    id: 'site.edit', version: 1, type: 'app', title: 'Edit site patch',
+    description: 'Apply a reviewed, typed patch to the site draft with revision checks and locks.', interfaceKey: 'form',
+    fields: [
+      { key: 'siteId', label: 'Site', kind: 'record', required: true },
+      { key: 'base', label: 'Revision', kind: 'number', required: true },
+    ],
+    output: ['siteId', 'version', 'revision', 'diff'], roles: ['owner', 'admin'], effects: ['record_update'],
+  },
+  {
+    id: 'site.ask', version: 1, type: 'agent', title: 'Ask for a site change',
+    description: 'Resolve a plain-language change into a reviewable patch. Nothing is applied here.', interfaceKey: 'form',
+    fields: [
+      { key: 'siteId', label: 'Site', kind: 'record', required: true },
+      { key: 'command', label: 'Change', kind: 'textarea', required: true },
+    ],
+    output: ['target', 'operations', 'summary', 'questions'], roles: ['owner', 'admin'], effects: ['model_inference'],
+  },
+  {
+    id: 'site.undo', version: 1, type: 'app', title: 'Undo site change',
+    description: 'Restore an earlier revision by writing a new revision.', interfaceKey: 'confirmation',
+    fields: [
+      { key: 'siteId', label: 'Site', kind: 'record', required: true },
+    ],
+    output: ['siteId', 'version', 'revision', 'diff'], roles: ['owner', 'admin'], effects: ['record_update'],
+  },
+  {
+    id: 'site.checks', version: 1, type: 'app', title: 'Read site checks',
+    description: 'Read the deterministic checks stored with a compiled candidate.', interfaceKey: 'confirmation',
+    fields: [
+      { key: 'siteId', label: 'Site', kind: 'record', required: true },
+    ],
+    output: ['releaseId', 'checks'], roles: ['owner', 'admin'], effects: [],
+  },
+  {
+    id: 'site.design.import', version: 1, type: 'app', title: 'Import design.md',
+    description: 'Parse a readable design reference into the typed design with recorded decisions.', interfaceKey: 'form',
+    fields: [
+      { key: 'siteId', label: 'Site', kind: 'record', required: true },
+      { key: 'markdown', label: 'Design reference', kind: 'textarea', required: true },
+    ],
+    output: ['siteId', 'revision', 'design', 'decisions', 'designMarkdown'], roles: ['owner', 'admin'], effects: ['record_update'],
+  },
+  {
+    id: 'site.asset.upload', version: 1, type: 'app', title: 'Upload site asset',
+    description: 'Store a media asset with provenance and rights before it can be published.', interfaceKey: 'form',
+    fields: [
+      { key: 'siteId', label: 'Site', kind: 'record', required: true },
+      { key: 'mime', label: 'Type', kind: 'text', required: true },
+      { key: 'data', label: 'Base64 data', kind: 'textarea', required: true },
+    ],
+    output: ['siteId', 'revision', 'assets'], roles: ['owner', 'admin'], effects: ['record_update'],
+  },
+  {
+    id: 'site.asset.generate', version: 1, type: 'agent', title: 'Generate site illustration',
+    description: 'Generate an illustrative image. Generated media never evidences product facts.', interfaceKey: 'form',
+    fields: [
+      { key: 'siteId', label: 'Site', kind: 'record', required: true },
+      { key: 'prompt', label: 'Illustration', kind: 'text', required: true },
+    ],
+    output: ['siteId', 'revision', 'assets'], roles: ['owner', 'admin'], effects: ['model_inference', 'record_update'],
+  },
+  {
+    id: 'site.assets', version: 1, type: 'app', title: 'List site assets',
+    description: 'List site assets with rights, usage and publication URL.', interfaceKey: 'confirmation',
+    fields: [
+      { key: 'siteId', label: 'Site', kind: 'record', required: true },
+    ],
+    output: ['siteId', 'revision', 'assets'], roles: ['owner', 'admin'], effects: [],
+  },
+  {
+    id: 'site.compile', version: 2, type: 'app', title: 'Compile site candidate',
     description: 'Compile frozen site definition into release candidate manifest.', interfaceKey: 'confirmation',
     fields: [
       { key: 'siteId', label: 'Site', kind: 'record', required: true },
     ],
-    output: ['releaseId', 'manifest', 'hash'], roles: ['owner', 'admin'], effects: ['record_update'],
+    output: ['releaseId', 'hash', 'previewUrl'], roles: ['owner', 'admin'], effects: ['record_update'],
   },
   {
-    id: 'site.publish', version: 1, type: 'app', title: 'Publish site',
+    id: 'site.publish', version: 2, type: 'app', title: 'Publish site',
     description: 'Promote release candidate to live website routing.', interfaceKey: 'confirmation',
     fields: [
       { key: 'siteId', label: 'Site', kind: 'record', required: true },
+      { key: 'releaseId', label: 'Candidate', kind: 'text', required: true },
+      { key: 'hash', label: 'Candidate hash', kind: 'text', required: true },
       { key: 'subdomain', label: 'Subdomain', kind: 'text' },
     ],
     output: ['siteId', 'releaseId', 'liveUrl', 'generation'], roles: ['owner', 'admin'], effects: ['record_update'],
@@ -247,6 +329,12 @@ export const actionCatalog = [
       { key: 'siteId', label: 'Site', kind: 'record', required: true },
     ],
     output: ['refreshed', 'itemCount'], roles: ['owner', 'admin'], effects: ['record_update'],
+  },
+  {
+    id: 'site.unpublish', version: 1, type: 'app', title: 'Unpublish site',
+    description: 'Stop serving the public site while keeping retained releases.', interfaceKey: 'confirmation',
+    fields: [{ key: 'siteId', label: 'Site', kind: 'record', required: true }],
+    output: ['siteId', 'unpublished'], roles: ['owner', 'admin'], effects: ['record_update'],
   },
   {
     id: 'web.search', version: 1, type: 'app', title: 'Search the web',

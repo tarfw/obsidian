@@ -44,4 +44,7 @@ export const posActions: readonly ActionDefinition[] = [
     fields: [{ key: 'orderId', label: 'Order', kind: 'record', required: true, hidden: true }, { key: 'version', label: 'Version', kind: 'number', required: true, hidden: true },
       { key: 'rating', label: 'Rating from 1 to 5', kind: 'number', required: true }, { key: 'comment', label: 'Comment', kind: 'textarea' }],
     output: ['order'], roles: ['member'], effects: ['order_update', 'inbox'] },
+  { id: 'pos.register.count', version: 1, type: 'app', title: 'Count register cash', description: 'Save the drawer count for the assigned workspace review.', interfaceKey: 'form',
+    fields: [{ key: 'counted', label: 'Cash counted', kind: 'number', required: true }],
+    output: ['register'], roles: ['owner', 'admin', 'member'], effects: ['register_count'] },
 ];

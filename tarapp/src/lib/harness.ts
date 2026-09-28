@@ -25,22 +25,14 @@ export interface Link { id: string; role: string; since: number | null; until: n
 export interface Consent { id: string; contact: string; channel: string; purpose: string; state: 'granted' | 'revoked'; source: string; actor: string; created: number; }
 export type HarnessFieldKind = 'text' | 'email' | 'number' | 'textarea' | 'record' | 'action-list';
 export interface HarnessActionField { key: string; label: string; kind: HarnessFieldKind; required?: boolean; hidden?: boolean; defaultValue?: string; recordType?: string; }
-export interface HarnessAction { id: string; version: number; title: string; description: string; type: 'app' | 'agent' | 'human'; interfaceKey: string; fields: HarnessActionField[]; output: string[]; roles: HarnessRole[]; effects: string[]; }
+export interface HarnessAction { id: string; version: number; title: string; description: string; type: 'app' | 'agent' | 'human'; interfaceKey: string; fields: HarnessActionField[]; output: string[]; roles: HarnessRole[]; effects: string[]; workRoles?: string[]; }
 export interface HarnessInterfaceContract { key: string; version: number; title: string; presentation: 'sheet' | 'screen' | 'flow'; submitLabel: string; }
-export type HarnessCanvasCard =
-  | { id: string; kind: 'data'; title: string; display: 'value' | 'report' | 'chart'; value: number | string; caption?: string }
-  | { id: string; kind: 'action'; title: string; description: string; actionId: string; initialInput?: Record<string, unknown> }
-  | { id: string; kind: 'flow'; title: string; description: string; flowId: string; actionId?: string; initialInput?: Record<string, unknown> }
-  | { id: string; kind: 'now'; title: string; description: string };
-export interface HarnessSpaceSection { id: string; title: string; cards: HarnessCanvasCard[]; }
+export interface HarnessTool { id: string; title: string; description: string; icon: string; category: 'work' | 'create' | 'manage' | 'explore'; module: 'core' | 'pos' | 'commerce' | 'site'; kind: 'action' | 'flows' | 'site'; action: string; input: Record<string, unknown>; }
+export interface HarnessTools { tools: HarnessTool[]; modules: { id: 'pos' | 'commerce' | 'site'; title: string; description: string; enabled: boolean }[]; version: number; canManage: boolean; role: string; legacy?: boolean; }
 export interface HarnessSpaceContext {
   id: string; label: string; role: string; owner: string; confidence: number;
   source: 'default' | 'routine' | 'override'; held: boolean;
   workspace: { id: string; slug: string; name: string; mode: 'personal' | 'work' };
-}
-export interface HarnessSpace {
-  context: HarnessSpaceContext; decision: 'automatic' | 'confirm'; alternatives: HarnessSpaceContext[];
-  sections: HarnessSpaceSection[];
 }
 export interface NowRow {
   id: string; source: string; target: string; kind: 'action' | 'flow' | 'status' | 'artifact';
@@ -56,8 +48,9 @@ export interface NowFeed {
 }
 export class HarnessRequestError extends Error { constructor(readonly status: number, message: string, readonly code?: string) { super(message); } }
 export function createOperationKey(prefix: string) { return `${prefix}:${randomUUID()}`; }
+let syncRouteAvailable = true;
 
-async function request<T>(path: string, options: { method?: 'GET' | 'POST' | 'PUT'; body?: Record<string, unknown>; key?: string } = {}): Promise<T> {
+async function request<T>(path: string, options: { method?: 'GET' | 'POST' | 'PUT'; body?: Record<string, unknown>; key?: string; missingRouteOk?: boolean } = {}): Promise<T> {
   const method = options.method || 'GET';
   const route = path.split('?')[0];
   const started = Date.now();
@@ -91,7 +84,8 @@ async function request<T>(path: string, options: { method?: 'GET' | 'POST' | 'PU
   catch (cause) {
     const status = cause instanceof HarnessRequestError ? cause.status : 'network';
     const code = cause instanceof HarnessRequestError && cause.code ? ` code=${cause.code}` : '';
-    console.error(`[Harness] ${method} ${route} failed status=${status}${code} after ${Date.now() - started}ms: ${cause instanceof Error ? cause.message : String(cause)}`);
+    if (__DEV__ && !(options.missingRouteOk && cause instanceof HarnessRequestError && cause.status === 404 && cause.message === 'Route not found.'))
+      console.info(`[Harness] ${method} ${route} failed status=${status}${code} after ${Date.now() - started}ms: ${cause instanceof Error ? cause.message : String(cause)}`);
     throw cause;
   }
   finally { if (timeout) clearTimeout(timeout); }
@@ -104,10 +98,12 @@ async function workspaceRegistry(slug: string) {
 const workspacePath = (slug: string, suffix: string) => `/v1/workspaces/${encodeURIComponent(slug)}/${suffix}`;
 export const harness = {
   pos: <T>(slug: string, section: string, search = '', offset = 0) => request<T>(workspacePath(slug, 'pos/' + section) + '?q=' + encodeURIComponent(search) + '&offset=' + offset),
+  posOverview: (slug: string) => request<{ settings: unknown | null }>(workspacePath(slug, 'pos/overview'), { missingRouteOk: true }),
   posProductContent: (slug: string, productId: string) => request<{ content: Record<string, unknown> }>(workspacePath(slug, `pos/products/${encodeURIComponent(productId)}/content`)),
   health: () => request<{ ok: boolean }>('/health'),
   registry: () => request<{ actions: HarnessAction[]; interfaces: HarnessInterfaceContract[] }>('/v1/actions'),
   workspaceRegistry,
+  workspaceTools: (slug: string) => request<HarnessTools>(workspacePath(slug, 'tools'), { missingRouteOk: true }),
   members: (slug: string) => request<{ members: HarnessMember[]; currentUserId: string }>(workspacePath(slug, 'members')),
   updateMember: (slug: string, id: string, input: { role?: HarnessRole; workRole?: WorkRole; roles?: WorkRole[]; state?: 'revoked' }) => request(workspacePath(slug, `members/${encodeURIComponent(id)}`), { method: 'PUT', body: input }),
   teamChat: (slug: string) => request<TeamChatState>(workspacePath(slug, 'team-chat')),
@@ -116,11 +112,6 @@ export const harness = {
   disconnectChat: (slug: string, destination: boolean) => request(workspacePath(slug, 'team-chat/disconnect'), { method: 'POST', body: { destination } }),
   actions: () => request<{ actions: HarnessAction[]; interfaces: HarnessInterfaceContract[] }>('/v1/actions'),
   listWorkspaces: () => request<{ workspaces: HarnessWorkspace[] }>('/v1/workspaces'),
-  space: () => {
-    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-    const query = new URLSearchParams({ zone, at: String(Date.now()) });
-    return request<HarnessSpace>(`/v1/space?${query.toString()}`);
-  },
   holdContext: (scope: string, duration = 43_200_000, role?: string) => request<{ context: { mode: 'hold'; scope: string; role: string | null; expires: number } }>('/v1/context', { method: 'PUT', body: { mode: 'hold', scope, duration, role } }),
   resumeContext: () => request<{ context: { mode: 'auto'; scope: null; expires: null } }>('/v1/context', { method: 'PUT', body: { mode: 'auto' } }),
   now: (refresh?: string) => {
@@ -129,11 +120,19 @@ export const harness = {
     if (refresh) query.set('refresh', refresh);
     return request<NowFeed>(`/v1/inbox?${query.toString()}`);
   },
-  nowReplica: () => request<{ url: string; authToken: string; expiresAt: number; database: string }>('/v1/inbox/replica'),
+  nowSync: async () => {
+    type Access = { url: string; authToken: string; expiresAt: number; database: string };
+    if (!syncRouteAvailable) return request<Access>('/v1/inbox/replica');
+    try { return await request<Access>('/v1/inbox/sync'); }
+    catch (cause) {
+      if (!(cause instanceof HarnessRequestError) || cause.status !== 404) throw cause;
+      syncRouteAvailable = false;
+      return request<Access>('/v1/inbox/replica');
+    }
+  },
   nowDetail: (slug: string, id: string) => request<{ row: NowRow; record: HarnessRecord; workspace: HarnessWorkspace }>(workspacePath(slug, `now/${encodeURIComponent(id)}`)),
   createWorkspace: (name: string, slug: string) => request<{ workspace: HarnessWorkspace }>('/v1/workspaces', { method: 'POST', body: { name, slug }, key: createOperationKey(`workspace:${slug}`) }),
   inviteMember: (slug: string, email: string, role: Exclude<HarnessRole, 'owner'> = 'member', workRole: WorkRole = 'general', roles: WorkRole[] = [workRole]) => request<{ invitation: { email: string; role: Exclude<HarnessRole, 'owner'>; state: 'pending' } }>(workspacePath(slug, 'members'), { method: 'POST', body: { email, role, workRole, roles }, key: createOperationKey(`invite:${slug}:${email}`) }),
-  canvas: (slug: string) => request<{ cards: HarnessCanvasCard[] }>(workspacePath(slug, 'canvas')),
     records: (slug: string, type?: string, offset = 0, search = '') => request<{ records: HarnessRecord[]; next: number | null }>(`${workspacePath(slug, 'records')}?${type ? `type=${encodeURIComponent(type)}&` : ''}q=${encodeURIComponent(search)}&offset=${offset}`),
     record: (slug: string, id: string) => request<{ record: HarnessRecord }>(workspacePath(slug, `records/${encodeURIComponent(id)}`)),
   contacts: (slug: string, search = '', offset = 0) => request<{ contacts: HarnessRecord[]; next: number | null }>(`${workspacePath(slug, 'contacts')}?q=${encodeURIComponent(search)}&offset=${offset}`),
@@ -146,7 +145,8 @@ export const harness = {
   createTask: (slug: string, title: string) => request<{ record: HarnessRecord }>(workspacePath(slug, 'actions/task.create'), { method: 'POST', body: { title }, key: createOperationKey('task.create') }),
   completeTask: (slug: string, taskId: string) => request<{ taskId: string; state: 'completed' }>(workspacePath(slug, 'actions/task.complete'), { method: 'POST', body: { taskId }, key: createOperationKey(`task.complete:${taskId}`) }),
   site: {
-    get: (slug: string) => request<{ site: { id: string; version: number; state: string; data: SiteDefinition } | null }>(workspacePath(slug, 'site')),
+    get: (slug: string) => request<{ site: { id: string; version: number; state: string; data: SiteDefinition } | null; publicUrl: string | null; liveRelease: string | null; publicationState: string | null }>(workspacePath(slug, 'site')),
+    available: (slug: string) => request<{ site: unknown | null }>(workspacePath(slug, 'site'), { missingRouteOk: true }),
     generate: (slug: string, input: { title?: string; prompt?: string; theme?: string }, operationKey?: string) =>
       request<{ siteId: string; version: number; state: string; site: SiteDefinition; preview: { html: string; css: string; hash: string } }>(
         workspacePath(slug, 'actions/site.generate'),
@@ -157,10 +157,15 @@ export const harness = {
         workspacePath(slug, 'actions/site.update'),
         { method: 'POST', body: { siteId, baseVersion, operations }, key: operationKey || createOperationKey('site.update') }
       ),
-    publish: (slug: string, siteId: string, subdomain?: string, operationKey?: string) =>
-      request<{ siteId: string; releaseId: string; liveUrl: string; generation: number; state: string }>(
+    compile: (slug: string, siteId: string, operationKey?: string) =>
+      request<{ releaseId: string; hash: string; version: number; previewUrl?: string }>(
+        workspacePath(slug, 'actions/site.compile'),
+        { method: 'POST', body: { siteId }, key: operationKey || createOperationKey('site.compile') }
+      ),
+    publish: (slug: string, siteId: string, releaseId: string, hash: string, operationKey?: string) =>
+      request<{ siteId: string; releaseId: string; liveUrl: string; publicUrl?: string; generation: number; state: string }>(
         workspacePath(slug, 'actions/site.publish'),
-        { method: 'POST', body: { siteId, subdomain }, key: operationKey || createOperationKey('site.publish') }
+        { method: 'POST', body: { siteId, releaseId, hash }, key: operationKey || createOperationKey('site.publish') }
       ),
     rollback: (slug: string, siteId: string, releaseId: string, operationKey?: string) =>
       request<{ siteId: string; releaseId: string; rolledBack: boolean }>(
@@ -171,6 +176,11 @@ export const harness = {
       request<{ refreshed: boolean; itemCount: number }>(
         workspacePath(slug, 'actions/site.refresh'),
         { method: 'POST', body: { siteId }, key: operationKey || createOperationKey('site.refresh') }
+      ),
+    unpublish: (slug: string, siteId: string, operationKey?: string) =>
+      request<{ siteId: string; unpublished: boolean }>(
+        workspacePath(slug, 'actions/site.unpublish'),
+        { method: 'POST', body: { siteId }, key: operationKey || createOperationKey('site.unpublish') }
       ),
   },
 };

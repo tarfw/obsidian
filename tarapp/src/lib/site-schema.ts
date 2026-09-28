@@ -19,7 +19,7 @@ export interface VariantDefinition { id: string; when: Record<string, unknown>; 
 export interface SurfaceDefinition { id: string; catalog: string[]; scope: string; design?: Partial<DesignTokens>; budget?: number; fallback?: Record<string, unknown> }
 export interface SitePolicy { publicOrdering?: boolean; publicEnquiry?: boolean; allowedCurrencies?: string[] }
 export interface ReleaseFile { path: string; mime: string; bytes: number; hash: string; key: string }
-export interface ReleaseManifest { id: string; siteId: string; version: number; generation: number; created: number; hash: string; files: ReleaseFile[] }
+export interface ReleaseManifest { id: string; siteId: string; host?: string; epoch?: number; version: number; generation: number; created: number; hash: string; files: ReleaseFile[] }
 export interface SiteDefinition {
   schema: '1.0.0'; design: DesignTokens; locale: string; timezone: string; currency: string;
   pages: PageDefinition[]; journeys: JourneyDefinition[]; variants: VariantDefinition[]; surfaces: SurfaceDefinition[];

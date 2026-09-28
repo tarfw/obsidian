@@ -11,24 +11,42 @@ export const isCook = (member: Member) => member.role === 'member' && grantedRol
 export const isCourier = (member: Member) => member.role === 'member' && grantedRoles(member).every((role) => role === 'courier');
 export const isCustomer = (member: Member) => member.role === 'member' && grantedRoles(member).every((role) => role === 'customer');
 const cookActions = new Set(['task.complete', 'pos.order.item.update', 'pos.order.handoff']);
-const cashierActions = new Set(['task.create', 'task.complete', 'pos.open', 'pos.customer.save', 'pos.order.save', 'pos.order.cancel', 'pos.checkout', 'pos.register.open', 'pos.register.close', 'order.create', 'order.fulfill', 'order.cancel', 'invoice.issue', 'payment.record']);
-const courierActions = new Set(['task.create', 'task.complete', 'pos.order.reach', 'pos.order.collect', 'pos.order.deliver']);
+const cashierActions = new Set(['task.create', 'task.complete', 'flow.start', 'flow.advance', 'pos.open', 'pos.customer.save', 'pos.order.save', 'pos.order.cancel', 'pos.checkout', 'pos.register.open', 'pos.register.count', 'order.create', 'order.fulfill', 'order.cancel', 'invoice.issue', 'payment.record']);
+const courierActions = new Set(['task.create', 'task.complete', 'flow.start', 'flow.advance', 'pos.order.reach', 'pos.order.collect', 'pos.order.deliver']);
 const customerActions = new Set(['pos.order.receive', 'pos.order.rate']);
 const generalWorkActions = new Set(['record.create', 'record.update', 'contact.create', 'organization.create', 'relationship.create', 'relationship.end', 'consent.record', 'task.create', 'task.complete', 'flow.start', 'flow.advance', 'web.search', 'pos.order.handoff']);
+const managerActions = new Set([...generalWorkActions, 'pos.open', 'pos.customer.save', 'pos.order.save', 'pos.order.cancel', 'pos.checkout', 'pos.register.open', 'pos.register.count', 'pos.register.close', 'order.create', 'order.fulfill', 'order.cancel', 'invoice.issue', 'payment.record', 'refund.record']);
+export const workRoleNames = ['general', 'chef', 'cook', 'kitchen', 'cashier', 'manager', 'server', 'floor', 'kds', 'courier', 'customer'] as const;
+function workRoleActions(role: string): ReadonlySet<string> {
+  if (!role || role === 'general') return generalWorkActions;
+  if (kitchenRoles.has(role)) return cookActions;
+  if (role === 'cashier') return cashierActions;
+  if (role === 'manager') return managerActions;
+  if (['server', 'floor', 'kds'].includes(role)) return generalWorkActions;
+  if (role === 'courier') return courierActions;
+  if (role === 'customer') return customerActions;
+  return generalWorkActions;
+}
+
+export function canUseWorkRole(role: string, actionId: string): boolean {
+  const action = findAction(actionId);
+  return Boolean(action?.roles.includes('member') && workRoleActions(workRole(role)).has(actionId));
+}
 
 export function canExecute(member: Member, actionId: string): boolean {
   const action = findAction(actionId);
   if (member.state !== 'active' || !action || !action.roles.includes(member.role)) return false;
   if (member.role !== 'member') return true;
-  return grantedRoles(member).some((role) => {
-    if (!role || role === 'general') return true;
-    if (kitchenRoles.has(role)) return cookActions.has(actionId);
-    if (role === 'cashier') return cashierActions.has(actionId);
-    if (['server', 'floor', 'kds'].includes(role)) return generalWorkActions.has(actionId);
-    if (role === 'courier') return courierActions.has(actionId);
-    if (role === 'customer') return customerActions.has(actionId);
-    return generalWorkActions.has(actionId);
-  });
+  return grantedRoles(member).some((role) => workRoleActions(role).has(actionId));
+}
+
+export function canRunFlowStep(member: Member, step: Record<string, unknown>, starter: string): boolean {
+  const actionId = workRole(step.id);
+  if (!actionId || !canExecute(member, actionId)) return false;
+  const assigned = workRole(step.role);
+  if (assigned === 'any') return member.role !== 'guest';
+  if (assigned) return hasWorkRole(member, assigned);
+  return member.userId === starter || managesMembers(member);
 }
 
 export function canReadRecord(member: Member, record: Pick<RecordItem, 'type' | 'data' | 'assignee'> & { owner?: string | null }): boolean {
@@ -45,6 +63,7 @@ export function canReadRecord(member: Member, record: Pick<RecordItem, 'type' | 
   }
   if (member.role === 'guest') return false;
   if (member.role !== 'member') return true;
+  if (record.type === 'pos.register' && grantedRoles(member).some((role) => ['cashier', 'manager'].includes(role))) return true;
   return roles.some((role) => {
     if (!role || role === 'general') return true;
     if (kitchenRoles.has(role) || role === 'courier' || role === 'customer') return false;

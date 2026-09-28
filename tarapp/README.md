@@ -2,8 +2,8 @@
 
 Expo/React Native client for Space, Now, Ask TAR, Flow Books, commerce
 interfaces, members and Site Studio. Business state and mutations stay in TAR
-Harness. Now keeps a local, read-only Turso replica of a dedicated per-user
-Inbox database. It shows saved work immediately and pulls fresh
+Harness. Now keeps a local Turso database synchronized one way from a dedicated
+per-user Inbox database. It shows saved work immediately and pulls fresh
 projections after the Gateway refreshes source workspaces. Rows open their
 source for fresh details and use its Gateway for changes. Offline actions are
 unavailable until the source can be reached.
@@ -15,12 +15,16 @@ npm install
 npm start
 ```
 
-The Now replica uses `@tursodatabase/sync-react-native`, a native module.
+Now uses `@tursodatabase/sync-react-native`, a native module. It calls `pull()`
+to bring remote Inbox changes into the local database; it does not push local
+writes because Now is read-only on the device.
 Rebuild the Expo development client after installing dependencies; Expo Go and
 an older development client cannot load it. The app requests short-lived,
-read-only replica credentials from `GET /v1/inbox/replica`. They are held in
+read-only sync credentials from `GET /v1/inbox/sync`. The older
+`GET /v1/inbox/replica` path remains an API compatibility alias, and the app
+falls back to it when connected to an older Gateway. Credentials are held in
 memory and never saved to the device. Signing out removes the local snapshot
-and replica files.
+and synced database files.
 
 The development build uses the deployed TAR Harness unless
 `EXPO_PUBLIC_TARHARNESS_URL` is set. `npx expo start` serves the app bundle; it

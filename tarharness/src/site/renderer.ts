@@ -691,7 +691,7 @@ export function renderCard(card: CardDefinition, site: SiteDefinition): string {
   }
 }
 
-export async function compileSiteHtml(site: SiteDefinition, pageIndex = 0): Promise<{ html: string; css: string; hash: string }> {
+export async function compileSiteHtml(site: SiteDefinition, pageIndex = 0, origin?: string): Promise<{ html: string; css: string; hash: string }> {
   const page = site.pages[pageIndex] || site.pages[0];
   const css = compileCss(site.design);
   const cardMarkup = page.cards.map((card) => renderCard(card, site)).join('\n');
@@ -699,6 +699,7 @@ export async function compileSiteHtml(site: SiteDefinition, pageIndex = 0): Prom
   const pageTitle = escapeHtml(page.title ? `${page.title} — ${site.pages[0]?.title || 'TAR'}` : 'TAR Site');
   const description = page.meta?.description || 'Built on TAR.';
   const metaDesc = escapeHtml(description);
+  const canonical = origin ? `${origin}${page.path}` : null;
 
   const structuredData = {
     '@context': 'https://schema.org',
@@ -715,8 +716,10 @@ export async function compileSiteHtml(site: SiteDefinition, pageIndex = 0): Prom
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${pageTitle}</title>
   <meta name="description" content="${metaDesc}">
+  ${canonical ? `<link rel="canonical" href="${escapeHtml(canonical)}">` : ''}
   <meta property="og:title" content="${pageTitle}">
   <meta property="og:description" content="${metaDesc}">
+  ${canonical ? `<meta property="og:url" content="${escapeHtml(canonical)}">` : ''}
   <meta property="og:type" content="website">
   <script type="application/ld+json">
 ${JSON.stringify(structuredData, null, 2).replace(/</g, '\\u003c')}

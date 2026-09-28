@@ -11,10 +11,10 @@ type Snapshot = {
   workspaces: HarnessWorkspace[];
 };
 
-type ReplicaCredentials = Awaited<ReturnType<typeof harness.nowReplica>>;
+type SyncCredentials = Awaited<ReturnType<typeof harness.nowSync>>;
 const databases = new Map<string, Promise<Database>>();
-const credentials = new Map<string, ReplicaCredentials>();
-const credentialRequests = new Map<string, Promise<ReplicaCredentials>>();
+const credentials = new Map<string, SyncCredentials>();
+const credentialRequests = new Map<string, Promise<SyncCredentials>>();
 const pulls = new Map<string, Promise<boolean>>();
 const feedRequests = new Map<string, Promise<NowFeed>>();
 const safe = (value: string) => value.replace(/[^a-zA-Z0-9]/g, '');
@@ -38,14 +38,14 @@ async function writeSnapshot(personal: string, snapshot: Snapshot): Promise<void
   saved.write(JSON.stringify(snapshot));
 }
 
-async function replicaCredentials(snapshot: Snapshot): Promise<ReplicaCredentials> {
+async function syncCredentials(snapshot: Snapshot): Promise<SyncCredentials> {
   const id = key(snapshot.user, snapshot.personal);
   const saved = credentials.get(id);
   if (saved && saved.expiresAt > Date.now() + 30_000) return saved;
   const pending = credentialRequests.get(id);
   if (pending) return pending;
-  const request = harness.nowReplica().then((result) => {
-    if (result.database !== snapshot.personal) throw new Error('Now replica identity changed.');
+  const request = harness.nowSync().then((result) => {
+    if (result.database !== snapshot.personal) throw new Error('Now sync identity changed.');
     credentials.set(id, result);
     return result;
   }).finally(() => { credentialRequests.delete(id); });
@@ -57,11 +57,11 @@ function openDatabase(snapshot: Snapshot): Promise<Database> {
   const id = key(snapshot.user, snapshot.personal);
   const existing = databases.get(id);
   if (existing) return existing;
-  if (!snapshot.url) return Promise.reject(new Error('Now replica URL is unavailable.'));
+  if (!snapshot.url) return Promise.reject(new Error('Now sync URL is unavailable.'));
   const db = new Database({
     path: databasePath(snapshot.user, snapshot.personal),
     url: snapshot.url,
-    authToken: async () => (await replicaCredentials(snapshot)).authToken,
+    authToken: async () => (await syncCredentials(snapshot)).authToken,
     // Open the local file without waiting for a remote bootstrap; pull below hydrates it.
     bootstrapIfEmpty: false,
     longPollTimeoutMs: 1_000,
@@ -124,7 +124,7 @@ const string = (value: unknown) => String(value ?? '');
 const nullable = (value: unknown) => value === null || value === undefined ? null : String(value);
 const number = (value: unknown) => Number(value || 0);
 
-async function readDatabase(db: Database, snapshot: Snapshot): Promise<NowFeed> {
+async function readDatabase(db: Database, snapshot: Snapshot, cached = false): Promise<NowFeed> {
   const [rows, projections] = await Promise.all([
     db.all(`SELECT * FROM inbox ORDER BY CASE WHEN due IS NULL THEN 1 ELSE 0 END,due,
       CASE lane WHEN 'mine' THEN 0 WHEN 'available' THEN 1 ELSE 2 END,
@@ -144,7 +144,7 @@ async function readDatabase(db: Database, snapshot: Snapshot): Promise<NowFeed> 
     updated: number(row.updated), workspace: workspaces.get(string(row.source))!,
   }));
   return { ...snapshot.feed, rows: mapped, sync: Object.fromEntries(projections.map((row) => [string(row.source), number(row.updated)])),
-    partial: true, next: null };
+    partial: cached || snapshot.feed.partial, next: cached ? null : snapshot.feed.next };
 }
 
 export async function cachedNow(personal: string): Promise<NowFeed | null> {
@@ -154,7 +154,7 @@ export async function cachedNow(personal: string): Promise<NowFeed | null> {
   if (!snapshot.url) return saved;
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    const local = openDatabase(snapshot).then((db) => readDatabase(db, snapshot))
+    const local = openDatabase(snapshot).then((db) => readDatabase(db, snapshot, true))
       .then((feed) => feed.rows.length === 0 && saved.rows.length > 0 ? saved : feed)
       .catch(() => saved);
     return await Promise.race([local, new Promise<NowFeed>((resolve) => {
@@ -173,12 +173,22 @@ export async function refreshNow(personal: string, workspaces: HarnessWorkspace[
   onFeed?.(feed);
   const snapshot: Snapshot = { user: user.id, personal, url: previous?.url || null, feed, workspaces };
   try {
-    const access = await replicaCredentials(snapshot);
+    const access = await syncCredentials(snapshot);
     snapshot.url = access.url;
     await writeSnapshot(personal, snapshot);
     const db = await openDatabase(snapshot);
     const completion = await waitForPull(pullDatabase(snapshot, db));
     if (__DEV__ && completion === 'timeout') console.warn('[Now] Turso pull is still running; the current Gateway feed remains available.');
+    if (completion === 'done') {
+      const synced = retainKnown(await readDatabase(db, snapshot), [feed]);
+      const caughtUp = Object.entries(feed.sync).every(([source, updated]) => (synced.sync[source] || 0) >= updated);
+      if (caughtUp) {
+        snapshot.feed = synced;
+        await writeSnapshot(personal, snapshot);
+        onFeed?.(synced);
+        return synced;
+      }
+    }
     return feed;
   } catch (cause) {
     await writeSnapshot(personal, snapshot);
@@ -219,6 +229,6 @@ export async function clearNowStorage(userId: string): Promise<void> {
       if (entry instanceof File && ['inbox', 'now'].some((prefix) => entry.name.startsWith(`${prefix}-${safe(userId)}-`))) entry.delete();
     }
   } catch (cause) {
-    if (__DEV__) console.warn('[Now] Could not remove the local replica files.', cause);
+    if (__DEV__) console.warn('[Now] Could not remove the local sync files.', cause);
   }
 }

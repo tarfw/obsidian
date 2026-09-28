@@ -113,7 +113,7 @@ export function projectNow(source: Source, actor: string): NowEntry[] {
   }
   for (const run of source.runs) {
     entries.push({ id: `${source.workspace.id}:${run.id}:flow`, source: source.workspace.id, target: run.id,
-      kind: 'flow', role: role(source), lane: run.state === 'blocked' ? 'waiting' : 'mine',
+      kind: 'flow', role: run.role, lane: run.state === 'blocked' ? 'waiting' : 'mine',
       title: run.title, parent: run.parent, quantity: null, state: run.state === 'blocked' ? `WAIT / STEP ${run.step + 1}` : `STEP ${run.step + 1}`,
       due: null, ordinal: entries.length, version: run.version, action: 'flow.start',
       input: { flowId: run.flow, runId: run.id }, updated: run.updated });

@@ -1,0 +1,657 @@
+/**
+ * Site v2 compiler: one deterministic compiler for pages, sections, nodes and
+ * components.
+ *
+ * Owns semantic HTML, escaped content, validated styles, safe URLs, canonical
+ * metadata, sitemap, robots and the tiny progressive interaction runtime.
+ * Emits no arbitrary JavaScript; interaction behaviour is a fixed tested file.
+ */
+
+import { EASING_CSS } from './document.ts';
+import type { Asset, Binding, Node, Page, Section, SiteDocument, Style, StyleSet } from './document.ts';
+import { escapeAttribute, escapeHtml, formatMoney, isSafeHref, safeHref, slugify } from './html.ts';
+import { resolveToken, type Design } from './design.ts';
+
+export interface CompiledFile {
+  path: string;
+  mime: string;
+  body: string | Uint8Array;
+  hash: string;
+}
+
+export interface ResolvedItem {
+  id?: string;
+  slug?: string;
+  title: string;
+  description?: string;
+  price?: number;
+  currency?: string;
+  image?: string;
+}
+
+export interface CompileOptions {
+  origin?: string;
+  release?: string;
+  media?: (asset: Asset) => Promise<Uint8Array | null>;
+}
+
+export interface CompileResult {
+  files: CompiledFile[];
+  hash: string;
+  itemCount: number;
+  redirects: { from: string; to: string; status: 308 }[];
+}
+
+const sha = async (value: string): Promise<string> => {
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)));
+  return [...digest].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+};
+
+const short = (value: string): string => {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash.toString(36);
+};
+
+const EXT: Record<string, string> = {
+  'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'image/avif': 'avif',
+  'image/gif': 'gif', 'image/svg+xml': 'svg', 'video/mp4': 'mp4', 'video/webm': 'webm', 'font/woff2': 'woff2',
+};
+
+const ICONS: Record<string, string> = {
+  arrow: 'M5 12h14M13 6l6 6-6 6',
+  check: 'M4 12l5 5L20 6',
+  star: 'M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z',
+  mail: 'M3 6h18v12H3zM3 7l9 6 9-6',
+  phone: 'M6 3h4l2 5-3 2a12 12 0 005 5l2-3 5 2v4a2 2 0 01-2 2A16 16 0 014 5a2 2 0 012-2z',
+  pin: 'M12 21s7-6 7-11a7 7 0 10-14 0c0 5 7 11 7 11zM12 10a2 2 0 100-4 2 2 0 000 4z',
+  clock: 'M12 21a9 9 0 100-18 9 9 0 000 18zM12 7v5l3 2',
+  bag: 'M6 7h12l1 13H5zM9 7a3 3 0 016 0',
+  heart: 'M12 20s-7-4.5-7-9.5A3.5 3.5 0 0112 8a3.5 3.5 0 017 2.5c0 5-7 9.5-7 9.5z',
+  sparkle: 'M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z',
+};
+
+function padUnit(design: Design, value: string | undefined): string | null {
+  if (!value) return null;
+  if (value === 'token:space.unit') return 'var(--space-unit)';
+  if (value === 'token:space.section') return 'var(--space-section)';
+  const steps: Record<string, number> = { none: 0, sm: 2, md: 4, lg: 8, xl: 12 };
+  return steps[value] === undefined ? null : `calc(var(--space-unit) * ${steps[value]})`;
+}
+
+function colorValue(design: Design, value: string): string {
+  const token = resolveToken(design, value);
+  if (typeof token === 'string') return token;
+  return value;
+}
+
+function styleDeclarations(design: Design, style: Style | undefined): string[] {
+  if (!style) return [];
+  const out: string[] = [];
+  if (style.background) out.push(`background:${colorValue(design, style.background)}`);
+  if (style.gradient) out.push(`background-image:linear-gradient(${style.gradient.angle}deg, ${colorValue(design, style.gradient.from)}, ${colorValue(design, style.gradient.to)})`);
+  if (style.color) out.push(`color:${colorValue(design, style.color)}`);
+  if (style.pad) { const pad = padUnit(design, style.pad); if (pad) out.push(`padding:${pad}`); }
+  if (style.gap) { const gap = padUnit(design, style.gap); if (gap) out.push(`gap:${gap}`); }
+  if (style.radius !== undefined) {
+    const resolved = typeof style.radius === 'number' ? style.radius : resolveToken(design, style.radius) ?? 0;
+    out.push(`border-radius:${typeof resolved === 'number' ? `${resolved}px` : resolved}`);
+  }
+  if (style.border === 'hairline') out.push('border:1px solid var(--color-border)');
+  else if (style.border && style.border !== 'none') out.push(`border:1px solid ${colorValue(design, style.border)}`);
+  if (style.shadow && style.shadow !== 'none') out.push(`box-shadow:var(--elevation-${style.shadow})`);
+  if (style.align) out.push(`justify-content:${({ start: 'flex-start', center: 'center', end: 'flex-end', between: 'space-between' } as Record<string, string>)[style.align] || 'flex-start'}`);
+  if (style.width === 'content') out.push('max-width:var(--layout-content)');
+  else if (style.width === 'wide') out.push('max-width:var(--layout-wide)');
+  if (style.aspect) out.push(`aspect-ratio:${({ square: '1 / 1', portrait: '3 / 4', landscape: '4 / 3', wide: '16 / 9' } as Record<string, string>)[style.aspect] || 'auto'}`);
+  if (style.mask === 'soft') out.push('mask-image:linear-gradient(to bottom, #000 72%, transparent)');
+  if (style.size) out.push(`font-size:var(--type-${style.size})`);
+  if (style.weight) out.push(`font-weight:${style.weight}`);
+  if (style.columns) out.push(`grid-template-columns:repeat(${style.columns}, minmax(0, 1fr))`);
+  return out;
+}
+
+interface CssCollector {
+  classes: Map<string, StyleSet>;
+  runtime: Set<string>;
+}
+
+function styleClass(collector: CssCollector, style: StyleSet | undefined): string {
+  if (!style || !Object.keys(style).length) return '';
+  const key = JSON.stringify(style);
+  const name = `s-${short(key)}`;
+  collector.classes.set(name, style);
+  return ` ${name}`;
+}
+
+function compileCss(design: Design, collector: CssCollector): string {
+  const space = (steps: number) => `calc(var(--space-unit) * ${steps})`;
+  const blocks: string[] = [];
+  collector.classes.forEach((style, name) => {
+    for (const level of ['base', 'small', 'medium', 'large'] as const) {
+      const declarations = styleDeclarations(design, style[level]);
+      if (!declarations.length) continue;
+      const rule = `.${name}{${declarations.join(';')}}`;
+      if (level === 'base') blocks.push(rule);
+      else if (level === 'small') blocks.push(`@media (max-width: 640px){${rule}}`);
+      else if (level === 'medium') blocks.push(`@media (min-width: 641px) and (max-width: 1024px){${rule}}`);
+      else blocks.push(`@media (min-width: 1025px){${rule}}`);
+    }
+  });
+  return `
+:root {
+  --color-canvas: ${design.color.canvas};
+  --color-ink: ${design.color.ink};
+  --color-accent: ${design.color.accent};
+  --color-accentink: ${design.color.accentink};
+  --color-surface: ${design.color.surface};
+  --color-border: ${design.color.border};
+  --color-muted: ${design.color.muted};
+  --color-success: ${design.color.success};
+  --color-danger: ${design.color.danger};
+  --font-display: ${design.type.display};
+  --font-heading: ${design.type.heading};
+  --font-body: ${design.type.body};
+  --type-base: ${design.type.base}px;
+  --type-display: clamp(2rem, 5vw, ${(design.type.base * design.type.scale ** 3).toFixed(0)}px);
+  --type-heading: clamp(1.5rem, 3vw, ${(design.type.base * design.type.scale ** 2).toFixed(0)}px);
+  --type-body: ${design.type.base}px;
+  --type-label: ${Math.max(12, Math.round(design.type.base * 0.875))}px;
+  --leading: ${design.type.leading};
+  --space-unit: ${design.space.unit}px;
+  --space-section: ${design.space.section}px;
+  --layout-content: ${design.space.container}px;
+  --layout-wide: ${(design.space.container + 240).toFixed(0)}px;
+  --radius-sm: ${design.shape.sm}px;
+  --radius-md: ${design.shape.md}px;
+  --radius-lg: ${design.shape.lg}px;
+  --radius-pill: ${design.shape.pill}px;
+  --elevation-low: 0 1px ${design.elevation.low}px rgba(15, 15, 20, 0.08);
+  --elevation-high: 0 12px ${design.elevation.high}px rgba(15, 15, 20, 0.16);
+  --motion: ${design.motion.duration}ms;
+  --ease: ${EASING_CSS[design.motion.easing] || 'ease'};
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: var(--type-base); -webkit-text-size-adjust: 100%; }
+body { background: var(--color-canvas); color: var(--color-ink); font-family: var(--font-body); line-height: var(--leading); min-height: 100vh; display: flex; flex-direction: column; }
+main { flex: 1; }
+img, video { max-width: 100%; height: auto; display: block; }
+a { color: inherit; }
+:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.tar-skip { position: absolute; left: -9999px; }
+.tar-skip:focus { position: static; display: inline-block; padding: ${space(2)} ${space(4)}; background: var(--color-accent); color: var(--color-accentink); }
+.tar-wrap { width: 100%; max-width: var(--layout-content); margin: 0 auto; padding: 0 ${space(4)}; }
+.tar-section { padding: var(--space-section) 0; }
+.tar-flex { display: flex; flex-direction: row; gap: ${space(4)}; align-items: flex-start; flex-wrap: wrap; }
+.tar-stack { display: flex; flex-direction: column; gap: ${space(4)}; }
+.tar-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr)); gap: ${space(4)}; }
+.tar-card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: ${space(4)}; display: flex; flex-direction: column; gap: ${space(2)}; }
+.tar-prose { max-width: 72ch; }
+.tar-title { font-family: var(--font-display); font-weight: ${design.type.weight}; line-height: 1.15; }
+h1.tar-title { font-size: var(--type-display); }
+h2.tar-title { font-size: var(--type-heading); }
+h3.tar-title { font-size: var(--type-body); font-weight: ${Math.min(900, design.type.weight + 100)}; }
+.tar-muted { color: var(--color-muted); }
+.tar-label { font-size: var(--type-label); font-weight: 600; }
+.tar-btn { display: inline-flex; align-items: center; justify-content: center; gap: ${space(2)}; padding: ${space(3)} ${space(6)}; border-radius: var(--radius-pill); font-weight: 600; font-size: var(--type-body); text-decoration: none; cursor: pointer; border: 1px solid transparent; transition: opacity var(--motion) var(--ease), transform var(--motion) var(--ease); }
+.tar-btn:hover { opacity: 0.88; }
+.tar-btn:active { transform: scale(0.985); }
+.tar-btn-primary { background: var(--color-accent); color: var(--color-accentink); }
+.tar-btn-secondary { background: transparent; color: var(--color-ink); border-color: var(--color-border); }
+.tar-btn-outline { background: transparent; color: var(--color-accent); border-color: var(--color-accent); }
+.tar-link { text-decoration: underline; text-underline-offset: 3px; }
+.tar-divider { border: 0; border-top: 1px solid var(--color-border); }
+.tar-spacer { height: var(--space-section); }
+.tar-icon { width: 1.5em; height: 1.5em; stroke: currentColor; fill: none; stroke-width: 1.6; }
+.tar-price { font-weight: 700; color: var(--color-accent); }
+.tar-item img { width: 100%; border-radius: var(--radius-sm); }
+.tar-cardlink { text-decoration: none; display: block; }
+.tar-item[hidden] { display: none; }
+.tar-empty { color: var(--color-muted); font-style: italic; }
+.tar-nav { position: sticky; top: 0; z-index: 20; background: color-mix(in srgb, var(--color-canvas) 88%, transparent); backdrop-filter: blur(10px); border-bottom: 1px solid var(--color-border); }
+.tar-nav-inner { display: flex; align-items: center; justify-content: space-between; gap: ${space(4)}; min-height: ${space(18)}; }
+.tar-brand { font-family: var(--font-heading); font-size: 1.15rem; font-weight: 700; text-decoration: none; }
+.tar-navlinks { display: flex; gap: ${space(5)}; list-style: none; flex-wrap: wrap; }
+.tar-navlinks a { text-decoration: none; }
+.tar-navlinks a:hover { color: var(--color-accent); }
+.tar-menu-btn { display: none; background: none; border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: ${space(1)} ${space(2)}; font-size: 1.1rem; cursor: pointer; }
+.tar-footer { border-top: 1px solid var(--color-border); background: var(--color-surface); margin-top: auto; }
+.tar-footer-inner { display: flex; justify-content: space-between; flex-wrap: wrap; gap: ${space(3)}; padding: ${space(8)} 0; font-size: 0.9rem; color: var(--color-muted); }
+.tar-footer-links { display: flex; gap: ${space(5)}; list-style: none; flex-wrap: wrap; }
+.tar-footer-links a { text-decoration: none; }
+.tar-tabs [role="tablist"] { display: flex; gap: ${space(2)}; border-bottom: 1px solid var(--color-border); flex-wrap: wrap; }
+.tar-tabs [role="tab"] { background: none; border: 0; padding: ${space(2)} ${space(3)}; font: inherit; cursor: pointer; border-bottom: 2px solid transparent; }
+.tar-tabs [role="tab"][aria-selected="true"] { border-color: var(--color-accent); color: var(--color-accent); font-weight: 600; }
+.tar-tabs [role="tabpanel"] { padding-top: ${space(4)}; }
+.tar-tabs[data-ready] [role="tabpanel"][hidden] { display: none; }
+.tar-acc { border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface); margin-bottom: ${space(2)}; }
+.tar-acc summary { padding: ${space(3)} ${space(4)}; font-weight: 600; cursor: pointer; }
+.tar-acc > div { padding: 0 ${space(4)} ${space(4)}; color: var(--color-muted); }
+.tar-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(220px, 100%), 1fr)); gap: ${space(2)}; }
+.tar-gallery img { border-radius: var(--radius-sm); cursor: zoom-in; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; }
+.tar-lightbox { position: fixed; inset: 0; background: rgba(10, 10, 14, 0.86); display: none; align-items: center; justify-content: center; padding: ${space(6)}; z-index: 60; }
+.tar-lightbox[data-open] { display: flex; }
+.tar-lightbox img { max-width: 92vw; max-height: 88vh; border-radius: var(--radius-md); }
+.tar-search { display: flex; gap: ${space(2)}; margin-bottom: ${space(4)}; }
+.tar-search input { flex: 1; padding: ${space(2)} ${space(3)}; border: 1px solid var(--color-border); border-radius: var(--radius-md); font: inherit; background: var(--color-canvas); color: inherit; }
+.tar-visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.tar-form { display: flex; flex-direction: column; gap: ${space(3)}; max-width: 560px; }
+.tar-field { display: flex; flex-direction: column; gap: ${space(1)}; }
+.tar-field label { font-size: var(--type-label); font-weight: 600; }
+.tar-field input, .tar-field textarea, .tar-field select { padding: ${space(2)} ${space(3)}; border: 1px solid var(--color-border); border-radius: var(--radius-md); font: inherit; background: var(--color-canvas); color: inherit; }
+.tar-field textarea { min-height: 130px; resize: vertical; }
+.tar-honeypot { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+.tar-cta { background: var(--color-surface); border-radius: var(--radius-lg); padding: ${space(10)}; text-align: center; }
+${blocks.join('\n')}
+@media (max-width: 640px) {
+  .tar-flex { flex-direction: column; }
+  .tar-menu[data-ready] .tar-navlinks { display: none; }
+  .tar-menu[data-ready][data-open] .tar-navlinks { display: flex; flex-direction: column; padding: ${space(3)} 0; }
+  .tar-menu-btn { display: inline-block; }
+  .tar-section { padding: min(var(--space-section), ${space(16)}) 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
+}
+`.trim();
+}
+
+const RUNTIME = `
+(function () {
+  var menus = document.querySelectorAll('[data-menu]');
+  for (var index = 0; index < menus.length; index += 1) {
+    (function (menu) {
+      var button = menu.querySelector('.tar-menu-btn');
+      var id = menu.getAttribute('data-menu');
+      var list = document.getElementById(id);
+      if (!button || !list) return;
+      menu.setAttribute('data-ready', '');
+      button.setAttribute('aria-controls', id);
+      button.addEventListener('click', function () {
+        var open = menu.hasAttribute('data-open');
+        if (open) menu.removeAttribute('data-open'); else menu.setAttribute('data-open', '');
+        button.setAttribute('aria-expanded', String(!open));
+      });
+    })(menus[index]);
+  }
+  var tabs = document.querySelectorAll('[data-tabs]');
+  for (var t = 0; t < tabs.length; t += 1) {
+    (function (group) {
+      var buttons = group.querySelectorAll('[role="tab"]');
+      var panels = group.querySelectorAll('[role="tabpanel"]');
+      if (!buttons.length) return;
+      group.setAttribute('data-ready', '');
+      var activate = function (active) {
+        for (var i = 0; i < buttons.length; i += 1) {
+          var selected = buttons[i] === active;
+          buttons[i].setAttribute('aria-selected', String(selected));
+          buttons[i].setAttribute('tabindex', selected ? '0' : '-1');
+          if (panels[i]) { if (selected) panels[i].removeAttribute('hidden'); else panels[i].setAttribute('hidden', ''); }
+        }
+      };
+      for (var i = 0; i < buttons.length; i += 1) {
+        buttons[i].addEventListener('click', function (event) { activate(event.currentTarget); });
+      }
+      activate(buttons[0]);
+    })(tabs[t]);
+  }
+  var searches = document.querySelectorAll('[data-search]');
+  for (var s = 0; s < searches.length; s += 1) {
+    (function (input) {
+      var form = input.form;
+      if (form) form.addEventListener('submit', function (event) { event.preventDefault(); });
+      var target = document.getElementById(input.getAttribute('data-search'));
+      if (!target) return;
+      var items = target.querySelectorAll('[data-item]');
+      input.addEventListener('input', function () {
+        var value = input.value.toLowerCase();
+        for (var i = 0; i < items.length; i += 1) {
+          var match = items[i].getAttribute('data-item').indexOf(value) !== -1;
+          if (match) items[i].removeAttribute('hidden'); else items[i].setAttribute('hidden', '');
+        }
+      });
+    })(searches[s]);
+  }
+  var galleries = document.querySelectorAll('[data-gallery]');
+  if (galleries.length) {
+    var box = document.createElement('div');
+    box.className = 'tar-lightbox';
+    box.setAttribute('role', 'dialog');
+    box.setAttribute('aria-label', 'Image');
+    box.addEventListener('click', function () { box.removeAttribute('data-open'); });
+    document.body.appendChild(box);
+    for (var g = 0; g < galleries.length; g += 1) {
+      galleries[g].addEventListener('click', function (event) {
+        var image = event.target && event.target.tagName === 'IMG' ? event.target : null;
+        if (!image) return;
+        box.innerHTML = '';
+        var clone = document.createElement('img');
+        clone.src = image.src;
+        clone.alt = image.alt || '';
+        box.appendChild(clone);
+        box.setAttribute('data-open', '');
+      });
+    }
+  }
+})();
+`.trim();
+
+interface RenderContext {
+  doc: SiteDocument;
+  collector: CssCollector;
+  base: string;
+  binding?: Binding;
+  item?: ResolvedItem;
+  index: number;
+}
+
+function itemSlug(item: ResolvedItem, index: number): string {
+  return item.slug || `${slugify(item.title)}-${index + 1}`;
+}
+
+function renderNodes(nodes: Node[] | undefined, context: RenderContext): string {
+  if (!Array.isArray(nodes)) return '';
+  return nodes.map((node) => renderNode(node, context)).join('\n');
+}
+
+/** Container body: component composition, instance children or defaults. */
+function renderChildren(node: Node, context: RenderContext): string {
+  const component = node.component ? context.doc.components.find((entry) => entry.id === node.component) : undefined;
+  if (component && (!node.children || !node.children.length)) return renderNodes(component.nodes, context);
+  return renderNodes(node.children, context);
+}
+
+function renderNode(node: Node, context: RenderContext): string {
+  const style = styleClass(context.collector, node.style);
+  const id = escapeAttribute(node.id);
+  const props = node.props || {};
+  const component = node.component ? context.doc.components.find((entry) => entry.id === node.component) : undefined;
+  const variant = component?.variants?.[node.variant || ''];
+  const merged = variant?.props ? { ...variant.props, ...props } : props;
+  const item = context.item;
+
+  switch (node.kind) {
+    case 'heading': {
+      const level = Math.min(3, Math.max(1, Number(merged.level) || 2));
+      const field = String(merged.field || '');
+      const content = item && field ? (field === 'title' ? item.title : field === 'description' ? item.description || '' : '') : String(merged.text || '');
+      return `<h${level} id="${id}" class="tar-title${style}">${escapeHtml(content)}</h${level}>`;
+    }
+    case 'text': {
+      const field = String(merged.field || '');
+      const content = item && field === 'description' ? item.description || '' : String(merged.text || '');
+      return `<p id="${id}" class="tar-prose${style}">${escapeHtml(content).replace(/\n/g, '<br>')}</p>`;
+    }
+    case 'image': {
+      const asset = context.doc.assets.find((entry) => entry.id === merged.asset);
+      if (!asset) return '';
+      const source = `/media/${asset.id}.${EXT[asset.mime] || 'bin'}`;
+      const alt = merged.decorative ? '' : escapeAttribute(merged.alt ?? asset.alt ?? '');
+      const dimensions = asset.width && asset.height ? ` width="${asset.width}" height="${asset.height}"` : '';
+      return `<img id="${id}" class="tar-media${style}" src="${source}" alt="${alt}"${dimensions} loading="lazy" decoding="async">`;
+    }
+    case 'video': {
+      const asset = context.doc.assets.find((entry) => entry.id === merged.asset);
+      const remote = safeHref(merged.url);
+      const source = asset ? `/media/${asset.id}.${EXT[asset.mime] || 'bin'}` : remote;
+      if (!source) return '';
+      return `<video id="${id}" class="tar-media${style}" src="${escapeAttribute(source)}" controls preload="metadata" playsinline></video>`;
+    }
+    case 'icon': {
+      const path = ICONS[String(merged.name)] || ICONS.sparkle;
+      return `<svg id="${id}" class="tar-icon${style}" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="${path}"></path></svg>`;
+    }
+    case 'list': {
+      const items = Array.isArray(merged.items) ? merged.items as unknown[] : [];
+      return `<ul id="${id}" class="tar-list${style}">${items.map((entry) => `<li>${escapeHtml(entry)}</li>`).join('')}</ul>`;
+    }
+    case 'link': {
+      const href = safeHref(merged.href) || '#';
+      return `<a id="${id}" class="tar-link${style}" href="${href}">${escapeHtml(merged.label)}</a>`;
+    }
+    case 'button': {
+      const label = escapeHtml(merged.label);
+      const journey = String(merged.journey || '');
+      const href = journey ? `#journey-${escapeAttribute(journey)}` : safeHref(merged.href) || '#';
+      const variantClass = merged.variant === 'secondary' ? ' tar-btn-secondary' : merged.variant === 'outline' ? ' tar-btn-outline' : ' tar-btn-primary';
+      return `<a id="${id}" class="tar-btn${variantClass}${style}" href="${href}">${label}</a>`;
+    }
+    case 'divider': return `<hr id="${id}" class="tar-divider">`;
+    case 'spacer': return `<div id="${id}" class="tar-spacer" aria-hidden="true"></div>`;
+    case 'flex': return `<div id="${id}" class="tar-flex${style}">${renderChildren(node, context)}</div>`;
+    case 'stack': return `<div id="${id}" class="tar-stack${style}">${renderChildren(node, context)}</div>`;
+    case 'grid': return `<div id="${id}" class="tar-grid${style}">${renderChildren(node, context)}</div>`;
+    case 'card': return `<div id="${id}" class="tar-card${style}">${renderChildren(node, context)}</div>`;
+    case 'collection': {
+      const items = Array.isArray(merged.items) ? merged.items as ResolvedItem[] : [];
+      const title = merged.title ? `<h2 class="tar-title">${escapeHtml(merged.title)}</h2>` : '';
+      const binding = context.binding;
+      const detail = binding?.detail?.path;
+      if (!items.length) {
+        const empty = String(merged.empty || binding?.empty?.text || '');
+        return `<div id="${id}" class="tar-stack${style}">${title}${empty ? `<p class="tar-empty">${escapeHtml(empty)}</p>` : ''}</div>`;
+      }
+      const template = node.children && node.children.length ? node.children : null;
+      const cards = items.map((entry, index) => {
+        const slug = itemSlug(entry, index);
+        const local: RenderContext = { ...context, item: entry, index };
+        const body = template
+          ? renderNodes(template, local)
+          : `<div class="tar-card"><div class="tar-item"><strong>${escapeHtml(entry.title)}</strong>${entry.price !== undefined && entry.currency ? ` <span class="tar-price">${formatMoney(entry.price, entry.currency, context.doc.locale)}</span>` : ''}${entry.description ? `<p class="tar-muted">${escapeHtml(entry.description)}</p>` : ''}</div></div>`;
+        const href = detail ? `${detail.replace('/:item', '')}/${encodeURIComponent(slug)}` : null;
+        const card = `<div data-item="${escapeAttribute(`${entry.title} ${entry.description || ''}`.toLowerCase())}">${body}</div>`;
+        return href ? `<a class="tar-cardlink" href="${escapeAttribute(href)}">${card}</a>` : card;
+      }).join('\n');
+      return `<div id="${id}" class="tar-grid${style}">${title}${cards}</div>`;
+    }
+    case 'navigation': {
+      const links = Array.isArray(merged.links) ? merged.links as { label?: string; href?: string }[] : [];
+      const listId = `nav-${escapeAttribute(node.id)}`;
+      const rendered = links.map((link) => {
+        const href = safeHref(link.href);
+        return href ? `<li><a href="${href}">${escapeHtml(link.label)}</a></li>` : '';
+      }).join('');
+      return `<header id="${escapeAttribute(node.id)}" class="tar-nav"><div class="tar-wrap tar-nav-inner"><a class="tar-brand" href="/">${escapeHtml(merged.brand)}</a><nav class="tar-menu" data-menu="${listId}" aria-label="Main"><button class="tar-menu-btn" type="button" aria-expanded="false">☰</button><ul id="${listId}" class="tar-navlinks">${rendered}</ul></nav></div></header>`;
+    }
+    case 'footer': {
+      const links = Array.isArray(merged.links) ? merged.links as { label?: string; href?: string }[] : [];
+      const rendered = links.map((link) => {
+        const href = safeHref(link.href);
+        return href ? `<li><a href="${href}">${escapeHtml(link.label)}</a></li>` : '';
+      }).join('');
+      const year = new Date().getFullYear();
+      const brand = escapeHtml(merged.brand);
+      const text = escapeHtml(merged.text || `© ${year} ${brand}`);
+      return `<footer id="${escapeAttribute(node.id)}" class="tar-footer"><div class="tar-wrap tar-footer-inner"><span>${text}</span><ul class="tar-footer-links">${rendered}</ul></div></footer>`;
+    }
+    case 'menu': {
+      const links = Array.isArray(merged.links) ? merged.links as { label?: string; href?: string }[] : [];
+      const listId = `menu-${escapeAttribute(node.id)}`;
+      const rendered = links.map((link) => {
+        const href = safeHref(link.href);
+        return href ? `<li><a href="${href}">${escapeHtml(link.label)}</a></li>` : '';
+      }).join('');
+      context.collector.runtime.add('menu');
+      return `<nav id="${id}" class="tar-stack${style}"><button class="tar-menu-btn" type="button" aria-expanded="false">${escapeHtml(merged.label || 'Menu')}</button><ul class="tar-navlinks">${rendered}</ul></nav>`;
+    }
+    case 'tabs': {
+      context.collector.runtime.add('tabs');
+      const children = node.children || [];
+      const buttons = children.map((child, index) => `<button role="tab" type="button" id="${escapeAttribute(child.id)}-tab" aria-controls="${escapeAttribute(child.id)}" aria-selected="${index === 0}" tabindex="${index === 0 ? '0' : '-1'}">${escapeHtml((child.props || {}).label)}</button>`).join('');
+      const panels = children.map((child, index) => `<div role="tabpanel" id="${escapeAttribute(child.id)}" aria-labelledby="${escapeAttribute(child.id)}-tab"${index === 0 ? '' : ' hidden'}>${renderNodes(child.children, context)}</div>`).join('');
+      return `<div id="${id}" class="tar-tabs${style}" data-tabs><div role="tablist">${buttons}</div>${panels}</div>`;
+    }
+    case 'accordion': {
+      const children = node.children || [];
+      return `<div id="${id}" class="tar-stack${style}">${children.map((child) => `<details class="tar-acc"><summary>${escapeHtml((child.props || {}).label)}</summary><div>${renderNodes(child.children, context)}</div></details>`).join('')}</div>`;
+    }
+    case 'gallery': {
+      const assets = Array.isArray(merged.assets) ? merged.assets as string[] : [];
+      context.collector.runtime.add('gallery');
+      const images = assets.map((assetId) => {
+        const asset = context.doc.assets.find((entry) => entry.id === assetId);
+        if (!asset) return '';
+        return `<img src="/media/${asset.id}.${EXT[asset.mime] || 'bin'}" alt="${escapeAttribute(asset.alt || '')}" loading="lazy" decoding="async">`;
+      }).join('');
+      return `<div id="${id}" class="tar-gallery${style}" data-gallery>${images}</div>`;
+    }
+    case 'search': {
+      context.collector.runtime.add('search');
+      const target = escapeAttribute(merged.target);
+      return `<form id="${id}" class="tar-search${style}" role="search"><label class="tar-visually-hidden" for="${id}-input">Search</label><input id="${id}-input" type="search" data-search="${target}" placeholder="${escapeAttribute(merged.placeholder || 'Search')}"><button class="tar-btn tar-btn-secondary" type="submit">Search</button></form>`;
+    }
+    case 'form': {
+      const journey = context.doc.journeys.find((entry) => entry.id === String(merged.journey || ''));
+      if (!journey || !journey.enabled) return '';
+      const fields = journey.fields.map((field) => {
+        const fieldId = `${escapeAttribute(node.id)}-${escapeAttribute(field.key)}`;
+        const required = field.required ? ' required' : '';
+        const max = field.max ? ` maxlength="${field.max}"` : '';
+        const control = field.kind === 'textarea'
+          ? `<textarea id="${fieldId}" name="${escapeAttribute(field.key)}"${required}${max}></textarea>`
+          : field.kind === 'select'
+            ? `<select id="${fieldId}" name="${escapeAttribute(field.key)}"${required}>${(field.options || []).map((option) => `<option>${escapeHtml(option)}</option>`).join('')}</select>`
+            : `<input id="${fieldId}" name="${escapeAttribute(field.key)}" type="${field.kind}"${required}${max}>`;
+        return `<div class="tar-field"><label for="${fieldId}">${escapeHtml(field.label)}${field.required ? ' *' : ''}</label>${control}</div>`;
+      }).join('');
+      const honeypot = `<div class="tar-honeypot" aria-hidden="true"><label for="${escapeAttribute(node.id)}-extra">Leave empty</label><input id="${escapeAttribute(node.id)}-extra" name="extra" tabindex="-1" autocomplete="off"></div>`;
+      return `<form id="journey-${escapeAttribute(journey.id)}" class="tar-form${style}" method="post" action="${escapeAttribute(`${context.base}/_tar/${journey.id}`)}">${fields}${honeypot}<button class="tar-btn tar-btn-primary" type="submit">${escapeHtml(merged.submitLabel || 'Send')}</button></form>`;
+    }
+    default:
+      return '';
+  }
+}
+
+function renderSection(section: Section, context: RenderContext): string {
+  const layout = section.layout || { kind: 'flow' };
+  const columns = typeof layout.columns === 'number' ? ` style="grid-template-columns:repeat(${layout.columns}, minmax(0, 1fr))"` : '';
+  const kind = layout.kind === 'flow' ? '' : ` tar-${layout.kind}`;
+  const style = styleClass(context.collector, section.style);
+  const body = renderNodes(section.nodes, { ...context, binding: section.bindings?.[0] });
+  if (!body.trim()) return '';
+  return `<section id="${escapeAttribute(section.id)}" class="tar-section${style}" data-purpose="${escapeAttribute(section.purpose)}"><div class="tar-wrap${kind}"${columns}>${body}</div></section>`;
+}
+
+function pageMeta(doc: SiteDocument, page: Page, origin: string | undefined, canonicalPath: string, titleOverride?: string): string {
+  const title = escapeHtml(`${titleOverride || page.title} — ${doc.pages[0].title}`);
+  const description = escapeHtml(page.meta?.description || doc.brief.goal || `${doc.pages[0].title}`);
+  const canonical = origin ? `${origin}${canonicalPath === '/' ? '/' : canonicalPath}` : null;
+  const structured = {
+    '@context': 'https://schema.org',
+    '@type': 'WebSite',
+    name: titleOverride || page.title,
+    description: page.meta?.description || doc.brief.goal || undefined,
+    inLanguage: doc.locale,
+  };
+  return `<title>${title}</title>
+  <meta name="description" content="${description}">
+  ${canonical ? `<link rel="canonical" href="${escapeAttribute(canonical)}">` : ''}
+  <meta property="og:title" content="${title}">
+  <meta property="og:description" content="${description}">
+  ${canonical ? `<meta property="og:url" content="${escapeAttribute(canonical)}">` : ''}
+  <meta property="og:type" content="website">
+  <script type="application/ld+json">
+${JSON.stringify(structured, null, 2).replace(/</g, '\\u003c')}
+  </script>`;
+}
+
+function pageHtml(doc: SiteDocument, page: Page, body: string, origin: string | undefined, canonicalPath: string, cssPath: string, runtime: boolean, titleOverride?: string): string {
+  return `<!DOCTYPE html>
+<html lang="${escapeAttribute(doc.locale || 'en')}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  ${pageMeta(doc, page, origin, canonicalPath, titleOverride)}
+  <link rel="stylesheet" href="${cssPath}">
+  ${runtime ? '<script src="/site.js" defer></script>' : ''}
+</head>
+<body>
+  <a class="tar-skip" href="#main">Skip to content</a>
+  <main id="main">
+${body}
+  </main>
+</body>
+</html>`;
+}
+
+export async function compileDocument(doc: SiteDocument, options: CompileOptions = {}): Promise<CompileResult> {
+  const collector: CssCollector = { classes: new Map(), runtime: new Set() };
+  const files: CompiledFile[] = [];
+  let itemCount = 0;
+  const base = options.origin ? new URL(options.origin).pathname.replace(/\/$/, '') : '';
+  const detailPages: { path: string; page: Page; item: ResolvedItem; detailNodes: Node[] }[] = [];
+  const routes: string[] = [];
+
+  const contexts = (item?: ResolvedItem, index = 0): RenderContext => ({ doc, collector, base, item, index });
+
+  for (const page of doc.pages) {
+    const body = page.sections.map((section) => renderSection(section, contexts())).join('\n');
+    const runtime = collector.runtime.size > 0;
+    const html = pageHtml(doc, page, body, options.origin, page.path, '/style.css', runtime);
+    files.push({ path: page.path === '/' ? '/index.html' : `${page.path}/index.html`, mime: 'text/html; charset=utf-8', body: html, hash: await sha(html) });
+    routes.push(page.path);
+
+    for (const section of page.sections) {
+      for (const binding of section.bindings || []) {
+        const node = section.nodes.find((entry) => entry.kind === 'collection' && (entry.id === binding.slot || (entry.props || {}).slot === binding.slot || entry.id === (entry.props || {}).slot));
+        if (!node) continue;
+        const items = Array.isArray(node.props.items) ? node.props.items as ResolvedItem[] : [];
+        itemCount += items.length;
+        const size = binding.paginate?.size;
+        if (size && items.length > size) {
+          for (let number = 2; number * size - size < items.length; number += 1) {
+            const slice = items.slice((number - 1) * size, number * size);
+            const paged = { ...node, props: { ...node.props, items: slice } };
+            const sectionCopy = { ...section, nodes: section.nodes.map((entry) => entry === node ? paged : entry) };
+            const pagedBody = page.sections.map((entry) => entry === section ? renderSection(sectionCopy, contexts()) : renderSection(entry, contexts())).join('\n');
+            const path = `${page.path === '/' ? '' : page.path}/page/${number}`;
+            const html2 = pageHtml(doc, page, pagedBody, options.origin, path, '/style.css', collector.runtime.size > 0, `${page.title} (page ${number})`);
+            files.push({ path: `${path}/index.html`, mime: 'text/html; charset=utf-8', body: html2, hash: await sha(html2) });
+            routes.push(path);
+          }
+        }
+        if (binding.detail && node.children?.length) {
+          items.forEach((item, index) => {
+            const path = `${binding.detail!.path.replace('/:item', '')}/${itemSlug(item, index)}`;
+            detailPages.push({ path, page, item, detailNodes: node.children! });
+          });
+        }
+      }
+    }
+  }
+
+  for (const entry of detailPages) {
+    const inner = renderNodes(entry.detailNodes, { ...contexts(entry.item) });
+    const body = `<section class="tar-section" data-purpose="detail"><div class="tar-wrap tar-stack">${inner}</div></section>`;
+    const html = pageHtml(doc, entry.page, body, options.origin, entry.path, '/style.css', false, entry.item.title);
+    files.push({ path: `${entry.path}/index.html`, mime: 'text/html; charset=utf-8', body: html, hash: await sha(html) });
+    routes.push(entry.path);
+  }
+
+  const usedAssets = new Set<string>();
+  const walk = (nodes: Node[] | undefined) => (nodes || []).forEach((node) => {
+    if (typeof node.props?.asset === 'string') usedAssets.add(String(node.props.asset));
+    if (Array.isArray(node.props?.assets)) (node.props.assets as unknown[]).forEach((id) => usedAssets.add(String(id)));
+    walk(node.children);
+  });
+  doc.pages.forEach((page) => page.sections.forEach((section) => walk(section.nodes)));
+  for (const asset of doc.assets) if (usedAssets.has(asset.id) && asset.rights.approved && options.media) {
+    const bytes = await options.media(asset);
+    if (bytes) files.push({ path: `/media/${asset.id}.${EXT[asset.mime] || 'bin'}`, mime: asset.mime, body: bytes, hash: asset.hash });
+  }
+
+  const css = compileCss(doc.design, collector);
+  files.push({ path: '/style.css', mime: 'text/css; charset=utf-8', body: css, hash: await sha(css) });
+  if (collector.runtime.size) files.push({ path: '/site.js', mime: 'text/javascript; charset=utf-8', body: RUNTIME, hash: await sha(RUNTIME) });
+
+  const sitemap = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${options.origin ? routes.map((route) => `<url><loc>${escapeAttribute(`${options.origin}${route}`)}</loc></url>`).join('') : ''}</urlset>`;
+  files.push({ path: '/sitemap.xml', mime: 'application/xml; charset=utf-8', body: sitemap, hash: await sha(sitemap) });
+  const robots = `User-agent: *\nAllow: /\n${options.origin ? `Sitemap: ${options.origin}/sitemap.xml\n` : ''}`;
+  files.push({ path: '/robots.txt', mime: 'text/plain; charset=utf-8', body: robots, hash: await sha(robots) });
+
+  const hash = await sha(files.map((file) => `${file.path}:${file.hash}`).join('|'));
+  return { files, hash, itemCount, redirects: doc.redirects.map((redirect) => ({ ...redirect })) };
+}

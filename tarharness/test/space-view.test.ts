@@ -53,7 +53,10 @@ describe('Space projection', () => {
       await task(db, 'mine', 'open', 'user');
       await task(db, 'waiting', 'blocked', 'user');
       await db.execute("INSERT INTO definitions(id,kind,name,version,state,data,created_at,updated_at) VALUES ('book','flow','Closing',1,'published','{}',0,0)");
-      await db.execute("INSERT INTO runs(id,flow_id,flow_version,occurrence,state,context,version,created_at,updated_at) VALUES ('run','book',1,'once','ready','{\"startedBy\":\"user\",\"step\":2}',1,0,0)");
+      await db.execute({
+        sql: "INSERT INTO runs(id,flow_id,flow_version,occurrence,state,context,version,created_at,updated_at) VALUES ('run','book',1,'once','ready',?,1,0,0)",
+        args: [JSON.stringify({ startedBy: 'user', step: 2, actions: [{ id: 'task.complete' }, { id: 'task.complete' }, { id: 'task.complete' }] })],
+      });
       const view = await buildSpaceView(db, owner, decision);
       expect(view.sections.map((section) => section.id)).toEqual(['signals', 'actions', 'flows']);
       expect(view.sections[0].cards).toEqual([expect.objectContaining({ id: 'waiting', value: 1 })]);

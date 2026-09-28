@@ -27,6 +27,7 @@ async function fixture() {
   for (const sql of WORKSPACE_SCHEMA) await client.execute(sql);
   const run = (actionId: string, input: Record<string, unknown>, key: string = crypto.randomUUID(), context = access) =>
     Effect.runPromise(executeGateway(client, context, { actionId, input, idempotencyKey: key }));
+  await run('capability.save', { module: 'pos', enabled: true, baseVersion: 0 });
   await run('pos.setup', { name: 'Shop', currency: 'INR', timezone: 'Asia/Kolkata', location: 'Main' });
   const result = await run('pos.product.save', { title: 'Tea', price: 1001, stock: 5, taxBps: 500, lowStock: 2, barcode: 'TEA' });
   const product = result.product as { id: string; version: number };

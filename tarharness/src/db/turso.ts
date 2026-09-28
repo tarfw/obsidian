@@ -39,7 +39,7 @@ async function token(env: TursoEnv, name: string): Promise<string> {
   }
 }
 
-export async function mintReplicaToken(env: TursoEnv, name: string): Promise<string> {
+export async function mintNowSyncToken(env: TursoEnv, name: string): Promise<string> {
   const result = await platform<{ jwt: string }>(env,
     `/databases/${encodeURIComponent(name)}/auth/tokens?expiration=10m&authorization=read-only`, { method: 'POST' });
   if (!result.jwt) throw new Error('Turso did not return a read-only database token.');

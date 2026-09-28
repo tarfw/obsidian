@@ -3,20 +3,23 @@ import * as Crypto from 'expo-crypto';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Modal, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { createOperationKey, harness, type HarnessAction } from '@/lib/harness';
+import { createOperationKey, harness, type HarnessAction, type HarnessMember } from '@/lib/harness';
 import type { ActionInterfaceProps } from './types';
 
-type DraftStep = { id: string; auto: boolean; input: Record<string, string> };
+type DraftStep = { id: string; auto: boolean; role: string; input: Record<string, string> };
 
-const bookActions = new Set(['record.create', 'contact.create', 'organization.create', 'task.create', 'site.generate', 'web.search']);
+const bookActions = new Set(['record.create', 'contact.create', 'organization.create', 'task.create', 'site.generate', 'web.search', 'pos.register.count', 'pos.register.close']);
 const automaticActions = new Set(['record.create', 'contact.create', 'organization.create', 'task.create']);
+const specializedRoles = new Set(['chef', 'cook', 'kitchen', 'cashier', 'manager', 'server', 'floor', 'kds', 'courier', 'customer']);
 const editableField = (kind: string) => ['text', 'email', 'number', 'textarea'].includes(kind);
+const roleTitle = (role: string) => role === 'any' ? 'Any permitted member' : role === 'chef' || role === 'cook' || role === 'kitchen' ? 'Kitchen' : role.replace(/\b\w/g, (letter) => letter.toUpperCase());
 
 export default function FlowBuilderInterface(props: ActionInterfaceProps) {
   const insets = useSafeAreaInsets();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [available, setAvailable] = useState<HarnessAction[]>([]);
+  const [workRoles, setWorkRoles] = useState<string[]>(['any']);
   const [canSuggest, setCanSuggest] = useState(false);
   const [selected, setSelected] = useState<DraftStep[]>([]);
   const [loading, setLoading] = useState(true);
@@ -28,10 +31,17 @@ export default function FlowBuilderInterface(props: ActionInterfaceProps) {
 
   useEffect(() => {
     let active = true;
-    void harness.workspaceRegistry(props.scope).then((result) => {
+    void Promise.all([harness.workspaceRegistry(props.scope), harness.members(props.scope).catch(() => ({ members: [] as HarnessMember[], currentUserId: '' })), harness.workspaceTools(props.scope).catch(() => null)]).then(([result, roster, tools]) => {
       if (!active) return;
-      setAvailable(result.actions.filter((action) => bookActions.has(action.id)));
+      const posEnabled = tools?.modules.some((module) => module.id === 'pos' && module.enabled) === true;
+      setAvailable(result.actions.filter((action) => bookActions.has(action.id) && (posEnabled || !action.id.startsWith('pos.'))));
       setCanSuggest(result.actions.some((action) => action.id === 'flow.suggest'));
+      const roles = new Set(['any']);
+      for (const member of roster.members) {
+        if (member.state !== 'active' || member.role !== 'member') continue;
+        for (const role of member.roles?.length ? member.roles : [member.workRole]) roles.add(role.trim().toLowerCase());
+      }
+      setWorkRoles([...roles]);
     }).catch((cause) => {
       if (active) Alert.alert('Could not load Actions', cause instanceof Error ? cause.message : 'Try again.');
     }).finally(() => { if (active) setLoading(false); });
@@ -41,7 +51,7 @@ export default function FlowBuilderInterface(props: ActionInterfaceProps) {
   const add = (id: string) => {
     const action = available.find((item) => item.id === id);
     if (!action) return;
-    setSelected((current) => [...current, { id, auto: false, input: Object.fromEntries(action.fields.flatMap((field) => field.defaultValue === undefined ? [] : [[field.key, field.defaultValue]])) }]);
+    setSelected((current) => [...current, { id, auto: false, role: 'any', input: Object.fromEntries(action.fields.flatMap((field) => field.defaultValue === undefined ? [] : [[field.key, field.defaultValue]])) }]);
   };
   const update = (index: number, next: (step: DraftStep) => DraftStep) => {
     setSelected((current) => current.map((step, at) => at === index ? next(step) : step));
@@ -78,6 +88,7 @@ export default function FlowBuilderInterface(props: ActionInterfaceProps) {
     const actions = selected.map((step) => ({
       id: step.id,
       auto: step.auto,
+      role: step.auto ? '' : step.role,
       input: step.auto ? Object.fromEntries(Object.entries(step.input).flatMap(([key, raw]) => {
         const value = raw.trim();
         if (!value) return [];
@@ -113,6 +124,7 @@ export default function FlowBuilderInterface(props: ActionInterfaceProps) {
           return <View key={`${step.id}-${index}`} style={styles.reviewStep}>
             <Text style={styles.actionTitle}>{index + 1}. {action?.title || step.id}</Text>
             <Text style={styles.actionDescription}>{step.auto ? 'Runs automatically with the input below' : 'Waits for a person to complete it'}</Text>
+            <Text style={styles.reviewValue}>{step.auto ? 'Assigned to TAR' : `Assigned to ${roleTitle(step.role)}`}</Text>
             {step.auto && Object.entries(step.input).filter(([, value]) => value.trim()).map(([key, value]) => <Text key={key} style={styles.reviewValue}>{action?.fields.find((field) => field.key === key)?.label || key}: {value.trim()}</Text>)}
           </View>;
         })}
@@ -130,6 +142,7 @@ export default function FlowBuilderInterface(props: ActionInterfaceProps) {
           return <View key={`${step.id}-${index}`} style={styles.selectedStep}>
             <View style={styles.sequenceRow}><Text style={styles.number}>{index + 1}</Text><Text style={styles.sequenceText}>{action?.title || step.id}</Text><TouchableOpacity onPress={() => setSelected((current) => current.filter((_, at) => at !== index))} accessibilityRole="button" accessibilityLabel={`Remove Action ${index + 1}`}><Ionicons name="close" size={19} color="#7b879a" /></TouchableOpacity></View>
             {automaticActions.has(step.id) && <View style={styles.switchRow}><Text style={styles.actionDescription}>Run automatically</Text><Switch value={step.auto} onValueChange={(auto) => update(index, (current) => ({ ...current, auto }))} accessibilityLabel={`Run ${action?.title || step.id} automatically`} /></View>}
+            {!step.auto && <View style={styles.rolePicker}><Text style={styles.actionDescription}>Assigned role</Text><View style={styles.roleOptions}>{workRoles.filter((role) => role === 'any' || Boolean(action?.workRoles?.includes(role)) || (!specializedRoles.has(role) && Boolean(action?.workRoles?.includes('general')))).map((role) => <TouchableOpacity key={role} accessibilityRole="radio" accessibilityState={{ selected: step.role === role }} onPress={() => update(index, (current) => ({ ...current, role }))} style={[styles.roleOption, step.role === role && styles.roleOptionSelected]}><Text style={[styles.roleText, step.role === role && styles.roleTextSelected]}>{role === 'any' ? 'Any permitted' : roleTitle(role)}</Text></TouchableOpacity>)}</View></View>}
             {step.auto && <View style={styles.fields}>{action?.fields.filter((field) => !field.hidden && editableField(field.kind)).map((field) => <View key={field.key} style={styles.field}><Text style={styles.fieldLabel}>{field.label}{field.required ? ' *' : ''}</Text><TextInput value={step.input[field.key] || ''} onChangeText={(value) => update(index, (current) => ({ ...current, input: { ...current.input, [field.key]: value } }))} placeholder={field.label} keyboardType={field.kind === 'email' ? 'email-address' : field.kind === 'number' ? 'numeric' : 'default'} autoCapitalize={field.kind === 'email' ? 'none' : 'sentences'} multiline={field.kind === 'textarea'} style={styles.input} /></View>)}</View>}
           </View>;
         }) : <Text style={styles.empty}>Tap Actions below to build the sequence.</Text>}
@@ -158,6 +171,7 @@ const styles = StyleSheet.create({
   number: { width: 22, fontSize: 12, fontWeight: '800', color: '#7b879a' },
   sequenceText: { flex: 1, fontSize: 14, fontWeight: '700', color: '#172033' },
   switchRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', minHeight: 44 },
+  rolePicker: { gap: 7, paddingTop: 4 }, roleOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 }, roleOption: { minHeight: 32, justifyContent: 'center', paddingHorizontal: 11, borderRadius: 16, backgroundColor: '#f3f5f8' }, roleOptionSelected: { backgroundColor: '#dce5ff' }, roleText: { fontSize: 12, fontWeight: '700', color: '#68758c' }, roleTextSelected: { color: '#173673' },
   fields: { gap: 10 },
   field: { gap: 5 },
   fieldLabel: { fontSize: 13, fontWeight: '700', color: '#68758c' },

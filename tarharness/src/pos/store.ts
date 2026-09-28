@@ -47,7 +47,7 @@ export async function posSummary(db: DB) {
 }
 export async function readPos(db: DB, context: AccessContext, section: string, search = '', offset = 0) {
   if (isCook(context.member) || !(context.member.role === 'owner' || context.member.role === 'admin'
-    || (context.member.role === 'member' && hasWorkRole(context.member, 'cashier')))) throw forbidden();
+    || (context.member.role === 'member' && (hasWorkRole(context.member, 'cashier') || hasWorkRole(context.member, 'manager'))))) throw forbidden();
   if (section === 'products' || section === 'orders' || section === 'customers') {
     const types = { products: 'pos.product', orders: 'pos.order', customers: 'pos.customer' };
     return { items: await list(db, types[section], search.slice(0, 100), offset), nextOffset: offset + 100 };
@@ -301,10 +301,15 @@ async function mutate(db: Transaction, context: AccessContext, action: string, i
   }
   const session = await register(db);
   if (!session) throw badRequest('Open the register first.');
+  if (action === 'pos.register.count') {
+    if (input.registerId !== session.id) throw conflict('Register changed. Reload before counting.');
+    const counted = integer(input.counted, 'Counted cash');
+    return { register: await put(db, 'pos.register', session.title, { ...session.data, counted }, actor, session.id, session.state) };
+  }
   if (action === 'pos.register.close') {
     if (input.registerId !== session.id) throw conflict('Register changed. Reload before closing.');
     const expected = await balance(db, session);
-    const counted = integer(input.counted, 'Counted cash');
+    const counted = integer(input.counted ?? session.data.counted, 'Counted cash');
     return { register: await put(db, 'pos.register', session.title, { ...session.data, expected, counted, difference: counted - expected, closedBy: actor, closedAt: Date.now() }, actor, session.id, 'closed') };
   }
   const businessDate = new Intl.DateTimeFormat('en-CA', { timeZone: String(settings.data.timezone), year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());

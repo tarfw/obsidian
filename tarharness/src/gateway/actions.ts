@@ -6,18 +6,21 @@ import type { AccessContext, FlowDefinition, FlowRun, RecordItem } from '../type
 import { findAction, type ActionId } from '../registry/catalog.ts';
 import { executePos } from '../pos/store.ts';
 import { draftProduct, saveProductContent } from '../pos/content.ts';
-import { canExecute, canReadRecord } from '../access.ts';
-import { executeSiteGenerate, executeSiteUpdate, executeSiteCompile, executeSitePublish, executeSiteRollback, executeSiteRefresh } from '../site/store.ts';
+import { canExecute, canReadRecord, canRunFlowStep } from '../access.ts';
+import { executeSiteGenerate, executeSiteUpdate, executeSiteCompile, executeSitePublish, executeSiteRollback, executeSiteRefresh, executeSiteUnpublish, executeSiteChecks } from '../site/store.ts';
+import { executeSiteAsk, executeSiteDesignImport, executeSiteEdit, executeSiteUndo } from '../site/edit.ts';
+import { executeSiteAssetGenerate, executeSiteAssetUpload, executeSiteAssets } from '../site/asset.ts';
 import { searchWeb } from '../web/search.ts';
 import { appendEvent, eventStatement, findReplay, fingerprint, runStatement, stamp, stepStatement } from './commit.ts';
 import { suggest } from '../brain/jev.ts';
 import { claimTurn, completeTurn, failTurn } from './turns.ts';
 import { commerceActionIds } from '../commerce/catalog.ts';
 import { executeCommerce } from '../commerce/store.ts';
+import { isModule, moduleForAction, readCapabilities } from '../registry/tools.ts';
 
 type GatewayError = ReturnType<typeof badRequest> | ReturnType<typeof conflict> | ReturnType<typeof forbidden> | ReturnType<typeof notFound> | ReturnType<typeof unavailable>;
 export interface GatewayRequest { readonly idempotencyKey: string; readonly actionId: ActionId; readonly input: Record<string, unknown>; }
-export interface GatewayServices { readonly productContent?: R2Bucket; readonly siteReleases?: R2Bucket; readonly ai?: Ai; readonly tinyfish?: string; readonly typesafe?: string }
+export interface GatewayServices { readonly productContent?: R2Bucket; readonly siteReleases?: R2Bucket; readonly publication?: D1Database; readonly siteDomain?: string; readonly ai?: Ai; readonly tinyfish?: string; readonly typesafe?: string }
 
 const object = (value: unknown): Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const text = (value: unknown, max = 200): string => typeof value === 'string' ? value.trim().slice(0, max) : '';
@@ -30,9 +33,9 @@ const rowToRecord = (row: Record<string, unknown>): RecordItem => ({
   createdAt: Number(row.created),
   updatedAt: Number(row.updated),
 });
-const bookActions = new Set(['record.create', 'contact.create', 'organization.create', 'task.create', 'site.generate', 'web.search']);
+const bookActions = new Set(['record.create', 'contact.create', 'organization.create', 'task.create', 'site.generate', 'web.search', 'pos.register.count', 'pos.register.close']);
 const unattendedActions = new Set(['record.create', 'contact.create', 'organization.create', 'task.create']);
-const managedCommerceTypes = new Set(['item', 'variant', 'price', 'stock', 'purchase', 'order', 'invoice', 'payment', 'refund', 'posting', 'movement', 'receipt']);
+const managedCommerceTypes = new Set(['item', 'variant', 'price', 'stock', 'purchase', 'order', 'invoice', 'payment', 'refund', 'posting', 'movement', 'receipt', 'capability']);
 function validateContactDetails(values: Record<string, unknown>): void {
   for (const [key, value] of Object.entries(values)) {
     if (!['email', 'phone', 'website'].includes(key) || value === null || value === '') continue;
@@ -53,6 +56,8 @@ export function executeGateway(client: Client, context: AccessContext, request: 
       const registeredAction = findAction(request.actionId);
       if (!registeredAction) throw notFound('Action is not registered.');
       if (!canExecute(context.member, request.actionId)) throw forbidden();
+      const module = moduleForAction(request.actionId);
+      if (module && !(await readCapabilities(client)).enabled[module]) throw forbidden();
       for (const field of registeredAction.fields) {
         const value = request.input[field.key];
         if (field.required && (value === undefined || value === null || (typeof value === 'string' && !value.trim()))) throw badRequest(`${field.label} is required.`);
@@ -63,6 +68,26 @@ export function executeGateway(client: Client, context: AccessContext, request: 
       const replay = await findReplay(client, request.idempotencyKey, hash);
       if (replay) return object(replay.result);
       const at = stamp();
+      if (request.actionId === 'capability.save') {
+        const module = request.input.module;
+        const enabled = request.input.enabled;
+        const baseVersion = Number(request.input.baseVersion);
+        if (!isModule(module) || typeof enabled !== 'boolean' || !Number.isSafeInteger(baseVersion) || baseVersion < 0) throw badRequest('Choose a capability and current version.');
+        const current = await readCapabilities(client);
+        if (current.version !== baseVersion) throw conflict('Tools changed. Refresh and try again.');
+        const next = { ...current.enabled, [module]: enabled };
+        const result = { enabled: next, version: baseVersion + 1 };
+        const committed = await client.batch([
+          baseVersion === 0
+            ? { sql: "INSERT OR IGNORE INTO records (id,type,title,state,data,owner,assignee,due,version,created,updated) VALUES ('capability','capability','Capabilities','active',?,?,NULL,NULL,1,?,?)", args: [json(next), context.identity.id, at, at] }
+            : { sql: "UPDATE records SET data=?,version=version+1,updated=? WHERE id='capability' AND type='capability' AND version=? AND archived IS NULL", args: [json(next), at, baseVersion] },
+          { sql: `INSERT INTO events (id,kind,run_id,record_id,action_id,state,actor_id,input_hash,idempotency_key,data,created_at,updated_at)
+            SELECT ?, 'action', NULL, 'capability', ?, 'accepted', ?, ?, ?, ?, ?, ? WHERE changes()=1`,
+            args: [`evt_${crypto.randomUUID()}`, request.actionId, context.identity.id, hash, request.idempotencyKey, json({ result }), at, at] },
+        ], 'write');
+        if (committed[0]?.rowsAffected !== 1 || committed[1]?.rowsAffected !== 1) throw conflict('Tools changed. Refresh and try again.');
+        return result;
+      }
       if (request.actionId === 'pos.product.content.save') return saveProductContent(client, services.productContent, context, request.input, { key: request.idempotencyKey, hash });
       if (request.actionId === 'pos.product.draft') {
         const result = await draftProduct(services.ai, request.input);
@@ -73,10 +98,19 @@ export function executeGateway(client: Client, context: AccessContext, request: 
       if (commerceActionIds.has(request.actionId)) return executeCommerce(client, context, request.actionId, request.input, request.idempotencyKey, hash);
       if (request.actionId === 'site.generate') return executeSiteGenerate(client, context, request.input, request.idempotencyKey, hash, services.typesafe);
       if (request.actionId === 'site.update') return executeSiteUpdate(client, context, request.input, request.idempotencyKey, hash);
-      if (request.actionId === 'site.compile') return executeSiteCompile(client, context, request.input, request.idempotencyKey, hash);
-      if (request.actionId === 'site.publish') return executeSitePublish(client, services.siteReleases, context, request.input, request.idempotencyKey, hash);
-      if (request.actionId === 'site.rollback') return executeSiteRollback(client, context, request.input, request.idempotencyKey, hash);
-      if (request.actionId === 'site.refresh') return executeSiteRefresh(client, services.siteReleases, context, request.input, request.idempotencyKey, hash);
+      if (request.actionId === 'site.edit') return executeSiteEdit(client, context, request.input, request.idempotencyKey, hash, services.siteReleases);
+      if (request.actionId === 'site.ask') return executeSiteAsk(client, context, request.input, services.typesafe, services.publication);
+      if (request.actionId === 'site.undo') return executeSiteUndo(client, context, request.input, request.idempotencyKey, hash, services.siteReleases);
+      if (request.actionId === 'site.design.import') return executeSiteDesignImport(client, context, request.input, request.idempotencyKey, hash, services.siteReleases);
+      if (request.actionId === 'site.asset.upload') return executeSiteAssetUpload(client, services.productContent, context, request.input, request.idempotencyKey, hash);
+      if (request.actionId === 'site.asset.generate') return executeSiteAssetGenerate(client, services.productContent, services.ai, context, request.input, request.idempotencyKey, hash);
+      if (request.actionId === 'site.assets') return executeSiteAssets(client, context, request.input);
+      if (request.actionId === 'site.checks') return executeSiteChecks(client, services.siteReleases, context, request.input);
+      if (request.actionId === 'site.compile') return executeSiteCompile(client, services.siteReleases, context, request.input, request.idempotencyKey, hash, services.publication, services.siteDomain, services.productContent);
+      if (request.actionId === 'site.publish') return executeSitePublish(client, services.siteReleases, context, request.input, request.idempotencyKey, hash, services.publication, services.siteDomain, services.productContent);
+      if (request.actionId === 'site.rollback') return executeSiteRollback(client, context, request.input, request.idempotencyKey, hash, services.publication, services.siteDomain, services.siteReleases, services.productContent);
+      if (request.actionId === 'site.refresh') return executeSiteRefresh(client, services.siteReleases, context, request.input, request.idempotencyKey, hash, services.publication, services.siteDomain, services.productContent);
+      if (request.actionId === 'site.unpublish') return executeSiteUnpublish(client, context, request.input, request.idempotencyKey, hash, services.publication);
       if (request.actionId === 'web.search') {
         const claimed = await claimTurn(client, request.idempotencyKey, hash);
         if (claimed.result) return claimed.result;
@@ -100,11 +134,13 @@ export function executeGateway(client: Client, context: AccessContext, request: 
         const flowId = text(request.input.flowId, 160); const name = text(request.input.name, 100); const description = text(request.input.description, 400);
         const actions = Array.isArray(request.input.actions) ? request.input.actions.map(object).map((item) => ({
           id: text(item.id, 160), version: findAction(text(item.id, 160))?.version ?? 0,
-          auto: item.auto === true, input: object(item.input),
+          auto: item.auto === true, role: item.auto === true ? '' : text(item.role, 80).toLowerCase(), input: object(item.input),
         })) : [];
         if (!/^book\.[a-z0-9]{1,80}$/.test(flowId) || !name || !actions.length || actions.length > 20 || actions.some((item) => !item.id)) throw badRequest('A Flow Book name and between 1 and 20 Actions are required.');
         if (actions.some((item) => !findAction(item.id) || item.id === 'flow.start' || item.id === 'flow.advance' || item.id === 'flow.publish' || !bookActions.has(item.id))) throw badRequest('Flow Book contains an unavailable Action.');
         if (actions.some((item) => item.auto && (!unattendedActions.has(item.id) || JSON.stringify(item.input).length > 8_000 || findAction(item.id)!.fields.some((field) => field.required && (item.input[field.key] === undefined || item.input[field.key] === null || item.input[field.key] === ''))))) throw badRequest('Automatic steps require a supported internal Action and complete reviewed input.');
+        const enabled = (await readCapabilities(client)).enabled;
+        if (actions.some((item) => { const module = moduleForAction(item.id); return module !== null && !enabled[module]; })) throw badRequest('Enable each step’s capability before publishing this Flow Book.');
         const result = { flowId, published: true };
         const statements: InStatement[] = [
           { sql: `INSERT INTO definitions (id,kind,name,version,state,data,created_at,updated_at) VALUES (?, 'flow', ?, 1, 'published', ?, ?, ?)
@@ -293,7 +329,7 @@ export function executeGateway(client: Client, context: AccessContext, request: 
       }
 
       if (request.actionId === 'flow.advance') {
-        const runId = text(request.input.runId, 160); const actionId = text(request.input.actionId, 160); const input = object(request.input.data);
+        const runId = text(request.input.runId, 160); const actionId = text(request.input.actionId, 160); let input = object(request.input.data);
         const rows = await query<Record<string, unknown>>(client, { sql: 'SELECT * FROM runs WHERE id=?', args: [runId] }).pipe(Effect.runPromise);
         const current = rows[0]; if (!current) throw notFound('Flow Book run not found.');
         if (typeof current.record_id === 'string') {
@@ -308,6 +344,13 @@ export function executeGateway(client: Client, context: AccessContext, request: 
         const expected = text(actions[index].id, 160);
         if (!expected || expected !== actionId) throw conflict('The Flow Book changed. Refresh before continuing.');
         if (actions[index].auto === true) throw conflict('This step is dispatched by the Flow Book runner. Refresh its status.');
+        if (!canRunFlowStep(context.member, actions[index], String(runContext.startedBy || ''))) throw forbidden();
+        if (['pos.register.count', 'pos.register.close'].includes(expected)) {
+          if (typeof current.record_id !== 'string') throw badRequest('Link this Flow Book run to an open register.');
+          const registerRows = await query<Record<string, unknown>>(client, { sql: "SELECT type,state FROM records WHERE id=? AND archived IS NULL", args: [current.record_id] }).pipe(Effect.runPromise);
+          if (registerRows[0]?.type !== 'pos.register' || registerRows[0]?.state !== 'open') throw conflict('The linked register is no longer open.');
+          input = { ...input, registerId: current.record_id };
+        }
         if (Number(actions[index].version || 0) > 0 && findAction(expected)?.version !== Number(actions[index].version)) throw conflict('This Flow Book step needs a reviewed action migration before it can continue.');
         if (['flow.start', 'flow.advance', 'flow.publish'].includes(expected) || (runContext.source === 'book' && !bookActions.has(expected))) throw badRequest('This Flow Book contains a non-runnable Action.');
         const childKey = `flow:${runId}:${index}`;
@@ -335,11 +378,17 @@ export function executeGateway(client: Client, context: AccessContext, request: 
       const first = actions[0]; if (!first || !text(first.id)) throw badRequest('Flow needs at least one Action.');
       const source = text(data.source, 40);
       if (actions.length > 20 || actions.some((item) => !findAction(text(item.id, 160)) || (source === 'book' && !bookActions.has(text(item.id, 160))) || (Number(item.version || 0) > 0 && findAction(text(item.id, 160))?.version !== Number(item.version)))) throw badRequest('Flow Book has an invalid, changed or unavailable Action.');
+      const enabled = (await readCapabilities(client)).enabled;
+      if (actions.some((item) => { const module = moduleForAction(text(item.id, 160)); return module !== null && !enabled[module]; })) throw forbidden();
+      if (source === 'book' && !canRunFlowStep(context.member, first, context.identity.id)) throw forbidden();
       const recordId = text(request.input.recordId, 160) || null;
+      const usesRegister = actions.some((item) => ['pos.register.count', 'pos.register.close'].includes(text(item.id, 160)));
+      if (usesRegister && !recordId) throw badRequest('Choose the open register this Flow Book will update.');
       if (recordId) {
         const linked = await query<Record<string, unknown>>(client, { sql: 'SELECT * FROM records WHERE id=? AND archived IS NULL', args: [recordId] }).pipe(Effect.runPromise);
         if (!linked[0]) throw notFound('Related record not found.');
         if (!canReadRecord(context.member, rowToRecord(linked[0]))) throw forbidden();
+        if (usesRegister && (String(linked[0].type) !== 'pos.register' || String(linked[0].state) !== 'open')) throw badRequest('Choose an open register record.');
       }
       const initialContext = { ...object(request.input.context), source, startedBy: context.identity.id, actions, step: 0, outputs: [] };
       const run: FlowRun = { id: `run_${crypto.randomUUID()}`, flowId, flowVersion: Number(flowDefinition.version), occurrence: request.idempotencyKey, recordId, state: 'ready', actionId: text(first.id), context: initialContext, version: 1 };

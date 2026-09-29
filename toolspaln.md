@@ -34,13 +34,28 @@
 | 21  | Site assets              | `site.asset.upload`, `site.asset.generate`, `site.assets`                                                                  |
 | 22  | Site releases            | `site.releases`, `site.checks`, `site.compile`, `site.publish`, `site.rollback`, `site.refresh`, `site.unpublish`          |
 
-| Business coverage | Current scope / extension                                                                                                                 |
-| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| Covered core      | Purchasing/receiving, stock, orders, invoices, customer payments/refunds, POS/register, kitchen/delivery, tasks and Site Actions.         |
-| Finance gaps      | Supplier payments, expenses, bank reconciliation, period closing and complete financial/tax reports.                                      |
-| Inventory gaps    | Stock transfers, batches/expiry, recipes and production need dedicated rules and Actions.                                                 |
-| Domain gaps       | Bookings/time tracking, taxi trips/fares, workforce/payroll and other domain operations need registered implementations.                  |
-| Extension rule    | The 68-Action registry is a shared base. Jev selects registered behavior; implement and register missing operations before offering them. |
+### Pending registered Actions to be added
+
+| No. | Tool / work group           | Proposed Action IDs                                               |
+| --- | --------------------------- | ----------------------------------------------------------------- |
+| 1   | Supplier payments           | `purchase.pay`                                                    |
+| 2   | Expenses                    | `expense.record`, `expense.reverse`                               |
+| 3   | Bank reconciliation         | `bank.import`, `bank.reconcile`                                   |
+| 4   | Period closing              | `period.close`, `period.reopen`                                   |
+| 5   | Stock transfers             | `stock.transfer`                                                  |
+| 6   | Batches / expiry            | `batch.save`, `batch.dispose`                                     |
+| 7   | Recipes / production        | `recipe.save`, `production.start`, `production.complete`          |
+| 8   | Bookings / time             | `booking.create`, `booking.cancel`, `time.record`                 |
+| 9   | Taxi trips / fares          | `trip.start`, `trip.complete`, `fare.set`                         |
+| 10  | Workforce / payroll         | `shift.assign`, `attendance.record`, `payroll.run`, `payroll.pay` |
+| 11  | Supplier sourcing / quotes  | `supplier.qualify`, `quote.request`, `quote.record`               |
+| 12  | Purchase approvals          | `purchase.submit`, `purchase.approve`, `purchase.reject`          |
+| 13  | Warehouse picking / packing | `warehouse.pick`, `warehouse.pack`                                |
+| 14  | Shipping / tracking         | `shipment.dispatch`, `shipment.track`, `shipment.deliver`         |
+| 15  | Supplier returns / quality  | `purchase.return`, `quality.inspect`, `quality.release`           |
+| 16  | Demand / replenishment      | `forecast.generate`, `replenishment.plan`                         |
+
+Proposed IDs only; build and register before Jev can select them. Financial/tax reports use projections or Artifacts over business records.
 
 ## 2. Add members and define roles with Jev
 

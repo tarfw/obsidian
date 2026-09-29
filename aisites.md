@@ -1,221 +1,284 @@
-# AI Sites
+# TAR Sites
 
-Create, edit and publish responsive sites through Tar chat.
-Target plan; the complete live editor is still being built.
-[Space](space.md) owns private work; [Commerce](commerce.md) owns business truth.
-
-## 1. End-to-end architecture
-
-```text
-Tar: brief / selected page or section / prompt
-                       |
-tarharness: current document + design-system capabilities
-                       |
-        Code exact edits / Jev decisions / LLM creation
-                       |
-          ONE typed edit -> validate -> save + history
-                       |
-          ONE renderer -> private draft preview + Undo
-                       |
-          freeze -> compile/check -> review -> Publish
-                       |
-          immutable R2 release + CONTROL live pointer
-                       |
-          Sites Worker -> public pages
-                       |
-          visitor Action -> Gateway -> Commerce / Inboxes
-```
-
-One controller, design system and rendering path for prompts and taps.
-Reuse the harness, Jev/Workers AI adapters and jobs; call only required models.
-Code owns authority and execution. Page visits use no AI.
-
-| Project area | Site work |
+| Purpose | Contract |
 | --- | --- |
-| `sites/core/` (planned) | Design system, document, edit registry, validator, renderer |
-| `sites/src/` | Public Worker: verified serving and visitor Action forwarding |
-| `sites/test/` | Engine and delivery checks |
-| `sites/wrangler.jsonc` | Worker configuration |
-| `tarharness/src/site/` | Facts/assets, AI, saves, private preview, publication |
-| `tarharness/src/gateway/` | Authorized Actions and commerce rules |
-| `tarapp/src/components/site.tsx` | Selection, chat, assets, preview, undo, Publish |
-| `tarapp/src/lib/harness.ts` | Authenticated API client |
+| System | One JSON document; Tar chat edits it, renderer previews it, compiler publishes it |
+| Status | Target plan; full live editor pending |
+| Ownership | [Space](space.md): private work; [Commerce](commerce.md): business truth |
+
+## 1. Architecture
 
 ```text
-Turso       drafts / history / jobs / commerce
-CONTROL D1  unique slug / verified host / access epoch / live pointer
-R2          approved assets / immutable releases / retained sources
+1 USER      brief / prompt / uploads
+2 ROUTER    Builder handles exact edits; Picker/Writer when needed
+3 CATALOG   design system + allowed operations/values
+4 DOCUMENT  site.json: brand + frame + pages + facts
+5 DATA      approved DB facts + stored assets
+6 BUILD     validate -> save -> render private preview
+7 HISTORY   retained revisions; Undo creates a NEW revision
 
-NOW:        https://tar-sites.tar-54d.workers.dev/<workspace>/
-EXAMPLE:    https://tar-sites.tar-54d.workers.dev/studio/
-NEXT WEEK:  verified domain -> same Worker -> same site
+Edit    -> JSON patch -> validate/save -> preview + Undo
+Publish -> freeze/check/review -> HTML/CSS/registered JS/assets -> public site
 ```
 
-One site per workspace; one Worker serves all. Reserve stable unique workspace
-slugs, handle collisions/reserved names, and preserve them on display-name edits.
-Keep `workers_dev` enabled and `SITE_WORKER_ORIGIN` configured; routes/assets/SEO
-respect the workspace prefix. Domain purchase does not block launch.
+| Role / rule | Work |
+| --- | --- |
+| Builder: code | Route, copy exact values, bind data/actions, validate, save, render, publish |
+| Picker: Jev | Prompt + current state -> supported layout/style/mobile choices |
+| Writer: LLM | Original copy/brand; compose catalog blocks when needed |
+| Shared engine | One catalog, validator, renderer and edit path for prompts/taps |
+| Model boundary | Decisions/content; no invented business facts, authority or executable site code |
+| Public visits | No AI calls |
 
-## 2. Design system + one document
+Jev: [typed decisions](https://docs.typesafe.ai/concepts/system-one) ->
+[code dispatch](https://docs.typesafe.ai/cookbooks/function_calling).
+
+## 2. Vocabulary and catalog
+
+| Term | Meaning |
+| --- | --- |
+| `brand` | Shared color, type, spacing and shape tokens |
+| `frame` | Optional topbar + nav + footer |
+| `page` | Route, metadata and ordered sections |
+| `section` | Stable editable region with layout and blocks |
+| `layout` | Containers, columns, ratio, alignment and height |
+| `tone` | Color variant: light, dark, accent |
+| `block` | Content, interaction or nested container |
+| `slot` | Named position within its parent layout |
+| `style` | Appearance and mobile overrides |
+| `fact` | Approved DB/source binding; DB owns business truth |
+| `action` | Registered order/book/contact/local behavior |
+| `recipe` | Editable reusable block composition |
+| `asset` | Approved stored image/video/illustration |
+| `catalog` | Capabilities, valid values, defaults and rendering rules |
+| `rev` | Saved document revision |
 
 ```text
-DESIGN SYSTEM
-tokens + composable elements/components + responsive defaults
-                       |
-SITE DOCUMENT
-design / assets / components / locks / policy / revision
- +-- pages: routes / metadata
-      +-- sections
-           +-- text / images / buttons / forms
-           +-- nested grids / rows / stacks
-           +-- styles / mobile overrides / data / Actions
+brand + frame + pages + facts
+                 |
+              sections
+                 +-- Layout: nested grids / rows / stacks
+                 +-- Blocks: text / images / buttons / forms...
+                 +-- Slots: background / left / center / right / bottom...
+                 +-- Styles + mobile rules
 ```
 
-Shared tokens/components give consistent defaults; local overrides allow varied
-designs. The registry defines insert/remove/move/group/resize/style/mobile edits
-and their valid values. Jev chooses operations; code assembles the structure.
-Combine them to create layouts without a template for each appearance.
+| Capability | Choices / rule |
+| --- | --- |
+| Blocks | Heading, text, buttons, image, video, cards, quote, logos, stat, tabs, input, list, form, registered widget |
+| Styles | Color, type, size, spacing, crop, highlight, motion |
+| Edits | Insert, remove, move, group, resize, restyle, mobile |
+| Composition | Recipes are starting points; nested blocks + local token overrides |
+| Document | Picks + literal values/content + references; versions, stable IDs, locks, policy, revisions |
+| Validation | Check combinations, permissions, facts and limits |
+| Extensions | New behavior needs a tested catalog/renderer extension |
+| Naming | Single-word lowercase internal names; preserve APIs with versioned adapters |
 
-The document stores the chosen design; HTML/CSS are generated output.
-The registry serves tap controls, Jev and validation. LLMs compose its elements;
-new behavior needs a tested renderer extension. Use single-word lowercase internal
-names; preserve existing API names.
-
-## 3. Editing and design.md
+## 3. Live editing
 
 ```text
-Code  exact supplied text/colors/sizes/assets; validate and execute
-Jev   interpret supported structural, style and mobile changes
-LLM   create original copy, design or unfamiliar compositions
-
-selected scope + prompt + current state + allowed capabilities
-  -> required interpretation -> ONE edit -> preview + save + Undo
-
-element prompt -> element        section prompt -> section
-page prompt    -> selected page  explicit site-wide -> shared design
+scope + prompt + current JSON + authorized catalog/data
+  -> Builder / Picker / Writer as needed
+  -> ONE validated edit -> save revision -> redraw affected preview
 ```
 
-Preserve content, identities, locks and explicit mobile rules; otherwise use
-responsive defaults. Show shared-edit impact. Apply clear edits with Undo;
-ask once for unclear targets. Jev gets relevant state and keep/none options.
-Batch independent questions; dependent decisions need updated state.
-Code copies exact values; Jev selects options rather than generating content.
-
-New compositions go directly to the LLM for scoped edits through the same
-capabilities. Preserve existing content; show progress for slow generation.
-Bound the work and evaluate uncertainty on real editing requests.
-[Building guide](https://docs.typesafe.ai/concepts/how-to-build-with-system-one),
-[function calling](https://docs.typesafe.ai/cookbooks/function_calling).
-
-`design.md` is optional guidance. Jev selects from descriptions/tokens/layouts;
-images need text descriptions.
+**Jev example: selected Hero section**
 
 ```text
-Example catalog: calm.md / bold.md / editorial.md / none
-"Quiet photography portfolio"
-  -> Jev selects calm -> load cached validated design -> site.design
-  -> LLM composes pages -> draft preview
+Before: image above text; tight spacing
 
-site.design -> export current design.md
+You: "Image left, text right, more breathing room.
+      Keep the heading unchanged."
+
+Jev choices:
+  layout -> two columns
+  image  -> left
+  text   -> right
+  space  -> airy
+
+Builder -> patch Hero JSON -> preserve heading/locks -> validate/save
+Renderer -> update private draft:
+
+Desktop                         Mobile default
++-----------+----------------+  +----------------+
+|           | SAME HEADING   |  | IMAGE          |
+| IMAGE     | Text           |  | SAME HEADING   |
+|           | [Button]       |  | Text [Button]  |
++-----------+----------------+  +----------------+
+
+Undo -> new revision restoring previous design
+Publish -> reviewed design becomes public
 ```
 
-Parse/cache references by hash; use an LLM for free-form conversion. Retain the
-source; `site.design` stays authoritative. Manual selection bypasses Jev; none
-allows new LLM design. Ongoing edits use the full loop.
+| Editing rule | Behavior |
+| --- | --- |
+| Jev input | Text/JSON state and described options/assets; no image inspection |
+| Calls | Only needed models; batch independent choices; dependent choices use updated state |
+| Uncertainty | Include keep/none; ask once for unclear targets |
+| Exact values | Code copies literal text, numbers, colors and selected assets |
+| Scope | Element/section/page; explicit site-wide edits show brand/frame impact |
+| Preserve | Content, IDs, locks, mobile overrides; responsive defaults otherwise |
+| Writer | Original copy/new composition uses the same scoped edit path |
+| Saves | Base revision + request identity; discard stale results |
+| Failure | Show pending/saved; preserve last accepted state |
+| Efficiency | Workspace/state/model/catalog caches; bounded generation/repair, quotas, progress, cancel/resume |
+| Speed | Redraw accepted edits; measure input-to-preview latency, no instant guarantee |
+| `design.md` | Optional parse/cache -> Jev/user selects -> typed brand; Writer converts free-form references; retain source/hash, export from JSON |
 
-## 4. Simple editor
+## 4. Editor and hosting
 
 ```text
-MOBILE TAR                     DESKTOP DRAFT VIEW
-+---------------------------+  +------------------------------+
-| Studio / Site   Saved r12 |  | Home / Hero   Draft r12       |
-| [Open live ->] [Publish]  |  | Click a section to select it |
-| [Home v] [Hero v]         |  |                              |
-| You: Image left...        |  |      live draft preview      |
-| Tar: Updated. [Undo]      |  +------------------------------+
-| [Preview] [Assets]        |
-| [ Describe change ][Send] |
-+---------------------------+
++--------------------------------+
+| Studio / Site   Draft: Saved   |
+| [Open live ->]        [Publish]|
+| [Home v] [Hero v]              |
+| You: Image left, text right    |
+| Tar: Updated. [Undo]           |
+| [Preview] [Assets]             |
+| [ Describe change ... ][Send]  |
++--------------------------------+
 
-phone chat -> saved revision -> paired private browser preview
+phone chat -> accepted revision -> paired private browser preview
 same phone -> Preview sheet -> return to preserved chat
 Open live  -> external published site
 ```
 
-Start with a brief and approved facts/assets. Selection/assets/undo/Publish are
-taps; details open on demand. Pair desktop via an authenticated expiring QR session.
-Preview follows saved revisions and preserves route/scroll; selection grants no
-permission. Start with revision checks.
+| Area | Setup |
+| --- | --- |
+| Controls | Taps select pages/sections/assets, Undo and Publish; details on demand |
+| Desktop pairing | Authenticated expiring QR access; preserve route/scroll; start with revision checks |
+| Authority | Preview selection changes context only; permissions checked separately |
+| Address now | `https://tar-sites.tar-54d.workers.dev/<workspace>/` |
+| Routing | One Worker; stable unique slugs, collisions/reserved names checked; prefix routes/assets/SEO |
+| Configuration | Keep `workers_dev` and `SITE_WORKER_ORIGIN` |
+| Domain next week | Verify domain, review canonical candidate; retain Worker until ready, redirect equivalent routes, protect retired addresses |
 
-## 5. Fast changes: end to end
+## 5. End-to-end example
 
 ```text
-Selected: Home / Hero r12; approved studio image
-"Two columns, image left, text right. Write 'Welcome to our studio'.
- Blue background #123456, white text, more breathing room."
+Brief: "Playful coffee site; cream/orange, huge 'WAKE UP DIFFERENT',
+        products with prices/availability, order button, quote, big footer."
 
-1. Code copies the exact values and selected asset.
-2. One Jev call: layout=split, image=left, spacing=airy.
-   Options come from the registry; each includes keep/none.
-3. Code builds one edit; default mobile order is image then text.
-4. Validate scope/locks/r12 -> save r13 -> redraw affected preview.
+Approved: NORI brand, catalog products, beans.webp; ordering configured.
+No quote/offer supplied -> omit and request evidence.
 
-DESKTOP                             PHONE
-+--------------------------------+  +----------------------+
-| BLUE BACKGROUND                |  | IMAGE                |
-| +----------+-----------------+ |  +----------------------+
-| | IMAGE    | Welcome to      | |  | Welcome to our studio|
-| |          | our studio      | |  +----------------------+
-| +----------+-----------------+ |
-+--------------------------------+
-
-"Swap sides"                   -> Jev + code -> same loop
-"Three service columns"         -> Jev + code -> grid + mobile rules
-"Move FAQ above Contact"        -> Jev + code -> page section order
-"Create an original story page" -> LLM + code -> same document/renderer
-Publish -> checked candidate -> public Worker URL
+Builder -> exact headline
+Picker  -> design/compositions
+Writer  -> optional "Find your morning favorite."
+Builder -> approved products/order bindings -> JSON
 ```
 
-Known edits need no deployment or full-site rebuild. Redraw affected sections
-and shared dependencies; "instant" means fast visible feedback, measured from
-input to preview. New copy/images take longer.
+Concept JSON; Builder adds versions, field allowlists and policy:
 
-Serialize saves with request identity/base revision; discard stale responses.
-Show pending versus saved; failed saves retain the last accepted state.
-Undo creates a revision. Cache by workspace/state; AI failure preserves draft/live.
-
-## 6. Publish, data and commerce
+```json
+{
+  "rev": 1,
+  "brand": { "palette": "cream", "type": "bold", "space": "airy" },
+  "frame": {
+    "nav": { "recipe": "spread", "links": "pages" },
+    "footer": { "recipe": "columns", "columns": 3, "links": "pages" }
+  },
+  "assets": { "beans": "approved:beans.webp" },
+  "facts": { "products": { "query": "catalog.public" } },
+  "actions": { "order": { "target": "order.create", "enabled": true } },
+  "pages": [{
+    "id": "home", "route": "/", "title": "NORI",
+    "sections": [{
+      "id": "hero", "layout": { "columns": 1, "align": "center" },
+      "tone": "light", "blocks": [
+        { "id": "title", "kind": "heading", "text": "WAKE UP DIFFERENT",
+          "style": { "size": "display", "color": "accent" } },
+        { "id": "intro", "kind": "text", "text": "Find your morning favorite." },
+        { "id": "shop", "kind": "buttons", "text": "Shop beans", "action": "order" },
+        { "id": "image", "kind": "image", "slot": "bottom", "asset": "beans" }
+      ]
+    }, {
+      "id": "roasts", "layout": { "columns": 1 }, "blocks": [
+        { "id": "products", "kind": "cards", "source": "products",
+          "recipe": "product", "action": "order" }
+      ]
+    }]
+  }]
+}
+```
 
 ```text
-freeze revision + facts + assets + address + epoch + renderer
-  -> compile/check all routes -> exact candidate preview -> Publish
+validate -> save rev1 -> private preview -> candidate review -> Publish
+
++--------------------------------------+
+| NORI                            HOME |
+|          WAKE UP DIFFERENT            |
+|       Find your morning favorite.    |
+|            [SHOP BEANS]              |
+|          beans illustration          |
++--------------------------------------+
+| product cards: images/titles/prices  |
+| availability + registered buttons    |
++--------------------------------------+
+| NORI                            HOME |
++--------------------------------------+
+```
+
+| Edit | Path and result |
+| --- | --- |
+| "Button says 'Grab a bag'" | Builder copies text -> rev2 |
+| "Make hero darker" | Picker tone/style -> rev3 |
+| "Two columns, image left" | Picker layout/slots + mobile defaults -> rev4 |
+| "Image in background" | Picker placement/crop -> rev5 |
+| "Undo last two" | Restore rev3 content into rev6; retain history |
+| "Write new subtext" | Writer -> same edit path -> rev7 |
+| DB price/stock change | Approved public refresh; no AI or draft design changes |
+| Accepted design edit | Redraw draft; explicit Publish updates public design |
+| Quotes/offers/legal/claims | Require approved evidence |
+
+## 6. Publish and public data
+
+```text
+freeze JSON/facts/assets/address/epoch/renderer versions
+  -> compile/check every route -> exact candidate review -> Publish
   -> immutable R2 files -> atomic CONTROL activation
+
+approved DB change -> authorized refresh of PUBLISHED source -> new snapshot
+visitor order -> Gateway -> current price/stock/policy -> Commerce / Inboxes
 ```
 
 | Rule | Contract |
 | --- | --- |
-| Publish | Exact checked candidate and unchanged reviewed draft; CONTROL atomically compares live generation/host/epoch. Audit, deduplicate and reconcile cross-store projections |
-| Serve | Check CONTROL primary authority before cached files; verified routes/release files only, with real 404s |
-| Preview | Private scoped access; isolated renderer, no-store/noindex; same rendering as live |
-| Public data | Approved facts/fields/assets only; never invent prices, proof or availability. Refresh published source while preserving draft edits |
-| Commerce | Registered Gateway Actions with identity/policy, abuse checks and idempotency. Recheck price/stock/availability; verified webhooks establish payment |
-| Recovery | Rollback preserves current access/business truth; unpublish/revocation blocks serving first. Retain live/rollback assets |
-| Domain later | Verify ownership/DNS/TLS and review the new canonical candidate before switching. Keep Worker address until ready; redirect equivalent routes and protect retired addresses |
-
-Reuse the full [Commerce](commerce.md) cycle; configure journeys before enabling.
-Publish checks all routes at phone/tablet/desktop widths: safe content, responsive
-layout, keyboard/contrast, links/forms, factual evidence, asset rights and
-canonical/sitemap/robots metadata. Blocking defects stop publication.
-Keep quotas, bounded repair, cancellation/resume, backups and failure/latency monitoring.
+| Public data | Approved snapshots; no direct private workspace DB reads |
+| Refresh | Planned queued/coalesced updates, declared freshness, retries, scheduled fallback; retain manual refresh; preserve draft |
+| Publish | Exact checked candidate + unchanged reviewed draft; atomic CONTROL comparison of live generation/host/epoch |
+| Consistency | Audit, idempotency, cross-store reconciliation |
+| Serving | CONTROL primary gate before cached files; verified routes, real 404s, private-data isolation |
+| Private preview | Scoped expiring access; no-store/noindex |
+| Actions | Registered/configured; validate input; server derives workspace/site; identity/policy, abuse checks, idempotency |
+| Payment | Verified webhooks establish payment; checkout rechecks current price/stock/policy |
+| Recovery | Undo draft; rollback compatible public output, never commerce state; unpublish/revocation blocks serving first |
+| Route checks | Phone/tablet/desktop: layout, safe media/content, keyboard/contrast, links/forms, evidence/rights, canonical/sitemap/robots |
+| Publish gate | Blocking defects stop Publish |
+| Operations | Full Commerce cycle; backups, protected live/rollback retention, quotas, usage/failure/latency monitoring; recheck restored access |
 
 ## 7. Delivery and acceptance
 
-| Order | Deliver | Done when |
-| --- | --- | --- |
-| 1. Editor | Extract `sites/core/`; design system + Jev edits, selection, chat, private preview | Nested layouts, page order, styles/mobile rules, locks, stale/failed saves and undo work |
-| 2. Creation | Design references and grounded LLM composition | Varied briefs create responsive editable pages; jobs cancel/resume |
-| 3. Launch now | Checked candidates on unique Workers.dev paths | Two isolated sites; routes/assets/SEO, collisions, refresh/rollback/unpublish pass |
-| 4. Expansion | Verified domains, richer data and configured journeys | Domain transitions and commerce retries/races pass end to end |
+| Project area | Responsibility |
+| --- | --- |
+| `sites/core/` (planned) | Catalog/design system, document, edits, validator, renderer |
+| `sites/src/`, `sites/wrangler.jsonc` | Public Worker and CONTROL/R2 configuration |
+| `sites/test/` | Engine/serving checks |
+| `tarharness/src/site/` | Builder, Picker/Writer adapters, data/assets, saves/jobs, preview/publish |
+| `tarharness/src/gateway/` | Actions and commerce enforcement |
+| `tarapp/src/components/site.tsx`, `tarapp/src/lib/harness.ts` | Chat/tap editor and API |
 
-Current Ask mainly proposes style edits with Apply; the broad live loop is pending.
-Preserve existing sites/releases during extraction; run harness/app/Worker checks.
+```text
+Same repository: Sites engine + Harness backend + Tar app
+
+Deliver:
+catalog/editor -> grounded creation -> Workers.dev -> domains/refresh/journeys
+```
+
+| Acceptance | Check |
+| --- | --- |
+| Design | Varied nested page/section edits; frame/styles/mobile; locks and Undo |
+| Reliability | Stale/failed saves; two isolated sites; valid routes/assets/SEO |
+| Publishing | Adapters, refresh excluding drafts, rollback/unpublish, domain transitions |
+| Commerce | Action retries/races; current business truth |
+| Verification | Harness/app/Worker checks |

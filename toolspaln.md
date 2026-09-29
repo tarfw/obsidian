@@ -1,86 +1,208 @@
 ## 1. Workspace definition and tool group selection by Jev
 
-| Step | Definition |
-| --- | --- |
-| Brief | Describe the work, people and duties freely. One workspace may combine several capabilities. |
-| Registry | All 68 currently registered Actions are grouped below; launcher metadata comes from [Tools](tarharness/src/registry/tools.ts), operations from [Actions](tarharness/src/registry/catalog.ts), [POS](tarharness/src/pos/catalog.ts) and [Commerce](tarharness/src/commerce/catalog.ts). |
-| Jev Choice | Code supplies eligible groups and descriptions. Batch one Choice per optional group: `include / skip / unsure`; several groups may fit. |
-| Save | Owner reviews; code validates dependencies and saves enabled capabilities with available default role bundles. Members receive grants in step 2. |
-| Status | Target setup flow; table reflects current Actions. New domains need registered implementations. Manual selection works without Jev. |
-| Product | [Space](space.md) owns context; [Inbox](inbox.md) owns Now; [Commerce](commerce.md) owns business truth; [AI Sites](aisites.md) owns site editing and publication. |
+| Step        | Input                                              | Jev / AI                                           | Code / result                                                     |
+| ----------- | -------------------------------------------------- | -------------------------------------------------- | ----------------------------------------------------------------- |
+| 1. Describe | Workspace name, work and optional site brief       | No call for exact values                           | Create empty Records + owner membership                           |
+| 2. Select   | Registered tool/capability groups                  | Choice per optional group: include / skip / unsure | Propose groups, including Site; resolve dependencies              |
+| 3. Save     | Owner reviews selection                            | Unclear fit asks; manual selection works           | Save enabled capabilities + default role bundles                  |
+| 4. Site     | Site selected; reuse brief + approved facts/assets | Jev Picker for design; Writer only as needed       | Builder validates/saves private preview; ask only missing details |
+| 5. Publish  | Owner reviews checked Site candidate               | No AI needed for an exact Publish command          | Explicit Publish in the same setup journey                        |
+| Status      | Target setup flow                                  | Options come from the registry                     | Workspace/member setup continues while Site is pending            |
 
-| Tool / work group | Registered Actions |
-| --- | --- |
-| Records | `record.create`, `record.update` |
-| People and relationships | `contact.create`, `organization.create`, `relationship.create`, `relationship.end`, `consent.record` |
-| Tasks | `task.create`, `task.complete` |
-| Routines | `routine.save`, `routine.remove` |
-| Flow Books | `flow.start`, `flow.publish`, `flow.advance`, `flow.suggest` |
-| Capability setup | `capability.save` |
-| Web search | `web.search` |
-| POS launcher/setup | `pos.open`, `pos.setup` |
-| POS catalog/stock | `pos.product.save`, `pos.product.content.save`, `pos.product.draft`, `pos.stock.adjust` |
-| POS customers | `pos.customer.save` |
-| POS orders/kitchen | `pos.order.save`, `pos.order.item.update`, `pos.order.cancel`, `pos.order.accept`, `pos.order.reject`, `pos.order.handoff` |
-| POS sales/returns | `pos.checkout`, `pos.refund` |
-| POS register | `pos.register.open`, `pos.register.count`, `pos.register.close` |
-| Delivery | `pos.order.reach`, `pos.order.collect`, `pos.order.deliver` |
-| Customer receipt/rating | `pos.order.receive`, `pos.order.rate` |
-| Commerce catalog/stock | `catalog.item.save`, `catalog.variant.save`, `price.set`, `stock.adjust` |
-| Purchasing | `purchase.create`, `purchase.receive` |
-| Commerce orders | `order.create`, `order.fulfill`, `order.cancel` |
-| Billing | `invoice.issue`, `payment.record`, `refund.record` |
-| Site authoring | `site.generate`, `site.update`, `site.edit`, `site.ask`, `site.undo`, `site.design.import` |
-| Site assets | `site.asset.upload`, `site.asset.generate`, `site.assets` |
-| Site releases | `site.releases`, `site.checks`, `site.compile`, `site.publish`, `site.rollback`, `site.refresh`, `site.unpublish` |
+| No. | Tool / work group        | Registered Actions                                                                                                         |
+| --- | ------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Records                  | `record.create`, `record.update`                                                                                           |
+| 2   | People and relationships | `contact.create`, `organization.create`, `relationship.create`, `relationship.end`, `consent.record`                       |
+| 3   | Tasks                    | `task.create`, `task.complete`                                                                                             |
+| 4   | Routines                 | `routine.save`, `routine.remove`                                                                                           |
+| 5   | Flow Books               | `flow.start`, `flow.publish`, `flow.advance`, `flow.suggest`                                                               |
+| 6   | Capability setup         | `capability.save`                                                                                                          |
+| 7   | Web search               | `web.search`                                                                                                               |
+| 8   | POS launcher/setup       | `pos.open`, `pos.setup`                                                                                                    |
+| 9   | POS catalog/stock        | `pos.product.save`, `pos.product.content.save`, `pos.product.draft`, `pos.stock.adjust`                                    |
+| 10  | POS customers            | `pos.customer.save`                                                                                                        |
+| 11  | POS orders/kitchen       | `pos.order.save`, `pos.order.item.update`, `pos.order.cancel`, `pos.order.accept`, `pos.order.reject`, `pos.order.handoff` |
+| 12  | POS sales/returns        | `pos.checkout`, `pos.refund`                                                                                               |
+| 13  | POS register             | `pos.register.open`, `pos.register.count`, `pos.register.close`                                                            |
+| 14  | Delivery                 | `pos.order.reach`, `pos.order.collect`, `pos.order.deliver`                                                                |
+| 15  | Customer receipt/rating  | `pos.order.receive`, `pos.order.rate`                                                                                      |
+| 16  | Commerce catalog/stock   | `catalog.item.save`, `catalog.variant.save`, `price.set`, `stock.adjust`                                                   |
+| 17  | Purchasing               | `purchase.create`, `purchase.receive`                                                                                      |
+| 18  | Commerce orders          | `order.create`, `order.fulfill`, `order.cancel`                                                                            |
+| 19  | Billing                  | `invoice.issue`, `payment.record`, `refund.record`                                                                         |
+| 20  | Site authoring           | `site.generate`, `site.update`, `site.edit`, `site.ask`, `site.undo`, `site.design.import`                                 |
+| 21  | Site assets              | `site.asset.upload`, `site.asset.generate`, `site.assets`                                                                  |
+| 22  | Site releases            | `site.releases`, `site.checks`, `site.compile`, `site.publish`, `site.rollback`, `site.refresh`, `site.unpublish`          |
 
-```text
-Workspace brief + registry descriptions
-                 |
-       Jev Choices: include / skip / unsure
-                 |
-          owner reviews -> saves
-                 |
-   enabled capabilities + default role bundles
-```
+| Business coverage | Current scope / extension                                                                                                                 |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Covered core      | Purchasing/receiving, stock, orders, invoices, customer payments/refunds, POS/register, kitchen/delivery, tasks and Site Actions.         |
+| Finance gaps      | Supplier payments, expenses, bank reconciliation, period closing and complete financial/tax reports.                                      |
+| Inventory gaps    | Stock transfers, batches/expiry, recipes and production need dedicated rules and Actions.                                                 |
+| Domain gaps       | Bookings/time tracking, taxi trips/fares, workforce/payroll and other domain operations need registered implementations.                  |
+| Extension rule    | The 68-Action registry is a shared base. Jev selects registered behavior; implement and register missing operations before offering them. |
 
 ## 2. Add members and define roles with Jev
 
-| Step | Definition |
-| --- | --- |
-| Add | Owner invites a person as a member and describes their duties. `contact.create` stores a business contact; it does not add a member. |
-| Authority | Code excludes team/admin operations from ordinary member candidates. Becoming an admin is an explicit authorized membership change; Jev never infers it from job duties. |
-| Candidates | Code supplies delegable registered Actions from enabled capabilities. The registry defines required dependencies and default data access. |
-| Jev Choice | Match duties to an available role bundle + `none`; `none` allows an owner-defined role. Explicit restrictions match predefined policy options. |
-| Jev Noul | For a custom role or proposed changes, ask per eligible Action whether the duties require it. Several Actions can be proposed together. |
-| Data access | Current workspace is implicit. Selected Actions supply necessary read/write fields and default record scope; no routine field picker. Interpret stated restrictions and clarify ambiguity. |
-| Review | Owner sees a short role/permission summary; details expand on demand. Ask about unclear or unsupported duties; role names never grant access. |
-| Save | Code validates and audits the role definition and member assignment. Grants are workspace-scoped data; owner/admin authority remains explicit. |
-| Reuse | Other members can receive the same saved role without rerunning Jev; multiple roles combine grants with their scope conditions. |
+| Step        | Owner input                                  | Jev                                           | Code / result                                              |
+| ----------- | -------------------------------------------- | --------------------------------------------- | ---------------------------------------------------------- |
+| 1. Add      | Invite person; default membership = member   | No admin inference                            | Activate membership after invitation acceptance            |
+| 2. Define   | Cashier and manage products                  | Choice matches an existing role bundle + none | Reuse bundle or draft a custom role                        |
+| 3. Actions  | Custom duties / changes                      | Noul per eligible registered Action           | Propose explicit member grants                             |
+| 4. Restrict | Optional: descriptions only, no prices       | Choice matches supported restrictions         | Default Action data access otherwise; no field picker      |
+| 5. Save     | Short permission summary; details on demand  | Ask for unclear or unsupported duties         | Owner confirms; validate and audit saved grants            |
+| 6. Reuse    | Assign the same saved role to another person | No repeated inference                         | Reuse grants; combine multiple roles with their conditions |
+
+| Rule       | Default / contract                                                                                                                         |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Authority  | Member candidates exclude team/admin operations. Admin promotion is an explicit authorized change.                                         |
+| Registry   | Actions declare delegation, required reads/writes, record scope and launcher dependencies.                                                 |
+| Access     | Source checks membership, capabilities, grants, scope and state on reads/commits. Unknown roles deny.                                      |
+| Projection | Code derives Tools without AI. Now includes authorized work across workspaces; Space changes focus only.                                   |
+| Site       | One setup brief; optional Site uses approved public facts/assets. Private preview + explicit Publish follow aisites.md; visits need no AI. |
+| AI         | Choice has confidence; Noul has yes-probability. Batch independent judgments; clarify uncertainty.                                         |
+| Freshness  | Cache by identity/access, source/registry versions, context/request, question/model and relevant time. Source remains authoritative.       |
+| Business   | Reuse Commerce, Flows, idempotency and audit. Distinct approval/execution steps need distinct registered Actions.                          |
+| Build      | Implement shared grants; migrate delegable business Actions from fixed owner/admin checks. Preserve existing access.                       |
+| Naming     | New internal identifiers use one lowercase word. Preserve existing interfaces and external spellings.                                      |
+
+| Reference         | Source                                                                                                                                                                                                           |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Registry snapshot | 68 Actions; [Tools](tarharness/src/registry/tools.ts), [Actions](tarharness/src/registry/catalog.ts), [POS](tarharness/src/pos/catalog.ts), [Commerce](tarharness/src/commerce/catalog.ts)                       |
+| Product contracts | [Space](space.md), [Inbox](inbox.md), [Commerce](commerce.md), [AI Sites](aisites.md)                                                                                                                            |
+| Jev guidance      | [Choice](https://docs.typesafe.ai/primitives/choice), [Noul](https://docs.typesafe.ai/primitives/noul), [Confidence](https://docs.typesafe.ai/confidence), [Batching](https://docs.typesafe.ai/patterns/fan-out) |
+
+## 3. End-to-end flow
 
 ```text
-Owner: "Ravi can cashier and manage products"
-  Choice -> cashier bundle; Noul -> pos.product.save
-  Code   -> inherited data access; Ravi remains a member
-  Owner saves -> explicit member grants
-                             |
-     enabled capabilities + saved grants + interfaces
-                             |
-                shared source access policy
-                  /                     \
-            allowed Tools          Inbox -> Now
-                  \                     /
-                   tap -> source recheck
+             +--------------------------------------------------------+
+             | OWNER BRIEF                                            |
+             | "Restaurant: sales, products and a site"               |
+             +--------------------------------------------------------+
+                                          |
+                                          v
+             +--------------------------------------------------------+
+             | REGISTRY -> JEV GROUP CHOICES                          |
+             | Propose matching tool/capability groups                |
+             | Unclear -> ask; manual selection available             |
+             +--------------------------------------------------------+
+                                          |
+                                          v
+             +--------------------------------------------------------+
+             | OWNER REVIEWS; CODE VALIDATES + SAVES                  |
+             | Enabled capabilities + default role bundles            |
+             | Workspace ready; Site does not block members           |
+             +--------------------------------------------------------+
+                                          |
+                    +---------------------+---------------------+
+                    |                                           |
+                    v                                           v
++--------------------------------------+    +--------------------------------------+
+| MEMBER SETUP                         |    | SITE (IF SELECTED)                   |
+| Invite Ravi as member                |    | Reuse brief + approved public facts  |
+| "Cashier + manage products"          |    | Reuse assets; ask missing details    |
++--------------------------------------+    +--------------------------------------+
+                    |                                           |
+                    v                                           v
++--------------------------------------+    +--------------------------------------+
+| JEV ROLE / ACTION PROPOSAL           |    | BUILD SITE                           |
+| Choice: role bundle + none           |    | Builder + Jev Picker for design      |
+| Noul: eligible registered Actions    |    | Writer only when needed              |
++--------------------------------------+    +--------------------------------------+
+                    |                                           |
+                    v                                           v
++--------------------------------------+    +--------------------------------------+
+| OWNER CONFIRMS; CODE SAVES GRANTS    |    | PRIVATE PREVIEW                      |
+| Validate + audit permissions         |    | Builder validates + saves            |
+| Acceptance activates membership      |    | Edit / Undo until ready              |
++--------------------------------------+    +--------------------------------------+
+                    |                                           |
+                    v                                           v
++--------------------------------------+    +--------------------------------------+
+| CODE PROJECTS AUTHORIZED WORK        |    | REVIEW CHECKED CANDIDATE             |
+| Capabilities + grants + interfaces   |    | Freeze + check; owner Publish        |
+| Tools launchers / Inbox -> Now       |    | Public site; visits need no AI       |
++--------------------------------------+    +--------------------------------------+
+                    |                                           |
+                    v                                           v
++--------------------------------------+    +--------------------------------------+
+| MEMBER USES TOOL / NOW               |    | VISITOR USES PUBLIC SITE             |
+| Open -> source read check            |    | Choose configured registered Action  |
+| Submit registered Action             |    | Current identity + request context   |
++--------------------------------------+    +--------------------------------------+
+                    |                                           |
+                    +---------------------+---------------------+
+                                          |
+                                          v
+             +--------------------------------------------------------+
+             | GATEWAY RECHECKS CURRENT SOURCE STATE                  |
+             | Identity + access + business state + idempotency       |
+             +--------------------------------------------------------+
+                                          |
+                    +---------------------+---------------------+
+                    |                                           |
+                    v                                           v
++--------------------------------------+    +--------------------------------------+
+| DENY                                 |    | COMMIT + AUDIT                       |
+| Rejected request; no commit          |    | Refresh affected Tools / Now         |
++--------------------------------------+    +--------------------------------------+
+
+             +--------------------------------------------------------+
+             | ACCESS CHANGES / ROLE REUSE                            |
+             | Revoked -> next source use denied; sync retracts       |
+             | Reuse saved role -> no new Jev call                    |
+             +--------------------------------------------------------+
 ```
 
-| Shared rule | Result |
-| --- | --- |
-| Access | Every read/commit checks membership, capability, grants, scope, state and access windows. Unknown roles deny; revocation blocks the next source use. |
-| Projection | Code derives Tools without AI or a second permission list. Now retains work across authorized workspaces; Space changes focus, not authority. |
-| AI | Choice selects one option with confidence; Noul returns yes-probability. Batch independent questions; dependent choices need updated state. Evaluate thresholds; manual setup survives AI failure. |
-| Freshness | Cache by identity/access, source and registry versions, context/request and question/model version. Refresh relevant changes; cached results never authorize source use. |
-| Core | Reuse Records, registered Actions, idempotency/audit, Commerce and existing Flows. Step approvals and site publication remain source rules. |
-| Meaning | Approving a refund and issuing it need distinct registered Actions when they are separate business steps. Missing operations ask for clarification; no substitute execution. |
-| Build | Implement shared grants and both setup steps; migrate delegable business Actions from fixed owner/admin checks while preserving existing access. New behavior needs registered code. |
-| Naming | New internal identifiers use one lowercase semantic word; preserve existing interfaces and external spellings. |
-| Jev docs | [Choice](https://docs.typesafe.ai/primitives/choice), [Noul](https://docs.typesafe.ai/primitives/noul), [Confidence](https://docs.typesafe.ai/confidence), [Batching](https://docs.typesafe.ai/patterns/fan-out). |
+## 4. Tarapp concept screens
+
+| Screen            | Entry / result                                                                                             |
+| ----------------- | ---------------------------------------------------------------------------------------------------------- |
+| 1 -> 2. Workspace | Jev selects matching registered groups; owner reviews/adjusts; Save enables the workspace.                 |
+| After Save        | Show Add member, Open Site (if selected), and Continue to Tools; Site can wait.                            |
+| 3 -> 4. Member    | Describe duties or reuse a saved role; review Actions on demand; access starts after acceptance.           |
+| 5. Site           | Reuse approved public facts/assets; preview/edit; freeze/check/review -> explicit Publish.                 |
+| 6. Tools          | Same renderer for every workspace; show launchers allowed by saved grants and capabilities.                |
+| States            | Unclear -> one focused question/manual choice; pending/error -> retain inputs + retry; revoked -> refresh. |
+| Status            | Target concepts; restaurant labels are examples. Owner controls require current authority.                 |
+
+```text
++------------------------------------------+    +------------------------------------------+
+| 1. CREATE WORKSPACE                      |    | 2. REVIEW WORKSPACE                      |
+|                                          |    |                                          |
+| Name: Northstar                          |    | Selected by Jev; review:                 |
+| Describe your work:                      |    | [x] POS   [x] Commerce   [x] Site        |
+| Restaurant: sales, products and a site   |    | [Change selection]                       |
+|                                          |    |                                          |
+| Use the same brief for your Site.        |    | You can change these later.              |
+|                                          |    |                                          |
+| [Next]                         [Cancel]  |    | [Save workspace]                [Back]   |
++------------------------------------------+    +------------------------------------------+
+
++------------------------------------------+    +------------------------------------------+
+| 3. ADD MEMBER                            |    | 4. REVIEW MEMBER PERMISSIONS             |
+| Northstar                                |    | Northstar / Ravi / Member                |
+|                                          |    |                                          |
+| Person: ravi@example.com                 |    | Suggested permissions:                   |
+| Membership: Member                       |    | [x] Record sales                         |
+| What can Ravi do?                        |    | [x] Manage products                      |
+| Cashier and manage products              |    | [View Actions] [Change duties]           |
+|                                          |    |                                          |
+| [Use saved role]                         |    | [Save as reusable role]                  |
+| [Review permissions]           [Back]    |    | [Save and invite]              [Back]    |
++------------------------------------------+    +------------------------------------------+
+
++------------------------------------------+    +------------------------------------------+
+| 5. SITE - PRIVATE DRAFT                  |    | 6. TOOLS - RAVI                          |
+| Northstar / Owner: Mira                  |    | Northstar / Cashier + products           |
+|                                          |    | Owner: Mira                              |
+| Draft: Saved                             |    |                                          |
+| [Preview] [Assets] [Undo]                |    | [T] POS                              >   |
+|                                          |    | [T] Products                         >   |
+| Describe a change:                       |    |                                          |
+| Make the menu easier to browse           |    | Open a tool to do the work.              |
+| [Send]                                   |    |                                          |
+|                                          |    | [Now]                       [Ask TAR]    |
+| [Review publish]          [Do later]     |    |                                          |
++------------------------------------------+    +------------------------------------------+
+```

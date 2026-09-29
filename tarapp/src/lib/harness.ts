@@ -28,7 +28,7 @@ export interface HarnessActionField { key: string; label: string; kind: HarnessF
 export interface HarnessAction { id: string; version: number; title: string; description: string; type: 'app' | 'agent' | 'human'; interfaceKey: string; fields: HarnessActionField[]; output: string[]; roles: HarnessRole[]; effects: string[]; workRoles?: string[]; }
 export interface HarnessInterfaceContract { key: string; version: number; title: string; presentation: 'sheet' | 'screen' | 'flow'; submitLabel: string; }
 export interface HarnessTool { id: string; title: string; description: string; icon: string; category: 'work' | 'create' | 'manage' | 'explore'; module: 'core' | 'pos' | 'commerce' | 'site'; kind: 'action' | 'flows' | 'site'; action: string; input: Record<string, unknown>; }
-export interface HarnessTools { tools: HarnessTool[]; modules: { id: 'pos' | 'commerce' | 'site'; title: string; description: string; enabled: boolean }[]; version: number; canManage: boolean; role: string; legacy?: boolean; }
+export interface HarnessTools { tools: HarnessTool[]; modules: { id: 'pos' | 'commerce' | 'site'; title: string; description: string; enabled: boolean }[]; version: number; canManage: boolean; role: string; }
 export interface HarnessSpaceContext {
   id: string; label: string; role: string; owner: string; confidence: number;
   source: 'default' | 'routine' | 'override'; held: boolean;

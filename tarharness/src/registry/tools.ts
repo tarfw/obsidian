@@ -58,11 +58,11 @@ const modules = [
 ] as const;
 
 export async function readCapabilities(client: Client): Promise<CapabilityState> {
-  const [saved, legacy] = await Promise.all([
+  const [saved, existing] = await Promise.all([
     client.execute("SELECT data,version FROM records WHERE id='capability' AND type='capability' AND archived IS NULL LIMIT 1"),
     client.execute("SELECT type FROM records WHERE type IN ('pos.settings','site','item','variant','price','stock','purchase','order','invoice','payment','refund','expense','statement','reconciliation','period','transfer','batch','recipe','production','booking','time','trip','fare','shift','attendance','payroll','supplier','quote','pick','pack','shipment','return','inspection','quality','forecast','plan') AND archived IS NULL GROUP BY type"),
   ]);
-  const found = new Set(legacy.rows.map((row) => String(row.type)));
+  const found = new Set(existing.rows.map((row) => String(row.type)));
   const inferred = { pos: found.has('pos.settings'), commerce: [...found].some((type) => !['pos.settings', 'site'].includes(type)), site: found.has('site') };
   const row = saved.rows[0];
   if (!row) return { enabled: inferred, version: 0 };

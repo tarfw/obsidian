@@ -26,4 +26,57 @@ describe('registry contracts', () => {
     expect(cards.find((card) => card.kind === 'action' && card.actionId === 'pos.open')).toMatchObject({ title: 'Open POS', initialInput: { section: 'sell' } });
     expect(cards.at(-1)).toMatchObject({ kind: 'flow', flowId: 'book.followup' });
   });
+
+  it('includes all 34 pending action IDs from workspace.md specification', () => {
+    const expectedActions = [
+      'purchase.pay',
+      'expense.record', 'expense.reverse',
+      'bank.import', 'bank.reconcile',
+      'period.close', 'period.reopen',
+      'stock.transfer',
+      'batch.save', 'batch.dispose',
+      'recipe.save', 'production.start', 'production.complete',
+      'booking.create', 'booking.cancel', 'time.record',
+      'trip.start', 'trip.complete', 'fare.set',
+      'shift.assign', 'attendance.record', 'payroll.run', 'payroll.pay',
+      'supplier.qualify', 'quote.request', 'quote.record',
+      'purchase.submit', 'purchase.approve', 'purchase.reject',
+      'warehouse.pick', 'warehouse.pack',
+      'shipment.dispatch', 'shipment.track', 'shipment.deliver',
+      'purchase.return', 'quality.inspect', 'quality.release',
+      'forecast.generate', 'replenishment.plan',
+    ];
+
+    const actionIds = new Set(actionCatalog.map((a) => a.id));
+    for (const expected of expectedActions) {
+      expect(actionIds.has(expected), `Missing registered action: ${expected}`).toBe(true);
+    }
+  });
+
+  it('strictly follows single-word lowercase format for all newly added action fields and outputs', () => {
+    const singleWord = /^[a-z]+$/;
+    const newActions = actionCatalog.filter((action) =>
+      [
+        'purchase.pay', 'expense.record', 'expense.reverse', 'bank.import', 'bank.reconcile',
+        'period.close', 'period.reopen', 'stock.transfer', 'batch.save', 'batch.dispose',
+        'recipe.save', 'production.start', 'production.complete', 'booking.create',
+        'booking.cancel', 'time.record', 'trip.start', 'trip.complete', 'fare.set',
+        'shift.assign', 'attendance.record', 'payroll.run', 'payroll.pay', 'supplier.qualify',
+        'quote.request', 'quote.record', 'purchase.submit', 'purchase.approve',
+        'purchase.reject', 'warehouse.pick', 'warehouse.pack', 'shipment.dispatch',
+        'shipment.track', 'shipment.deliver', 'purchase.return', 'quality.inspect',
+        'quality.release', 'forecast.generate', 'replenishment.plan',
+      ].includes(action.id),
+    );
+
+    expect(newActions.length).toBeGreaterThanOrEqual(34);
+    for (const action of newActions) {
+      for (const field of action.fields) {
+        expect(singleWord.test(field.key), `Field key "${field.key}" in action "${action.id}" must be single-word lowercase`).toBe(true);
+      }
+      for (const out of action.output) {
+        expect(singleWord.test(out), `Output key "${out}" in action "${action.id}" must be single-word lowercase`).toBe(true);
+      }
+    }
+  });
 });

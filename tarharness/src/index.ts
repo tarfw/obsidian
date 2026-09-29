@@ -25,6 +25,7 @@ import { resolveContext, routineFromRecord } from './space/context.ts';
 import { buildSpaceView, readInboxSource } from './space/view.ts';
 import { authorityKey, ensureNowSchema, projectNow, readNow, replaceSource, retractMissing, retractSource } from './inbox/now.ts';
 import { nextInTie } from './inbox/rank.ts';
+import { suggestCapabilities, suggestMember } from './brain/workspace-ai.ts';
 export { FlowWorkflow } from './flows/workflow.ts';
 
 type RuntimeEnv = Env & ChannelEnv & { readonly TURSO_PLATFORM_TOKEN?: string; readonly TINYFISH_API_KEY?: string; readonly TYPESAFE_API_KEY?: string; readonly SITE_BASE_DOMAIN?: string; readonly SITE_WORKER_ORIGIN?: string; readonly SITE_MODEL?: string };
@@ -366,6 +367,12 @@ async function handle(request: Request, env: RuntimeEnv, ctx: ExecutionContext):
     return response({ workspaces: workspaces.map(({ workspace, role, workRole, roles }) => ({ id: workspace.id, name: workspace.name, slug: workspace.slug, scope: workspace.slug, role, workRole, roles, owner: workspace.mode === 'personal' ? 'You' : workspace.ownerName || 'Workspace owner', mode: workspace.mode, state: workspace.state })) });
   }
   if (request.method === 'POST' && path === '/v1/workspaces') return createWorkspace(request, env);
+  if (request.method === 'POST' && path === '/v1/ai/workspace-suggest') {
+    await identity(request, env);
+    const body = await Effect.runPromise(parseJson(request));
+    const brief = typeof body.brief === 'string' ? body.brief : '';
+    return response(await suggestCapabilities(env.TYPESAFE_API_KEY, brief));
+  }
   const publicSiteMatch = /^\/v1\/sites\/([a-z0-9-]+)(\/.*)?$/.exec(path);
   if (request.method === 'GET' && publicSiteMatch) {
     const siteSlug = publicSiteMatch[1];
@@ -386,6 +393,11 @@ async function handle(request: Request, env: RuntimeEnv, ctx: ExecutionContext):
   const slug = match[1]; const nested = match[2] || '';
   const { access: current } = await access(request, env, slug);
   if (request.method === 'GET' && nested === 'members') return response({ members: await listMembers(env.CONTROL, current), currentUserId: current.identity.id });
+  if (request.method === 'POST' && nested === 'ai/member-suggest') {
+    const body = await Effect.runPromise(parseJson(request));
+    const duties = typeof body.duties === 'string' ? body.duties : '';
+    return response(await suggestMember(env.TYPESAFE_API_KEY, duties));
+  }
   if (request.method === 'POST' && nested === 'members') {
     return response({ invitation: await inviteMember(env.CONTROL, current, await Effect.runPromise(parseJson(request))) }, 201);
   }

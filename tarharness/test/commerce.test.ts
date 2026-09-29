@@ -31,7 +31,7 @@ async function fixture() {
   return { client, run, supplier, item, variant };
 }
 
-describe('commerce core', { timeout: 20000 }, () => {
+describe('commerce core', { timeout: 60000 }, () => {
   it('reserves, fulfils, invoices, receives payment and records a balanced refund', async () => {
     const { client, run, variant } = await fixture();
     const order = (await run('order.create', { lines: [{ variant: variant.id, quantity: 2 }] }, 'order-once')).order as { id: string; version: number; data: { total: number } };

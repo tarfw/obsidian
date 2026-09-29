@@ -44,6 +44,10 @@ const catalog: readonly ToolDefinition[] = [
   { id: 'invoice', title: 'Issue invoice', description: 'Bill an order', icon: 'document-outline', category: 'create', module: 'commerce', kind: 'action', action: 'invoice.issue' },
   { id: 'payment', title: 'Record payment', description: 'Post money received', icon: 'card-outline', category: 'work', module: 'commerce', kind: 'action', action: 'payment.record' },
   { id: 'refund', title: 'Record refund', description: 'Reverse a paid balance', icon: 'return-down-back-outline', category: 'work', module: 'commerce', kind: 'action', action: 'refund.record' },
+  { id: 'expense', title: 'Record expense', description: 'Record business expenditure', icon: 'wallet-outline', category: 'work', module: 'commerce', kind: 'action', action: 'expense.record' },
+  { id: 'quote', title: 'Request quote', description: 'Request quote from supplier', icon: 'chatbubbles-outline', category: 'create', module: 'commerce', kind: 'action', action: 'quote.request' },
+  { id: 'transfer', title: 'Transfer stock', description: 'Move inventory between locations', icon: 'swap-horizontal-outline', category: 'manage', module: 'commerce', kind: 'action', action: 'stock.transfer' },
+  { id: 'shift', title: 'Assign shift', description: 'Schedule worker shifts', icon: 'calendar-outline', category: 'manage', module: 'commerce', kind: 'action', action: 'shift.assign' },
   { id: 'search', title: 'Search the web', description: 'Find current public sources', icon: 'search-outline', category: 'explore', module: 'core', kind: 'action', action: 'web.search', personal: true },
 ];
 
@@ -56,7 +60,7 @@ const modules = [
 export async function readCapabilities(client: Client): Promise<CapabilityState> {
   const [saved, legacy] = await Promise.all([
     client.execute("SELECT data,version FROM records WHERE id='capability' AND type='capability' AND archived IS NULL LIMIT 1"),
-    client.execute("SELECT type FROM records WHERE type IN ('pos.settings','site','item','variant','price','stock','purchase','order','invoice','payment','refund') AND archived IS NULL GROUP BY type"),
+    client.execute("SELECT type FROM records WHERE type IN ('pos.settings','site','item','variant','price','stock','purchase','order','invoice','payment','refund','expense','statement','reconciliation','period','transfer','batch','recipe','production','booking','time','trip','fare','shift','attendance','payroll','supplier','quote','pick','pack','shipment','return','inspection','quality','forecast','plan') AND archived IS NULL GROUP BY type"),
   ]);
   const found = new Set(legacy.rows.map((row) => String(row.type)));
   const inferred = { pos: found.has('pos.settings'), commerce: [...found].some((type) => !['pos.settings', 'site'].includes(type)), site: found.has('site') };

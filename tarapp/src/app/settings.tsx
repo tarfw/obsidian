@@ -36,6 +36,13 @@ export default function SettingsScreen() {
           <Text style={[styles.value, { color: theme.textSecondary }]}>{themeMode === 'light' ? 'Light' : 'Dark'}</Text>
         </TouchableOpacity>
       </View>
+      <Text style={[styles.label, { color: theme.textSecondary }]}>SYSTEM & REGISTRY</Text>
+      <View style={[styles.card, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
+        <TouchableOpacity accessibilityRole="button" onPress={() => router.push('/registry')} style={styles.row}>
+          <View style={styles.rowLabel}><Ionicons name="list-outline" size={20} color={theme.primary} /><Text style={[styles.rowText, { color: theme.text }]}>Action Registry</Text></View>
+          <Ionicons name="chevron-forward" size={18} color={theme.textSecondary} />
+        </TouchableOpacity>
+      </View>
       {user ? <>
         <Text style={[styles.label, { color: theme.textSecondary }]}>ACCOUNT</Text>
         <View style={[styles.card, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>

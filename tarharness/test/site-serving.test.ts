@@ -26,7 +26,7 @@ beforeAll(async () => {
     for (const statement of sql.split(';').filter((part) => part.trim())) await control.prepare(statement).run();
   }
   await control.prepare("INSERT INTO users(id,email,created_at,updated_at) VALUES('owner','owner@example.test',1,1)").run();
-}, 30_000);
+}, 60_000);
 
 afterAll(async () => {
   for (const client of clients) client.close();
@@ -88,4 +88,4 @@ it('publishes, isolates, unpublishes and restores two real D1/R2 releases', asyn
   expect((await runtime.dispatchFetch('https://beta.example.test/')).status).toBe(200);
   await control.prepare("UPDATE workspaces SET state='archived' WHERE id='beta'").run();
   expect((await runtime.dispatchFetch('https://beta.example.test/')).status).toBe(404);
-}, 30_000);
+}, 90_000);

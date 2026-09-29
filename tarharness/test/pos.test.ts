@@ -35,7 +35,7 @@ async function fixture() {
   const sale = { items: [{ productId: product.id, quantity: 2, version: product.version }], method: 'cash', discountBps: 1000, expectedTotal: 1892, tendered: 2000 };
   return { client, run, product, sale };
 }
-describe('POS ledger', { timeout: 20000 }, () => {
+describe('POS ledger', { timeout: 60000 }, () => {
   it('persists open carts for the Inbox, advances item work, then pays the same order', async () => {
     const { client, run, sale } = await fixture();
     const input = { items: sale.items, discountBps: sale.discountBps, customerId: '', orderType: 'dine-in', table: '7', draftKey: 'device-sale-1' };

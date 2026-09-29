@@ -10,7 +10,6 @@ import WorkspaceTeam from '@/components/WorkspaceTeam';
 import { useWorkspace } from '@/components/WorkspaceProvider';
 import { getCurrentUser } from '@/lib/auth';
 import { createOperationKey, HarnessRequestError, harness, type HarnessAction, type HarnessFlowBook, type HarnessFlowRun, type HarnessInterfaceContract, type HarnessTool, type HarnessTools, type HarnessWorkspace } from '@/lib/harness';
-import { legacyWorkspaceTools } from '@/lib/legacy-tools';
 
 const ink = '#1C2430';
 const muted = '#697586';
@@ -29,7 +28,6 @@ type ListedTool = HarnessTool & { scope: string; workspace: string; role: string
 type ToolGroup = { id: string; title: string; icon: keyof typeof Ionicons.glyphMap; workspace: string; scope: string; tools: ListedTool[] };
 type OpenAction = { action: HarnessAction; interfaces: HarnessInterfaceContract[]; scope: string; input: Record<string, unknown>; title: string };
 type FlowPicker = { scope: string; workspace: string; action: HarnessAction; interfaces: HarnessInterfaceContract[]; books: HarnessFlowBook[]; runs: HarnessFlowRun[] };
-let missingRouteUntil = 0;
 const toolSnapshotCache = new Map<string, HarnessTools>();
 const cacheKey = (workspace: HarnessWorkspace) => `${workspace.id}:${workspace.role}:${[...(workspace.roles?.length ? workspace.roles : [workspace.workRole || workspace.role])].sort().join(',')}`;
 const storedCacheKey = (userId: string, workspace: HarnessWorkspace) => `tar_tools_v1_${userId.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 36)}_${workspace.id.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 48)}`;
@@ -37,25 +35,12 @@ const isToolsSnapshot = (value: unknown): value is HarnessTools => Boolean(value
   && Array.isArray((value as HarnessTools).tools) && Array.isArray((value as HarnessTools).modules)
   && typeof (value as HarnessTools).role === 'string' && Number.isFinite((value as HarnessTools).version));
 
-const missingRoute = (cause: unknown) => cause instanceof HarnessRequestError && cause.status === 404 && cause.message === 'Route not found.';
 const bucket = (tool: HarnessTool) => tool.module !== 'core' ? tool.module
   : tool.kind === 'flows' || tool.id === 'flow' ? 'flows'
   : tool.category === 'create' ? 'create' : 'other';
 
 async function readTools(workspace: HarnessWorkspace): Promise<HarnessTools> {
-  if (Date.now() >= missingRouteUntil) {
-    try { return await harness.workspaceTools(workspace.slug); }
-    catch (cause) { if (!missingRoute(cause)) throw cause; missingRouteUntil = Date.now() + 30_000; }
-  }
-  const registry = await harness.workspaceRegistry(workspace.slug);
-  const actionIds = new Set(registry.actions.map((action) => action.id));
-  const roles = [workspace.workRole, ...(workspace.roles || [])].map((role) => role?.toLowerCase());
-  const canReadPos = actionIds.has('pos.open') && (workspace.role === 'owner' || workspace.role === 'admin' || roles.includes('cashier') || roles.includes('manager'));
-  const [pos, site] = await Promise.all([
-    canReadPos ? harness.posOverview(workspace.slug).catch((cause) => { if (missingRoute(cause)) return { settings: null }; throw cause; }) : Promise.resolve({ settings: null }),
-    actionIds.has('site.generate') ? harness.site.available(workspace.slug).catch((cause) => { if (missingRoute(cause)) return { site: null }; throw cause; }) : Promise.resolve({ site: null }),
-  ]);
-  return legacyWorkspaceTools(workspace, registry.actions, registry.interfaces, { pos: Boolean(pos.settings), site: Boolean(site.site) });
+  return await harness.workspaceTools(workspace.slug);
 }
 
 export default function ToolsScreen() {
@@ -143,7 +128,6 @@ export default function ToolsScreen() {
   const pending = chosen.some((workspace) => !loadedScopes[workspace.slug]);
   const manageable = active.filter((workspace) => sources[workspace.slug]?.canManage);
   const managing = manageable.find((workspace) => workspace.slug === managedSlug) || manageable[0];
-  const legacy = chosen.some((workspace) => sources[workspace.slug]?.legacy);
 
   const openTool = async (tool: ListedTool) => {
     if (busy) return;
@@ -238,7 +222,6 @@ export default function ToolsScreen() {
             {!toolGroups.length && !failed.length && !pending ? <Empty title="No tools available" detail="Try another workspace." /> : null}
           </>}
           {pending && toolGroups.length ? <View style={styles.refreshing}><ActivityIndicator size="small" color={blue} /><Text style={styles.rowDetail}>Loading more workspaces…</Text></View> : null}
-          {legacy ? <Pressable accessibilityRole="button" onPress={() => { missingRouteUntil = 0; void load(); }}><Text style={styles.helper}>Some tools await the server update. Check again ›</Text></Pressable> : null}
         </>}
       </ScrollView>
     </> : null}
@@ -265,6 +248,7 @@ export default function ToolsScreen() {
 
     {page === 'more' ? <ScrollView style={styles.scroll} contentContainerStyle={[styles.content, { paddingBottom: bottom }]}>
       <Row icon="folder-outline" title="Browse records" onPress={() => router.push({ pathname: '/(home)/records', params: { source: selected === 'all' ? current.slug : selected } })} />
+      <Row icon="list-outline" title="Action registry" onPress={() => router.push('/registry')} />
       <Row icon="time-outline" title="Space routines" onPress={() => router.push('/(home)/routines')} />
       {active.some((workspace) => workspace.mode === 'work') ? <Row icon="people-outline" title="Members & chat" onPress={() => {
         const work = active.filter((workspace) => workspace.mode === 'work');

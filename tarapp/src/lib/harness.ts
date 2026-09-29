@@ -56,11 +56,12 @@ async function request<T>(path: string, options: { method?: 'GET' | 'POST' | 'PU
   const started = Date.now();
   const controller = new AbortController();
   let timeout: ReturnType<typeof setTimeout> | undefined;
+  const isLongRunning = path.includes('/site') || path.includes('/actions/site.') || path.includes('/ai/') || path.startsWith('/v1/inbox') || path.includes('/flows');
   const deadline = new Promise<never>((_, reject) => {
     timeout = setTimeout(() => {
       controller.abort();
       reject(new HarnessRequestError(408, 'TAR did not respond in time. Check your connection and retry.'));
-    }, path.startsWith('/v1/inbox') ? 45_000 : 20_000);
+    }, isLongRunning ? 60_000 : 30_000);
   });
   const operation = (async () => {
     const token = await getValidIdToken();
@@ -132,6 +133,8 @@ export const harness = {
   },
   nowDetail: (slug: string, id: string) => request<{ row: NowRow; record: HarnessRecord; workspace: HarnessWorkspace }>(workspacePath(slug, `now/${encodeURIComponent(id)}`)),
   createWorkspace: (name: string, slug: string) => request<{ workspace: HarnessWorkspace }>('/v1/workspaces', { method: 'POST', body: { name, slug }, key: createOperationKey(`workspace:${slug}`) }),
+  suggestWorkspace: (brief: string) => request<{ capabilities: { pos: boolean; commerce: boolean; site: boolean }; confidence: Record<string, number>; model?: string; review: true }>('/v1/ai/workspace-suggest', { method: 'POST', body: { brief } }),
+  suggestMember: (slug: string, duties: string) => request<{ role: HarnessRole; workRole: WorkRole; roles: WorkRole[]; suggestedActions: string[]; permissions: string[]; confidence: number | null; model?: string; review: true }>(workspacePath(slug, 'ai/member-suggest'), { method: 'POST', body: { duties } }),
   inviteMember: (slug: string, email: string, role: Exclude<HarnessRole, 'owner'> = 'member', workRole: WorkRole = 'general', roles: WorkRole[] = [workRole]) => request<{ invitation: { email: string; role: Exclude<HarnessRole, 'owner'>; state: 'pending' } }>(workspacePath(slug, 'members'), { method: 'POST', body: { email, role, workRole, roles }, key: createOperationKey(`invite:${slug}:${email}`) }),
     records: (slug: string, type?: string, offset = 0, search = '') => request<{ records: HarnessRecord[]; next: number | null }>(`${workspacePath(slug, 'records')}?${type ? `type=${encodeURIComponent(type)}&` : ''}q=${encodeURIComponent(search)}&offset=${offset}`),
     record: (slug: string, id: string) => request<{ record: HarnessRecord }>(workspacePath(slug, `records/${encodeURIComponent(id)}`)),

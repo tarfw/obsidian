@@ -25,9 +25,26 @@ export interface Asset {
 }
 export interface AssetSummary extends Asset { used: boolean; url: string }
 
-export interface StyleSet { base?: Record<string, unknown>; small?: Record<string, unknown>; medium?: Record<string, unknown>; large?: Record<string, unknown> }
+export interface Style {
+  background?: string;
+  color?: string;
+  pad?: string;
+  gap?: string;
+  radius?: string | number;
+  border?: string;
+  shadow?: string;
+  align?: string;
+  width?: string;
+  aspect?: string;
+  gradient?: { from: string; to: string; angle: number };
+  mask?: string;
+  size?: string;
+  weight?: number;
+  columns?: number;
+}
+export interface StyleSet { base?: Style; small?: Style; medium?: Style; large?: Style; [key: string]: Style | undefined; }
 export interface Node { id: string; kind: string; props: Record<string, unknown>; style?: StyleSet; children?: Node[]; component?: string; variant?: string }
-export interface Section { id: string; purpose: string; layout: { kind: string; columns?: number }; style?: StyleSet; nodes: Node[]; bindings?: Record<string, unknown>[] }
+export interface Section { id: string; purpose: string; layout: { kind: string; columns?: number; gap?: string; align?: string; width?: string }; style?: StyleSet; nodes: Node[]; bindings?: Record<string, unknown>[] }
 export interface Page { id: string; path: string; title: string; meta?: { description?: string }; sections: Section[] }
 export interface Journey { id: string; title: string; kind: string; target: string; enabled: boolean; fields: { key: string; label: string; kind: string; required?: boolean }[] }
 export interface ReleaseFile { path: string; mime: string; bytes: number; hash: string; key: string }
@@ -60,10 +77,16 @@ export type PatchOperation =
   | { op: 'set_text'; target: string; value: string }
   | { op: 'set_props'; target: string; value: Record<string, unknown> }
   | { op: 'set_style'; target: string; value: StyleSet | null }
-  | { op: 'remove_node'; target: string }
+  | { op: 'move_node'; target: string; before?: string; after?: string }
+  | { op: 'move_section'; target: string; index: number }
+  | { op: 'add_section'; page: string; section: Section; index?: number }
   | { op: 'remove_section'; target: string }
+  | { op: 'add_node'; parent: string; node: Node; index?: number }
+  | { op: 'remove_node'; target: string }
+  | { op: 'swap_component'; target: string; component: string; variant?: string }
   | { op: 'set_token'; token: string; value: string | number }
   | { op: 'set_journey'; journey: Journey }
+  | { op: 'remove_journey'; target: string }
   | { op: 'set_redirect'; from: string; to: string | null }
   | { op: 'set_page'; page: string; value: { title?: string; description?: string; path?: string } }
   | { op: 'set_brief'; value: Partial<SiteDocument['brief']> }

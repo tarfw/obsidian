@@ -1,4 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, AppState, FlatList, Keyboard, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -91,10 +92,11 @@ export default function NowScreen() {
   const rows = useMemo(() => feed.rows.filter((row) => !query.trim()
     || `${row.title} ${row.parent || ''} ${row.workspace.name} ${row.role} ${row.state}`.toLowerCase().includes(query.trim().toLowerCase())), [feed.rows, query]);
   const context = space?.context;
-  const workspaceName = feed.decision === 'confirm' ? 'Choose workspace' : context?.workspace.name || current.name;
+  const workspaceName = feed.decision === 'confirm' ? 'Choose workspace' : context?.label || context?.workspace.name || current.name;
   const workspaceMode = context?.workspace.mode || current.mode;
-  const workspaceDetails = feed.decision === 'confirm' || workspaceMode === 'personal' ? ''
-    : `${context?.role || current.workRole || current.role} · ${context?.owner || current.owner || 'Workspace owner'}`;
+  const targetWorkspaceName = context?.workspace.name || current.name;
+  const workspaceDetails = feed.decision === 'confirm' ? ''
+    : `${targetWorkspaceName} · ${workspaceMode === 'personal' ? 'Individual' : (context?.role || current.workRole || current.role)} · Owner: ${workspaceMode === 'personal' ? 'You' : (context?.owner || current.owner || 'Workspace owner')}`;
   const activeWorkspaceSlug = context?.workspace.slug || current.slug;
   const contextChoices = feed.decision === 'confirm' && space ? [space.context, ...space.alternatives] : [];
   const workspaceOptions = workspaces.filter((workspace) => !contextChoices.some((choice) => choice.workspace.slug === workspace.slug));
@@ -155,17 +157,33 @@ export default function NowScreen() {
     <View style={styles.top}>
       <Text style={styles.title}>Now</Text>
       <View style={styles.topActions}>
-        <Pressable accessibilityRole="button" accessibilityLabel={finding ? 'Close search' : 'Find work'} onPress={() => { if (finding) setQuery(''); setFinding(!finding); }} style={styles.icon}><Ionicons name={finding ? 'close' : 'search'} size={21} color={ink} /></Pressable>
-        <Pressable accessibilityRole="button" accessibilityLabel="Open tools" onPress={() => router.push({ pathname: '/(home)/tools', params: { source: activeWorkspaceSlug } })} style={styles.icon}><Ionicons name="grid-outline" size={22} color={ink} /></Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel={finding ? 'Close search' : 'Find work'} onPress={() => { if (finding) setQuery(''); setFinding(!finding); }} style={styles.icon}>
+          <Ionicons name={finding ? 'close' : 'search'} size={21} color={ink} />
+        </Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel="Open workspace tools" onPress={() => router.push({ pathname: '/(home)/tools', params: { source: activeWorkspaceSlug } })} style={styles.icon}>
+          <MaterialIcons name="workspaces-outline" size={24} color="black" />
+        </Pressable>
       </View>
     </View>
-    <Pressable accessibilityRole="button" accessibilityLabel={feed.decision === 'confirm' ? 'Choose workspace' : `Switch workspace, ${workspaceName}${workspaceDetails ? `, ${workspaceDetails}` : ''}${context?.held ? ', manually selected' : ''}`} onPress={() => setMenu('change')} style={styles.context}>
-      <View style={styles.contextIdentity}>
-        <Text numberOfLines={1} style={styles.workspaceName}>{workspaceName}</Text>
-        {workspaceDetails ? <Text numberOfLines={1} style={styles.contextDetails}>{workspaceDetails}</Text> : null}
+    <View style={styles.contextBar}>
+      <Pressable accessibilityRole="button" accessibilityLabel={feed.decision === 'confirm' ? 'Choose workspace' : `Switch workspace, ${workspaceName}${workspaceDetails ? `, ${workspaceDetails}` : ''}${context?.held ? ', manually selected' : ''}`} onPress={() => setMenu('change')} style={styles.context}>
+        <View style={styles.contextIdentity}>
+          <Text numberOfLines={1} style={styles.workspaceName}>{workspaceName}</Text>
+          {workspaceDetails ? <Text numberOfLines={1} style={styles.contextDetails}>{workspaceDetails}</Text> : null}
+        </View>
+        <Ionicons name="chevron-down" size={18} color={muted} />
+      </Pressable>
+      <View style={styles.contextActions}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Schedule Space routine" onPress={() => router.push('/(home)/routines')} style={styles.contextBtn}>
+          <Text style={styles.contextBtnText}>Schedule</Text>
+        </Pressable>
+        {context?.held ? (
+          <Pressable accessibilityRole="button" accessibilityLabel="Release manual hold to automatic" onPress={() => void resumeAutomatic()} style={[styles.contextBtn, styles.contextBtnAuto]}>
+            <Text style={[styles.contextBtnText, styles.contextBtnAutoText]}>Auto</Text>
+          </Pressable>
+        ) : null}
       </View>
-      <Ionicons name="chevron-down" size={18} color={muted} />
-    </Pressable>
+    </View>
     {finding ? <TextInput autoFocus accessibilityLabel="Search Now" placeholder="Find work across workspaces" value={query} onChangeText={setQuery} style={styles.search} /> : null}
     {!loading && (feed.partial || error) ? <Pressable accessibilityRole="button" onPress={() => { setRefreshing(true); void reload(); }} style={styles.partial}>
       <Text style={styles.partialText}>{error || (failedNames ? `Could not refresh ${failedNames}.` : 'Could not verify all sources.')}{feed.rows.length ? ' Known work is shown.' : ''} {lastUpdated ? `Last updated ${new Date(lastUpdated).toLocaleTimeString()}.` : ''} Retry ›</Text>
@@ -234,9 +252,15 @@ const styles = StyleSheet.create({
   top: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingBottom: 12 },
   title: { fontSize: 30, fontWeight: '800', color: ink }, topActions: { flexDirection: 'row', gap: 4 },
   icon: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center' },
-  context: { minHeight: 54, paddingHorizontal: 20, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: '#E3E6EC', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  contextBar: { flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderColor: '#E3E6EC', paddingRight: 14 },
+  context: { flex: 1, minHeight: 54, paddingHorizontal: 20, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   contextIdentity: { flex: 1, minWidth: 0 }, workspaceName: { fontSize: 15, lineHeight: 20, color: ink, fontWeight: '700' },
   contextDetails: { fontSize: 12, lineHeight: 17, color: muted, marginTop: 2 },
+  contextActions: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  contextBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, backgroundColor: '#F0F3F9', borderWidth: StyleSheet.hairlineWidth, borderColor: '#D0D7E5' },
+  contextBtnText: { fontSize: 12, fontWeight: '700', color: blue },
+  contextBtnAuto: { backgroundColor: blue, borderColor: blue },
+  contextBtnAutoText: { color: '#FFFFFF' },
   search: { margin: 14, marginBottom: 4, borderWidth: 1, borderColor: '#D8DBE3', borderRadius: 10, paddingHorizontal: 12, height: 44 },
   partial: { padding: 12, backgroundColor: '#FFF4DF' }, partialText: { color: '#825500', lineHeight: 20 },
   row: { paddingHorizontal: 20, paddingVertical: 15, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: '#D8DBE3', minHeight: 76 }, rowHead: { flexDirection: 'row', alignItems: 'flex-start', gap: 7 },

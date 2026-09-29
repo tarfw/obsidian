@@ -91,7 +91,7 @@ export class ModelRunner {
       const started = Date.now();
       let answer: unknown;
       try {
-        answer = await this.ai.run(models[Math.min(attempt, models.length - 1)], {
+        const runPromise = this.ai.run(models[Math.min(attempt, models.length - 1)], {
           messages: [
             { role: 'system', content: input.system },
             { role: 'user', content: attempt === 0 ? input.prompt : `${input.prompt}\n\nYour previous answer was rejected: ${lastError}\nReturn corrected JSON only.` },
@@ -100,6 +100,8 @@ export class ModelRunner {
           max_tokens: Math.min(input.maxTokens || 2_400, Math.max(256, this.budget.output - this.usage.output)),
           temperature: input.temperature ?? 0.4,
         });
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Model call timed out')), 15_000));
+        answer = await Promise.race([runPromise, timeoutPromise]);
       } catch (cause) {
         lastError = cause instanceof Error ? cause.message : 'the model call failed';
         if (attempt === 1) throw unavailable('Site composition could not reach the model. Try again shortly.', cause);

@@ -35,7 +35,14 @@ const rowToRecord = (row: Record<string, unknown>): RecordItem => ({
 });
 const bookActions = new Set(['record.create', 'contact.create', 'organization.create', 'task.create', 'site.generate', 'web.search', 'pos.register.count', 'pos.register.close']);
 const unattendedActions = new Set(['record.create', 'contact.create', 'organization.create', 'task.create']);
-const managedCommerceTypes = new Set(['item', 'variant', 'price', 'stock', 'purchase', 'order', 'invoice', 'payment', 'refund', 'posting', 'movement', 'receipt', 'capability']);
+const managedCommerceTypes = new Set([
+  'item', 'variant', 'price', 'stock', 'purchase', 'order', 'invoice', 'payment',
+  'refund', 'posting', 'movement', 'receipt', 'capability',
+  'expense', 'statement', 'reconciliation', 'period', 'transfer', 'batch',
+  'recipe', 'production', 'booking', 'time', 'trip', 'fare', 'shift', 'attendance',
+  'payroll', 'supplier', 'quote', 'pick', 'pack', 'shipment', 'return', 'inspection',
+  'quality', 'forecast', 'plan',
+]);
 function validateContactDetails(values: Record<string, unknown>): void {
   for (const [key, value] of Object.entries(values)) {
     if (!['email', 'phone', 'website'].includes(key) || value === null || value === '') continue;

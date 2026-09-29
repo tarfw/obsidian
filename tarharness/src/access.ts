@@ -14,9 +14,25 @@ const cookActions = new Set(['task.complete', 'pos.order.item.update', 'pos.orde
 const cashierActions = new Set(['task.create', 'task.complete', 'flow.start', 'flow.advance', 'pos.open', 'pos.customer.save', 'pos.order.save', 'pos.order.cancel', 'pos.checkout', 'pos.register.open', 'pos.register.count', 'order.create', 'order.fulfill', 'order.cancel', 'invoice.issue', 'payment.record']);
 const courierActions = new Set(['task.create', 'task.complete', 'flow.start', 'flow.advance', 'pos.order.reach', 'pos.order.collect', 'pos.order.deliver']);
 const customerActions = new Set(['pos.order.receive', 'pos.order.rate']);
-const generalWorkActions = new Set(['record.create', 'record.update', 'contact.create', 'organization.create', 'relationship.create', 'relationship.end', 'consent.record', 'task.create', 'task.complete', 'flow.start', 'flow.advance', 'web.search', 'pos.order.handoff']);
-const managerActions = new Set([...generalWorkActions, 'pos.open', 'pos.customer.save', 'pos.order.save', 'pos.order.cancel', 'pos.checkout', 'pos.register.open', 'pos.register.count', 'pos.register.close', 'order.create', 'order.fulfill', 'order.cancel', 'invoice.issue', 'payment.record', 'refund.record']);
-export const workRoleNames = ['general', 'chef', 'cook', 'kitchen', 'cashier', 'manager', 'server', 'floor', 'kds', 'courier', 'customer'] as const;
+const driverActions = new Set(['task.create', 'task.complete', 'flow.start', 'flow.advance', 'trip.start', 'trip.complete', 'time.record', 'attendance.record']);
+const warehouseActions = new Set(['task.create', 'task.complete', 'flow.start', 'flow.advance', 'warehouse.pick', 'warehouse.pack', 'shipment.dispatch', 'shipment.track', 'shipment.deliver', 'stock.transfer', 'quality.inspect', 'time.record', 'attendance.record']);
+const domainWorkActions = [
+  'expense.record', 'stock.transfer', 'production.start', 'production.complete',
+  'booking.create', 'booking.cancel', 'time.record', 'trip.start', 'trip.complete',
+  'attendance.record', 'quote.request', 'quote.record', 'purchase.submit',
+  'warehouse.pick', 'warehouse.pack', 'shipment.dispatch', 'shipment.track', 'shipment.deliver', 'quality.inspect',
+] as const;
+const generalWorkActions = new Set([
+  'record.create', 'record.update', 'contact.create', 'organization.create', 'relationship.create', 'relationship.end',
+  'consent.record', 'task.create', 'task.complete', 'flow.start', 'flow.advance', 'web.search', 'pos.order.handoff',
+  ...domainWorkActions,
+]);
+const managerActions = new Set([
+  ...generalWorkActions, 'pos.open', 'pos.customer.save', 'pos.order.save', 'pos.order.cancel', 'pos.checkout',
+  'pos.register.open', 'pos.register.count', 'pos.register.close', 'order.create', 'order.fulfill', 'order.cancel',
+  'invoice.issue', 'payment.record', 'refund.record',
+]);
+export const workRoleNames = ['general', 'chef', 'cook', 'kitchen', 'cashier', 'manager', 'server', 'floor', 'kds', 'courier', 'customer', 'driver', 'warehouse'] as const;
 function workRoleActions(role: string): ReadonlySet<string> {
   if (!role || role === 'general') return generalWorkActions;
   if (kitchenRoles.has(role)) return cookActions;
@@ -25,6 +41,8 @@ function workRoleActions(role: string): ReadonlySet<string> {
   if (['server', 'floor', 'kds'].includes(role)) return generalWorkActions;
   if (role === 'courier') return courierActions;
   if (role === 'customer') return customerActions;
+  if (role === 'driver') return driverActions;
+  if (role === 'warehouse') return warehouseActions;
   return generalWorkActions;
 }
 
@@ -66,8 +84,9 @@ export function canReadRecord(member: Member, record: Pick<RecordItem, 'type' | 
   if (record.type === 'pos.register' && grantedRoles(member).some((role) => ['cashier', 'manager'].includes(role))) return true;
   return roles.some((role) => {
     if (!role || role === 'general') return true;
-    if (kitchenRoles.has(role) || role === 'courier' || role === 'customer') return false;
     if (role === 'cashier') return ['contact', 'person', 'pos.order', 'pos.customer', 'pos.product'].includes(record.type);
+    if (role === 'driver') return ['trip', 'fare', 'task'].includes(record.type);
+    if (role === 'warehouse') return ['order', 'stock', 'pick', 'pack', 'shipment', 'movement', 'batch', 'inspection', 'task'].includes(record.type);
     return record.owner === member.userId || record.assignee === member.userId || workRole(record.data.workRole) === role;
   });
 }

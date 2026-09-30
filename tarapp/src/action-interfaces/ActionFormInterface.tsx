@@ -562,27 +562,62 @@ function ActionForm(props: ActionInterfaceProps) {
                     </Text>
 
                     {field.kind === 'record' ? (
-                      <TouchableOpacity
-                        disabled={saving}
-                        onPress={() => {
-                          setRecordQuery('');
-                          setPicker(field);
-                        }}
-                        style={styles.recordInput}
-                      >
-                        <Text
-                          numberOfLines={1}
-                          style={[
-                            styles.recordValue,
-                            !values[field.key] && styles.placeholder,
-                          ]}
-                        >
-                          {records.find((r) => r.id === values[field.key])?.title ||
-                            values[field.key] ||
-                            `Select ${field.label.toLowerCase()}`}
-                        </Text>
-                        <Ionicons name="chevron-down" size={16} color="#94A3B8" />
-                      </TouchableOpacity>
+                      (() => {
+                        const matchingRecords = records.filter(
+                          (r) => !field.recordType || r.type === field.recordType,
+                        );
+                        if (matchingRecords.length > 0 && matchingRecords.length <= 4) {
+                          return (
+                            <View style={styles.choices}>
+                              {matchingRecords.map((record) => {
+                                const selected = values[field.key] === record.id;
+                                return (
+                                  <TouchableOpacity
+                                    key={record.id}
+                                    accessibilityRole="radio"
+                                    accessibilityState={{ selected }}
+                                    disabled={saving}
+                                    onPress={() => setValue(field.key, record.id)}
+                                    style={[styles.choice, selected && styles.choiceSelected]}
+                                  >
+                                    <Text
+                                      style={[
+                                        styles.choiceText,
+                                        selected && styles.choiceTextSelected,
+                                      ]}
+                                    >
+                                      {record.title}
+                                    </Text>
+                                  </TouchableOpacity>
+                                );
+                              })}
+                            </View>
+                          );
+                        }
+                        return (
+                          <TouchableOpacity
+                            disabled={saving}
+                            onPress={() => {
+                              setRecordQuery('');
+                              setPicker(field);
+                            }}
+                            style={styles.recordInput}
+                          >
+                            <Text
+                              numberOfLines={1}
+                              style={[
+                                styles.recordValue,
+                                !values[field.key] && styles.placeholder,
+                              ]}
+                            >
+                              {records.find((r) => r.id === values[field.key])?.title ||
+                                values[field.key] ||
+                                `Select ${field.label.toLowerCase()}`}
+                            </Text>
+                            <Ionicons name="chevron-down" size={16} color="#94A3B8" />
+                          </TouchableOpacity>
+                        );
+                      })()
                     ) : (
                       <TextInput
                         editable={!saving}
@@ -608,91 +643,131 @@ function ActionForm(props: ActionInterfaceProps) {
                   </View>
                 ))}
 
-              {/* Clean Inline Multi-Line Items */}
+              {/* Clean Inline Multi-Line Items (Natural Full-Width & 1-Tap Hybrid Stepper) */}
               {linesFieldKey ? (
                 <View style={styles.linesSection}>
                   <View style={styles.linesHeader}>
                     <Text style={styles.linesSectionTitle}>Line items</Text>
                     <TouchableOpacity onPress={addLine} style={styles.addLineButton}>
-                      <Ionicons name="add" size={16} color="#1E293B" />
+                      <Ionicons name="add" size={16} color="#2563EB" />
                       <Text style={styles.addLineText}>Add line</Text>
                     </TouchableOpacity>
                   </View>
 
-                  {lineItems.map((line, idx) => (
-                    <View key={line.id} style={styles.lineRowCard}>
-                      <View style={styles.lineRowTop}>
-                        <Text style={styles.lineIndex}>#{idx + 1}</Text>
-                        <TextInput
-                          editable={!saving}
-                          value={line.item}
-                          onChangeText={(val) => updateLine(line.id, { item: val })}
-                          placeholder="Item description"
-                          placeholderTextColor="#94A3B8"
-                          style={styles.lineItemInput}
-                        />
-                        {lineItems.length > 1 ? (
-                          <TouchableOpacity
-                            onPress={() => removeLine(line.id)}
-                            style={styles.removeLineButton}
-                          >
-                            <Ionicons name="close" size={18} color="#94A3B8" />
-                          </TouchableOpacity>
-                        ) : null}
-                      </View>
+                  {lineItems.map((line) => {
+                    const lineTotal = line.quantity * line.rate;
+                    return (
+                      <View key={line.id} style={styles.lineItemCard}>
+                        {/* Top Line: Full Width Item Description, Line Total & Remove */}
+                        <View style={styles.lineItemTopRow}>
+                          <TextInput
+                            editable={!saving}
+                            value={line.item}
+                            onChangeText={(val) => updateLine(line.id, { item: val })}
+                            placeholder="Item description"
+                            placeholderTextColor="#94A3B8"
+                            style={styles.lineItemNameInput}
+                          />
+                          {lineTotal > 0 ? (
+                            <Text numberOfLines={1} style={styles.lineItemTotal}>
+                              {lineTotal.toLocaleString(undefined, {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              })}
+                            </Text>
+                          ) : null}
+                          {lineItems.length > 1 ? (
+                            <TouchableOpacity
+                              onPress={() => removeLine(line.id)}
+                              style={styles.lineItemDeleteBtn}
+                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                              accessibilityLabel="Remove item"
+                            >
+                              <Ionicons name="close" size={16} color="#94A3B8" />
+                            </TouchableOpacity>
+                          ) : null}
+                        </View>
 
-                      <View style={styles.lineRowBottom}>
-                        <View style={styles.lineQtyWrap}>
-                          <Text style={styles.lineSubLabel}>Qty</Text>
-                          <TextInput
-                            editable={!saving}
-                            value={String(line.quantity || '')}
-                            onChangeText={(val) =>
-                              updateLine(line.id, { quantity: Number(val) || 0 })
-                            }
-                            keyboardType="numeric"
-                            placeholder="1"
-                            placeholderTextColor="#94A3B8"
-                            style={styles.lineSmallInput}
-                          />
-                        </View>
-                        <View style={styles.lineRateWrap}>
-                          <Text style={styles.lineSubLabel}>Rate</Text>
-                          <TextInput
-                            editable={!saving}
-                            value={line.rate === 0 ? '' : String(line.rate)}
-                            onChangeText={(val) =>
-                              updateLine(line.id, { rate: Number(val) || 0 })
-                            }
-                            keyboardType="numeric"
-                            placeholder="0.00"
-                            placeholderTextColor="#94A3B8"
-                            style={styles.lineSmallInput}
-                          />
-                        </View>
-                        <View style={styles.lineTotalWrap}>
-                          <Text style={styles.lineSubLabel}>Total</Text>
-                          <Text style={styles.lineTotalText}>
-                            {(line.quantity * line.rate).toLocaleString(undefined, {
-                              minimumFractionDigits: 2,
-                              maximumFractionDigits: 2,
-                            })}
-                          </Text>
+                        {/* Bottom Sub-Row: 1-Tap Hybrid Stepper & Inline Unit Rate */}
+                        <View style={styles.lineItemSubRow}>
+                          <View style={styles.stepperContainer}>
+                            <TouchableOpacity
+                              disabled={saving}
+                              onPress={() => {
+                                if (line.quantity <= 1 && lineItems.length > 1) {
+                                  removeLine(line.id);
+                                } else {
+                                  updateLine(line.id, {
+                                    quantity: Math.max(1, line.quantity - 1),
+                                  });
+                                }
+                              }}
+                              style={styles.stepperBtn}
+                              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                              accessibilityLabel="Decrease quantity"
+                            >
+                              <Ionicons name="remove" size={14} color="#475569" />
+                            </TouchableOpacity>
+
+                            <TextInput
+                              editable={!saving}
+                              value={String(line.quantity || 1)}
+                              onChangeText={(val) => {
+                                const parsed = parseInt(val, 10);
+                                updateLine(line.id, { quantity: isNaN(parsed) ? 0 : parsed });
+                              }}
+                              keyboardType="numeric"
+                              selectTextOnFocus
+                              style={styles.stepperInput}
+                            />
+
+                            <TouchableOpacity
+                              disabled={saving}
+                              onPress={() =>
+                                updateLine(line.id, { quantity: line.quantity + 1 })
+                              }
+                              style={styles.stepperBtn}
+                              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                              accessibilityLabel="Increase quantity"
+                            >
+                              <Ionicons name="add" size={14} color="#475569" />
+                            </TouchableOpacity>
+                          </View>
+
+                          <View style={styles.rateContainer}>
+                            <Text style={styles.ratePrefix}>@</Text>
+                            <TextInput
+                              editable={!saving}
+                              value={line.rate === 0 ? '' : String(line.rate)}
+                              onChangeText={(val) =>
+                                updateLine(line.id, { rate: Number(val) || 0 })
+                              }
+                              keyboardType="numeric"
+                              placeholder="0.00"
+                              placeholderTextColor="#94A3B8"
+                              style={styles.rateInput}
+                            />
+                            {line.unit ? (
+                              <Text style={styles.unitText}>/ {line.unit}</Text>
+                            ) : null}
+                          </View>
                         </View>
                       </View>
-                    </View>
-                  ))}
+                    );
+                  })}
 
                   {/* Clean Subtotal Summary */}
-                  <View style={styles.subtotalRow}>
-                    <Text style={styles.subtotalLabel}>Subtotal</Text>
-                    <Text style={styles.subtotalValue}>
-                      {subtotal.toLocaleString(undefined, {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })}
-                    </Text>
-                  </View>
+                  {subtotal > 0 ? (
+                    <View style={styles.subtotalRow}>
+                      <Text style={styles.subtotalLabel}>Subtotal</Text>
+                      <Text style={styles.subtotalValue}>
+                        {subtotal.toLocaleString(undefined, {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
+                      </Text>
+                    </View>
+                  ) : null}
                 </View>
               ) : null}
             </View>
@@ -841,8 +916,8 @@ const styles = StyleSheet.create({
   recordValue: { flex: 1, fontSize: 14, color: '#0F172A' },
   placeholder: { color: '#94A3B8' },
 
-  /* Clean Line Items */
-  linesSection: { marginTop: 8, gap: 12 },
+  /* Clean Line Items - Natural Full-Width & 1-Tap Hybrid Stepper */
+  linesSection: { marginTop: 4, gap: 0 },
   linesHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -854,58 +929,105 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
   },
-  addLineText: { fontSize: 13, fontWeight: '600', color: '#1E293B' },
-  lineRowCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    padding: 12,
-    gap: 10,
+  addLineText: { fontSize: 13, fontWeight: '600', color: '#2563EB' },
+  lineItemCard: {
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#F1F5F9',
+    gap: 6,
   },
-  lineRowTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  lineIndex: { fontSize: 12, fontWeight: '600', color: '#94A3B8', width: 24 },
-  lineItemInput: {
+  lineItemTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  lineItemNameInput: {
     flex: 1,
-    minHeight: 38,
+    fontSize: 15,
+    fontWeight: '500',
+    color: '#0F172A',
+    paddingVertical: 0,
+    paddingHorizontal: 0,
+  },
+  lineItemTotal: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#0F172A',
+    textAlign: 'right',
+    minWidth: 48,
+  },
+  lineItemDeleteBtn: {
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  lineItemSubRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  stepperContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#F8FAFC',
     borderRadius: 6,
-    paddingHorizontal: 10,
-    fontSize: 13,
-    color: '#0F172A',
     borderWidth: 1,
     borderColor: '#E2E8F0',
+    height: 28,
   },
-  removeLineButton: { padding: 4 },
-  lineRowBottom: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  lineQtyWrap: { width: 70 },
-  lineRateWrap: { flex: 1 },
-  lineTotalWrap: { width: 90, alignItems: 'flex-end' },
-  lineSubLabel: { fontSize: 11, fontWeight: '500', color: '#64748B', marginBottom: 4 },
-  lineSmallInput: {
-    height: 36,
-    backgroundColor: '#F8FAFC',
-    borderRadius: 6,
-    paddingHorizontal: 8,
+  stepperBtn: {
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepperInput: {
+    minWidth: 26,
+    height: 28,
+    textAlign: 'center',
     fontSize: 13,
+    fontWeight: '600',
     color: '#0F172A',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
+    paddingHorizontal: 2,
+    paddingVertical: 0,
   },
-  lineTotalText: { fontSize: 14, fontWeight: '700', color: '#0F172A', height: 36, textAlignVertical: 'center', paddingTop: 8 },
+  rateContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  ratePrefix: {
+    fontSize: 13,
+    color: '#94A3B8',
+    fontWeight: '500',
+  },
+  rateInput: {
+    fontSize: 13,
+    color: '#475569',
+    minWidth: 44,
+    paddingVertical: 0,
+    paddingHorizontal: 0,
+  },
+  unitText: {
+    fontSize: 12,
+    color: '#94A3B8',
+  },
   subtotalRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingTop: 12,
+    marginTop: 4,
     borderTopWidth: 1,
-    borderTopColor: '#F1F5F9',
+    borderTopColor: '#E2E8F0',
   },
-  subtotalLabel: { fontSize: 14, fontWeight: '600', color: '#64748B' },
-  subtotalValue: { fontSize: 17, fontWeight: '700', color: '#0F172A' },
+  subtotalLabel: { fontSize: 13, fontWeight: '600', color: '#64748B' },
+  subtotalValue: { fontSize: 16, fontWeight: '700', color: '#0F172A' },
 
   /* Routines */
   routineBlock: { gap: 16 },

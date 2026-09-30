@@ -16,7 +16,6 @@ const muted = '#697586';
 const blue = '#3157A8';
 const line = '#E8ECF1';
 const groups = [
-  { id: 'pos', title: 'Point of sale', icon: 'storefront-outline' },
   { id: 'commerce', title: 'Commerce', icon: 'bag-handle-outline' },
   { id: 'site', title: 'Site Studio', icon: 'globe-outline' },
   { id: 'flows', title: 'Flow Books', icon: 'git-branch-outline' },
@@ -28,19 +27,35 @@ type ListedTool = HarnessTool & { scope: string; workspace: string; role: string
 type ToolGroup = { id: string; title: string; icon: keyof typeof Ionicons.glyphMap; workspace: string; scope: string; tools: ListedTool[] };
 type OpenAction = { action: HarnessAction; interfaces: HarnessInterfaceContract[]; scope: string; input: Record<string, unknown>; title: string };
 type FlowPicker = { scope: string; workspace: string; action: HarnessAction; interfaces: HarnessInterfaceContract[]; books: HarnessFlowBook[]; runs: HarnessFlowRun[] };
+const LEGACY_TOOL_IDS = new Set(['register', 'pos.register', 'pos.orders', 'orders', 'pos.stock', 'stock', 'pos.customers', 'customers', 'variant', 'price', 'shift']);
+
+function sanitizeTools(snapshot: HarnessTools): HarnessTools {
+  return {
+    ...snapshot,
+    tools: (snapshot.tools || [])
+      .filter((tool) => !LEGACY_TOOL_IDS.has(tool.id))
+      .map((tool) => {
+        if (tool.id === 'pos') return { ...tool, title: 'Point of sale', description: 'Quick counter sale & payment' };
+        return tool;
+      }),
+  };
+}
+
 const toolSnapshotCache = new Map<string, HarnessTools>();
 const cacheKey = (workspace: HarnessWorkspace) => `${workspace.id}:${workspace.role}:${[...(workspace.roles?.length ? workspace.roles : [workspace.workRole || workspace.role])].sort().join(',')}`;
-const storedCacheKey = (userId: string, workspace: HarnessWorkspace) => `tar_tools_v1_${userId.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 36)}_${workspace.id.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 48)}`;
+const storedCacheKey = (userId: string, workspace: HarnessWorkspace) => `tar_tools_v5_${userId.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 36)}_${workspace.id.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 48)}`;
 const isToolsSnapshot = (value: unknown): value is HarnessTools => Boolean(value && typeof value === 'object'
   && Array.isArray((value as HarnessTools).tools) && Array.isArray((value as HarnessTools).modules)
   && typeof (value as HarnessTools).role === 'string' && Number.isFinite((value as HarnessTools).version));
 
-const bucket = (tool: HarnessTool) => tool.module !== 'core' ? tool.module
+const bucket = (tool: HarnessTool) => tool.module === 'commerce' || tool.module === 'pos' ? 'commerce'
+  : tool.module !== 'core' ? tool.module
   : tool.kind === 'flows' || tool.id === 'flow' ? 'flows'
   : tool.category === 'create' ? 'create' : 'other';
 
 async function readTools(workspace: HarnessWorkspace): Promise<HarnessTools> {
-  return await harness.workspaceTools(workspace.slug);
+  const result = await harness.workspaceTools(workspace.slug);
+  return sanitizeTools(result);
 }
 
 export default function ToolsScreen() {
@@ -54,7 +69,7 @@ export default function ToolsScreen() {
   const [loadedScopes, setLoadedScopes] = useState<Record<string, boolean>>({});
   const [failed, setFailed] = useState<string[]>([]);
   const [page, setPage] = useState<Page>('home');
-  const [selected, setSelected] = useState(params.source || current.slug);
+  const [selected, setSelected] = useState(params.source || 'all');
   const [managedSlug, setManagedSlug] = useState(current.slug);
   const [folder, setFolder] = useState<ToolGroup | null>(null);
   const [flowPicker, setFlowPicker] = useState<FlowPicker | null>(null);
@@ -67,11 +82,24 @@ export default function ToolsScreen() {
   const [teamScope, setTeamScope] = useState<string | null>(null);
   const loadGeneration = useRef(0);
 
+  const chooseWorkspace = useCallback((slug: string) => {
+    setSelected(slug);
+    void SecureStore.setItemAsync('tar_tools_preferred_scope', slug).catch(() => undefined);
+  }, []);
+
   const load = useCallback(async () => {
     const generation = ++loadGeneration.current;
+    try {
+      const saved = await SecureStore.getItemAsync('tar_tools_preferred_scope');
+      if (saved && (saved === 'all' || active.some((w) => w.slug === saved))) {
+        setSelected(saved);
+      } else if (!saved) {
+        setSelected('all');
+      }
+    } catch { /* Local storage fallback */ }
     const cached = Object.fromEntries(active.flatMap((workspace) => {
       const snapshot = toolSnapshotCache.get(cacheKey(workspace));
-      return snapshot ? [[workspace.slug, snapshot]] : [];
+      return snapshot ? [[workspace.slug, sanitizeTools(snapshot)]] : [];
     }));
     setSources(cached);
     setLoadedScopes(Object.fromEntries(active.map((workspace) => [workspace.slug, Boolean(cached[workspace.slug])])));
@@ -87,8 +115,9 @@ export default function ToolsScreen() {
             if (!raw) return;
             const entry = JSON.parse(raw) as { authority?: unknown; snapshot?: unknown };
             if (entry.authority !== cacheKey(workspace) || !isToolsSnapshot(entry.snapshot)) return;
-            cached[workspace.slug] = entry.snapshot;
-            toolSnapshotCache.set(cacheKey(workspace), entry.snapshot);
+            const cleanSnapshot = sanitizeTools(entry.snapshot);
+            cached[workspace.slug] = cleanSnapshot;
+            toolSnapshotCache.set(cacheKey(workspace), cleanSnapshot);
           } catch { /* Local snapshots are only a fast display hint. */ }
         }));
         if (generation !== loadGeneration.current) return;
@@ -98,7 +127,10 @@ export default function ToolsScreen() {
     } catch { /* Server checks still run when secure storage is unavailable. */ }
     await Promise.allSettled(active.map(async (workspace) => {
       try {
-        const snapshot = await readTools(workspace);
+        const [snapshot] = await Promise.all([
+          readTools(workspace),
+          harness.workspaceRegistry(workspace.slug).catch(() => null),
+        ]);
         toolSnapshotCache.set(cacheKey(workspace), snapshot);
         if (userId) void SecureStore.setItemAsync(storedCacheKey(userId, workspace), JSON.stringify({ authority: cacheKey(workspace), snapshot })).catch(() => undefined);
         if (generation === loadGeneration.current) {
@@ -131,21 +163,45 @@ export default function ToolsScreen() {
 
   const openTool = async (tool: ListedTool) => {
     if (busy) return;
-    setBusy(`${tool.scope}:${tool.id}`);
     try {
       const workspace = active.find((item) => item.slug === tool.scope);
       if (!workspace) throw new Error('Workspace is no longer available.');
-      const [available, registry] = await Promise.all([readTools(workspace), harness.workspaceRegistry(tool.scope)]);
-      const fresh = available.tools.find((item) => item.id === tool.id);
-      const action = fresh && registry.actions.find((item) => item.id === fresh.action);
-      if (!fresh || !action || !registry.interfaces.some((item) => item.key === action.interfaceKey)) throw new Error('This tool is no longer available. Refresh Tools.');
-      if (fresh.kind === 'site') setSiteOpen({ scope: tool.scope, workspace: tool.workspace });
-      else if (fresh.kind === 'flows') {
+
+      const registry = await harness.workspaceRegistry(tool.scope);
+      const available = sources[tool.scope] || (await readTools(workspace));
+      const fresh = available.tools.find((item) => item.id === tool.id) || tool;
+      const action = registry.actions.find((item) => item.id === fresh.action);
+
+      if (fresh && action && registry.interfaces.some((item) => item.key === action.interfaceKey)) {
+        if (fresh.kind === 'site') { setSiteOpen({ scope: tool.scope, workspace: tool.workspace }); return; }
+        if (fresh.kind === 'flows') {
+          setBusy(`${tool.scope}:${tool.id}`);
+          const flows = await harness.flows(tool.scope);
+          setFlowPicker({ scope: tool.scope, workspace: tool.workspace, action, interfaces: registry.interfaces, ...flows });
+          setBackFromFlow(page);
+          setPage('flows');
+          return;
+        }
+        setOpenAction({ action, interfaces: registry.interfaces, scope: tool.scope, input: fresh.input, title: fresh.title });
+        return;
+      }
+
+      setBusy(`${tool.scope}:${tool.id}`);
+      const [freshAvailable, freshRegistry] = await Promise.all([readTools(workspace), harness.workspaceRegistry(tool.scope, true)]);
+      const retryFresh = freshAvailable.tools.find((item) => item.id === tool.id);
+      const retryAction = retryFresh && freshRegistry.actions.find((item) => item.id === retryFresh.action);
+      if (!retryFresh || !retryAction || !freshRegistry.interfaces.some((item) => item.key === retryAction.interfaceKey)) {
+        throw new Error('This tool is no longer available. Refresh Tools.');
+      }
+      if (retryFresh.kind === 'site') setSiteOpen({ scope: tool.scope, workspace: tool.workspace });
+      else if (retryFresh.kind === 'flows') {
         const flows = await harness.flows(tool.scope);
-        setFlowPicker({ scope: tool.scope, workspace: tool.workspace, action, interfaces: registry.interfaces, ...flows });
+        setFlowPicker({ scope: tool.scope, workspace: tool.workspace, action: retryAction, interfaces: freshRegistry.interfaces, ...flows });
         setBackFromFlow(page);
         setPage('flows');
-      } else setOpenAction({ action, interfaces: registry.interfaces, scope: tool.scope, input: fresh.input, title: fresh.title });
+      } else {
+        setOpenAction({ action: retryAction, interfaces: freshRegistry.interfaces, scope: tool.scope, input: retryFresh.input, title: retryFresh.title });
+      }
     } catch (cause) { Alert.alert('Could not open tool', cause instanceof Error ? cause.message : 'Try again.'); void load(); }
     finally { setBusy(''); }
   };
@@ -200,8 +256,12 @@ export default function ToolsScreen() {
 
     {page === 'home' ? <>
       <Pressable accessibilityRole="button" accessibilityLabel="Choose workspace for tools" onPress={() => setPage('workspaces')} style={styles.scopeRow}>
-        <View style={styles.scopeCopy}><Text style={styles.scopeName}>{selected === 'all' ? 'All workspaces' : selectedWorkspace?.name || current.name}</Text>
-          <Text style={styles.scopeRole}>{selected === 'all' ? 'Your available tools' : sources[selected]?.role || selectedWorkspace?.workRole || selectedWorkspace?.role || ''}</Text></View>
+        <View style={styles.scopeCopy}>
+          <Text style={styles.scopeName}>{selected === 'all' ? 'All workspaces' : selectedWorkspace?.name || current.name}</Text>
+          <Text style={styles.scopeRole}>
+            {selected === 'all' ? 'Your available tools' : sources[selected]?.role || selectedWorkspace?.workRole || selectedWorkspace?.role || 'Active workspace'}
+          </Text>
+        </View>
         <Ionicons name="chevron-down" size={19} color={muted} />
       </Pressable>
       {searchOpen ? <View style={styles.searchWrap}><Ionicons name="search-outline" size={19} color={muted} /><TextInput autoFocus accessibilityLabel="Find a tool or workspace" placeholder="Find a tool or workspace" placeholderTextColor={muted} value={query} onChangeText={setQuery} style={styles.searchInput} /></View> : null}
@@ -209,12 +269,12 @@ export default function ToolsScreen() {
         {pending && !toolGroups.length ? <ActivityIndicator color={blue} style={styles.loading} /> : <>
           {failed.length ? <Pressable accessibilityRole="button" onPress={() => void load()} style={styles.notice}><Text style={styles.noticeText}>Could not load {failed.join(', ')}. Retry</Text><Ionicons name="arrow-forward" size={17} color={blue} /></Pressable> : null}
           {query.trim() ? <>
-            {matches.map((tool) => <Row key={`${tool.scope}:${tool.id}`} icon={tool.icon as keyof typeof Ionicons.glyphMap} title={tool.title} detail={`${tool.workspace} · ${tool.description}`} busy={busy === `${tool.scope}:${tool.id}`} onPress={() => void openTool(tool)} />)}
+            {matches.map((tool) => <Row key={`${tool.scope}:${tool.id}`} icon={tool.icon as keyof typeof Ionicons.glyphMap} title={tool.title} detail={selected === 'all' ? tool.workspace : undefined} busy={busy === `${tool.scope}:${tool.id}`} onPress={() => void openTool(tool)} />)}
             {!matches.length && pending ? <View style={styles.refreshing}><ActivityIndicator size="small" color={blue} /><Text style={styles.rowDetail}>Loading tools…</Text></View> : !matches.length ? <Empty title="No matching tools" detail="Try another name or workspace." /> : null}
           </> : <>
             {toolGroups.map((group, index) => <View key={`${group.scope}:${group.id}`}>
               {selected === 'all' && (index === 0 || toolGroups[index - 1].scope !== group.scope) ? <Text style={styles.groupHeading}>{group.workspace}</Text> : null}
-              <Row icon={group.icon} title={group.title} detail={group.tools.length > 1 ? `${group.tools.length} tools` : undefined} onPress={() => {
+              <Row icon={group.icon} title={group.title} badge={group.tools.length > 1 ? group.tools.length : undefined} arrow={group.tools.length > 1} onPress={() => {
                 if (group.tools.length === 1) void openTool(group.tools[0]);
                 else { setFolder(group); setPage('folder'); }
               }} />
@@ -227,42 +287,42 @@ export default function ToolsScreen() {
     </> : null}
 
     {page === 'workspaces' ? <ScrollView style={styles.scroll} contentContainerStyle={[styles.content, { paddingBottom: bottom }]}>
-      <Row icon="layers-outline" title="All workspaces" onPress={() => { setSelected('all'); setPage('home'); }} selected={selected === 'all'} />
-      {active.map((workspace) => <Row key={workspace.slug} icon="albums-outline" title={workspace.name} detail={sources[workspace.slug]?.role || workspace.workRole || workspace.role} onPress={() => { setSelected(workspace.slug); setPage('home'); }} selected={selected === workspace.slug} />)}
+      <Row icon="layers-outline" title="All workspaces" onPress={() => { chooseWorkspace('all'); setPage('home'); }} selected={selected === 'all'} />
+      {active.map((workspace) => <Row key={workspace.slug} icon="albums-outline" title={workspace.name} detail={workspace.mode === 'personal' ? undefined : (sources[workspace.slug]?.role || workspace.workRole || workspace.role)} onPress={() => { chooseWorkspace(workspace.slug); setPage('home'); }} selected={selected === workspace.slug} />)}
     </ScrollView> : null}
 
     {page === 'folder' && folder ? <ScrollView style={styles.scroll} contentContainerStyle={[styles.content, { paddingBottom: bottom }]}>
       <Text style={styles.caption}>{folder.workspace}</Text>
-      {folder.tools.map((tool) => <Row key={tool.id} icon={tool.icon as keyof typeof Ionicons.glyphMap} title={tool.title} detail={tool.description} busy={busy === `${tool.scope}:${tool.id}`} onPress={() => void openTool(tool)} />)}
+      {folder.tools.map((tool) => <Row key={tool.id} icon={tool.icon as keyof typeof Ionicons.glyphMap} title={tool.title} busy={busy === `${tool.scope}:${tool.id}`} onPress={() => void openTool(tool)} />)}
     </ScrollView> : null}
 
     {page === 'flows' && flowPicker ? <ScrollView style={styles.scroll} contentContainerStyle={[styles.content, { paddingBottom: bottom }]}>
       <Text style={styles.caption}>{flowPicker.workspace}</Text>
       {flowPicker.runs.filter((run) => run.state !== 'completed').map((run) => {
         const book = flowPicker.books.find((item) => item.id === run.flowId);
-        return book ? <Row key={run.id} icon="play-outline" title={`Continue ${run.name || book.name}`} onPress={() => chooseFlow(book, run)} /> : null;
+        return book ? <Row key={run.id} icon="play-outline" title={`Continue ${run.name || book.name}`} busy={busy === `${flowPicker.scope}:${run.id}`} onPress={() => chooseFlow(book, run)} /> : null;
       })}
       {flowPicker.books.map((book) => <Row key={book.id} icon="git-branch-outline" title={book.name} onPress={() => chooseFlow(book)} />)}
       {!flowPicker.books.length ? <Empty title="No Flow Books" detail="Published processes will appear here." /> : null}
     </ScrollView> : null}
 
     {page === 'more' ? <ScrollView style={styles.scroll} contentContainerStyle={[styles.content, { paddingBottom: bottom }]}>
-      <Row icon="folder-outline" title="Browse records" onPress={() => router.push({ pathname: '/(home)/records', params: { source: selected === 'all' ? current.slug : selected } })} />
-      <Row icon="list-outline" title="Action registry" onPress={() => router.push('/registry')} />
-      <Row icon="time-outline" title="Space routines" onPress={() => router.push('/(home)/routines')} />
-      {active.some((workspace) => workspace.mode === 'work') ? <Row icon="people-outline" title="Members & chat" onPress={() => {
+      <Row icon="folder-outline" title="Browse records" arrow onPress={() => router.push({ pathname: '/(home)/records', params: { source: selected === 'all' ? current.slug : selected } })} />
+      <Row icon="list-outline" title="Action registry" arrow onPress={() => router.push('/registry')} />
+      <Row icon="time-outline" title="Space routines" arrow onPress={() => router.push('/(home)/routines')} />
+      {active.some((workspace) => workspace.mode === 'work') ? <Row icon="people-outline" title="Members & chat" arrow onPress={() => {
         const work = active.filter((workspace) => workspace.mode === 'work');
         if (work.length === 1) setTeamScope(work[0].slug);
         else setPage('teams');
       }} /> : null}
-      <Row icon="add-outline" title="Create workspace" onPress={createWorkspace} />
-      {manageable.length ? <Row icon="options-outline" title="Capabilities" onPress={() => { setManagedSlug(manageable.find((item) => item.slug === current.slug)?.slug || manageable[0].slug); setPage('manage'); }} /> : null}
-      <Row icon="settings-outline" title="Settings" onPress={() => router.push('/settings')} />
+      <Row icon="add-outline" title="Create workspace" arrow onPress={createWorkspace} />
+      {manageable.length ? <Row icon="options-outline" title="Capabilities" arrow onPress={() => { setManagedSlug(manageable.find((item) => item.slug === current.slug)?.slug || manageable[0].slug); setPage('manage'); }} /> : null}
+      <Row icon="settings-outline" title="Settings" arrow onPress={() => router.push('/settings')} />
     </ScrollView> : null}
 
     {page === 'teams' ? <ScrollView style={styles.scroll} contentContainerStyle={[styles.content, { paddingBottom: bottom }]}>
       {active.filter((workspace) => workspace.mode === 'work').map((workspace) =>
-        <Row key={workspace.slug} icon="people-outline" title={workspace.name} detail={sources[workspace.slug]?.role || workspace.workRole || workspace.role} onPress={() => setTeamScope(workspace.slug)} />)}
+        <Row key={workspace.slug} icon="people-outline" title={workspace.name} detail={sources[workspace.slug]?.role || workspace.workRole || workspace.role} arrow onPress={() => setTeamScope(workspace.slug)} />)}
     </ScrollView> : null}
 
     {page === 'manage' ? <ScrollView style={styles.scroll} contentContainerStyle={[styles.content, { paddingBottom: bottom }]}>
@@ -283,13 +343,27 @@ export default function ToolsScreen() {
   </View>;
 }
 
-function Row({ icon, title, detail, busy, selected, onPress }: { icon: keyof typeof Ionicons.glyphMap; title: string; detail?: string; busy?: boolean; selected?: boolean; onPress: () => void }) {
-  return <Pressable accessibilityRole="button" accessibilityState={selected === undefined ? undefined : { selected }} disabled={busy} onPress={onPress} style={styles.row}>
+function Row({ icon, title, detail, busy, selected, arrow, badge, onPress }: {
+  icon: keyof typeof Ionicons.glyphMap;
+  title: string;
+  detail?: string;
+  busy?: boolean;
+  selected?: boolean;
+  arrow?: boolean;
+  badge?: string | number;
+  onPress: () => void;
+}) {
+  return <Pressable accessibilityRole="button" accessibilityState={selected === undefined ? undefined : { selected }} disabled={busy} onPress={onPress} style={[styles.row, !detail && styles.compactRow]}>
     <Ionicons name={icon} size={20} color={muted} style={styles.rowIcon} />
-    <View style={styles.rowCopy}><Text style={styles.rowTitle}>{title}</Text>{detail ? <Text style={styles.rowDetail} numberOfLines={1}>{detail}</Text> : null}</View>
-    {busy ? <ActivityIndicator color={blue} /> : <Ionicons name={selected ? 'checkmark' : 'chevron-forward'} size={18} color={selected ? blue : '#9CA5B3'} />}
+    <View style={styles.rowCopy}>
+      <Text style={styles.rowTitle}>{title}</Text>
+      {detail ? <Text style={styles.rowDetail} numberOfLines={1}>{detail}</Text> : null}
+    </View>
+    {badge !== undefined ? <View style={styles.badge}><Text style={styles.badgeText}>{badge}</Text></View> : null}
+    {busy ? <ActivityIndicator size="small" color={blue} /> : selected === undefined ? (arrow ? <Ionicons name="chevron-forward" size={17} color="#A8B0BE" /> : null) : selected ? <Ionicons name="checkmark" size={18} color={blue} /> : null}
   </Pressable>;
 }
+
 function Empty({ title, detail }: { title: string; detail: string }) {
   return <View style={styles.empty}><Text style={styles.emptyTitle}>{title}</Text><Text style={styles.emptyDetail}>{detail}</Text></View>;
 }
@@ -299,15 +373,22 @@ const styles = StyleSheet.create({
   header: { minHeight: 58, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   title: { color: ink, fontSize: 22, fontWeight: '700', flex: 1, marginLeft: 8 },
   headerActions: { flexDirection: 'row' }, iconButton: { width: 44, height: 44, justifyContent: 'center', alignItems: 'center' },
-  scopeRow: { minHeight: 70, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 24, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: line, gap: 12 },
-  scopeCopy: { flex: 1 }, scopeName: { color: ink, fontSize: 16, fontWeight: '700' }, scopeRole: { color: muted, fontSize: 12, marginTop: 4, textTransform: 'capitalize' },
+  scopeRow: { minHeight: 64, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 24, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: line, gap: 12 },
+  scopeCopy: { flex: 1 },
+  scopeName: { color: ink, fontSize: 16, fontWeight: '700' },
+  scopeRole: { color: muted, fontSize: 12, marginTop: 3, textTransform: 'capitalize' },
   searchWrap: { height: 48, marginHorizontal: 24, marginTop: 16, marginBottom: 4, paddingHorizontal: 14, borderRadius: 10, backgroundColor: '#F5F7FA', flexDirection: 'row', alignItems: 'center', gap: 9 },
   searchInput: { flex: 1, height: '100%', color: ink, fontSize: 15 },
   content: { paddingHorizontal: 24, paddingTop: 12 },
   groupHeading: { color: muted, fontSize: 12, fontWeight: '700', marginTop: 20, marginBottom: 4 },
-  row: { minHeight: 62, flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: line },
-  rowIcon: { width: 24 }, rowCopy: { flex: 1 }, rowTitle: { color: ink, fontSize: 16, fontWeight: '600', lineHeight: 21 },
-  rowDetail: { color: muted, fontSize: 12, lineHeight: 17, marginTop: 3 },
+  row: { minHeight: 58, flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: line },
+  compactRow: { minHeight: 48, paddingVertical: 11 },
+  rowIcon: { width: 24 },
+  rowCopy: { flex: 1 },
+  rowTitle: { color: ink, fontSize: 15, fontWeight: '600', lineHeight: 20 },
+  rowDetail: { color: muted, fontSize: 12, lineHeight: 16, marginTop: 2 },
+  badge: { minWidth: 22, height: 22, paddingHorizontal: 7, borderRadius: 11, backgroundColor: '#F0F3F8', alignItems: 'center', justifyContent: 'center', marginRight: 4 },
+  badgeText: { color: muted, fontSize: 12, fontWeight: '700' },
   caption: { color: muted, fontSize: 13, marginTop: 8, marginBottom: 8 },
   notice: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, backgroundColor: '#F5F7FA', marginBottom: 12, borderRadius: 8 },
   noticeText: { color: ink, fontSize: 13, flex: 1 }, loading: { marginTop: 48 },

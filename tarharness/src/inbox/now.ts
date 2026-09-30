@@ -48,7 +48,7 @@ export function projectNow(source: Source, actor: string): NowEntry[] {
     if (isKitchen) {
       lines.forEach((line, index) => {
         const state = typeof line.status === 'string' ? line.status : 'pending';
-        const productId = typeof line.productId === 'string' ? line.productId : null;
+        const productId = typeof line.productId === 'string' ? line.productId : typeof line.variant === 'string' ? line.variant : null;
         const next = state === 'pending' ? 'preparing' : state === 'preparing' ? 'ready' : null;
         append(order, `line:${projectionRole}:${productId || index}`, { ...common, kind: next && productId ? 'action' : 'status',
           title: String(line.title || 'Order line'), quantity: Number.isFinite(Number(line.quantity)) ? Number(line.quantity) : null,

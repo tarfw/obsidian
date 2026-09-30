@@ -46,7 +46,6 @@ describe('workspace Tools eligibility', () => {
     await expect(Effect.runPromise(executeGateway(client, owner, { actionId: 'capability.save', idempotencyKey: 'stale-save', input: { module: 'site', enabled: true, baseVersion: 0 } }))).rejects.toThrow('Tools changed');
     const cashier = await readWorkspaceTools(client, member, { search: true });
     expect(cashier.tools.map((tool) => tool.id)).toContain('pos');
-    expect(cashier.tools.map((tool) => tool.id)).toContain('register');
     expect(cashier.tools.map((tool) => tool.id)).not.toContain('stock');
     expect(cashier.tools.map((tool) => tool.id)).not.toContain('site');
     expect(cashier.canManage).toBe(false);

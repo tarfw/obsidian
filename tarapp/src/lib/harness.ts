@@ -92,8 +92,20 @@ async function request<T>(path: string, options: { method?: 'GET' | 'POST' | 'PU
   finally { if (timeout) clearTimeout(timeout); }
 }
 
-async function workspaceRegistry(slug: string) {
-  return request<{ actions: HarnessAction[]; interfaces: HarnessInterfaceContract[] }>(workspacePath(slug, 'actions'));
+const registryCache = new Map<string, { actions: HarnessAction[]; interfaces: HarnessInterfaceContract[] }>();
+
+async function workspaceRegistry(slug: string, forceFresh = false) {
+  if (!forceFresh && registryCache.has(slug)) {
+    return registryCache.get(slug)!;
+  }
+  const result = await request<{ actions: HarnessAction[]; interfaces: HarnessInterfaceContract[] }>(workspacePath(slug, 'actions'));
+  registryCache.set(slug, result);
+  return result;
+}
+
+export function clearRegistryCache(slug?: string) {
+  if (slug) registryCache.delete(slug);
+  else registryCache.clear();
 }
 
 const workspacePath = (slug: string, suffix: string) => `/v1/workspaces/${encodeURIComponent(slug)}/${suffix}`;

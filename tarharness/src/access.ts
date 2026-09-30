@@ -81,10 +81,10 @@ export function canReadRecord(member: Member, record: Pick<RecordItem, 'type' | 
   }
   if (member.role === 'guest') return false;
   if (member.role !== 'member') return true;
-  if (record.type === 'pos.register' && grantedRoles(member).some((role) => ['cashier', 'manager'].includes(role))) return true;
+  if (['pos.register', 'register'].includes(record.type) && grantedRoles(member).some((role) => ['cashier', 'manager'].includes(role))) return true;
   return roles.some((role) => {
     if (!role || role === 'general') return true;
-    if (role === 'cashier') return ['contact', 'person', 'pos.order', 'pos.customer', 'pos.product'].includes(record.type);
+    if (role === 'cashier') return ['contact', 'person', 'pos.order', 'order', 'pos.customer', 'pos.product', 'item', 'variant', 'price', 'stock', 'register', 'pos.register', 'invoice', 'payment'].includes(record.type);
     if (role === 'driver') return ['trip', 'fare', 'task'].includes(record.type);
     if (role === 'warehouse') return ['order', 'stock', 'pick', 'pack', 'shipment', 'movement', 'batch', 'inspection', 'task'].includes(record.type);
     return record.owner === member.userId || record.assignee === member.userId || workRole(record.data.workRole) === role;
@@ -94,5 +94,5 @@ export function canReadRecord(member: Member, record: Pick<RecordItem, 'type' | 
 export function kitchenOrder<T extends { data: Record<string, unknown> }>(order: T): T {
   const lines = Array.isArray(order.data.lines) ? order.data.lines as Record<string, unknown>[] : [];
   return { ...order, data: { orderType: order.data.orderType, table: order.data.table, handedOffAt: order.data.handedOffAt,
-    lines: lines.map((line) => ({ productId: line.productId, title: line.title, quantity: line.quantity, status: line.status })) } };
+    lines: lines.map((line) => ({ productId: line.productId || line.variant, title: line.title, quantity: line.quantity, status: line.status || 'pending' })) } };
 }

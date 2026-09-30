@@ -37,9 +37,9 @@ function projectOrder(order: Awaited<ReturnType<typeof readPosInbox>>['orders'][
   const data = order.data;
   const lines = Array.isArray(data.lines) ? data.lines.map(object) : [];
   const ready = lines.length > 0 && lines.every((line) => line.status === 'ready');
-  const approval = String(data.approval || '');
+  const approval = String(data.approval || (order.type === 'order' ? 'accepted' : ''));
   const delivery = String(data.delivery || '');
-  const type = String(data.orderType || 'counter');
+  const type = String(data.orderType || (order.type === 'order' ? (data.channel === 'delivery' ? 'delivery' : data.channel === 'dinein' ? 'dine-in' : 'counter') : 'counter'));
   const input = { orderId: order.id, version: order.version };
   const actions: OrderAction[] = [];
   let group: 'mine' | 'available' | 'waiting';
@@ -50,16 +50,16 @@ function projectOrder(order: Awaited<ReturnType<typeof readPosInbox>>['orders'][
     if (approval === 'pending') {
       group = 'mine';
       actions.push({ id: 'pos.order.accept', label: 'Accept', input }, { id: 'pos.order.reject', label: 'Reject', input });
-    } else if (order.state === 'open' && approval === 'accepted') {
+    } else if (order.state === 'open' && (approval === 'accepted' || order.type === 'order')) {
       group = 'mine';
     } else return null;
     projected = { orderType: type, table: data.table, approval, lines, total: data.total, currency: data.currency };
   } else if (isCook(access.member)) {
-    if (approval !== 'accepted' || data.handedOffAt) return null;
+    if ((approval !== 'accepted' && order.type !== 'order') || data.handedOffAt) return null;
     group = 'mine';
     projected = kitchenOrder({ data }).data;
   } else if (['server', 'floor', 'kds'].some((role) => hasWorkRole(access.member, role))) {
-    if (approval !== 'accepted' || data.handedOffAt) return null;
+    if ((approval !== 'accepted' && order.type !== 'order') || data.handedOffAt) return null;
     group = ready ? 'mine' : 'waiting';
     if (ready && type !== 'delivery') actions.push({ id: 'pos.order.handoff', label: 'Serve order', input });
     projected = { orderType: type, table: data.table,

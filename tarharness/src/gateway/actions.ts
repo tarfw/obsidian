@@ -82,7 +82,8 @@ export function executeGateway(client: Client, context: AccessContext, request: 
         if (!isModule(module) || typeof enabled !== 'boolean' || !Number.isSafeInteger(baseVersion) || baseVersion < 0) throw badRequest('Choose a capability and current version.');
         const current = await readCapabilities(client);
         if (current.version !== baseVersion) throw conflict('Tools changed. Refresh and try again.');
-        const next = { ...current.enabled, [module]: enabled };
+        const targetModule = module === 'pos' ? 'commerce' : module;
+        const next = { ...current.enabled, [targetModule]: enabled, pos: targetModule === 'commerce' ? enabled : current.enabled.pos };
         const result = { enabled: next, version: baseVersion + 1 };
         const committed = await client.batch([
           baseVersion === 0
@@ -132,7 +133,7 @@ export function executeGateway(client: Client, context: AccessContext, request: 
         const claimed = await claimTurn(client, request.idempotencyKey, hash);
         if (claimed.result) return claimed.result;
         try {
-          const result = await suggest(services.typesafe, text(request.input.prompt, 2000));
+          const result = (await suggest(services.typesafe, text(request.input.prompt, 2000))) as unknown as Record<string, unknown>;
           await completeTurn(client, { action: request.actionId, actor: context.identity.id, key: request.idempotencyKey, hash, result }, claimed.lease!);
           return result;
         } catch (cause) { await failTurn(client, request.idempotencyKey, hash, claimed.lease!); throw cause; }

@@ -6,16 +6,20 @@ import { eventStatement, findReplay } from '../gateway/commit.ts';
 
 type DB = Pick<Client, 'execute'>;
 type Data = Record<string, unknown>;
-export interface PosRecord { id: string; title: string; state: string; data: Data; version: number; createdAt: number }
+export interface PosRecord { id: string; type: string; title: string; state: string; data: Data; version: number; createdAt: number }
 const object = (value: unknown): Data => value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Data : {};
 const text = (value: unknown, max = 200) => typeof value === 'string' ? value.trim().slice(0, max) : '';
-const decode = (row: Data): PosRecord => ({ id: String(row.id), title: String(row.title), state: String(row.state), data: object(JSON.parse(String(row.data))), version: Number(row.version), createdAt: Number(row.created) });
+const decode = (row: Data): PosRecord => ({ id: String(row.id), type: String(row.type || 'pos.order'), title: String(row.title), state: String(row.state), data: object(JSON.parse(String(row.data))), version: Number(row.version), createdAt: Number(row.created) });
 export function integer(value: unknown, label: string, min = 0, max = 100_000_000): number {
   if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < min || value > max) throw badRequest(label + ' is invalid.');
   return value;
 }
 async function get(db: DB, id: string, type: string) {
   const result = await db.execute({ sql: 'SELECT * FROM records WHERE id=? AND type=? AND archived IS NULL', args: [id, type] });
+  return result.rows[0] ? decode(result.rows[0]) : null;
+}
+async function getOrder(db: DB, id: string) {
+  const result = await db.execute({ sql: "SELECT * FROM records WHERE id=? AND type IN ('pos.order', 'order') AND archived IS NULL", args: [id] });
   return result.rows[0] ? decode(result.rows[0]) : null;
 }
 async function list(db: DB, type: string, search = '', offset = 0) {
@@ -40,8 +44,8 @@ export async function posSummary(db: DB) {
   const settings = await get(db, 'pos.settings', 'pos.settings');
   const timezone = String(settings?.data.timezone || 'Asia/Kolkata');
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
-  const result = await db.execute({ sql: "SELECT COALESCE(SUM(json_extract(data,'$.amount')),0) AS sales FROM records WHERE type='pos.payment' AND json_extract(data,'$.businessDate')=?", args: [today] });
-  const orders = await db.execute({ sql: "SELECT COUNT(*) AS count FROM records WHERE type='pos.order' AND json_extract(data,'$.businessDate')=?", args: [today] });
+  const result = await db.execute({ sql: "SELECT COALESCE(SUM(json_extract(data,'$.amount')),0) AS sales FROM records WHERE type IN ('pos.payment','payment') AND json_extract(data,'$.businessDate')=?", args: [today] });
+  const orders = await db.execute({ sql: "SELECT COUNT(*) AS count FROM records WHERE type IN ('pos.order','order') AND json_extract(data,'$.businessDate')=?", args: [today] });
   const stock = await db.execute("SELECT COUNT(*) AS count FROM records WHERE type='pos.product' AND archived IS NULL AND json_extract(data,'$.stock')<=json_extract(data,'$.lowStock')");
   return { sales: Number(result.rows[0].sales), orders: Number(orders.rows[0].count), lowStock: Number(stock.rows[0].count), currency: String(settings?.data.currency || 'INR'), businessDate: today };
 }
@@ -58,11 +62,11 @@ export async function readPos(db: DB, context: AccessContext, section: string, s
 }
 
 export async function readPosInbox(db: DB) {
-  const result = await db.execute({ sql: "SELECT * FROM records WHERE type='pos.order' AND state IN ('open','paid') AND json_extract(data,'$.submitted')=1 AND archived IS NULL ORDER BY updated DESC,id" });
+  const result = await db.execute({ sql: "SELECT * FROM records WHERE ((type='pos.order' AND json_extract(data,'$.submitted')=1) OR (type='order' AND (json_extract(data,'$.submitted') IS NULL OR json_extract(data,'$.submitted')=1))) AND state IN ('open','paid') AND archived IS NULL ORDER BY updated DESC,id" });
   return { orders: result.rows.map(decode).filter((order) => order.state === 'open' || order.data.approval === 'pending'
-    || (order.data.approval === 'accepted' && !order.data.handedOffAt)
+    || ((order.data.approval === 'accepted' || order.type === 'order') && !order.data.handedOffAt)
     || (order.data.orderType === 'delivery' && order.data.delivery !== 'delivered')
-    || (['dine-in', 'takeaway'].includes(String(order.data.orderType)) && Array.isArray(order.data.lines)
+    || (['dine-in', 'takeaway', 'counter'].includes(String(order.data.orderType || (order.type === 'order' ? 'counter' : ''))) && Array.isArray(order.data.lines)
       && order.data.lines.some((line) => object(line).status !== 'ready'))
     || (Boolean(order.data.customerEmail) && !order.data.rating)) };
 }
@@ -159,9 +163,9 @@ async function mutate(db: Transaction, context: AccessContext, action: string, i
   if (action === 'pos.order.save') {
     const orderId = text(input.orderId);
     const clientDraftKey = text(input.draftKey);
-    let current = orderId ? await get(db, orderId, 'pos.order') : null;
+    let current = orderId ? await getOrder(db, orderId) : null;
     if (!current && clientDraftKey) {
-      const existing = await db.execute({ sql: "SELECT * FROM records WHERE type='pos.order' AND owner=? AND json_extract(data,'$.draftKey')=? AND archived IS NULL LIMIT 1", args: [actor, clientDraftKey] });
+      const existing = await db.execute({ sql: "SELECT * FROM records WHERE type IN ('pos.order', 'order') AND owner=? AND json_extract(data,'$.draftKey')=? AND archived IS NULL LIMIT 1", args: [actor, clientDraftKey] });
       current = existing.rows[0] ? decode(existing.rows[0]) : null;
     }
     if (orderId && (!current || current.state !== 'open')) throw conflict('This order is no longer open.');
@@ -183,7 +187,7 @@ async function mutate(db: Transaction, context: AccessContext, action: string, i
       const lineDiscount = Math.round(gross * discountBps / 10000);
       const lineTax = Math.round((gross - lineDiscount) * Number(product.data.taxBps) / 10000);
       subtotal += gross; discount += lineDiscount; tax += lineTax;
-      const prior = Array.isArray(current?.data.lines) ? current.data.lines.map(object).find((item) => String(item.productId) === product.id) : null;
+      const prior = Array.isArray(current?.data.lines) ? current.data.lines.map(object).find((item) => String(item.productId || item.variant) === product.id) : null;
       lines.push({ productId: product.id, title: product.title, quantity, price: product.data.price, discount: lineDiscount, tax: lineTax, total: gross - lineDiscount + lineTax, status: text(prior?.status, 40) || 'pending' });
     }
     const customerId = text(input.customerId) || text(current?.data.customerId);
@@ -200,7 +204,7 @@ async function mutate(db: Transaction, context: AccessContext, action: string, i
     if (submitted && orderType === 'delivery' && !destination) throw badRequest('A delivery destination is required.');
     const previousLines = Array.isArray(current?.data.lines) ? current.data.lines.map(object) : [];
     const changed = Boolean(current) && (previousLines.length !== lines.length || previousLines.some((line, index) =>
-      line.productId !== lines[index].productId || line.quantity !== lines[index].quantity || line.price !== lines[index].price || line.total !== lines[index].total)
+      (line.productId || line.variant) !== (lines[index].productId || lines[index].variant) || line.quantity !== lines[index].quantity || line.price !== lines[index].price || line.total !== lines[index].total)
       || current?.data.customerId !== (customerId || null) || current?.data.orderType !== orderType || current?.data.table !== table
       || current?.data.destination !== destination || current?.data.discountBps !== discountBps);
     if (changed && current && (current.data.delivery === 'reached' || current.data.delivery === 'collected' || current.data.delivery === 'delivered'
@@ -212,62 +216,67 @@ async function mutate(db: Transaction, context: AccessContext, action: string, i
     if (changed) for (const line of lines) line.status = 'pending';
     const delivery = orderType === 'delivery' ? !changed && typeof current?.data.delivery === 'string' ? current.data.delivery : 'unassigned' : null;
     const total = integer(subtotal - discount + tax, 'Sale total');
-    const order = await put(db, 'pos.order', 'Open order', { ...current?.data, draftKey: clientDraftKey || current?.data.draftKey || null, lines, subtotal, discount, discountBps, tax, total, currency: settings.data.currency,
+    const order = await put(db, current?.type || 'pos.order', 'Open order', { ...current?.data, draftKey: clientDraftKey || current?.data.draftKey || null, lines, subtotal, discount, discountBps, tax, total, currency: settings.data.currency,
       paymentStatus: 'unpaid', customerId: customerId || null, customerName: customer?.title || null, customerEmail, table, destination, orderType, submitted, approval, delivery,
       courier: changed ? null : current?.data.courier || null,
       storeName: settings.title, location: settings.data.location }, actor, current?.id, 'open');
     return { order };
   }
   if (action === 'pos.order.item.update') {
-    const order = await get(db, text(input.orderId), 'pos.order');
+    const order = await getOrder(db, text(input.orderId));
     if (!order || !['open', 'paid'].includes(order.state)) throw notFound('Active order not found.');
     if (order.version !== input.version) throw conflict('Order changed. Reload Now.');
-    if (order.data.submitted !== true || order.data.approval !== 'accepted') throw conflict('The order must be accepted before preparation.');
+    const approval = String(order.data.approval || (order.type === 'order' ? 'accepted' : ''));
+    if (order.type === 'pos.order' && (order.data.submitted !== true || approval !== 'accepted')) throw conflict('The order must be accepted before preparation.');
     const productId = text(input.productId);
     const next = text(input.status, 40);
     const transitions: Record<string, readonly string[]> = { pending: ['preparing'], preparing: ['ready'], ready: [] };
     const lines = Array.isArray(order.data.lines) ? order.data.lines.map(object) : [];
-    const line = lines.find((item) => String(item.productId) === productId);
+    const line = lines.find((item) => String(item.productId || item.variant) === productId);
     if (!line) throw notFound('Order item not found.');
     const current = text(line.status, 40) || 'pending';
     if (!transitions[current]?.includes(next)) throw conflict('That item cannot move to this status.');
     line.status = next;
-    return { order: await put(db, 'pos.order', order.title, { ...order.data, lines }, actor, order.id, order.state) };
+    return { order: await put(db, order.type, order.title, { ...order.data, lines }, actor, order.id, order.state) };
   }
   if (action === 'pos.order.handoff') {
-    const order = await get(db, text(input.orderId), 'pos.order');
-    if (!order || !['open', 'paid'].includes(order.state) || order.data.submitted !== true || order.data.approval !== 'accepted') throw notFound('Active order not found.');
+    const order = await getOrder(db, text(input.orderId));
+    if (!order || !['open', 'paid'].includes(order.state)) throw notFound('Active order not found.');
+    const approval = String(order.data.approval || (order.type === 'order' ? 'accepted' : ''));
+    if (order.type === 'pos.order' && (order.data.submitted !== true || approval !== 'accepted')) throw notFound('Active order not found.');
     if (order.version !== input.version) throw conflict('Order changed. Reload Now.');
     if (order.data.handedOffAt) throw conflict('This order was already handed off.');
     if (order.data.orderType === 'delivery') throw conflict('Courier collection records delivery handoff.');
     const ready = Array.isArray(order.data.lines) && order.data.lines.length > 0 && order.data.lines.every((line) => object(line).status === 'ready');
     if (!ready) throw conflict('Every order line must be ready before handoff.');
-    return { order: await put(db, 'pos.order', order.title, { ...order.data, handedOffAt: Date.now(), handedOffBy: actor }, actor, order.id, order.state) };
+    return { order: await put(db, order.type, order.title, { ...order.data, handedOffAt: Date.now(), handedOffBy: actor }, actor, order.id, order.state) };
   }
   if (action === 'pos.order.cancel') {
-    const order = await get(db, text(input.orderId), 'pos.order');
+    const order = await getOrder(db, text(input.orderId));
     if (!order || order.state !== 'open') throw notFound('Open order not found.');
     if (order.version !== input.version) throw conflict('Order changed. Reload Now.');
     if (order.data.courier) throw conflict('A courier has claimed this order.');
-    return { order: await put(db, 'pos.order', order.title, { ...order.data, cancelledAt: Date.now() }, actor, order.id, 'cancelled') };
+    return { order: await put(db, order.type, order.title, { ...order.data, cancelledAt: Date.now() }, actor, order.id, 'cancelled') };
   }
   if (action === 'pos.order.accept' || action === 'pos.order.reject') {
-    const order = await get(db, text(input.orderId), 'pos.order');
-    if (!order || !['open', 'paid'].includes(order.state) || order.data.submitted !== true) throw notFound('Pending order not found.');
+    const order = await getOrder(db, text(input.orderId));
+    if (!order || !['open', 'paid'].includes(order.state) || (order.type === 'pos.order' && order.data.submitted !== true)) throw notFound('Pending order not found.');
     if (order.version !== input.version) throw conflict('Order changed. Reload Now.');
     if (order.data.approval !== 'pending') throw conflict('This order has already been reviewed.');
     if (action === 'pos.order.reject') {
       if (order.state !== 'open') throw conflict('A paid order needs a reviewed refund.');
       const reason = text(input.reason, 500);
       if (!reason) throw badRequest('A rejection reason is required.');
-      return { order: await put(db, 'pos.order', order.title, { ...order.data, approval: 'rejected', reason, reviewer: actor, reviewed: Date.now() }, actor, order.id, 'cancelled') };
+      return { order: await put(db, order.type, order.title, { ...order.data, approval: 'rejected', reason, reviewer: actor, reviewed: Date.now() }, actor, order.id, 'cancelled') };
     }
-    return { order: await put(db, 'pos.order', order.title, { ...order.data, approval: 'accepted', reviewer: actor, reviewed: Date.now() }, actor, order.id, order.state) };
+    return { order: await put(db, order.type, order.title, { ...order.data, approval: 'accepted', reviewer: actor, reviewed: Date.now() }, actor, order.id, order.state) };
   }
   if (action === 'pos.order.reach' || action === 'pos.order.collect' || action === 'pos.order.deliver') {
     if (context.member.role !== 'member' || !hasWorkRole(context.member, 'courier')) throw forbidden();
-    const order = await get(db, text(input.orderId), 'pos.order');
-    if (!order || !['open', 'paid'].includes(order.state) || order.data.submitted !== true || order.data.orderType !== 'delivery' || order.data.approval !== 'accepted') throw notFound('Available delivery order not found.');
+    const order = await getOrder(db, text(input.orderId));
+    if (!order || !['open', 'paid'].includes(order.state)) throw notFound('Available delivery order not found.');
+    const approval = String(order.data.approval || (order.type === 'order' ? 'accepted' : ''));
+    if (order.type === 'pos.order' && (order.data.submitted !== true || order.data.orderType !== 'delivery' || approval !== 'accepted')) throw notFound('Available delivery order not found.');
     if (order.version !== input.version) throw conflict('Order changed. Reload Now.');
     const stage = action.slice('pos.order.'.length);
     const previous = { reach: 'unassigned', collect: 'reached', deliver: 'collected' }[stage];
@@ -277,27 +286,27 @@ async function mutate(db: Transaction, context: AccessContext, action: string, i
       || order.data.lines.some((line) => object(line).status !== 'ready'))) {
       throw conflict('Payment and preparation must finish before collection.');
     }
-    return { order: await put(db, 'pos.order', order.title, { ...order.data, delivery: stage === 'reach' ? 'reached' : stage === 'collect' ? 'collected' : 'delivered',
+    return { order: await put(db, order.type, order.title, { ...order.data, delivery: stage === 'reach' ? 'reached' : stage === 'collect' ? 'collected' : 'delivered',
       courier: stage === 'reach' ? actor : order.data.courier,
       ...(stage === 'collect' ? { handedOffAt: Date.now(), handedOffBy: actor } : {}), [stage]: Date.now() }, actor, order.id, order.state) };
   }
   if (action === 'pos.order.receive' || action === 'pos.order.rate') {
     if (context.member.role !== 'member' || !hasWorkRole(context.member, 'customer')) throw forbidden();
-    const order = await get(db, text(input.orderId), 'pos.order');
-    if (!order || order.data.submitted !== true || order.state !== 'paid') throw notFound('Paid customer order not found.');
+    const order = await getOrder(db, text(input.orderId));
+    if (!order || (order.type === 'pos.order' && order.data.submitted !== true) || order.state !== 'paid') throw notFound('Paid customer order not found.');
     if (order.version !== input.version) throw conflict('Order changed. Reload Now.');
     if (!order.data.customerEmail || String(order.data.customerEmail).trim().toLowerCase() !== context.identity.email.trim().toLowerCase()) throw forbidden();
     const ready = Array.isArray(order.data.lines) && order.data.lines.length > 0 && order.data.lines.every((line) => object(line).status === 'ready');
     if (action === 'pos.order.receive') {
       if (order.data.receivedAt) throw conflict('This order was already received.');
       if (order.data.orderType === 'delivery' ? order.data.delivery !== 'delivered' : !ready || !order.data.handedOffAt) throw conflict('This order is not ready to receive.');
-      return { order: await put(db, 'pos.order', order.title, { ...order.data, receivedAt: Date.now(), receivedBy: actor }, actor, order.id, order.state) };
+      return { order: await put(db, order.type, order.title, { ...order.data, receivedAt: Date.now(), receivedBy: actor }, actor, order.id, order.state) };
     }
     if (!order.data.receivedAt || order.data.receivedBy !== actor) throw conflict('Confirm receipt before rating this order.');
     if (order.data.rating) throw conflict('This order was already rated.');
     const rating = integer(input.rating, 'Rating', 1, 5);
     const comment = text(input.comment, 500);
-    return { order: await put(db, 'pos.order', order.title, { ...order.data, rating, comment, ratedAt: Date.now() }, actor, order.id, order.state) };
+    return { order: await put(db, order.type, order.title, { ...order.data, rating, comment, ratedAt: Date.now() }, actor, order.id, order.state) };
   }
   const session = await register(db);
   if (!session) throw badRequest('Open the register first.');
@@ -322,7 +331,7 @@ async function mutate(db: Transaction, context: AccessContext, action: string, i
       if (duplicate.rows.length) throw conflict('This UPI reference is already recorded.');
     }
     const draftId = text(input.orderId);
-    const draft = draftId ? await get(db, draftId, 'pos.order') : null;
+    const draft = draftId ? await getOrder(db, draftId) : null;
     if (draftId && (!draft || draft.state !== 'open')) throw conflict('This order is no longer awaiting payment.');
     const cart = Array.isArray(input.items) ? input.items.map(object) : [];
     if (!cart.length || cart.length > 100) throw badRequest('Add between 1 and 100 products.');
@@ -355,7 +364,7 @@ async function mutate(db: Transaction, context: AccessContext, action: string, i
     const customerId = draft ? text(draft.data.customerId) : text(input.customerId);
     const customer = customerId ? await get(db, customerId, 'pos.customer') : null;
     if (customerId && !customer) throw notFound('Customer not found.');
-    const order = await put(db, 'pos.order', 'Sale', { ...draft?.data, lines, subtotal, discount, tax, total, currency: settings.data.currency, businessDate,
+    const order = await put(db, draft?.type || 'pos.order', 'Sale', { ...draft?.data, lines, subtotal, discount, tax, total, currency: settings.data.currency, businessDate,
       method: input.method, reference, verification: input.method === 'upi' ? 'cashier_confirmed' : 'cash', tendered, change: tendered - total, customerId: customerId || null, customerName: customer?.title || null,
       paymentStatus: 'paid', registerId: session.id, storeName: settings.title, location: settings.data.location, receiptFooter: settings.data.receiptFooter }, actor, draft?.id, 'paid');
     for (const line of lines) await movement(db, (await get(db, String(line.productId), 'pos.product'))!, -Number(line.quantity), 'Sale', actor, order.id);
@@ -365,7 +374,7 @@ async function mutate(db: Transaction, context: AccessContext, action: string, i
     return { order, posting: ledger };
   }
   if (action === 'pos.refund') {
-    const order = await get(db, text(input.orderId), 'pos.order');
+    const order = await getOrder(db, text(input.orderId));
     if (!order) throw notFound('Sale not found.');
     if (order.state !== 'paid' && order.state !== 'partially_refunded') throw conflict('Sale has already been returned.');
     if (!text(input.reason)) throw badRequest('Return reason is required.');
@@ -400,7 +409,7 @@ async function mutate(db: Transaction, context: AccessContext, action: string, i
       }
     }
     const fullyReturned = lines.every((line) => returned[String(line.productId)] === line.quantity);
-    const updated = await put(db, 'pos.order', order.title, { ...order.data, returnedQuantities: returned, refundedTotal: Number(order.data.refundedTotal || 0) + refundTotal, refundReason: text(input.reason), refundedAt: Date.now(), restocked: input.restock === true }, actor, order.id, fullyReturned ? 'refunded' : 'partially_refunded');
+    const updated = await put(db, order.type, order.title, { ...order.data, returnedQuantities: returned, refundedTotal: Number(order.data.refundedTotal || 0) + refundTotal, refundReason: text(input.reason), refundedAt: Date.now(), restocked: input.restock === true }, actor, order.id, fullyReturned ? 'refunded' : 'partially_refunded');
     await put(db, 'pos.payment', 'Refund', { orderId: order.id, amount: -refundTotal, method: order.data.method, reference: text(input.reference) || null, quantities, registerId: session.id, businessDate }, actor);
     const ledger = await posting(db, updated.id, [{ account: 'returns', debit: refundTotal - refundTax }, { account: 'tax', debit: refundTax },
       { account: order.data.method === 'cash' ? 'cash' : 'bank', credit: refundTotal }], actor);

@@ -1,35 +1,34 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Image, Modal, ScrollView, Share, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import type { ActionInterfaceProps } from '@/action-interfaces/types';
-import { TarLogo } from '@/components/TarLogo';
 import { createOperationKey, harness, HarnessRequestError } from '@/lib/harness';
 import { posJournal, type PendingPosAction } from './journal';
 import PosForm, { type PosFormSpec } from './PosForm';
 import { clearPosProductSession, getPosSession, savePosSession } from './session';
 import { cartTotals, minorUnits, money, type CartLine, type PosOverview, type PosRecord, type SaleLine } from './types';
 
-type Section = 'sell' | 'orders' | 'stock' | 'customers' | 'register';
+type Section = 'sell' | 'orders' | 'stock' | 'customers';
 const sections: { key: Section; label: string }[] = [
   { key: 'sell', label: 'Sell' }, { key: 'orders', label: 'Orders & returns' },
   { key: 'stock', label: 'Stock' }, { key: 'customers', label: 'Customers' },
-  { key: 'register', label: 'Register' },
 ];
 
 export default function PosInterface(props: ActionInterfaceProps) {
   const insets = useSafeAreaInsets();
   const wide = useWindowDimensions().width >= 760;
-  const initialSection = (sections.find((item) => item.key === props.initialInput?.section)?.key || 'sell') as Section;
+  const initialSection = 'sell' as Section;
   const initialOrderId = typeof props.initialInput?.orderId === 'string' ? props.initialInput.orderId : '';
   const savedSession = getPosSession(props.scope);
-  const hasSavedProducts = initialSection === 'sell' && savedSession?.products !== undefined;
-  const [section, setSection] = useState<Section>(initialSection);
+  const hasSavedProducts = savedSession?.products !== undefined;
+  const [section, setSection] = useState<Section>('sell');
   const [history, setHistory] = useState<{ section: Section; search: string; cartOpen: boolean }[]>([]);
   const [overview, setOverview] = useState<PosOverview | null>(() => savedSession?.overview || null);
   const [items, setItems] = useState<PosRecord[]>(() => hasSavedProducts ? savedSession?.products || [] : []);
   const [search, setSearch] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [loading, setLoading] = useState(!hasSavedProducts);
   const [sellProductsLoaded, setSellProductsLoaded] = useState(hasSavedProducts);
   const [error, setError] = useState('');
@@ -56,6 +55,20 @@ export default function PosInterface(props: ActionInterfaceProps) {
   const discountBps = Math.round(Number(discount || 0) * 100);
   const totals = cartTotals(cart, Number.isFinite(discountBps) ? discountBps : 0);
   const count = cart.reduce((sum, line) => sum + line.quantity, 0);
+
+  const categories = useMemo(() => {
+    const cats = new Set<string>();
+    for (const item of items) {
+      const cat = String(item.data.category || '').trim();
+      if (cat) cats.add(cat);
+    }
+    return ['All', ...Array.from(cats)];
+  }, [items]);
+
+  const filteredItems = useMemo(() => {
+    if (selectedCategory === 'All') return items;
+    return items.filter((item) => String(item.data.category || '').trim() === selectedCategory);
+  }, [items, selectedCategory]);
 
   const reloadOverview = useCallback(async () => {
     const next = await harness.pos<PosOverview>(props.scope, 'overview');
@@ -101,7 +114,6 @@ export default function PosInterface(props: ActionInterfaceProps) {
     let alive = true;
     const current = ++requestId.current;
     const timer = setTimeout(() => {
-      if (section === 'register') { setItems([]); setLoading(false); return; }
       const cachedProducts = section === 'sell' && !search ? getPosSession(props.scope)?.products : undefined;
       if (cachedProducts === undefined) setLoading(true);
       setError('');
@@ -266,10 +278,14 @@ export default function PosInterface(props: ActionInterfaceProps) {
   const customerForm = (existing?: PosRecord) => setForm({ title: existing ? 'Edit customer' : 'Add customer', submit: 'Save customer', fields: [
     { key: 'title', label: 'Name', value: existing?.title }, { key: 'phone', label: 'Phone', value: String(existing?.data.phone || '') }, { key: 'email', label: 'Email', value: String(existing?.data.email || '') },
   ], save: (values) => saveAction('pos.customer.save', { ...values, id: existing?.id, version: existing?.version }) });
-  const showStoreMenu = () => Alert.alert('Store', undefined, [
-    { text: 'Manage store', onPress: setup },
-    { text: 'Cancel', style: 'cancel' },
-  ]);
+  const cartQuantities = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const line of cart) {
+      map[line.product.id] = (map[line.product.id] || 0) + line.quantity;
+    }
+    return map;
+  }, [cart]);
+
   const registerForm = () => {
     const session = overview?.register;
     setForm({ title: session ? 'Close register' : 'Open register', submit: session ? 'Close register' : 'Open register', fields: [
@@ -379,28 +395,64 @@ export default function PosInterface(props: ActionInterfaceProps) {
   const cartView = <View style={[styles.cart, wide && styles.cartWide]}>
     <View style={styles.panelHeading}><Text style={styles.heading}>Cart · {count}</Text><TouchableOpacity style={styles.touch} onPress={() => { setCart([]); setDiscount('0'); setCustomer(null); }}><Text style={styles.muted}>Clear</Text></TouchableOpacity></View>
     <TouchableOpacity style={styles.customer} onPress={() => chooseSection('customers')}><Ionicons name="person-add-outline" size={18} color="#565b60" /><Text style={styles.body}>{customer?.title || 'Add customer'}</Text></TouchableOpacity>
-    <ScrollView style={styles.cartLines}>{cart.map((line) => <View key={line.product.id} style={styles.line}><View style={styles.copy}><Text style={styles.body}>{line.product.title}</Text><Text style={styles.muted}>{money(Number(line.product.data.price), currency)}</Text></View><View style={styles.stepper}><TouchableOpacity accessibilityLabel={'Remove one ' + line.product.title} style={styles.touch} onPress={() => changeQuantity(line.product.id, -1)}><Ionicons name="remove" size={18} /></TouchableOpacity><Text>{line.quantity}</Text><TouchableOpacity accessibilityLabel={'Add one ' + line.product.title} style={styles.touch} onPress={() => changeQuantity(line.product.id, 1)}><Ionicons name="add" size={18} /></TouchableOpacity></View></View>)}{!cart.length ? <Text style={styles.empty}>Add products to start a sale.</Text> : null}</ScrollView>
-    <View style={styles.totals}><View style={styles.totalRow}><Text style={styles.muted}>Discount %</Text><TextInput accessibilityLabel="Discount percentage" style={styles.discount} value={discount} keyboardType="decimal-pad" onChangeText={setDiscount} /></View><Total label="Subtotal" value={money(totals.subtotal, currency)} /><Total label="Discount" value={'−' + money(totals.discount, currency)} /><Total label="Tax" value={money(totals.tax, currency)} /><Total label="Total" value={money(totals.total, currency)} bold /><View style={styles.payments}><Button title="Order details" disabled={!cart.length || busy || draftSaving} secondary onPress={saveForNow} /><Button title="Cash" disabled={!cart.length || busy || draftSaving} onPress={() => checkout('cash')} /><Button title="UPI" disabled={!cart.length || busy || draftSaving} onPress={() => checkout('upi')} /></View></View>
+    <ScrollView style={styles.cartLines}>
+      {cart.map((line) => {
+        const unitPrice = Number(line.product.data.price);
+        const lineGross = unitPrice * line.quantity;
+        return (
+          <View key={line.product.id} style={styles.line}>
+            <View style={styles.copy}>
+              <Text style={styles.body}>{line.product.title}</Text>
+              <Text style={styles.muted}>{money(unitPrice, currency)} {line.quantity > 1 ? `· ${money(lineGross, currency)}` : ''}</Text>
+            </View>
+            <View style={styles.stepper}>
+              <TouchableOpacity accessibilityLabel={'Remove one ' + line.product.title} style={styles.stepperBtn} onPress={() => changeQuantity(line.product.id, -1)}>
+                <Ionicons name="remove" size={16} color="#202223" />
+              </TouchableOpacity>
+              <Text style={styles.stepperQty}>{line.quantity}</Text>
+              <TouchableOpacity accessibilityLabel={'Add one ' + line.product.title} style={styles.stepperBtn} onPress={() => changeQuantity(line.product.id, 1)}>
+                <Ionicons name="add" size={16} color="#202223" />
+              </TouchableOpacity>
+              <TouchableOpacity accessibilityLabel={'Delete ' + line.product.title} style={styles.removeBtn} onPress={() => changeQuantity(line.product.id, -line.quantity)}>
+                <Ionicons name="close" size={16} color="#8c9196" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        );
+      })}
+      {!cart.length ? <Text style={styles.empty}>Add products to start a sale.</Text> : null}
+    </ScrollView>
+    <View style={styles.totals}>
+      <View style={styles.totalRow}><Text style={styles.muted}>Discount %</Text><TextInput accessibilityLabel="Discount percentage" style={styles.discount} value={discount} keyboardType="decimal-pad" onChangeText={setDiscount} /></View>
+      <Total label="Subtotal" value={money(totals.subtotal, currency)} />
+      <Total label="Discount" value={'−' + money(totals.discount, currency)} />
+      <Total label="Tax" value={money(totals.tax, currency)} />
+      <Total label="Total" value={money(totals.total, currency)} bold />
+      <View style={styles.payments}>
+        <Button title="Order details" disabled={!cart.length || busy || draftSaving} secondary onPress={saveForNow} />
+        <Button title={`Cash (${money(totals.total, currency)})`} disabled={!cart.length || busy || draftSaving} onPress={() => checkout('cash')} />
+        <Button title="UPI / QR" disabled={!cart.length || busy || draftSaving} onPress={() => checkout('upi')} />
+      </View>
+    </View>
   </View>;
 
   return <Modal visible={props.visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={back}>
     <View style={[styles.page, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <StatusBar style="dark" />
       <View style={styles.header}>
-        <TouchableOpacity accessibilityLabel="Back" style={styles.touch} onPress={back}><Ionicons name="chevron-back" size={24} /></TouchableOpacity>
-        <TarLogo size={21} color="#2463A7" />
-        <View style={styles.copy}><Text numberOfLines={1} style={styles.storeName}>{overview?.settings?.title || 'Point of sale'}</Text><Text style={styles.small}>{overview?.register ? 'Register open' : 'Register closed'}</Text></View>
-        {overview?.canManage ? <TouchableOpacity accessibilityLabel="Store options" style={styles.touch} onPress={showStoreMenu}><Ionicons name="ellipsis-horizontal" size={22} /></TouchableOpacity> : null}
+        <TouchableOpacity accessibilityLabel="Back" style={styles.touch} onPress={back}><Ionicons name="chevron-back" size={24} color="#1C2430" /></TouchableOpacity>
+        <Text numberOfLines={1} style={styles.headerTitle}>Point of sale</Text>
+        <TouchableOpacity style={styles.drawerBadge} onPress={registerForm}>
+          <Ionicons name={overview?.register ? 'cash' : 'lock-closed-outline'} size={14} color={overview?.register ? '#16A34A' : '#64748B'} />
+          <Text style={[styles.drawerBadgeText, overview?.register ? styles.drawerBadgeActive : null]}>
+            {overview?.register ? `Drawer: ${money(overview.register.expected, currency)}` : 'Open drawer'}
+          </Text>
+        </TouchableOpacity>
       </View>
-      {overview?.settings ? <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.navScroll} contentContainerStyle={styles.nav}>
-        {sections.map((item) => <TouchableOpacity key={item.key} accessibilityRole="tab" accessibilityState={{ selected: section === item.key }}
-          style={[styles.navItem, section === item.key && styles.navItemActive]} onPress={() => chooseSection(item.key)}>
-          <Text style={[styles.navText, section === item.key && styles.navTextActive]}>{item.label}</Text>
-        </TouchableOpacity>)}
-      </ScrollView> : null}
+
       {error ? <View style={styles.error}><Text style={styles.errorText}>{error}</Text></View> : null}
       {pending && !form ? <View style={styles.recovery}><Text style={styles.body}>An operation needs confirmation.</Text><Button title={busy ? 'Checking…' : 'Resolve pending operation'} disabled={busy} onPress={() => void recover()} /></View> : null}
-      {!overview ? <View style={styles.center}><ActivityIndicator /></View> : !overview.settings ? <View style={styles.center}><Text style={styles.heading}>Set up your store</Text><Text style={styles.empty}>Name, currency and location. Then add your products.</Text>{overview.canManage ? <Button title="Set up POS" onPress={setup} /> : <Text style={styles.muted}>Ask a workspace admin to set up POS.</Text>}</View> : order ? <ScrollView contentContainerStyle={styles.receipt}>
+      {!overview ? <View style={styles.center}><ActivityIndicator /></View> : !overview.settings ? <View style={styles.center}><Text style={styles.heading}>Set up your store</Text><Text style={styles.empty}>Name, currency and location. Then add your products.</Text>{overview.canManage ? <Button title="Set up POS" onPress={setup} /> : <Text style={styles.muted}>Ask a workspace admin to set up POS.</Text>}</View> : order ? <ScrollView contentContainerStyle={[styles.receipt, { paddingBottom: insets.bottom + 32 }]}>
         <Ionicons name={order.state === 'refunded' || order.state === 'cancelled' ? 'return-down-back-outline' : 'checkmark-circle'} size={38} color={order.state === 'cancelled' ? '#b42318' : '#008060'} />
         <Text style={styles.receiptTitle}>{order.state === 'open' ? 'Open order' : order.state === 'cancelled' ? 'Order cancelled' : order.state === 'refunded' ? 'Sale returned' : order.state === 'partially_refunded' ? 'Partially returned' : 'Payment recorded'}</Text>
         <Text style={styles.muted}>{order.id.slice(-8).toUpperCase()} · {new Date(order.createdAt).toLocaleString()}</Text>
@@ -416,17 +468,86 @@ export default function PosInterface(props: ActionInterfaceProps) {
         <Button title="Done" secondary onPress={() => { setOrder(null); setRevision((value) => value + 1); }} />
       </ScrollView> : <View style={styles.main}>
         {(section !== 'sell' || wide || !cartOpen) ? <View style={styles.catalog}>
-          {section !== 'sell' ? <View style={styles.sectionHeading}><Text style={styles.heading}>{sections.find((item) => item.key === section)?.label}</Text>{section === 'stock' && overview.canManage ? <TouchableOpacity style={styles.touch} onPress={() => productForm()}><Ionicons name="add" size={24} /></TouchableOpacity> : section === 'customers' ? <TouchableOpacity style={styles.touch} onPress={() => customerForm()}><Ionicons name="add" size={24} /></TouchableOpacity> : null}</View> : null}
-          {section !== 'register' ? <View style={styles.search}><Ionicons name="search" size={18} color="#6d7175" /><TextInput accessibilityLabel="Search" value={search} onChangeText={setSearch} placeholderTextColor="#6d7175" placeholder={section === 'sell' || section === 'stock' ? 'Search products or barcode' : 'Search ' + section} style={styles.searchInput} /></View> : null}
-          {section === 'register' ? <ScrollView contentContainerStyle={styles.register}><Total label="Sales today" value={money(overview.summary.sales, currency)} bold /><Total label="Orders today" value={String(overview.summary.orders)} /><Total label="Low stock" value={String(overview.summary.lowStock)} />{overview.register ? <><Total label="Opening cash" value={money(Number(overview.register.data.opening), currency)} /><Total label="Expected cash" value={money(overview.register.expected, currency)} bold /></> : null}<Text style={styles.empty}>{overview.register ? 'UPI payments are tracked separately from drawer cash.' : 'Open your register to begin selling.'}</Text><Button title={overview.register ? 'Close register' : 'Open register'} onPress={registerForm} /></ScrollView> : <FlatList key={section === 'sell' ? 'grid' : 'list'} data={items} numColumns={section === 'sell' ? (wide ? 3 : 2) : 1} keyExtractor={(item) => item.id} contentContainerStyle={styles.products} ListEmptyComponent={<View style={styles.emptyState}><Text style={styles.empty}>{loading ? 'Loading…' : search ? 'No matches.' : section === 'sell' || section === 'stock' ? 'Add your first product to start selling.' : 'Nothing here yet.'}</Text>{!loading && !search && overview.canManage && (section === 'sell' || section === 'stock') ? <Button title="Add product" onPress={() => productForm()} /> : null}</View>} ListFooterComponent={hasMore ? <TouchableOpacity style={styles.loadMore} onPress={() => void more()}><Text>{loading ? 'Loading…' : 'Load more'}</Text></TouchableOpacity> : null} renderItem={({ item }) => section === 'sell' ? <TouchableOpacity accessibilityLabel={item.title + (Number(item.data.stock) < 1 ? ', out of stock' : '')} style={[styles.productTile, Number(item.data.stock) < 1 && styles.disabled]} onPress={() => add(item)}><View style={styles.productArt}>{item.data.imageUrl ? <Image source={{ uri: String(item.data.imageUrl) }} style={{ width: '100%', height: '100%', borderRadius: 4 }} resizeMode="contain" /> : <Text style={styles.productInitial}>{item.title.slice(0, 2).toUpperCase()}</Text>}</View><Text numberOfLines={2} style={styles.productName}>{item.title}</Text>{Number(item.data.stock) <= Number(item.data.lowStock || 0) ? <Text style={styles.lowStock}>Low stock</Text> : null}<Text style={styles.price}>{money(Number(item.data.price), currency)}</Text></TouchableOpacity> : <TouchableOpacity style={styles.listRow} onPress={() => {
-            if (section === 'orders') setOrder(item);
-            else if (section === 'customers') Alert.alert(item.title, String(item.data.phone || item.data.email || ''), [{ text: 'Add to sale', onPress: () => { selectCustomer(item); } }, { text: 'Purchase history', onPress: () => { chooseSection('orders'); setSearch(item.id); } }, { text: 'Edit', onPress: () => customerForm(item) }]);
-            else if (overview.canManage) Alert.alert(item.title, String(item.data.stock) + ' in stock', [{ text: 'Cancel', style: 'cancel' }, { text: 'Edit product', onPress: () => productForm(item) }, { text: 'Adjust stock', onPress: () => adjust(item) }]);
-          }}><View style={styles.copy}><Text style={styles.body}>{section === 'orders' ? item.id.slice(-8).toUpperCase() : item.title}</Text><Text style={styles.muted}>{section === 'stock' ? String(item.data.stock) + ' in stock · ' + String(item.data.barcode || 'No barcode') : section === 'customers' ? String(item.data.phone || item.data.email || 'Select for this sale') : new Date(item.createdAt).toLocaleDateString() + ' · ' + item.state}</Text></View>{section === 'stock' || section === 'orders' ? <Text style={styles.price}>{money(Number(section === 'stock' ? item.data.price : item.data.total), currency)}</Text> : null}<Ionicons name="chevron-forward" size={16} color="#8c9196" /></TouchableOpacity>} />}
+          {section !== 'sell' ? <View style={styles.sectionHeading}><Text style={styles.heading}>{sections.find((item) => item.key === section)?.label}</Text>{section === 'customers' ? <TouchableOpacity style={styles.touch} onPress={() => customerForm()}><Ionicons name="add" size={24} /></TouchableOpacity> : null}</View> : null}
+          <View style={styles.searchBar}>
+            <Ionicons name="search" size={17} color="#64748B" />
+            <TextInput
+              accessibilityLabel="Search"
+              value={search}
+              onChangeText={setSearch}
+              placeholderTextColor="#94A3B8"
+              placeholder={section === 'sell' ? 'Search products or scan barcode…' : 'Search ' + section}
+              style={styles.searchInput}
+            />
+            {search ? (
+              <TouchableOpacity onPress={() => setSearch('')} hitSlop={8} style={styles.searchClear}>
+                <Ionicons name="close-circle" size={18} color="#94A3B8" />
+              </TouchableOpacity>
+            ) : null}
+          </View>
+          {section === 'sell' && categories.length > 1 ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryScroll} contentContainerStyle={styles.categoryList}>
+              {categories.map((cat) => (
+                <TouchableOpacity
+                  key={cat}
+                  style={[styles.categoryPill, selectedCategory === cat && styles.categoryPillActive]}
+                  onPress={() => setSelectedCategory(cat)}
+                >
+                  <Text style={[styles.categoryPillText, selectedCategory === cat && styles.categoryPillTextActive]}>{cat === 'All' ? 'All Items' : cat}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          ) : null}
+          <FlatList key={section === 'sell' ? 'grid' : 'list'} data={section === 'sell' ? filteredItems : items} numColumns={section === 'sell' ? (wide ? 3 : 2) : 1} keyExtractor={(item) => item.id} contentContainerStyle={[styles.products, { paddingBottom: (count > 0 ? 84 : 24) + insets.bottom }]} ListEmptyComponent={<View style={styles.emptyState}><Text style={styles.empty}>{loading ? 'Loading products…' : search ? 'No matching products.' : 'No products in catalog yet.'}</Text>{!loading && !search && overview.canManage && section === 'sell' ? <Button title="Add product" onPress={() => productForm()} /> : null}</View>} ListFooterComponent={hasMore ? <TouchableOpacity style={styles.loadMore} onPress={() => void more()}><Text>{loading ? 'Loading…' : 'Load more'}</Text></TouchableOpacity> : null} renderItem={({ item }) => {
+            if (section === 'sell') {
+              const inCartQty = cartQuantities[item.id] || 0;
+              const isOutOfStock = Number(item.data.stock) < 1;
+              const isLowStock = !isOutOfStock && Number(item.data.stock) <= Number(item.data.lowStock || 0);
+              return (
+                <TouchableOpacity
+                  accessibilityLabel={item.title + (isOutOfStock ? ', out of stock' : '')}
+                  style={[styles.productTile, inCartQty > 0 && styles.productTileInCart, isOutOfStock && styles.disabled]}
+                  onPress={() => add(item)}
+                >
+                  <View style={styles.productTileTop}>
+                    {item.data.imageUrl ? (
+                      <Image source={{ uri: String(item.data.imageUrl) }} style={styles.productThumb} resizeMode="cover" />
+                    ) : null}
+                    <Text numberOfLines={2} style={styles.productName}>{item.title}</Text>
+                    {inCartQty > 0 ? (
+                      <View style={styles.productQtyBadge}>
+                        <Text style={styles.productQtyBadgeText}>{inCartQty}</Text>
+                      </View>
+                    ) : null}
+                  </View>
+                  <View style={styles.productTileBottom}>
+                    <Text style={styles.price}>{money(Number(item.data.price), currency)}</Text>
+                    {isLowStock ? <Text style={styles.lowStockText}>Low ({String(item.data.stock)})</Text> : isOutOfStock ? <Text style={styles.outOfStockText}>Out of stock</Text> : null}
+                  </View>
+                </TouchableOpacity>
+              );
+            }
+            return (
+              <TouchableOpacity style={styles.listRow} onPress={() => {
+                if (section === 'orders') setOrder(item);
+                else if (section === 'customers') Alert.alert(item.title, String(item.data.phone || item.data.email || ''), [{ text: 'Add to sale', onPress: () => { selectCustomer(item); } }, { text: 'Purchase history', onPress: () => { chooseSection('orders'); setSearch(item.id); } }, { text: 'Edit', onPress: () => customerForm(item) }]);
+              }}><View style={styles.copy}><Text style={styles.body}>{section === 'orders' ? item.id.slice(-8).toUpperCase() : item.title}</Text><Text style={styles.muted}>{section === 'customers' ? String(item.data.phone || item.data.email || 'Select for this sale') : new Date(item.createdAt).toLocaleDateString() + ' · ' + item.state}</Text></View>{section === 'orders' ? <Text style={styles.price}>{money(Number(item.data.total), currency)}</Text> : null}<Ionicons name="chevron-forward" size={16} color="#8c9196" /></TouchableOpacity>
+            );
+          }} />
         </View> : null}
         {section === 'sell' && ((wide && count > 0) || cartOpen) ? cartView : null}
       </View>}
-      {overview?.settings && !order && section === 'sell' && !wide && !cartOpen && count > 0 ? <TouchableOpacity style={styles.cartBar} onPress={() => setCartOpen(true)}><Text style={styles.cartBarText}>View cart · {count}</Text><Text style={styles.cartBarText}>{money(totals.total, currency)}</Text></TouchableOpacity> : null}
+      {overview?.settings && !order && section === 'sell' && !wide && !cartOpen && count > 0 ? (
+        <TouchableOpacity style={[styles.cartBar, { bottom: insets.bottom + 12 }]} onPress={() => setCartOpen(true)}>
+          <View style={styles.cartBarLeft}>
+            <View style={styles.cartBadge}><Text style={styles.cartBadgeText}>{count}</Text></View>
+            <Text style={styles.cartBarTotal}>{money(totals.total, currency)}</Text>
+          </View>
+          <View style={styles.cartBarRight}>
+            <Text style={styles.cartBarAction}>Review & Settle ›</Text>
+          </View>
+        </TouchableOpacity>
+      ) : null}
       {form ? <PosForm form={form} onClose={() => setForm(null)} /> : null}
     </View>
   </Modal>;
@@ -435,25 +556,192 @@ function Total({ label, value, bold = false }: { label: string; value: string; b
 function Button({ title, onPress, disabled, secondary }: { title: string; onPress: () => void; disabled?: boolean; secondary?: boolean }) { return <TouchableOpacity disabled={disabled} onPress={onPress} style={[styles.button, secondary && styles.secondary, disabled && styles.disabled]}><Text style={[styles.buttonText, secondary && styles.secondaryText]}>{title}</Text></TouchableOpacity>; }
 
 const styles = StyleSheet.create({
-  page: { flex: 1, backgroundColor: '#fff' }, header: { height: 60, backgroundColor: '#fff', flexDirection: 'row', alignItems: 'center', gap: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: '#d2d5d8', paddingHorizontal: 8 },
-  navScroll: { flexGrow: 0, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: '#d2d5d8' }, nav: { minHeight: 48, paddingHorizontal: 12, alignItems: 'center', gap: 4 },
-  navItem: { minHeight: 44, paddingHorizontal: 14, alignItems: 'center', justifyContent: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent' },
-  navItemActive: { borderBottomColor: '#2463a7' }, navText: { color: '#6d7175', fontSize: 13, fontWeight: '500' }, navTextActive: { color: '#2463a7', fontWeight: '700' },
-  touch: { minWidth: 40, height: 44, alignItems: 'center', justifyContent: 'center' }, copy: { flex: 1 }, storeName: { color: '#202223', fontSize: 16, fontWeight: '600' }, small: { fontSize: 11, color: '#6d7175', marginTop: 2 },
-  main: { flex: 1, flexDirection: 'row' }, catalog: { flex: 1 }, sectionHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, height: 54 },
-  heading: { fontSize: 17, fontWeight: '600', color: '#202223' }, body: { fontSize: 14, color: '#202223' }, muted: { fontSize: 12, color: '#6d7175', lineHeight: 18 },
-  search: { marginHorizontal: 16, marginTop: 12, marginBottom: 10, paddingHorizontal: 12, height: 42, backgroundColor: '#fff', borderWidth: 1, borderColor: '#c9cccf', borderRadius: 8, flexDirection: 'row', alignItems: 'center', gap: 8 }, searchInput: { flex: 1, fontSize: 14, color: '#202223', height: 42 },
-  products: { paddingHorizontal: 10, paddingBottom: 20 }, productTile: { flex: 1, margin: 5, padding: 10, backgroundColor: '#fff', borderWidth: StyleSheet.hairlineWidth, borderColor: '#d2d5d8', borderRadius: 8, maxWidth: '48%' },
-  productArt: { height: 92, backgroundColor: '#f1f2f3', justifyContent: 'center', alignItems: 'center', borderRadius: 4, marginBottom: 8 }, productInitial: { fontSize: 25, fontWeight: '500', color: '#8c9196' }, productName: { fontSize: 14, fontWeight: '600', color: '#202223', minHeight: 20 }, lowStock: { color: '#b98900', fontSize: 11, fontWeight: '600', marginTop: 4 }, price: { fontSize: 13, fontWeight: '600', color: '#202223', marginTop: 5 },
-  listRow: { minHeight: 66, paddingHorizontal: 10, flexDirection: 'row', alignItems: 'center', gap: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: '#d2d5d8' },
-  cart: { flex: 1, backgroundColor: '#fff' }, cartWide: { flex: 0, width: 340, borderLeftWidth: 1, borderColor: '#d2d5d8' }, panelHeading: { height: 54, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  customer: { height: 46, borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: '#d2d5d8', paddingHorizontal: 16, gap: 10, flexDirection: 'row', alignItems: 'center' },
-  cartLines: { flex: 1 }, line: { minHeight: 68, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: '#ddd' }, stepper: { flexDirection: 'row', alignItems: 'center' },
-  totals: { padding: 16, borderTopWidth: StyleSheet.hairlineWidth, borderColor: '#d2d5d8' }, totalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12, paddingVertical: 7 }, discount: { width: 60, height: 34, borderWidth: 1, borderColor: '#c9cccf', borderRadius: 6, textAlign: 'right', paddingHorizontal: 8 },
-  payments: { flexDirection: 'row', gap: 10, marginTop: 8 }, button: { backgroundColor: '#202223', minHeight: 46, paddingHorizontal: 22, borderRadius: 8, justifyContent: 'center', alignItems: 'center', marginVertical: 5 }, buttonText: { fontSize: 15, fontWeight: '600', color: '#fff' }, secondary: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#babfc3' }, secondaryText: { color: '#202223' }, disabled: { opacity: 0.4 },
-  cartBar: { height: 50, backgroundColor: '#202223', margin: 10, borderRadius: 8, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, cartBarText: { color: '#fff', fontWeight: '600', fontSize: 14 },
-
-  emptyState: { alignItems: 'center', padding: 20 },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28 }, empty: { paddingVertical: 28, paddingHorizontal: 16, textAlign: 'center', color: '#6d7175', fontSize: 13, lineHeight: 20 }, register: { padding: 20, width: '100%', maxWidth: 600, alignSelf: 'center' },
-  receipt: { padding: 24, gap: 10, maxWidth: 560, width: '100%', alignSelf: 'center' }, receiptTitle: { fontSize: 24, fontWeight: '600', color: '#202223' }, error: { padding: 12, backgroundColor: '#fff1f0' }, errorText: { fontSize: 13, color: '#b42318' }, loadMore: { height: 48, alignItems: 'center', justifyContent: 'center' }, recovery: { padding: 12, backgroundColor: '#fff8e5' },
+  page: { flex: 1, backgroundColor: '#FFFFFF' },
+  header: { height: 52, backgroundColor: '#FFFFFF', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: StyleSheet.hairlineWidth, borderColor: '#E8ECF1', paddingHorizontal: 12 },
+  touch: { width: 36, height: 44, alignItems: 'center', justifyContent: 'center' },
+  headerTitle: { flex: 1, fontSize: 16, fontWeight: '700', color: '#1C2430', marginLeft: 6 },
+  searchBar: {
+    marginHorizontal: 12,
+    marginTop: 10,
+    marginBottom: 6,
+    height: 44,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    gap: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: '#1C2430',
+    height: 44,
+    paddingVertical: 0,
+  },
+  searchClear: {
+    padding: 2,
+  },
+  copy: { flex: 1 },
+  drawerBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, backgroundColor: '#F8FAFC', borderRadius: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: '#E2E8F0' },
+  drawerBadgeText: { fontSize: 12, fontWeight: '600', color: '#64748B' },
+  drawerBadgeActive: { color: '#16A34A', fontWeight: '700' },
+  main: { flex: 1, flexDirection: 'row' },
+  catalog: { flex: 1 },
+  sectionHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, height: 48 },
+  heading: { fontSize: 16, fontWeight: '700', color: '#1C2430' },
+  body: { fontSize: 14, color: '#1C2430' },
+  muted: { fontSize: 12, color: '#697586', lineHeight: 18 },
+  categoryScroll: { flexGrow: 0, paddingHorizontal: 10, marginTop: 8, marginBottom: 8 },
+  categoryList: { gap: 6, alignItems: 'center', flexDirection: 'row' },
+  categoryPill: { paddingHorizontal: 13, paddingVertical: 6, borderRadius: 16, backgroundColor: '#F1F5F9' },
+  categoryPillActive: { backgroundColor: '#1C2430' },
+  categoryPillText: { fontSize: 13, fontWeight: '500', color: '#64748B' },
+  categoryPillTextActive: { color: '#FFFFFF', fontWeight: '700' },
+  products: { paddingHorizontal: 8, paddingBottom: 80 },
+  productTile: {
+    flex: 1,
+    margin: 4,
+    padding: 12,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E8ECF1',
+    justifyContent: 'space-between',
+    minHeight: 90,
+    maxWidth: '48%',
+  },
+  productTileInCart: {
+    borderColor: '#3157A8',
+    backgroundColor: '#F7F9FD',
+  },
+  productTileTop: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 6,
+  },
+  productThumb: {
+    width: 32,
+    height: 32,
+    borderRadius: 6,
+  },
+  productName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1C2430',
+    flex: 1,
+    lineHeight: 19,
+  },
+  productQtyBadge: {
+    backgroundColor: '#3157A8',
+    borderRadius: 10,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    minWidth: 20,
+    alignItems: 'center',
+  },
+  productQtyBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  productTileBottom: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 10,
+  },
+  price: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1C2430',
+  },
+  lowStockText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#B45309',
+  },
+  outOfStockText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#DC2626',
+  },
+  listRow: { minHeight: 64, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', gap: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: '#E8ECF1' },
+  cart: { flex: 1, backgroundColor: '#FFFFFF' },
+  cartWide: { flex: 0, width: 340, borderLeftWidth: 1, borderColor: '#E8ECF1' },
+  panelHeading: { height: 50, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  customer: { height: 44, borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: '#E8ECF1', paddingHorizontal: 16, gap: 10, flexDirection: 'row', alignItems: 'center' },
+  cartLines: { flex: 1 },
+  line: { minHeight: 64, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: '#F1F5F9' },
+  stepper: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  stepperBtn: { width: 30, height: 30, borderRadius: 6, backgroundColor: '#F1F5F9', alignItems: 'center', justifyContent: 'center' },
+  stepperQty: { minWidth: 24, textAlign: 'center', fontSize: 14, fontWeight: '700', color: '#1C2430' },
+  removeBtn: { width: 28, height: 28, alignItems: 'center', justifyContent: 'center', marginLeft: 4 },
+  totals: { padding: 16, borderTopWidth: StyleSheet.hairlineWidth, borderColor: '#E8ECF1' },
+  totalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12, paddingVertical: 6 },
+  discount: { width: 56, height: 32, borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 6, textAlign: 'right', paddingHorizontal: 6, fontSize: 13 },
+  payments: { flexDirection: 'row', gap: 8, marginTop: 8 },
+  button: { backgroundColor: '#1C2430', minHeight: 46, paddingHorizontal: 18, borderRadius: 8, justifyContent: 'center', alignItems: 'center', marginVertical: 4, flex: 1 },
+  buttonText: { fontSize: 14, fontWeight: '700', color: '#FFFFFF' },
+  secondary: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#CBD5E1' },
+  secondaryText: { color: '#1C2430' },
+  disabled: { opacity: 0.4 },
+  cartBar: {
+    position: 'absolute',
+    bottom: 12,
+    left: 12,
+    right: 12,
+    height: 52,
+    backgroundColor: '#1C2430',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 6,
+  },
+  cartBarLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  cartBadge: {
+    backgroundColor: '#3157A8',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  cartBadgeText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  cartBarTotal: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 16,
+  },
+  cartBarRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  cartBarAction: {
+    color: '#93C5FD',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  emptyState: { alignItems: 'center', padding: 32 },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28 },
+  empty: { paddingVertical: 24, paddingHorizontal: 16, textAlign: 'center', color: '#697586', fontSize: 13, lineHeight: 20 },
+  receipt: { padding: 24, gap: 10, maxWidth: 560, width: '100%', alignSelf: 'center' },
+  receiptTitle: { fontSize: 22, fontWeight: '700', color: '#1C2430' },
+  error: { padding: 12, backgroundColor: '#FEF2F2' },
+  errorText: { fontSize: 13, color: '#DC2626' },
+  loadMore: { height: 44, alignItems: 'center', justifyContent: 'center' },
+  recovery: { padding: 12, backgroundColor: '#FFFBEB' },
 });

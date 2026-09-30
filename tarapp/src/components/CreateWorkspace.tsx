@@ -205,38 +205,18 @@ export default function CreateWorkspace({
                 <View style={styles.moduleRow}>
                   <View style={styles.moduleCopy}>
                     <View style={styles.moduleTitleRow}>
-                      <Ionicons name="storefront-outline" size={18} color="#1E5631" />
-                      <Text style={styles.moduleTitle}>Point of Sale (POS)</Text>
-                    </View>
-                    <Text style={styles.moduleDesc}>
-                      Counter checkout, cash register, food/kitchen order management.
-                    </Text>
-                  </View>
-                  <Switch
-                    value={capabilities.pos}
-                    onValueChange={(val) => setCapabilities((c) => ({ ...c, pos: val }))}
-                    trackColor={{ false: '#DCE8E0', true: '#8DC99F' }}
-                    thumbColor={capabilities.pos ? '#1E5631' : '#FFFFFF'}
-                  />
-                </View>
-
-                <View style={styles.divider} />
-
-                <View style={styles.moduleRow}>
-                  <View style={styles.moduleCopy}>
-                    <View style={styles.moduleTitleRow}>
                       <Ionicons name="bag-handle-outline" size={18} color="#1E5631" />
                       <Text style={styles.moduleTitle}>Commerce</Text>
                     </View>
                     <Text style={styles.moduleDesc}>
-                      Catalog items, variants, purchasing, customer orders, invoices & payments.
+                      Sales, POS counter, catalog, inventory, register, invoices & payments.
                     </Text>
                   </View>
                   <Switch
-                    value={capabilities.commerce}
-                    onValueChange={(val) => setCapabilities((c) => ({ ...c, commerce: val }))}
+                    value={capabilities.commerce || capabilities.pos}
+                    onValueChange={(val) => setCapabilities((c) => ({ ...c, commerce: val, pos: val }))}
                     trackColor={{ false: '#DCE8E0', true: '#8DC99F' }}
-                    thumbColor={capabilities.commerce ? '#1E5631' : '#FFFFFF'}
+                    thumbColor={(capabilities.commerce || capabilities.pos) ? '#1E5631' : '#FFFFFF'}
                   />
                 </View>
 

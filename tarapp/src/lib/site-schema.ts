@@ -106,12 +106,13 @@ export interface AskOutcome {
   siteId: string; base: number; target: string | null; targetKind: 'section' | 'node' | null;
   operations: PatchOperation[]; summary: string; questions: string[];
 }
-export interface EditOutcome { siteId: string; version: number; revision: number; site: SiteDocument; diff: DiffEntry[] }
+export interface EditOutcome { siteId: string; version: number; revision: number; site: SiteDocument; diff: DiffEntry[]; html?: string }
 export interface SiteSnapshot {
   site: { id: string; version: number; state: string; data: SiteDocument } | null;
   schema: string | null;
   history: HistoryEntry[];
   designMarkdown: string | null;
+  html?: string | null;
   publicUrl: string | null;
   liveRelease: string | null;
   publicationState: string | null;

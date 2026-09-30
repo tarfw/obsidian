@@ -17,10 +17,11 @@ import {
 } from './document.ts';
 import { COLOR_KEYS, exportDesign, parseDesign } from './design.ts';
 import { applyPatch, diffSummary, type DiffEntry, type PatchOperation } from './patch.ts';
-import { chooseTarget, chooseValues, type JudgmentCache } from './judgment.ts';
+import { chooseLayout, chooseTarget, chooseTone, chooseValues, type JudgmentCache } from './judgment.ts';
 import { readDocument } from './adapt.ts';
 import { validateDocument } from './validate.ts';
 import { getSiteRecord } from './store.ts';
+import { compileDocument } from './compile.ts';
 
 const now = () => Date.now();
 const text = (value: unknown, max = 400): string => typeof value === 'string' ? value.trim().slice(0, max) : '';
@@ -89,7 +90,7 @@ export interface AskResult {
 }
 
 function styleTarget(doc: SiteDocument, target: string): 'section' | 'node' | null {
-  if (doc.pages.some((page) => page.sections.some((section) => section.id === target))) return 'section';
+  if (doc.pages.some((page) => page.sections.some((section) => section.id === target || section.purpose.toLowerCase() === target.toLowerCase()))) return 'section';
   const walk = (nodes: Node[]): boolean => nodes.some((node) => node.id === target || walk(node.children || []));
   if (doc.pages.some((page) => page.sections.some((section) => walk(section.nodes)))) return 'node';
   return null;
@@ -182,7 +183,7 @@ export async function executeSiteAsk(
     const lower = command.toLowerCase();
     outer: for (const page of doc.pages) {
       for (const section of page.sections) {
-        if (lower.includes(section.id.toLowerCase())) { target = section.id; targetKind = 'section'; break outer; }
+        if (lower.includes(section.id.toLowerCase()) || lower.includes(section.purpose.toLowerCase())) { target = section.id; targetKind = 'section'; break outer; }
         const heading = section.nodes.find((node) => node.kind === 'heading' && typeof node.props.text === 'string' && lower.includes(String(node.props.text).toLowerCase().slice(0, 24)));
         if (heading) { target = section.id; targetKind = 'section'; break outer; }
       }
@@ -196,17 +197,131 @@ export async function executeSiteAsk(
       label: `${page.title}: ${String(section.nodes.find((node) => node.kind === 'heading')?.props.text || section.purpose)}`,
       purpose: section.purpose,
     })));
-    const judged = await chooseTarget(typesafe, cache, { command, targets: candidates });
-    if (judged.target) { target = judged.target; targetKind = 'section'; }
-    else questions.push('Which section should this change?');
+    if (typesafe) {
+      const judged = await chooseTarget(typesafe, cache, { command, targets: candidates });
+      if (judged.target) { target = judged.target; targetKind = 'section'; }
+      else questions.push('Which section should this change?');
+    } else {
+      questions.push('Which section should this change?');
+    }
   }
 
   const operations: PatchOperation[] = [];
   let summary = '';
   if (target && targetKind) {
+    const wanted = target;
+    const targetSection = doc.pages.flatMap((page) => page.sections).find((s) => s.id === wanted || s.purpose.toLowerCase() === wanted.toLowerCase());
+    if (targetSection) {
+      target = targetSection.id;
+      const lower = command.toLowerCase();
+      // Layout Decision (columns, alignment, density)
+      let cols: number | null = null;
+      if (lower.includes('2 col') || lower.includes('two col') || lower.includes('side by side') || lower.includes('split')) cols = 2;
+      else if (lower.includes('3 col') || lower.includes('three col')) cols = 3;
+      else if (lower.includes('4 col') || lower.includes('four col')) cols = 4;
+      else if (lower.includes('1 col') || lower.includes('one col') || lower.includes('single col') || lower.includes('stack')) cols = 1;
+
+      let align: 'start' | 'center' | 'end' | null = null;
+      if (lower.includes('align center') || lower.includes('center align') || lower.includes('centered') || lower.includes('centre')) align = 'center';
+      else if (lower.includes('align left') || lower.includes('left align')) align = 'start';
+      else if (lower.includes('align right') || lower.includes('right align')) align = 'end';
+
+      let density: 'airy' | 'compact' | null = null;
+      if (lower.includes('airy') || lower.includes('breathing room') || lower.includes('spacious') || lower.includes('more room')) density = 'airy';
+      else if (lower.includes('compact') || lower.includes('tight') || lower.includes('dense')) density = 'compact';
+
+      if (typesafe && (lower.includes('layout') || lower.includes('align') || lower.includes('columns') || lower.includes('spacing'))) {
+        const layoutChoice = await chooseLayout(typesafe, cache, { command, target, currentColumns: targetSection.layout.columns, currentAlign: targetSection.layout.align });
+        if (layoutChoice.columns) cols = layoutChoice.columns;
+        if (layoutChoice.align) align = layoutChoice.align;
+        if (layoutChoice.density && layoutChoice.density !== 'balanced') density = layoutChoice.density;
+      }
+
+      if (cols !== null || align !== null) {
+        const nextLayout = {
+          ...targetSection.layout,
+          ...(cols !== null ? { columns: cols, kind: (cols > 1 ? 'grid' : 'stack') as import('./document.ts').SectionLayout } : {}),
+          ...(align !== null ? { align } : {}),
+        };
+        operations.push({ op: 'set_layout', target, value: nextLayout });
+        summary = summary ? `${summary}, updated layout` : `Updated ${target} layout`;
+      }
+
+      if (density !== null) {
+        const padVal = density === 'airy' ? 'token:space.section' : 'token:space.unit';
+        const existingStyle = targetSection.style || {};
+        const nextBase = { ...(existingStyle.base || {}), pad: padVal };
+        operations.push({ op: 'set_style', target, value: { ...existingStyle, base: nextBase } });
+        summary = summary ? `${summary}, set spacing to ${density}` : `Set ${target} spacing to ${density}`;
+      }
+
+      // Tone Decision (canvas, surface, ink, accent)
+      let toneChoice: 'canvas' | 'surface' | 'ink' | 'accent' | null = null;
+      if (lower.includes('dark') || lower.includes('ink') || lower.includes('black')) toneChoice = 'ink';
+      else if (lower.includes('light') || lower.includes('canvas') || lower.includes('white')) toneChoice = 'canvas';
+      else if (lower.includes('surface') || lower.includes('raised') || lower.includes('card')) toneChoice = 'surface';
+      else if (lower.includes('accent') || lower.includes('royal blue') || lower.includes('blue') || lower.includes('brand')) toneChoice = 'accent';
+
+      if (typesafe && (lower.includes('tone') || lower.includes('color') || lower.includes('theme') || lower.includes('look'))) {
+        const judgedTone = await chooseTone(typesafe, cache, { command, target });
+        if (judgedTone) toneChoice = judgedTone;
+      }
+
+      if (toneChoice) {
+        const toneMap: Record<string, { bg: string; color: string }> = {
+          canvas: { bg: 'token:color.canvas', color: 'token:color.ink' },
+          surface: { bg: 'token:color.surface', color: 'token:color.ink' },
+          ink: { bg: 'token:color.ink', color: 'token:color.canvas' },
+          accent: { bg: 'token:color.accent', color: 'token:color.accentink' },
+        };
+        const existingStyle = targetSection.style || {};
+        const nextBase = { ...(existingStyle.base || {}), background: toneMap[toneChoice].bg, color: toneMap[toneChoice].color };
+        operations.push({ op: 'set_style', target, value: { ...existingStyle, base: nextBase } });
+        summary = summary ? `${summary}, set tone to ${toneChoice}` : `Set ${target} tone to ${toneChoice}`;
+      }
+
+      // Borders and Elevation
+      if (lower.includes('soft border') || lower.includes('soft borders') || lower.includes('rounded')) {
+        const existingStyle = targetSection.style || {};
+        const nextBase = { ...(existingStyle.base || {}), border: 'hairline', radius: 'token:shape.md' };
+        operations.push({ op: 'set_style', target, value: { ...existingStyle, base: nextBase } });
+        summary = summary ? `${summary}, soft borders` : `Added soft borders to ${target}`;
+      }
+      if (lower.includes('raised') || lower.includes('shadow') || lower.includes('elevation')) {
+        const existingStyle = targetSection.style || {};
+        const nextBase = { ...(existingStyle.base || {}), shadow: 'soft' };
+        operations.push({ op: 'set_style', target, value: { ...existingStyle, base: nextBase } });
+        summary = summary ? `${summary}, raised cards` : `Added raised elevation to ${target}`;
+      }
+
+      // Exact text rewrite if quoted
+      const quoteMatch = command.match(/["']([^"']+)["']/);
+      if (quoteMatch) {
+        const textTarget = targetSection.nodes.find((n) => n.kind === 'heading' || n.kind === 'text' || n.kind === 'button');
+        if (textTarget) {
+          if (textTarget.kind === 'button') {
+            operations.push({ op: 'set_props', target: textTarget.id, value: { label: quoteMatch[1] } });
+          } else {
+            operations.push({ op: 'set_text', target: textTarget.id, value: quoteMatch[1] });
+          }
+          summary = summary ? `${summary}, updated text` : `Updated text in ${target}`;
+        }
+      }
+    }
+
     const { ops, unresolved } = explicitStyle(doc, command, target);
-    operations.push(...ops);
-    if (ops.length) summary = `Update the selected ${targetKind}: ${ops.length} style change${ops.length === 1 ? '' : 's'}.`;
+    for (const op of ops) {
+      const opTarget = 'target' in op ? (op as { target: string }).target : undefined;
+      const exists = operations.some((existing) => {
+        if (existing.op !== op.op) return false;
+        const existingTarget = 'target' in existing ? (existing as { target: string }).target : undefined;
+        return existingTarget === opTarget;
+      });
+      if (!exists) {
+        operations.push(op);
+      }
+    }
+    if (ops.length && !summary) summary = `Update the selected ${targetKind}: ${ops.length} style change${ops.length === 1 ? '' : 's'}.`;
     const missing = Object.keys(unresolved);
     if (missing.length && typesafe) {
       const chosen = await chooseValues(typesafe, cache, { command, target, options: Object.fromEntries(missing.map((property) => [property, unresolved[property]])) });
@@ -265,7 +380,7 @@ export async function executeSiteEdit(
   const base = Number(input.base);
   const current = await getSiteRecord(client, siteId);
   if (!siteId || !current) throw notFound('Site was not found.');
-  if (!Number.isSafeInteger(base) || current.version !== base) throw conflict('Site changed since this patch was prepared. Refresh and try again.');
+  if (!Number.isSafeInteger(base)) throw badRequest('Base revision is required.');
   const { doc } = readDocument(current.data);
   if (doc.revision !== base) throw conflict('Site changed since this patch was prepared. Refresh and try again.');
   const operations = Array.isArray(input.operations) ? input.operations as PatchOperation[] : [];
@@ -278,12 +393,19 @@ export async function executeSiteEdit(
   const result: Record<string, unknown> = { siteId, version, revision: next.revision, site: next, diff };
   const stored = await recordHistory(bucket, context, siteId, next, doc, summary);
   const saved = await client.batch([
-    { sql: 'UPDATE records SET data=?,version=?,updated=? WHERE id=? AND version=?', args: [JSON.stringify(stored), version, at, siteId, base] },
+    { sql: 'UPDATE records SET data=?,version=?,updated=? WHERE id=? AND version=?', args: [JSON.stringify(stored), version, at, siteId, current.version] },
     { sql: `INSERT INTO events(id,kind,record_id,action_id,state,actor_id,input_hash,idempotency_key,data,created_at,updated_at)
       SELECT ?, 'action', ?, 'site.edit', 'accepted', ?, ?, ?, ?, ?, ? WHERE changes()=1`, args: [`evt_${crypto.randomUUID()}`, siteId, context.identity.id, inputHash, key, JSON.stringify({ result }), at, at] },
   ], 'write');
   if (saved[0].rowsAffected !== 1 || saved[1].rowsAffected !== 1) throw conflict('Site changed while saving. Refresh and try again.');
-  return { siteId, version, revision: next.revision, site: next, diff };
+  let previewHtml = '';
+  try {
+    const compiled = await compileDocument(next);
+    const html = String(compiled.files.find((f) => f.path === '/index.html')?.body || '');
+    const css = String(compiled.files.find((f) => f.path === '/style.css')?.body || '');
+    previewHtml = html.replace('</head>', `<style>${css}</style></head>`);
+  } catch { /* ignore */ }
+  return { siteId, version, revision: next.revision, site: next, diff, html: previewHtml };
 }
 
 /**
@@ -350,7 +472,14 @@ export async function executeSiteUndo(
       SELECT ?, 'action', ?, 'site.undo', 'accepted', ?, ?, ?, ?, ?, ? WHERE changes()=1`, args: [`evt_${crypto.randomUUID()}`, siteId, context.identity.id, inputHash, key, JSON.stringify({ result }), at, at] },
   ], 'write');
   if (saved[0].rowsAffected !== 1 || saved[1].rowsAffected !== 1) throw conflict('Site changed while undoing. Refresh and try again.');
-  return result;
+  let previewHtml = '';
+  try {
+    const compiled = await compileDocument(merged);
+    const html = String(compiled.files.find((f) => f.path === '/index.html')?.body || '');
+    const css = String(compiled.files.find((f) => f.path === '/style.css')?.body || '');
+    previewHtml = html.replace('</head>', `<style>${css}</style></head>`);
+  } catch { /* ignore */ }
+  return { ...result, html: previewHtml };
 }
 
 /**

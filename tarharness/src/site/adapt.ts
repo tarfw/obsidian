@@ -292,6 +292,9 @@ export function upgrade(site: SiteDefinition): SiteDocument {
 export function readDocument(value: unknown): { doc: SiteDocument; migrated: boolean } {
   if (isV2(value)) return { doc: value, migrated: false };
   if (isV1(value)) return { doc: upgrade(value), migrated: true };
+  if (value && typeof value === 'object' && Array.isArray((value as Record<string, unknown>).pages)) {
+    return { doc: { ...(value as object), schema: DOCUMENT_VERSION } as unknown as SiteDocument, migrated: true };
+  }
   throw badRequest('Site definition is invalid.');
 }
 

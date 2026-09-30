@@ -120,6 +120,81 @@ export async function chooseTarget(
   return { target, confidence: answer.confidence };
 }
 
+export interface LayoutJudgment {
+  columns: number | null;
+  align: 'start' | 'center' | null;
+  density: 'airy' | 'balanced' | 'compact' | null;
+}
+
+/** Jev decides layout structure (1 vs 2 columns, alignment, spacing density) for a section. */
+export async function chooseLayout(
+  apiKey: string | undefined,
+  cache: JudgmentCache,
+  input: { command: string; target: string; currentColumns?: number; currentAlign?: string },
+): Promise<LayoutJudgment> {
+  const result = await answers(apiKey, cache, 'site.layout', input, {
+    columns: {
+      type: 'choice',
+      instructions: 'How many columns should this section layout use based on the request? Choose 1, 2, or keep.',
+      criteria: {
+        '1': 'Single column / stacked layout.',
+        '2': 'Two columns / side-by-side layout (e.g. image left/right, text right/left).',
+        'keep': 'Leave columns unchanged.',
+      },
+    },
+    align: {
+      type: 'choice',
+      instructions: 'How should content inside this section be aligned? Choose start, center, or keep.',
+      criteria: {
+        'start': 'Left-aligned content.',
+        'center': 'Centered content.',
+        'keep': 'Leave alignment unchanged.',
+      },
+    },
+    density: {
+      type: 'choice',
+      instructions: 'What spacing density best fits the request? Choose airy, balanced, compact, or keep.',
+      criteria: {
+        'airy': 'Spacious layout with generous breathing room.',
+        'balanced': 'Standard balanced spacing.',
+        'compact': 'Tight, compact spacing.',
+        'keep': 'Leave spacing unchanged.',
+      },
+    },
+  });
+  const col = choiceOf(result?.columns).choice;
+  const alg = choiceOf(result?.align).choice;
+  const den = choiceOf(result?.density).choice;
+  return {
+    columns: col === '1' ? 1 : col === '2' ? 2 : null,
+    align: alg === 'start' || alg === 'center' ? alg : null,
+    density: den === 'airy' || den === 'balanced' || den === 'compact' ? den : null,
+  };
+}
+
+/** Jev decides section tone (light/canvas, dark/ink, surface, accent). */
+export async function chooseTone(
+  apiKey: string | undefined,
+  cache: JudgmentCache,
+  input: { command: string; target: string },
+): Promise<'canvas' | 'surface' | 'ink' | 'accent' | null> {
+  const result = await answers(apiKey, cache, 'site.tone', input, {
+    tone: {
+      type: 'choice',
+      instructions: 'Which color tone should the selected section use? Choose canvas (light), surface (neutral card), ink (dark/black), accent (brand accent), or keep.',
+      criteria: {
+        canvas: 'Light background with dark ink text.',
+        surface: 'Slightly raised or tinted background panel.',
+        ink: 'Dark/black background with light text.',
+        accent: 'Brand accent colored background.',
+        keep: 'Leave tone unchanged.',
+      },
+    },
+  });
+  const tone = choiceOf(result?.tone).choice;
+  return tone === 'canvas' || tone === 'surface' || tone === 'ink' || tone === 'accent' ? tone : null;
+}
+
 /**
  * Choose values for editable properties when the request is ambiguous.
  * `keep` preserves an existing value; `none` clears it.

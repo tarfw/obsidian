@@ -113,6 +113,64 @@ describe('site ask and edit', () => {
     void site;
   });
 
+  it('resolves layout columns, tone and copy changes via Jev decision system', async () => {
+    const client = await createTestWorkspace();
+    const { siteId, site } = await generatedSite(client);
+    const layoutRequest = vi.fn().mockImplementation(async () => new Response(JSON.stringify({
+      model: 'jev-latest',
+      answers: {
+        target: { type: 'choice', choice: 'hero', confidence: 0.95 },
+        columns: { type: 'choice', choice: '2', confidence: 0.95 },
+        align: { type: 'choice', choice: 'start', confidence: 0.9 },
+        density: { type: 'choice', choice: 'airy', confidence: 0.88 },
+        tone: { type: 'choice', choice: 'ink', confidence: 0.91 },
+      },
+    }), { status: 200 }));
+    vi.stubGlobal('fetch', layoutRequest);
+
+    const asked = await Effect.runPromise(executeGateway(client, ownerAccess, {
+      actionId: 'site.ask', idempotencyKey: 'ask-layout-jev',
+      input: { siteId, command: 'Two columns, image left, text right, more breathing room, darker tone' },
+    }, { typesafe: 'test-key' }));
+
+    expect(asked.target).toBe('hero');
+    const ops = asked.operations as { op: string; target: string; value: unknown }[];
+    expect(ops.some((op) => op.op === 'set_layout')).toBe(true);
+    expect(ops.some((op) => op.op === 'set_style')).toBe(true);
+
+    const edited = await Effect.runPromise(executeGateway(client, ownerAccess, {
+      actionId: 'site.edit', idempotencyKey: 'edit-layout-jev',
+      input: { siteId, base: site.revision, operations: asked.operations, summary: String(asked.summary) },
+    }, { siteReleases: releaseBucket() }));
+
+    const updatedSite = edited.site as SiteDocument;
+    const hero = updatedSite.pages[0].sections.find((s) => s.id === 'hero');
+    expect(hero?.layout.columns).toBe(2);
+    expect(hero?.layout.kind).toBe('grid');
+  });
+
+  it('resolves deterministic layout and spacing commands without API key', async () => {
+    const client = await createTestWorkspace();
+    const { siteId, site } = await generatedSite(client);
+    const asked = await Effect.runPromise(executeGateway(client, ownerAccess, {
+      actionId: 'site.ask', idempotencyKey: 'ask-two-cols',
+      input: { siteId, command: 'Two columns with airy spacing', target: 'introduction' },
+    }));
+    const ops = asked.operations as { op: string; target: string; value: unknown }[];
+    expect(ops.some((op) => op.op === 'set_layout')).toBe(true);
+    expect(ops.some((op) => op.op === 'set_style')).toBe(true);
+
+    const edited = await Effect.runPromise(executeGateway(client, ownerAccess, {
+      actionId: 'site.edit', idempotencyKey: 'edit-two-cols',
+      input: { siteId, base: site.revision, operations: asked.operations, summary: String(asked.summary) },
+    }, { siteReleases: releaseBucket() }));
+
+    const updated = edited.site as SiteDocument;
+    const intro = updated.pages[0].sections.find((s) => s.id === asked.target);
+    expect(intro?.layout.columns).toBe(2);
+    expect(intro?.layout.kind).toBe('grid');
+  });
+
   it('rejects stale patches and locked targets', async () => {
     const client = await createTestWorkspace();
     const { siteId, site } = await generatedSite(client);

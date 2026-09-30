@@ -12,8 +12,10 @@ import { buildWorkspaceCanvas } from './registry/canvas.ts';
 import { posSummary, readPos } from './pos/store.ts';
 import { readProductContent } from './pos/content.ts';
 import { serveSitePreview } from './site/preview.ts';
-import { isV2 } from './site/adapt.ts';
+import { isV2, upgrade, readDocument } from './site/adapt.ts';
+import { createDefaultSite } from './site/store.ts';
 import { exportDesign } from './site/design.ts';
+import { compileDocument } from './site/compile.ts';
 import { canExecute, canReadRecord, canRunFlowStep, canUseWorkRole, isCook, managesMembers, workRoleNames } from './access.ts';
 import { inviteMember, listMembers, updateMember } from './team.ts';
 import { providers, providerStatus, verifyEvent, chatResponse, type ChannelEnv, type Provider } from './channels/providers.ts';
@@ -28,7 +30,7 @@ import { nextInTie } from './inbox/rank.ts';
 import { suggestCapabilities, suggestMember } from './brain/workspace-ai.ts';
 export { FlowWorkflow } from './flows/workflow.ts';
 
-type RuntimeEnv = Env & ChannelEnv & { readonly TURSO_PLATFORM_TOKEN?: string; readonly TINYFISH_API_KEY?: string; readonly TYPESAFE_API_KEY?: string; readonly SITE_BASE_DOMAIN?: string; readonly SITE_WORKER_ORIGIN?: string; readonly SITE_MODEL?: string };
+type RuntimeEnv = Env & ChannelEnv & { readonly TURSO_PLATFORM_TOKEN?: string; readonly TINYFISH_API_KEY?: string; readonly TYPESAFE_API_KEY?: string; readonly GROQ_API_KEY?: string; readonly SITE_BASE_DOMAIN?: string; readonly SITE_WORKER_ORIGIN?: string; readonly SITE_MODEL?: string };
 const jsonHeaders = { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' };
 const corsHeaders = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Authorization, Content-Type, Idempotency-Key', 'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS' };
 const now = () => Date.now();
@@ -253,7 +255,22 @@ async function createWorkspace(request: Request, env: RuntimeEnv): Promise<Respo
   const databaseName = `${identityKey(owner.id)}-${slug}`.slice(0, 56);
   const input = { identity: owner, name, slug, databaseName, mode: 'work' as const };
   const pending = await Effect.runPromise(control.resumeErroredWorkspace(input)) ?? await Effect.runPromise(control.createPendingWorkspace(input));
-  await provision(control, env, pending);
+  const provisioned = await provision(control, env, pending);
+  try {
+    const client = await Effect.runPromise(openWorkspaceDatabase(tursoEnv(env), pending.databaseName, provisioned.host));
+    try {
+      const siteDoc = upgrade(createDefaultSite(name, `${name} — official online store, products and services.`));
+      const siteId = `site_${crypto.randomUUID()}`;
+      const at = Date.now();
+      await client.batch([
+        { sql: "INSERT INTO records(id,type,title,state,data,owner,version,created,updated) VALUES(?,'site',?,'draft',?,?,1,?,?)", args: [siteId, name, JSON.stringify(siteDoc), owner.id, at, at] },
+      ], 'write');
+    } finally {
+      client.close();
+    }
+  } catch (err) {
+    console.error('Initial site draft auto-generation note:', err);
+  }
   return response({ workspace: { ...pending, databaseHost: undefined, state: 'active' } }, 201);
 }
 
@@ -463,18 +480,35 @@ async function handle(request: Request, env: RuntimeEnv, ctx: ExecutionContext):
       return response(await readPos(client, current, nested.slice(4), url.searchParams.get('q') || '', offset));
     }
     if (request.method === 'GET' && nested === 'site') {
-      const siteRows = await Effect.runPromise(query<Record<string, unknown>>(client, { sql: "SELECT * FROM records WHERE type='site' AND archived IS NULL ORDER BY updated DESC LIMIT 1" }));
-      if (!siteRows.length) return response({ site: null });
+      let siteRows = await Effect.runPromise(query<Record<string, unknown>>(client, { sql: "SELECT * FROM records WHERE type='site' AND archived IS NULL ORDER BY updated DESC LIMIT 1" }));
+      if (!siteRows.length) {
+        const initialDoc = upgrade(createDefaultSite(current.workspace.name, `${current.workspace.name} — official online store, products and services.`));
+        const siteId = `site_${crypto.randomUUID()}`;
+        const at = Date.now();
+        await client.batch([
+          { sql: "INSERT INTO records(id,type,title,state,data,owner,version,created,updated) VALUES(?,'site',?,'draft',?,?,1,?,?)", args: [siteId, current.workspace.name, JSON.stringify(initialDoc), current.identity.id, at, at] },
+        ], 'write');
+        siteRows = await Effect.runPromise(query<Record<string, unknown>>(client, { sql: "SELECT * FROM records WHERE id=? LIMIT 1", args: [siteId] }));
+      }
       const row = siteRows[0];
       const publication = await env.CONTROL.withSession('first-primary').prepare('SELECT domain,mode,release,status FROM sites WHERE workspace=? AND site=?')
         .bind(current.workspace.id, String(row.id)).first<{ domain: string; mode: string; release: string; status: string }>();
       const stored = object(typeof row.data === 'string' ? JSON.parse(row.data) : row.data);
+      const { doc } = readDocument(stored);
       const history = Array.isArray((stored as { history?: unknown[] }).history) ? (stored as { history: unknown[] }).history : [];
-      const designMarkdown = isV2(stored) ? exportDesign(stored.design) : null;
-      return response({ site: { id: String(row.id), version: Number(row.version), state: String(row.state), data: stored },
-        schema: isV2(stored) ? '2.0.0' : '1.0.0',
+      const designMarkdown = exportDesign(doc.design);
+      let previewHtml = '';
+      try {
+        const compiled = await compileDocument(doc);
+        const html = String(compiled.files.find((f) => f.path === '/index.html')?.body || '');
+        const css = String(compiled.files.find((f) => f.path === '/style.css')?.body || '');
+        previewHtml = html.replace('</head>', `<style>${css}</style></head>`);
+      } catch { /* fallback */ }
+      return response({ site: { id: String(row.id), version: Number(row.version), state: String(row.state), data: doc },
+        schema: '2.0.0',
         history,
         designMarkdown,
+        html: previewHtml,
         publicUrl: publication?.status === 'active' ? `https://${publication.domain}${publication.mode === 'path' ? `/${slug}` : ''}` : null,
         liveRelease: publication?.status === 'active' ? publication.release : null,
         publicationState: publication?.status || null });
@@ -587,7 +621,7 @@ async function handle(request: Request, env: RuntimeEnv, ctx: ExecutionContext):
         input.workspace = target.workspace.slug;
       }
       const action = { actionId, idempotencyKey: key, input };
-      const result = await Effect.runPromise(executeGateway(client, current, action, { productContent: env.PRODUCT_CONTENT, siteReleases: env.SITE_RELEASES, publication: env.CONTROL, siteDomain: env.SITE_WORKER_ORIGIN || env.SITE_BASE_DOMAIN, ai: env.AI, tinyfish: env.TINYFISH_API_KEY, typesafe: env.TYPESAFE_API_KEY, siteModel: env.SITE_MODEL }));
+      const result = await Effect.runPromise(executeGateway(client, current, action, { productContent: env.PRODUCT_CONTENT, siteReleases: env.SITE_RELEASES, publication: env.CONTROL, siteDomain: env.SITE_WORKER_ORIGIN || env.SITE_BASE_DOMAIN, ai: env.AI, tinyfish: env.TINYFISH_API_KEY, typesafe: env.TYPESAFE_API_KEY, siteModel: env.SITE_MODEL, groqApiKey: env.GROQ_API_KEY }));
       ctx.waitUntil(enqueueInboxSync(env, current.workspace.id).catch((error) => console.error(JSON.stringify({ event: 'inbox.queue.failed', error: error instanceof Error ? error.message.slice(0, 300) : String(error).slice(0, 300) }))));
       return response(result, 201);
     }
@@ -607,7 +641,7 @@ export default {
       }
       if (body.kind !== 'chat.command' || typeof body.id !== 'string') { message.ack(); continue; }
       try {
-        await processCommand(env.CONTROL, body.id, (current, work) => withWorkspace(env, current, work), { productContent: env.PRODUCT_CONTENT, siteReleases: env.SITE_RELEASES, publication: env.CONTROL, siteDomain: env.SITE_WORKER_ORIGIN || env.SITE_BASE_DOMAIN, ai: env.AI, typesafe: env.TYPESAFE_API_KEY, siteModel: env.SITE_MODEL });
+        await processCommand(env.CONTROL, body.id, (current, work) => withWorkspace(env, current, work), { productContent: env.PRODUCT_CONTENT, siteReleases: env.SITE_RELEASES, publication: env.CONTROL, siteDomain: env.SITE_WORKER_ORIGIN || env.SITE_BASE_DOMAIN, ai: env.AI, typesafe: env.TYPESAFE_API_KEY, siteModel: env.SITE_MODEL, groqApiKey: env.GROQ_API_KEY });
         const completed = await env.CONTROL.prepare("SELECT workspace_id FROM channel_commands WHERE id=? AND state='completed'").bind(body.id).first<{ workspace_id: string }>();
         if (completed) await enqueueInboxSync(env, completed.workspace_id);
         message.ack();

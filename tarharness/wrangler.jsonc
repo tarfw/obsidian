@@ -11,7 +11,7 @@
     "TURSO_ORG": "tarfwrk",
     "TURSO_GROUP": "default",
     "SITE_WORKER_ORIGIN": "https://tar-sites.tar-54d.workers.dev",
-    "SITE_MODEL": "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+    "SITE_MODEL": "qwen/qwen3.8-27b"
   },
   "workers_dev": true,
   "preview_urls": false,

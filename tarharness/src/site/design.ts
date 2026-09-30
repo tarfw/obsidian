@@ -396,65 +396,76 @@ export function parseDesign(markdown: string, previous: Design = DEFAULT_DESIGN)
 }
 
 /** Export the typed design as its readable markdown view. */
-export function exportDesign(design: Design): string {
+export function exportDesign(design: Design | undefined | null): string {
+  if (!design) return '';
+  const direction = design.direction || DEFAULT_DESIGN.direction;
+  const color = design.color || DEFAULT_DESIGN.color;
+  const type = design.type || DEFAULT_DESIGN.type;
+  const space = design.space || DEFAULT_DESIGN.space;
+  const shape = design.shape || DEFAULT_DESIGN.shape;
+  const elevation = design.elevation || DEFAULT_DESIGN.elevation;
+  const layout = design.layout || DEFAULT_DESIGN.layout;
+  const motion = design.motion || DEFAULT_DESIGN.motion;
+  const guidance = Array.isArray(design.guidance) ? design.guidance : [];
+
   const lines: string[] = [];
   lines.push('# Design');
   lines.push('');
   lines.push('## Direction');
-  lines.push(`- audience: ${design.direction.audience}`);
-  lines.push(`- purpose: ${design.direction.purpose}`);
-  lines.push(`- voice: ${design.direction.voice}`);
-  lines.push(`- density: ${design.direction.density}`);
-  lines.push(`- idea: ${design.direction.idea}`);
+  lines.push(`- audience: ${direction.audience || ''}`);
+  lines.push(`- purpose: ${direction.purpose || ''}`);
+  lines.push(`- voice: ${direction.voice || ''}`);
+  lines.push(`- density: ${direction.density || 'balanced'}`);
+  lines.push(`- idea: ${direction.idea || ''}`);
   lines.push('');
   lines.push('## Foundations');
-  for (const key of COLOR_KEYS) lines.push(`- ${key}: ${design.color[key]}`);
+  for (const key of COLOR_KEYS) lines.push(`- ${key}: ${color[key] || DEFAULT_DESIGN.color[key]}`);
   lines.push('');
   lines.push('## Typography');
-  lines.push(`- display: ${design.type.display}`);
-  lines.push(`- heading: ${design.type.heading}`);
-  lines.push(`- body: ${design.type.body}`);
-  lines.push(`- base: ${design.type.base}px`);
-  lines.push(`- scale: ${design.type.scale}`);
-  lines.push(`- leading: ${design.type.leading}`);
-  lines.push(`- weight: ${design.type.weight}`);
+  lines.push(`- display: ${type.display || DEFAULT_DESIGN.type.display}`);
+  lines.push(`- heading: ${type.heading || DEFAULT_DESIGN.type.heading}`);
+  lines.push(`- body: ${type.body || DEFAULT_DESIGN.type.body}`);
+  lines.push(`- base: ${type.base || 16}px`);
+  lines.push(`- scale: ${type.scale || 1.25}`);
+  lines.push(`- leading: ${type.leading || 1.6}`);
+  lines.push(`- weight: ${type.weight || 600}`);
   lines.push('');
   lines.push('## Spacing');
-  lines.push(`- unit: ${design.space.unit}px`);
-  lines.push(`- section: ${design.space.section}px`);
-  lines.push(`- container: ${design.space.container}px`);
+  lines.push(`- unit: ${space.unit || 8}px`);
+  lines.push(`- section: ${space.section || 96}px`);
+  lines.push(`- container: ${space.container || 1200}px`);
   lines.push('');
   lines.push('## Shape');
-  lines.push(`- sm: ${design.shape.sm}px`);
-  lines.push(`- md: ${design.shape.md}px`);
-  lines.push(`- lg: ${design.shape.lg}px`);
-  lines.push(`- pill: ${design.shape.pill}px`);
+  lines.push(`- sm: ${shape.sm ?? 4}px`);
+  lines.push(`- md: ${shape.md ?? 8}px`);
+  lines.push(`- lg: ${shape.lg ?? 16}px`);
+  lines.push(`- pill: ${shape.pill ?? 9999}px`);
   lines.push('');
   lines.push('## Elevation');
-  lines.push(`- low: ${design.elevation.low}px`);
-  lines.push(`- high: ${design.elevation.high}px`);
+  lines.push(`- low: ${elevation.low ?? 2}px`);
+  lines.push(`- high: ${elevation.high ?? 8}px`);
   lines.push('');
   lines.push('## Layout');
-  lines.push(`- columns: ${design.layout.columns}`);
-  lines.push(`- gap: ${design.layout.gap}px`);
-  lines.push(`- align: ${design.layout.align}`);
+  lines.push(`- columns: ${layout.columns || 1}`);
+  lines.push(`- gap: ${layout.gap || 16}px`);
+  lines.push(`- align: ${layout.align || 'start'}`);
   lines.push('');
   lines.push('## Motion');
-  lines.push(`- duration: ${design.motion.duration}ms`);
-  lines.push(`- easing: ${design.motion.easing}`);
-  lines.push(`- reduce: ${design.motion.reduce ? 'true' : 'false'}`);
-  if (design.guidance.length) {
+  lines.push(`- duration: ${motion.duration || 200}ms`);
+  lines.push(`- easing: ${motion.easing || 'easeout'}`);
+  lines.push(`- reduce: ${motion.reduce ? 'true' : 'false'}`);
+  if (guidance.length) {
     lines.push('');
     lines.push('## Guidance');
-    for (const entry of design.guidance) lines.push(`- ${entry}`);
+    for (const entry of guidance) lines.push(`- ${entry}`);
   }
   if (design.source) {
     lines.push('');
     lines.push('## Source');
-    lines.push(`- reference: ${design.source.reference}`);
-    lines.push(`- hash: ${design.source.hash}`);
-    lines.push(`- revision: ${design.source.revision}`);
-    for (const decision of design.source.decisions) lines.push(`- decision: ${decision.area} - ${decision.question} - ${decision.choice}`);
+    lines.push(`- reference: ${design.source.reference || ''}`);
+    lines.push(`- hash: ${design.source.hash || ''}`);
+    lines.push(`- revision: ${design.source.revision || 1}`);
+    for (const decision of design.source.decisions || []) lines.push(`- decision: ${decision.area} - ${decision.question} - ${decision.choice}`);
   }
   return `${lines.join('\n')}\n`;
 }

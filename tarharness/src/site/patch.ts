@@ -15,6 +15,7 @@ export type PatchOperation =
   | { op: 'set_text'; target: string; value: string }
   | { op: 'set_props'; target: string; value: Record<string, unknown> }
   | { op: 'set_style'; target: string; value: StyleSet | null }
+  | { op: 'set_layout'; target: string; value: import('./document.ts').SectionLayoutSpec }
   | { op: 'move_node'; target: string; before?: string; after?: string }
   | { op: 'move_section'; target: string; index: number }
   | { op: 'add_section'; page: string; section: Section; index?: number }
@@ -155,6 +156,13 @@ export function applyPatch(doc: SiteDocument, input: PatchInput): SiteDocument {
         if (!found) throw notFound('Site node was not found.');
         if (operation.value === null) delete found.node.style;
         else found.node.style = operation.value;
+        break;
+      }
+      case 'set_layout': {
+        guard(locked, operation.target, respect);
+        const section = findSection(next, operation.target);
+        if (!section) throw notFound('Site section was not found.');
+        section.section.layout = operation.value;
         break;
       }
       case 'move_node': {

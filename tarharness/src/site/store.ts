@@ -9,7 +9,7 @@ import { applyLegacyOperations, isV2, readDocument, upgrade, THEMES, type Legacy
 import { inspectDocument } from './inspect.ts';
 import { assetReader } from './asset.ts';
 import { DEFAULT_DESIGN, type Design } from './design.ts';
-import { BudgetExceeded, ModelRunner, SITE_MODEL_FALLBACKS, composeSite, planSite } from './model.ts';
+import { BudgetExceeded, DEFAULT_BUDGET, ModelRunner, SITE_MODEL_FALLBACKS, composeSite, planSite } from './model.ts';
 import { slugify } from './html.ts';
 import { checkClaim, chooseSiteTheme } from './judgment.ts';
 import {
@@ -361,16 +361,17 @@ async function saveEvent(client: Client, context: AccessContext, action: string,
   await client.execute(eventStatement({ action, actor: context.identity.id, recordId: record, key, hash: inputHash, result }));
 }
 
-export async function executeSiteGenerate(client: Client, context: AccessContext, input: Record<string, unknown>, key: string, inputHash: string, typesafe?: string, ai?: Ai, control?: D1Database, model?: string): Promise<Record<string, unknown>> {
-  const prompt = text(input.prompt ?? input.description, 2000); const title = text(input.title) || context.workspace.name || 'Workspace';
+export async function executeSiteGenerate(client: Client, context: AccessContext, input: Record<string, unknown>, key: string, inputHash: string, typesafe?: string, ai?: Ai, control?: D1Database, model?: string, groqApiKey?: string): Promise<Record<string, unknown>> {
+  const title = text(input.title) || context.workspace.name || 'Workspace';
+  const prompt = text(input.prompt ?? input.description, 2000) || `${title} - official workspace catalog, products and services`;
   if (input.theme !== undefined && !Object.hasOwn(DEFAULT_DESIGN_TOKENS, input.theme as string)) throw badRequest('Choose a registered site theme.');
   const theme = (input.theme as ThemeName | undefined) || await chooseSiteTheme(typesafe, title, prompt) || 'editorial-chalk';
   const existing = await getSiteRecord(client);
   const previous = existing ? readDocument(existing.data).doc : null;
   const design = input.theme ? THEMES[String(input.theme)] || DEFAULT_DESIGN : previous?.design || DEFAULT_DESIGN;
   const facts = await publicFacts(client, input);
-  const attempt = ai && prompt
-    ? await tryCompose(ai, model, { goal: prompt, audience: text(input.audience, 200), tone: text(input.tone, 120) }, facts, design, typesafe, control, context)
+  const attempt = (ai || groqApiKey) && prompt
+    ? await tryCompose(ai, model, { goal: prompt, audience: text(input.audience, 200), tone: text(input.tone, 120) }, facts, design, typesafe, control, context, groqApiKey)
     : { document: null, note: '' };
   const composed = attempt.document;
   const site = composed || upgrade({
@@ -383,9 +384,11 @@ export async function executeSiteGenerate(client: Client, context: AccessContext
   validateDocument(site);
   const siteId = existing?.id || `site_${crypto.randomUUID()}`; const at = now();
   const compiled = await compileDocument(site);
+  const rawHtml = String(compiled.files.find((file) => file.path === '/index.html')?.body || '');
+  const css = String(compiled.files.find((file) => file.path === '/style.css')?.body || '');
   const preview = {
-    html: String(compiled.files.find((file) => file.path === '/index.html')?.body || ''),
-    css: String(compiled.files.find((file) => file.path === '/style.css')?.body || ''),
+    html: rawHtml.replace('</head>', `<style>${css}</style></head>`),
+    css,
     hash: compiled.hash,
   };
   const version = existing ? existing.version + 1 : 1;
@@ -582,7 +585,7 @@ async function publicFacts(client: Client, input: Record<string, unknown>): Prom
  * site and the reason is reported instead of failing the request.
  */
 async function tryCompose(
-  ai: Ai,
+  ai: Ai | undefined,
   model: string | undefined,
   brief: { goal: string; audience: string; tone: string },
   facts: Record<string, unknown>,
@@ -590,8 +593,9 @@ async function tryCompose(
   typesafe: string | undefined,
   control: D1Database | undefined,
   context: AccessContext,
+  groqApiKey?: string,
 ): Promise<{ document: SiteDocument | null; note: string }> {
-  const runner = new ModelRunner(ai, model || SITE_MODEL_FALLBACKS[0]);
+  const runner = new ModelRunner(ai, model || (groqApiKey ? 'qwen/qwen3.8-27b' : SITE_MODEL_FALLBACKS[0]), DEFAULT_BUDGET, groqApiKey);
   try {
     const plan = await planSite(runner, { brief, facts, design });
     const composed = await composeSite(runner, plan, { brief, facts, design });

@@ -68,12 +68,50 @@ function slug(value: string, fallback: string): string {
   return /^[a-z][a-z0-9-]*$/.test(clean) ? clean : fallback;
 }
 
+export const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions';
+export const GROQ_DEFAULT_MODEL = 'qwen/qwen3.8-27b';
+
+async function callGroq(apiKey: string, model: string, messages: { role: string; content: string }[], maxTokens: number, temperature: number, timeoutMs = 15_000): Promise<{ content: string; promptTokens: number; outputTokens: number }> {
+  const response = await fetch(GROQ_ENDPOINT, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      messages,
+      model,
+      temperature,
+      max_completion_tokens: maxTokens,
+      top_p: 0.95,
+      response_format: { type: 'json_object' },
+    }),
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => '');
+    throw new Error(`Groq API error (${response.status}): ${errorText.slice(0, 300)}`);
+  }
+  const payload = object(await response.json());
+  const choices = Array.isArray(payload.choices) ? payload.choices : [];
+  const firstChoice = object(choices[0]);
+  const message = object(firstChoice.message);
+  const content = typeof message.content === 'string' ? message.content : '';
+  const usage = object(payload.usage);
+  return {
+    content,
+    promptTokens: typeof usage.prompt_tokens === 'number' ? usage.prompt_tokens : 0,
+    outputTokens: typeof usage.completion_tokens === 'number' ? usage.completion_tokens : 0,
+  };
+}
+
 /** Run one JSON-mode completion with an optional single repair pass. */
 export class ModelRunner {
   constructor(
-    private readonly ai: Ai,
+    private readonly ai?: Ai,
     readonly model: string = SITE_MODEL_FALLBACKS[0],
     private readonly budget: ModelBudget = DEFAULT_BUDGET,
+    private readonly groqApiKey?: string,
   ) {}
 
   private readonly usage: ModelUsage = { calls: 0, prompt: 0, output: 0, ms: 0 };
@@ -89,19 +127,39 @@ export class ModelRunner {
       if (this.usage.calls >= this.budget.calls) throw new BudgetExceeded('This run used its model call budget.');
       if (this.usage.ms > this.budget.ms) throw new BudgetExceeded('This run used its time budget.');
       const started = Date.now();
-      let answer: unknown;
+      let rawContent = '';
       try {
-        const runPromise = this.ai.run(models[Math.min(attempt, models.length - 1)], {
-          messages: [
-            { role: 'system', content: input.system },
-            { role: 'user', content: attempt === 0 ? input.prompt : `${input.prompt}\n\nYour previous answer was rejected: ${lastError}\nReturn corrected JSON only.` },
-          ],
-          response_format: { type: 'json_object' },
-          max_tokens: Math.min(input.maxTokens || 2_400, Math.max(256, this.budget.output - this.usage.output)),
-          temperature: input.temperature ?? 0.4,
-        });
-        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Model call timed out')), 15_000));
-        answer = await Promise.race([runPromise, timeoutPromise]);
+        if (this.groqApiKey) {
+          const result = await callGroq(
+            this.groqApiKey,
+            this.model || GROQ_DEFAULT_MODEL,
+            [
+              { role: 'system', content: input.system },
+              { role: 'user', content: attempt === 0 ? input.prompt : `${input.prompt}\n\nYour previous answer was rejected: ${lastError}\nReturn corrected JSON only.` },
+            ],
+            Math.min(input.maxTokens || 2_048, Math.max(256, this.budget.output - this.usage.output)),
+            input.temperature ?? 0.6,
+          );
+          rawContent = result.content;
+          this.usage.prompt += result.promptTokens;
+          this.usage.output += result.outputTokens;
+        } else if (this.ai) {
+          const runPromise = this.ai.run(models[Math.min(attempt, models.length - 1)], {
+            messages: [
+              { role: 'system', content: input.system },
+              { role: 'user', content: attempt === 0 ? input.prompt : `${input.prompt}\n\nYour previous answer was rejected: ${lastError}\nReturn corrected JSON only.` },
+            ],
+            response_format: { type: 'json_object' },
+            max_tokens: Math.min(input.maxTokens || 2_400, Math.max(256, this.budget.output - this.usage.output)),
+            temperature: input.temperature ?? 0.4,
+          });
+          const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Model call timed out')), 15_000));
+          const answer = await Promise.race([runPromise, timeoutPromise]);
+          const raw = (answer as { response?: unknown })?.response ?? answer;
+          rawContent = typeof raw === 'string' ? raw : JSON.stringify(raw);
+        } else {
+          throw new Error('No AI provider or Groq API key configured.');
+        }
       } catch (cause) {
         lastError = cause instanceof Error ? cause.message : 'the model call failed';
         if (attempt === 1) throw unavailable('Site composition could not reach the model. Try again shortly.', cause);
@@ -109,8 +167,7 @@ export class ModelRunner {
       }
       this.usage.calls += 1;
       this.usage.ms += Date.now() - started;
-      const raw = (answer as { response?: unknown })?.response ?? answer;
-      const payload = typeof raw === 'string' ? safeJson(raw) : object(raw);
+      const payload = safeJson(rawContent);
       try {
         const parsed = input.read(payload);
         if (parsed) return parsed;

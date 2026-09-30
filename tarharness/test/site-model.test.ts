@@ -159,4 +159,32 @@ describe('site composition', () => {
       input: { siteId, releaseId: compiled.releaseId, hash: compiled.hash },
     }, { siteReleases: releases }))).rejects.toThrow('blocking check');
   });
+
+  it('composes a site using groq chat completion endpoint', async () => {
+    const client = await createTestWorkspace();
+    let fetchCount = 0;
+    const groqFetch = vi.fn().mockImplementation(async (url: string, init?: RequestInit) => {
+      fetchCount += 1;
+      const parsedBody = JSON.parse(String(init?.body || '{}'));
+      expect(url).toBe('https://api.groq.com/openai/v1/chat/completions');
+      expect(init?.headers).toMatchObject({
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer test-groq-key',
+      });
+      expect(parsedBody.model).toBe('qwen/qwen3.8-27b');
+      expect(parsedBody.response_format).toEqual({ type: 'json_object' });
+
+      const content = fetchCount === 1 ? JSON.stringify(PLAN) : JSON.stringify(composedDocument());
+      return new Response(JSON.stringify({
+        choices: [{ message: { content } }],
+        usage: { prompt_tokens: 150, completion_tokens: 300 },
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', groqFetch);
+    const result = await generate(client, { groqApiKey: 'test-groq-key', siteModel: 'qwen/qwen3.8-27b' }, 'compose-groq');
+    const site = result.site as SiteDocument;
+    expect(site.schema).toBe('2.0.0');
+    expect(site.pages.map((p) => p.path)).toEqual(['/']);
+    expect(fetchCount).toBe(2);
+  });
 });

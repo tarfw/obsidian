@@ -107,23 +107,7 @@ function ActionForm(props: ActionInterfaceProps) {
     return [{ id: '1', item: '', quantity: 1, rate: 0 }];
   });
 
-  // Keep serialized lines JSON field synchronized
-  useEffect(() => {
-    if (!linesFieldKey) return;
-    const serializable = lineItems
-      .filter((line) => line.item.trim() || line.rate > 0)
-      .map((line) => ({
-        item: line.item.trim(),
-        quantity: line.quantity,
-        rate: line.rate,
-        total: line.quantity * line.rate,
-        ...(line.unit ? { unit: line.unit } : {}),
-      }));
-    setValues((curr) => ({
-      ...curr,
-      [linesFieldKey]: serializable.length ? JSON.stringify(serializable) : '',
-    }));
-  }, [lineItems, linesFieldKey]);
+
 
   const recordTypes = useMemo(
     () => [
@@ -258,6 +242,20 @@ function ActionForm(props: ActionInterfaceProps) {
           return raw ? [[field.key, field.kind === 'number' ? Number(raw) : raw]] : [];
         }),
       );
+      if (linesFieldKey) {
+        const serializable = lineItems
+          .filter((line) => line.item.trim() || line.rate > 0)
+          .map((line) => ({
+            item: line.item.trim(),
+            quantity: line.quantity,
+            rate: line.rate,
+            total: line.quantity * line.rate,
+            ...(line.unit ? { unit: line.unit } : {}),
+          }));
+        if (serializable.length) {
+          input[linesFieldKey] = JSON.stringify(serializable);
+        }
+      }
       const body = JSON.stringify(input);
       if (attempt.current?.body !== body)
         attempt.current = { body, key: createOperationKey(props.action.id) };

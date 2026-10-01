@@ -17,7 +17,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { harness } from '@/lib/harness';
-import type { AskOutcome, SiteSnapshot } from '@/lib/site-schema';
+import type { AskOutcome, Node, Section, SiteSnapshot } from '@/lib/site-schema';
 
 export interface SiteScreenProps {
   visible: boolean;
@@ -28,13 +28,21 @@ export interface SiteScreenProps {
   workspaceDescription?: string;
 }
 
-const PROMPT_SUGGESTIONS = [
-  'Two columns with airy spacing',
-  'Make hero background dark with light text',
-  'Add more breathing room between sections',
-  'Set accent color to royal blue',
-  'Change headline and subtitle',
-  'Make cards raised with soft borders',
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'jev';
+  text: string;
+  revision?: number;
+  ms?: number;
+  details?: string;
+  target?: string;
+}
+
+const QUICK_PROMPTS = [
+  'Dark hero with generous breathing room',
+  'Two columns with live catalog prices',
+  'Set accent color to royal blue with 4px buttons',
+  'Clean minimalist lookbook layout',
 ];
 
 const siteSnapshotCache = new Map<string, SiteSnapshot>();
@@ -65,27 +73,56 @@ export default function SiteScreen({
   const [busy, setBusy] = useState(false);
   const [busyStep, setBusyStep] = useState<string>('');
 
-  // Navigation
+  // Preview Modal Sheet
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [activePageId, setActivePageId] = useState<string>(
-    initialCached?.site?.data?.pages?.[0]?.id || '',
+    initialCached?.site?.data?.pages?.[0]?.id || 'home',
   );
 
-  // Jev Prompt Editing State
+  // Input & Target State
   const [command, setCommand] = useState('');
   const [selectedSectionId, setSelectedSectionId] = useState<string>('all');
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+
+  const chatScrollRef = useRef<ScrollView>(null);
 
   const site = snapshot?.site?.data ?? null;
   const siteId = snapshot?.site?.id ?? '';
   const isLive = snapshot?.publicationState === 'active' || snapshot?.site?.state === 'live';
   const publicUrl = snapshot?.publicUrl ?? null;
+  const revision = site?.revision ?? 1;
 
-  // Active page
+  // Active page for preview
   const activePage = useMemo(() => {
     if (!site?.pages?.length) return null;
     return site.pages.find((p) => p.id === activePageId) || site.pages[0];
   }, [site, activePageId]);
 
-  // Load site snapshot (with auto-initialization from server)
+  // Sync conversation history
+  useEffect(() => {
+    if (!site) return;
+    setMessages((prev) => {
+      if (prev.length > 0) return prev;
+      const initialMsgs: ChatMessage[] = [];
+      const briefGoal = site.brief?.goal || `Build a storefront for ${workspaceName}.`;
+      initialMsgs.push({
+        id: 'brief_init',
+        role: 'user',
+        text: briefGoal,
+      });
+
+      const pagesSummary = site.pages.map((p) => p.title || p.path).join(', ');
+      initialMsgs.push({
+        id: 'jev_init',
+        role: 'jev',
+        revision: site.revision || 1,
+        text: `Storefront ready: ${site.design?.theme || 'editorial-lookbook'} theme, live catalog bindings, and pages [${pagesSummary}].`,
+      });
+      return initialMsgs;
+    });
+  }, [site, workspaceName]);
+
+  // Load site snapshot
   const loadSite = useCallback(async () => {
     if (!slug) return;
     try {
@@ -99,7 +136,7 @@ export default function SiteScreen({
         if (firstPageId) setActivePageId((curr) => curr || firstPageId);
       }
     } catch {
-      // Retain existing snapshot if in memory
+      // Retain existing snapshot
     } finally {
       if (mountedRef.current) {
         setInitialLoading(false);
@@ -142,29 +179,126 @@ export default function SiteScreen({
     };
   }, [visible, slug, initialCached, loadSite]);
 
-  // 1. Edit Site purely using Jev Decision System
-  const applyJevEdit = useCallback(async () => {
-    if (!slug || !siteId || !command.trim() || busy || !site) return;
-    const instruction = command.trim();
+  // Auto scroll chat to bottom
+  useEffect(() => {
+    setTimeout(() => {
+      chatScrollRef.current?.scrollToEnd({ animated: true });
+    }, 100);
+  }, [messages, busy]);
+
+  // Apply Prompt Edit
+  const applyJevEdit = useCallback(async (promptText?: string) => {
+    const instruction = (promptText || command).trim();
+    if (!slug || !siteId || !instruction || busy || !site) return;
+
     setBusy(true);
-    setBusyStep('Resolving edit with Jev...');
+    setBusyStep('Thinking...');
+    const userMsgId = `user_${Date.now()}`;
+    const targetParam = selectedSectionId !== 'all' ? selectedSectionId : undefined;
+
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: userMsgId,
+        role: 'user',
+        text: instruction,
+        target: targetParam,
+      },
+    ]);
+    setCommand('');
+
+    const start = Date.now();
+
+    // Check if this instruction is a full site generation / rebuild request
+    const isFullGeneration = targetParam === undefined && (
+      /^(build|create|generate|rebuild|make an exact clone|clone|adanola|lookbook)\b/i.test(instruction)
+      || instruction.length > 250
+      || instruction.includes('Design System')
+      || instruction.includes('Editorial Lookbook')
+      || instruction.includes('Adanola')
+      || instruction.includes('Tokens —')
+    );
+
+    if (isFullGeneration) {
+      setBusyStep('Generating site...');
+      try {
+        const theme = /adanola|lookbook|fashion|apparel|editorial/i.test(instruction) ? 'editorial-lookbook' : undefined;
+        const genRes = await harness.site.generate(slug, {
+          prompt: instruction,
+          ...(theme ? { theme } : {}),
+          title: workspaceName || 'Adanola',
+        });
+        const elapsed = Date.now() - start;
+        if (mountedRef.current) {
+          if (genRes.preview?.html) setHtml(genRes.preview.html);
+          setSnapshot((prev) => {
+            if (!prev) return null;
+            const nextSnap: SiteSnapshot = {
+              ...prev,
+              site: { id: genRes.siteId, version: genRes.version, state: genRes.state, data: genRes.site },
+              html: genRes.preview?.html || prev.html,
+            };
+            siteSnapshotCache.set(slug, nextSnap);
+            void SecureStore.setItemAsync(siteStorageKey(slug), JSON.stringify(nextSnap)).catch(() => undefined);
+            return nextSnap;
+          });
+
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: `jev_${Date.now()}`,
+              role: 'jev',
+              revision: genRes.version,
+              ms: elapsed,
+              text: `Generated ${genRes.site?.design?.theme || 'editorial-lookbook'} storefront with live catalog bindings, 4-column product grid and Adanola tokens. (rev ${genRes.version})`,
+            },
+          ]);
+        }
+      } catch (err) {
+        if (mountedRef.current) {
+          await loadSite().catch(() => undefined);
+          Alert.alert('Generation failed', err instanceof Error ? err.message : 'Could not generate site.');
+        }
+      } finally {
+        if (mountedRef.current) {
+          setBusy(false);
+          setBusyStep('');
+        }
+      }
+      return;
+    }
+
     try {
-      const targetParam = selectedSectionId !== 'all' ? selectedSectionId : undefined;
       const proposal: AskOutcome = await harness.site.ask(slug, siteId, instruction, targetParam);
 
       if (!proposal.operations?.length) {
-        Alert.alert('No change needed', 'Jev could not find any necessary edits for this prompt.');
+        const elapsed = Date.now() - start;
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `jev_${Date.now()}`,
+            role: 'jev',
+            revision: site.revision,
+            ms: elapsed,
+            text: proposal.questions?.length
+              ? proposal.questions.join(' ')
+              : 'No layout or style adjustments were needed for this request.',
+          },
+        ]);
         return;
       }
 
-      setBusyStep(`Applying ${proposal.operations.length} change(s)...`);
+      setBusyStep('Applying changes...');
+      const summaryText = proposal.summary || instruction;
       const edited = await harness.site.edit(
         slug,
         siteId,
         proposal.base,
         proposal.operations,
-        proposal.summary || instruction,
+        summaryText,
       );
+
+      const elapsed = Date.now() - start;
 
       if (mountedRef.current) {
         if (edited.html) setHtml(edited.html);
@@ -179,7 +313,17 @@ export default function SiteScreen({
           void SecureStore.setItemAsync(siteStorageKey(slug), JSON.stringify(nextSnap)).catch(() => undefined);
           return nextSnap;
         });
-        setCommand('');
+
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `jev_${Date.now()}`,
+            role: 'jev',
+            revision: edited.revision,
+            ms: elapsed,
+            text: `${summaryText}. (rev ${edited.revision})`,
+          },
+        ]);
       }
     } catch (err) {
       if (mountedRef.current) {
@@ -194,13 +338,15 @@ export default function SiteScreen({
     }
   }, [slug, siteId, command, busy, site, selectedSectionId, loadSite]);
 
-  // 2. Undo last change
+  // Undo last revision
   const undoLastEdit = useCallback(async () => {
     if (!slug || !siteId || busy) return;
     setBusy(true);
-    setBusyStep('Reverting revision...');
+    setBusyStep('Reverting...');
+    const start = Date.now();
     try {
       const undone = await harness.site.undo(slug, siteId);
+      const elapsed = Date.now() - start;
       if (mountedRef.current) {
         if (undone.html) setHtml(undone.html);
         setSnapshot((prev) => {
@@ -214,6 +360,17 @@ export default function SiteScreen({
           void SecureStore.setItemAsync(siteStorageKey(slug), JSON.stringify(nextSnap)).catch(() => undefined);
           return nextSnap;
         });
+
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `undo_${Date.now()}`,
+            role: 'jev',
+            revision: undone.revision,
+            ms: elapsed,
+            text: `Restored previous state as revision ${undone.revision}.`,
+          },
+        ]);
       }
     } catch (err) {
       if (mountedRef.current) {
@@ -227,14 +384,17 @@ export default function SiteScreen({
     }
   }, [slug, siteId, busy]);
 
-  // 3. One-Tap Publish Live
+  // One-Tap Publish
   const publishSite = useCallback(async () => {
     if (!slug || !siteId || busy) return;
     setBusy(true);
-    setBusyStep('Publishing live release...');
+    setBusyStep('Publishing live...');
+    const start = Date.now();
     try {
       const compiled = await harness.site.compile(slug, siteId);
       const published = await harness.site.publish(slug, siteId, compiled.releaseId, compiled.hash);
+      const elapsed = Date.now() - start;
+
       if (mountedRef.current) {
         const livePublicUrl = published.publicUrl || published.liveUrl || `https://${slug}.workers.dev`;
         setSnapshot((prev) => {
@@ -250,7 +410,17 @@ export default function SiteScreen({
           void SecureStore.setItemAsync(siteStorageKey(slug), JSON.stringify(nextSnap)).catch(() => undefined);
           return nextSnap;
         });
-        Alert.alert('Site Published', `Live at ${livePublicUrl}`);
+
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `pub_${Date.now()}`,
+            role: 'jev',
+            revision: site?.revision,
+            ms: elapsed,
+            text: `Live storefront published at ${livePublicUrl}`,
+          },
+        ]);
         void loadSite();
       }
     } catch (err) {
@@ -263,74 +433,132 @@ export default function SiteScreen({
         setBusyStep('');
       }
     }
-  }, [slug, siteId, busy, loadSite]);
+  }, [slug, siteId, busy, site?.revision, loadSite]);
 
-  // Clean HTML renderer for preview
-  const renderedHtmlDoc = useMemo(() => {
-    if (html.trim()) return html;
-    if (!site) return '';
+  // Native node rendering for preview modal
+  const renderNativeNode = (node: Node, toneColors: { ink: string; surface: string; border: string; accent: string }) => {
+    switch (node.kind) {
+      case 'heading': {
+        const level = Number(node.props?.level) || 2;
+        const fontSize = level === 1 ? 24 : level === 2 ? 19 : 15;
+        return (
+          <Text
+            key={node.id}
+            style={[
+              styles.previewHeading,
+              { fontSize, color: toneColors.ink, lineHeight: fontSize * 1.25 },
+            ]}
+          >
+            {String(node.props?.text || '')}
+          </Text>
+        );
+      }
+      case 'text':
+        return (
+          <Text key={node.id} style={[styles.previewBody, { color: toneColors.ink }]}>
+            {String(node.props?.text || '')}
+          </Text>
+        );
+      case 'button':
+        return (
+          <View
+            key={node.id}
+            style={[styles.previewButton, { backgroundColor: toneColors.accent }]}
+          >
+            <Text style={styles.previewButtonText}>
+              {String(node.props?.label || node.props?.text || 'Explore')}
+            </Text>
+          </View>
+        );
+      case 'card':
+        return (
+          <View
+            key={node.id}
+            style={[
+              styles.previewCard,
+              { backgroundColor: toneColors.surface, borderColor: toneColors.border },
+            ]}
+          >
+            {node.children?.map((child) => renderNativeNode(child, toneColors))}
+          </View>
+        );
+      case 'collection': {
+        const items = Array.isArray(node.props?.items) ? node.props.items : [];
+        return (
+          <View key={node.id} style={styles.previewCollectionGrid}>
+            {items.map((item: Record<string, unknown>, idx: number) => {
+              const itemTitle = String(item.title || `Item ${idx + 1}`);
+              const itemPrice = item.price !== undefined ? `${item.currency === 'EUR' ? '€' : '$'}${item.price}` : '';
+              return (
+                <View
+                  key={String(item.id || idx)}
+                  style={[
+                    styles.previewProductCard,
+                    { backgroundColor: toneColors.surface, borderColor: toneColors.border },
+                  ]}
+                >
+                  <View style={[styles.productImageMock, { backgroundColor: toneColors.border }]} />
+                  <Text style={[styles.productTitle, { color: toneColors.ink }]} numberOfLines={1}>
+                    {itemTitle}
+                  </Text>
+                  {itemPrice ? (
+                    <Text style={[styles.productPrice, { color: toneColors.accent }]}>{itemPrice}</Text>
+                  ) : null}
+                </View>
+              );
+            })}
+          </View>
+        );
+      }
+      case 'flex':
+        return (
+          <View key={node.id} style={styles.previewFlexRow}>
+            {node.children?.map((child) => renderNativeNode(child, toneColors))}
+          </View>
+        );
+      case 'stack':
+        return (
+          <View key={node.id} style={styles.previewStack}>
+            {node.children?.map((child) => renderNativeNode(child, toneColors))}
+          </View>
+        );
+      default:
+        return (
+          <View key={node.id} style={{ marginVertical: 2 }}>
+            {node.children?.map((child) => renderNativeNode(child, toneColors))}
+          </View>
+        );
+    }
+  };
 
-    const primaryColor = site.design?.color?.accent || '#2563eb';
-    const bg = site.design?.color?.canvas || '#ffffff';
-    const textInk = site.design?.color?.ink || '#18181b';
-    const surface = site.design?.color?.surface || '#f4f4f5';
-    const border = site.design?.color?.border || '#e4e4e7';
+  const renderNativeSection = (section: Section) => {
+    const tone = section.style?.base?.background?.includes('ink') ? 'ink'
+      : section.style?.base?.background?.includes('surface') ? 'surface'
+      : section.style?.base?.background?.includes('accent') ? 'accent' : 'canvas';
 
-    const sectionsHtml = (activePage?.sections || [])
-      .map((sec) => {
-        const cols = sec.layout?.columns || 1;
-        const nodesHtml = (sec.nodes || [])
-          .map((n) => {
-            if (n.kind === 'heading') return `<h${n.props?.level || 2} style="margin:0 0 12px 0;">${n.props?.text || ''}</h${n.props?.level || 2}>`;
-            if (n.kind === 'text') return `<p style="margin:0 0 16px 0; line-height:1.6;">${n.props?.text || ''}</p>`;
-            if (n.kind === 'button') {
-              return `<a href="${n.props?.href || '#'}" style="display:inline-block; padding:10px 20px; background:${primaryColor}; color:#fff; border-radius:6px; text-decoration:none; font-weight:600; margin:4px 0;">${n.props?.text || 'Learn more'}</a>`;
-            }
-            if (n.kind === 'card') {
-              return `<div style="background:${surface}; border:1px solid ${border}; border-radius:8px; padding:20px; margin:8px 0;"><h3 style="margin:0 0 8px 0;">${n.props?.title || ''}</h3><p style="margin:0 0 12px 0; color:#52525b;">${n.props?.body || ''}</p></div>`;
-            }
-            return '';
-          })
-          .join('\n');
+    const toneColors = {
+      ink: tone === 'ink' ? '#ffffff' : '#09090b',
+      canvas: tone === 'ink' ? '#09090b' : '#ffffff',
+      surface: tone === 'ink' ? '#18181b' : '#f4f4f5',
+      border: tone === 'ink' ? '#27272a' : '#e4e4e7',
+      accent: site?.design?.color?.accent || '#18181b',
+    };
 
-        return `
-        <section id="${sec.id}" style="padding:32px 20px; border-bottom:1px solid ${border};">
-          <div style="display:${cols > 1 ? 'grid' : 'block'}; grid-template-columns:repeat(${cols}, 1fr); gap:16px;">
-            ${nodesHtml}
-          </div>
-        </section>
-      `;
-      })
-      .join('\n');
-
-    return `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="utf-8"/>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-        <title>${site.brief?.goal || workspaceName}</title>
-        <style>
-          * { box-sizing: border-box; }
-          body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; background:${bg}; color:${textInk}; }
-          header { display:flex; justify-content:space-between; align-items:center; padding:16px 20px; border-bottom:1px solid ${border}; }
-          header h1 { margin:0; font-size:17px; font-weight:700; }
-          nav a { margin-left:14px; color:#52525b; text-decoration:none; font-size:13px; font-weight:500; }
-          nav a.active { color:${primaryColor}; font-weight:700; }
-        </style>
-      </head>
-      <body>
-        <header>
-          <h1>${workspaceName}</h1>
-          <nav>
-            ${(site.pages || []).map((p) => `<a href="#" class="${p.id === activePageId ? 'active' : ''}">${p.title || p.path}</a>`).join('')}
-          </nav>
-        </header>
-        ${sectionsHtml}
-      </body>
-      </html>
-    `;
-  }, [html, site, activePage, activePageId, workspaceName]);
+    return (
+      <View
+        key={section.id}
+        style={[
+          styles.previewSectionContainer,
+          { backgroundColor: toneColors.canvas, borderColor: toneColors.border },
+        ]}
+      >
+        <Text style={[styles.sectionBadge, { color: tone === 'ink' ? '#71717a' : '#a1a1aa' }]}>
+          {section.purpose.toUpperCase()}
+        </Text>
+        {section.nodes?.map((node) => renderNativeNode(node, toneColors))}
+      </View>
+    );
+  };
 
   return (
     <Modal
@@ -339,82 +567,244 @@ export default function SiteScreen({
       presentationStyle="pageSheet"
       onRequestClose={onClose}
     >
-      <View style={[styles.root, { paddingTop: Math.max(insets.top, 12) }]}>
-        {/* Clean, Uncluttered Modern Top Bar */}
+      <View style={[styles.root, { paddingTop: Math.max(insets.top, 8) }]}>
+        {/* ChatGPT Light Minimalist Header */}
         <View style={styles.header}>
-          <View style={styles.headerLeft}>
-            <Text style={styles.title} numberOfLines={1}>{workspaceName}</Text>
-            <TouchableOpacity
-              accessibilityRole="link"
-              onPress={() => {
-                if (publicUrl) void Linking.openURL(publicUrl);
-                else void Linking.openURL(`https://${slug}.workers.dev`);
-              }}
-              style={styles.urlCapsule}
-            >
-              <View style={[styles.dot, isLive ? styles.dotLive : styles.dotDraft]} />
-              <Text style={styles.urlText} numberOfLines={1}>
-                {slug}.workers.dev
+          <TouchableOpacity
+            accessibilityLabel="Close Studio"
+            onPress={onClose}
+            style={styles.headerIconBtn}
+          >
+            <Ionicons name="close" size={20} color="#18181b" />
+          </TouchableOpacity>
+
+          <View style={styles.headerCenter}>
+            <Text style={styles.headerTitle} numberOfLines={1}>
+              {workspaceName}
+            </Text>
+            <View style={styles.statusPill}>
+              <View style={[styles.statusDot, isLive ? styles.statusDotLive : styles.statusDotDraft]} />
+              <Text style={styles.statusText}>
+                {isLive ? 'Live' : 'Draft'} · rev {revision}
               </Text>
-              <Ionicons name="open-outline" size={10} color={isLive ? '#0284c7' : '#94a3b8'} />
-            </TouchableOpacity>
+            </View>
           </View>
 
-          <View style={styles.headerRight}>
-            {site && (site.revision > 1 || (snapshot?.history?.length ?? 0) > 0) ? (
-              <TouchableOpacity
-                accessibilityLabel="Undo last change"
-                onPress={() => void undoLastEdit()}
-                disabled={busy}
-                style={styles.iconBtn}
-              >
-                <Ionicons name="arrow-undo-outline" size={16} color="#0f172a" />
-              </TouchableOpacity>
-            ) : null}
-
+          <View style={styles.headerActions}>
             <TouchableOpacity
-              accessibilityRole="button"
-              disabled={busy || !site}
-              onPress={() => void publishSite()}
-              style={[styles.publishBtn, isLive ? styles.republishBtn : null, (busy || !site) && styles.disabled]}
+              onPress={() => setPreviewOpen(true)}
+              style={styles.previewPill}
+              accessibilityLabel="Preview Storefront"
             >
-              <Ionicons name="cloud-upload-outline" size={13} color="#ffffff" style={{ marginRight: 4 }} />
-              <Text style={styles.publishBtnText}>{isLive ? 'Republish' : 'Publish'}</Text>
+              <Text style={styles.previewPillText}>Preview</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity accessibilityLabel="Close Studio" onPress={onClose} style={styles.closeBtn}>
-              <Ionicons name="close" size={18} color="#0f172a" />
+            <TouchableOpacity
+              disabled={busy || !site}
+              onPress={() => void publishSite()}
+              style={[
+                styles.publishPill,
+                isLive ? styles.publishPillLive : styles.publishPillDraft,
+                (busy || !site) && styles.disabled,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.publishPillText,
+                  isLive ? styles.publishPillTextLive : styles.publishPillTextDraft,
+                ]}
+              >
+                {isLive ? 'Republish' : 'Publish'}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* Unified Mobile Site Studio View */}
+        {/* ChatGPT Light Chat Feed */}
         {initialLoading && !site ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#0f172a" />
-            <Text style={styles.loadingText}>Opening Site Studio...</Text>
+          <View style={styles.loadingFeed}>
+            <ActivityIndicator size="small" color="#71717a" />
+            <Text style={styles.loadingFeedText}>Connecting...</Text>
           </View>
         ) : (
           <KeyboardAvoidingView
             behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-            style={styles.studioLayout}
+            style={styles.chatContainer}
           >
-            {/* Minimal Underline Page Tabs */}
+            <ScrollView
+              ref={chatScrollRef}
+              style={styles.chatFeed}
+              contentContainerStyle={[styles.chatFeedContent, { paddingBottom: 24 }]}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
+              {messages.map((msg, index) => {
+                const isUser = msg.role === 'user';
+                return (
+                  <View
+                    key={msg.id || index}
+                    style={[
+                      styles.chatRow,
+                      isUser ? styles.chatRowUser : styles.chatRowJev,
+                    ]}
+                  >
+                    {!isUser ? (
+                      <View style={styles.jevAvatar}>
+                        <Text style={styles.jevAvatarText}>J</Text>
+                      </View>
+                    ) : null}
+
+                    <View
+                      style={[
+                        styles.bubble,
+                        isUser ? styles.userBubble : styles.jevBubble,
+                      ]}
+                    >
+                      <Text style={styles.bubbleText}>
+                        {msg.text}
+                      </Text>
+
+                      {!isUser && msg.revision && msg.revision > 1 ? (
+                        <View style={styles.jevFooterRow}>
+                          <TouchableOpacity
+                            onPress={() => void undoLastEdit()}
+                            disabled={busy}
+                            style={styles.bubbleActionBtn}
+                          >
+                            <Text style={styles.bubbleActionText}>Undo</Text>
+                          </TouchableOpacity>
+                        </View>
+                      ) : null}
+                    </View>
+                  </View>
+                );
+              })}
+
+              {busy && busyStep ? (
+                <View style={styles.chatRowJev}>
+                  <View style={styles.jevAvatar}>
+                    <ActivityIndicator size="small" color="#71717a" />
+                  </View>
+                  <View style={[styles.bubble, styles.jevBubble, styles.thinkingBubble]}>
+                    <Text style={styles.thinkingText}>{busyStep}</Text>
+                  </View>
+                </View>
+              ) : null}
+            </ScrollView>
+
+            {/* ChatGPT Light Floating Bottom Bar */}
+            <View style={[styles.bottomBarWrap, { paddingBottom: Math.max(insets.bottom + 6, 16) }]}>
+              {/* Subtle Horizontal Suggestion Chips */}
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.chipsScroll}
+              >
+                {QUICK_PROMPTS.map((prompt) => (
+                  <TouchableOpacity
+                    key={prompt}
+                    onPress={() => void applyJevEdit(prompt)}
+                    disabled={busy}
+                    style={styles.chip}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.chipText}>{prompt}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+
+              {/* Floating Input Dock */}
+              <View style={styles.inputDock}>
+                {/* Optional Target Pill */}
+                {selectedSectionId !== 'all' ? (
+                  <TouchableOpacity
+                    onPress={() => setSelectedSectionId('all')}
+                    style={styles.targetIndicator}
+                  >
+                    <Text style={styles.targetIndicatorText}>{selectedSectionId}</Text>
+                    <Ionicons name="close" size={11} color="#71717a" />
+                  </TouchableOpacity>
+                ) : null}
+
+                <TextInput
+                  style={styles.textInput}
+                  value={command}
+                  onChangeText={setCommand}
+                  placeholder="Describe a change..."
+                  placeholderTextColor="#a1a1aa"
+                  multiline
+                  editable={!busy}
+                />
+
+                <TouchableOpacity
+                  disabled={busy || !command.trim()}
+                  onPress={() => void applyJevEdit()}
+                  style={[
+                    styles.sendBtn,
+                    command.trim() ? styles.sendBtnActive : styles.sendBtnDisabled,
+                  ]}
+                  activeOpacity={0.8}
+                >
+                  {busy ? (
+                    <ActivityIndicator size="small" color="#ffffff" />
+                  ) : (
+                    <Ionicons
+                      name="arrow-up"
+                      size={18}
+                      color={command.trim() ? '#ffffff' : '#a1a1aa'}
+                    />
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        )}
+
+        {/* Clean Slide-Up Storefront Preview Modal */}
+        <Modal
+          visible={previewOpen}
+          animationType="slide"
+          presentationStyle="pageSheet"
+          onRequestClose={() => setPreviewOpen(false)}
+        >
+          <View style={[styles.previewRoot, { paddingTop: Math.max(insets.top, 8) }]}>
+            <View style={styles.previewHeader}>
+              <TouchableOpacity
+                onPress={() => setPreviewOpen(false)}
+                style={styles.headerIconBtn}
+              >
+                <Ionicons name="close" size={20} color="#18181b" />
+              </TouchableOpacity>
+
+              <Text style={styles.previewTitle}>{workspaceName}</Text>
+
+              <TouchableOpacity
+                onPress={() => {
+                  if (publicUrl) void Linking.openURL(publicUrl);
+                  else void Linking.openURL(`https://${slug}.workers.dev`);
+                }}
+                style={styles.browserLinkBtn}
+              >
+                <Text style={styles.browserLinkText}>Browser</Text>
+                <Ionicons name="open-outline" size={12} color="#18181b" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Page tabs */}
             {site?.pages && site.pages.length > 1 ? (
-              <View style={styles.pageBar}>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pageBarScroll}>
+              <View style={styles.pageTabsBar}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 6 }}>
                   {site.pages.map((p) => {
                     const isActive = activePage?.id === p.id;
                     return (
                       <TouchableOpacity
                         key={p.id}
                         onPress={() => setActivePageId(p.id)}
-                        style={styles.pageTab}
+                        style={[styles.pageTabPill, isActive && styles.pageTabPillActive]}
                       >
-                        <Text style={[styles.pageTabText, isActive && styles.pageTabTextActive]}>
+                        <Text style={[styles.pageTabPillText, isActive && styles.pageTabPillTextActive]}>
                           {p.title || p.path}
                         </Text>
-                        {isActive ? <View style={styles.activeIndicator} /> : null}
                       </TouchableOpacity>
                     );
                   })}
@@ -422,111 +812,37 @@ export default function SiteScreen({
               </View>
             ) : null}
 
-            {/* Central Full-Bleed Live Preview */}
-            <View style={styles.canvasArea}>
-              {Platform.OS === 'web' ? (
+            {/* Full Visual Content */}
+            <View style={styles.previewCanvas}>
+              {Platform.OS === 'web' && html ? (
                 React.createElement('iframe', {
-                  srcDoc: renderedHtmlDoc,
-                  title: 'Live Site',
-                  style: {
-                    width: '100%',
-                    height: '100%',
-                    border: 'none',
-                    backgroundColor: '#ffffff',
-                  },
+                  srcDoc: html,
+                  title: 'Storefront',
+                  style: { width: '100%', height: '100%', border: 'none', backgroundColor: '#ffffff' },
                 })
               ) : (
-                <ScrollView style={styles.nativeFallbackScroll}>
-                  {(activePage?.sections || []).map((sec) => (
-                    <View key={sec.id} style={styles.fallbackSection}>
-                      <Text style={styles.fallbackBadge}>{sec.purpose.toUpperCase()}</Text>
-                      {(sec.nodes || []).map((n) => (
-                        <Text key={n.id} style={styles.fallbackNodeText}>
-                          {String(n.props?.text || n.props?.title || n.kind)}
-                        </Text>
+                <ScrollView style={styles.nativePreviewScroll} showsVerticalScrollIndicator={false}>
+                  <View style={styles.nativeHeaderBar}>
+                    <Text style={styles.nativeBrandTitle}>{workspaceName}</Text>
+                    <View style={styles.nativeNavRow}>
+                      {(site?.pages || []).slice(0, 3).map((p) => (
+                        <TouchableOpacity key={p.id} onPress={() => setActivePageId(p.id)}>
+                          <Text style={[styles.nativeNavLink, p.id === activePageId && styles.nativeNavLinkActive]}>
+                            {p.title || p.path}
+                          </Text>
+                        </TouchableOpacity>
                       ))}
                     </View>
-                  ))}
+                  </View>
+                  {(activePage?.sections || []).map((sec) => renderNativeSection(sec))}
+                  <View style={styles.nativeFooterBar}>
+                    <Text style={styles.nativeFooterText}>© {new Date().getFullYear()} {workspaceName} · TAR</Text>
+                  </View>
                 </ScrollView>
               )}
             </View>
-
-            {/* Clean Bottom Edit Dock with Safe Area */}
-            <View style={[styles.editDock, { paddingBottom: Math.max(insets.bottom + 8, 22) }]}>
-              {/* Target Section Selector Pills */}
-              <View style={styles.sectionPillsRow}>
-                <Text style={styles.dockEyebrow}>TARGET</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
-                  <TouchableOpacity
-                    onPress={() => setSelectedSectionId('all')}
-                    style={[styles.targetPill, selectedSectionId === 'all' && styles.targetPillActive]}
-                  >
-                    <Text style={[styles.targetPillText, selectedSectionId === 'all' && styles.targetPillTextActive]}>
-                      Whole Page
-                    </Text>
-                  </TouchableOpacity>
-                  {(activePage?.sections || []).map((s) => (
-                    <TouchableOpacity
-                      key={s.id}
-                      onPress={() => setSelectedSectionId(s.id)}
-                      style={[styles.targetPill, selectedSectionId === s.id && styles.targetPillActive]}
-                    >
-                      <Text style={[styles.targetPillText, selectedSectionId === s.id && styles.targetPillTextActive]}>
-                        {s.purpose}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </View>
-
-              {/* Quick Suggestion Chips (Clean pills without AI icons) */}
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.suggestionsScroll}>
-                {PROMPT_SUGGESTIONS.map((sug) => (
-                  <TouchableOpacity
-                    key={sug}
-                    onPress={() => setCommand(sug)}
-                    style={styles.suggestionChip}
-                  >
-                    <Text style={styles.suggestionText}>{sug}</Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-
-              {/* Jev Prompt Input & Apply Action */}
-              <View style={styles.promptInputRow}>
-                <TextInput
-                  style={styles.promptInput}
-                  value={command}
-                  onChangeText={setCommand}
-                  placeholder="Describe a change (e.g. 2 columns with airy spacing)..."
-                  placeholderTextColor="#94a3b8"
-                  multiline
-                  editable={!busy}
-                />
-                <TouchableOpacity
-                  accessibilityRole="button"
-                  disabled={busy || !command.trim()}
-                  onPress={() => void applyJevEdit()}
-                  style={[styles.applyBtn, (busy || !command.trim()) && styles.disabled]}
-                >
-                  {busy ? (
-                    <ActivityIndicator size="small" color="#ffffff" />
-                  ) : (
-                    <Text style={styles.applyBtnText}>Apply</Text>
-                  )}
-                </TouchableOpacity>
-              </View>
-
-              {/* Transient Step Notice during active network processing only */}
-              {busy && busyStep ? (
-                <View style={styles.stepNotice}>
-                  <ActivityIndicator size="small" color="#2563eb" style={{ marginRight: 6 }} />
-                  <Text style={styles.stepNoticeText}>{busyStep}</Text>
-                </View>
-              ) : null}
-            </View>
-          </KeyboardAvoidingView>
-        )}
+          </View>
+        </Modal>
       </View>
     </Modal>
   );
@@ -537,184 +853,224 @@ const styles = StyleSheet.create({
 
   // Header
   header: {
-    height: 54,
+    height: 52,
     paddingHorizontal: 16,
-    backgroundColor: '#ffffff',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#e2e8f0',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#f4f4f5',
   },
-  headerLeft: { flex: 1, marginRight: 10 },
-  title: { fontSize: 16, fontWeight: '700', color: '#0f172a', letterSpacing: -0.2 },
-  urlCapsule: {
-    flexDirection: 'row',
+  headerIconBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
-    alignSelf: 'flex-start',
-    backgroundColor: '#f8fafc',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 2.5,
-    gap: 5,
-    marginTop: 3,
+    justifyContent: 'center',
   },
-  urlText: {
-    fontSize: 11,
-    color: '#475569',
-    fontWeight: '500',
-  },
-  dot: { width: 6, height: 6, borderRadius: 3 },
-  dotLive: { backgroundColor: '#16a34a' },
-  dotDraft: { backgroundColor: '#94a3b8' },
+  headerCenter: { alignItems: 'center' },
+  headerTitle: { fontSize: 15, fontWeight: '700', color: '#18181b', letterSpacing: -0.2 },
+  statusPill: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 1 },
+  statusDot: { width: 5, height: 5, borderRadius: 2.5 },
+  statusDotLive: { backgroundColor: '#16a34a' },
+  statusDotDraft: { backgroundColor: '#a1a1aa' },
+  statusText: { fontSize: 11, color: '#71717a', fontWeight: '500' },
 
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  iconBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#f1f5f9',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  closeBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#f1f5f9',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  publishBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#0f172a',
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  previewPill: {
     paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 16,
+    paddingVertical: 5,
+    borderRadius: 14,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e4e4e7',
   },
-  republishBtn: {
-    backgroundColor: '#334155',
+  previewPillText: { fontSize: 12, fontWeight: '600', color: '#18181b' },
+  publishPill: {
+    paddingHorizontal: 14,
+    paddingVertical: 5,
+    borderRadius: 14,
   },
-  publishBtnText: { color: '#ffffff', fontSize: 12, fontWeight: '600' },
+  publishPillDraft: {
+    backgroundColor: '#18181b',
+  },
+  publishPillLive: {
+    backgroundColor: '#f4f4f5',
+    borderWidth: 1,
+    borderColor: '#e4e4e7',
+  },
+  publishPillText: { fontSize: 12, fontWeight: '600' },
+  publishPillTextDraft: { color: '#ffffff' },
+  publishPillTextLive: { color: '#18181b' },
+  disabled: { opacity: 0.4 },
 
   // Loading
-  loadingContainer: {
-    flex: 1,
+  loadingFeed: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10 },
+  loadingFeedText: { fontSize: 13, color: '#71717a' },
+
+  // Chat Feed - Pure ChatGPT Light Design System
+  chatContainer: { flex: 1, backgroundColor: '#ffffff' },
+  chatFeed: { flex: 1 },
+  chatFeedContent: { paddingHorizontal: 16, paddingTop: 16, gap: 16 },
+  chatRow: { flexDirection: 'row', width: '100%' },
+  chatRowUser: { justifyContent: 'flex-end' },
+  chatRowJev: { justifyContent: 'flex-start', alignItems: 'flex-start', gap: 10 },
+
+  jevAvatar: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#f4f4f5',
+    borderWidth: 1,
+    borderColor: '#e4e4e7',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 24,
-    gap: 12,
+    marginTop: 2,
   },
-  loadingText: {
-    fontSize: 13,
-    color: '#64748b',
-    fontWeight: '500',
-  },
+  jevAvatarText: { fontSize: 11, fontWeight: '700', color: '#71717a' },
 
-  // Studio Layout
-  studioLayout: { flex: 1, flexDirection: 'column' },
-  pageBar: {
-    height: 40,
-    backgroundColor: '#ffffff',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#e2e8f0',
+  bubble: {
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 11,
+    maxWidth: '84%',
   },
-  pageBarScroll: {
-    paddingHorizontal: 12,
+  userBubble: {
+    backgroundColor: '#f4f4f6',
+    borderBottomRightRadius: 4,
+  },
+  jevBubble: {
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#f4f4f5',
+    borderBottomLeftRadius: 4,
+  },
+  thinkingBubble: {
+    paddingVertical: 8,
+    backgroundColor: '#fafafa',
+  },
+  thinkingText: { fontSize: 13, color: '#71717a', fontStyle: 'italic' },
+  bubbleText: { fontSize: 14, lineHeight: 21, color: '#18181b' },
+
+  jevFooterRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    justifyContent: 'space-between',
+    marginTop: 8,
+    paddingTop: 6,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#f4f4f5',
+    gap: 12,
   },
-  pageTab: {
-    paddingHorizontal: 12,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-    position: 'relative',
-  },
-  pageTabText: { fontSize: 12, color: '#64748b', fontWeight: '500' },
-  pageTabTextActive: { color: '#0f172a', fontWeight: '600' },
-  activeIndicator: {
-    position: 'absolute',
-    bottom: 0,
-    left: 8,
-    right: 8,
-    height: 2,
-    backgroundColor: '#0f172a',
-    borderRadius: 1,
-  },
-
-  // Canvas
-  canvasArea: {
-    flex: 1,
-    backgroundColor: '#ffffff',
-  },
-  nativeFallbackScroll: { flex: 1, padding: 16 },
-  fallbackSection: { marginBottom: 14, padding: 12, backgroundColor: '#f8fafc', borderRadius: 6, borderWidth: 1, borderColor: '#e2e8f0' },
-  fallbackBadge: { fontSize: 10, fontWeight: '700', color: '#475569', marginBottom: 4 },
-  fallbackNodeText: { fontSize: 13, color: '#0f172a', marginBottom: 4 },
-
-  // Edit Dock
-  editDock: {
-    backgroundColor: '#ffffff',
-    borderTopWidth: 1,
-    borderTopColor: '#e2e8f0',
-    paddingHorizontal: 16,
-    paddingTop: 8,
-  },
-  sectionPillsRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8, gap: 8 },
-  dockEyebrow: { fontSize: 9, fontWeight: '700', color: '#94a3b8', letterSpacing: 0.5 },
-  targetPill: {
+  jevMetaText: { fontSize: 10, color: '#a1a1aa', fontWeight: '500' },
+  jevActionsRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  bubbleActionBtn: {
+    backgroundColor: '#f4f4f5',
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 5,
-    backgroundColor: '#f1f5f9',
-  },
-  targetPillActive: { backgroundColor: '#e2e8f0' },
-  targetPillText: { fontSize: 11, color: '#64748b', fontWeight: '500' },
-  targetPillTextActive: { color: '#0f172a', fontWeight: '600' },
-
-  suggestionsScroll: { marginBottom: 8 },
-  suggestionChip: {
-    backgroundColor: '#f8fafc',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-    borderRadius: 8,
-    marginRight: 6,
-  },
-  suggestionText: { fontSize: 11, color: '#475569' },
-
-  promptInputRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  promptInput: {
-    flex: 1,
-    minHeight: 38,
-    maxHeight: 70,
-    backgroundColor: '#f8fafc',
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#cbd5e1',
-    paddingHorizontal: 10,
+    borderColor: '#e4e4e7',
+  },
+  bubbleActionText: { fontSize: 10, color: '#52525b', fontWeight: '600' },
+
+  // Bottom Floating Bar (ChatGPT Light)
+  bottomBarWrap: {
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 16,
+    paddingTop: 6,
+  },
+  chipsScroll: { gap: 6, paddingBottom: 8 },
+  chip: {
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 12,
     paddingVertical: 6,
-    fontSize: 13,
-    color: '#0f172a',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#e4e4e7',
   },
-  applyBtn: {
+  chipText: { fontSize: 12, color: '#52525b', fontWeight: '500' },
+
+  inputDock: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f4f4f6',
+    borderRadius: 22,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    minHeight: 44,
+  },
+  targetIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#e4e4e7',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginRight: 6,
+    gap: 3,
+  },
+  targetIndicatorText: { fontSize: 10, color: '#18181b', fontWeight: '600' },
+  textInput: {
+    flex: 1,
+    fontSize: 14,
+    color: '#18181b',
+    maxHeight: 80,
+    paddingVertical: 4,
+  },
+  sendBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#0f172a',
-    height: 38,
-    paddingHorizontal: 14,
-    borderRadius: 8,
+    marginLeft: 6,
   },
-  applyBtnText: { color: '#ffffff', fontSize: 13, fontWeight: '600' },
+  sendBtnActive: { backgroundColor: '#18181b' },
+  sendBtnDisabled: { backgroundColor: '#e4e4e7' },
 
-  stepNotice: { flexDirection: 'row', alignItems: 'center', marginTop: 6 },
-  stepNoticeText: { fontSize: 11, color: '#2563eb', fontWeight: '500' },
+  // Preview Modal Sheet
+  previewRoot: { flex: 1, backgroundColor: '#ffffff' },
+  previewHeader: {
+    height: 50,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#f4f4f5',
+  },
+  previewTitle: { fontSize: 15, fontWeight: '700', color: '#18181b' },
+  browserLinkBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, backgroundColor: '#f4f4f5' },
+  browserLinkText: { fontSize: 11, fontWeight: '600', color: '#18181b' },
+  pageTabsBar: { paddingVertical: 6, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#f4f4f5' },
+  pageTabPill: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 14, backgroundColor: '#f4f4f5' },
+  pageTabPillActive: { backgroundColor: '#18181b' },
+  pageTabPillText: { fontSize: 12, color: '#71717a', fontWeight: '500' },
+  pageTabPillTextActive: { color: '#ffffff', fontWeight: '600' },
+  previewCanvas: { flex: 1, backgroundColor: '#ffffff' },
 
-  disabled: { opacity: 0.5 },
+  // Native Preview Renderer
+  nativePreviewScroll: { flex: 1, backgroundColor: '#ffffff' },
+  nativeHeaderBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#f4f4f5' },
+  nativeBrandTitle: { fontSize: 16, fontWeight: '800', color: '#09090b', letterSpacing: -0.3 },
+  nativeNavRow: { flexDirection: 'row', gap: 12 },
+  nativeNavLink: { fontSize: 12, color: '#71717a', fontWeight: '500' },
+  nativeNavLinkActive: { color: '#09090b', fontWeight: '700' },
+  previewSectionContainer: { paddingHorizontal: 18, paddingVertical: 20, borderBottomWidth: 1, borderBottomColor: '#f4f4f5' },
+  sectionBadge: { fontSize: 9, fontWeight: '800', letterSpacing: 0.8, marginBottom: 8 },
+  previewHeading: { fontWeight: '800', marginBottom: 8, letterSpacing: -0.3 },
+  previewBody: { fontSize: 14, lineHeight: 21, marginBottom: 12 },
+  previewButton: { alignSelf: 'flex-start', paddingHorizontal: 16, paddingVertical: 9, borderRadius: 6, marginVertical: 4 },
+  previewButtonText: { color: '#ffffff', fontSize: 12, fontWeight: '700' },
+  previewCard: { padding: 14, borderRadius: 8, borderWidth: 1, marginVertical: 6 },
+  previewCollectionGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 8 },
+  previewProductCard: { width: '48%', padding: 10, borderRadius: 8, borderWidth: 1 },
+  productImageMock: { width: '100%', height: 90, borderRadius: 4, marginBottom: 8 },
+  productTitle: { fontSize: 12, fontWeight: '700', marginBottom: 3 },
+  productPrice: { fontSize: 12, fontWeight: '800' },
+  previewFlexRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginVertical: 4 },
+  previewStack: { gap: 8 },
+  nativeFooterBar: { padding: 24, alignItems: 'center', backgroundColor: '#f4f4f5', borderTopWidth: 1, borderTopColor: '#e4e4e7' },
+  nativeFooterText: { fontSize: 11, color: '#a1a1aa' },
 });

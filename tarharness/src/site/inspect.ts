@@ -93,7 +93,7 @@ export function inspectDocument(doc: SiteDocument, options: InspectOptions = {})
     if (Array.isArray(links)) {
       for (const link of links as { href?: string }[]) {
         const href = typeof link.href === 'string' ? link.href : '';
-        if (href.startsWith('/') && !paths.has(href) && !redirects.has(href)) add('blocking', 'link', node.id, `Navigation target ${href} is not a page or redirect.`);
+        if (href.startsWith('/') && !paths.has(href) && !redirects.has(href) && !href.startsWith('/#')) add('blocking', 'link', node.id, `Navigation target ${href} is not a page or redirect.`);
       }
     }
   }

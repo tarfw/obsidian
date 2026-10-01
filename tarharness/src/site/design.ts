@@ -165,12 +165,42 @@ const minimal: Design = {
   shape: { sm: 6, md: 10, lg: 14, pill: 9999 },
 };
 
+const lookbook: Design = {
+  ...DEFAULT_DESIGN,
+  theme: 'editorial-lookbook',
+  direction: {
+    ...DEFAULT_DESIGN.direction,
+    audience: 'fashion and editorial apparel audience',
+    purpose: 'editorial lookbook on white paper with live catalog and photography',
+    voice: 'understated, editorial and precise',
+    density: 'compact',
+    idea: 'editorial lookbook on white paper with Favorit typography, black hairlines, and full-bleed photography',
+  },
+  color: {
+    canvas: '#ffffff', ink: '#000000', accent: '#000000', accentink: '#ffffff',
+    surface: '#ffffff', border: '#000000', muted: '#333333',
+    success: DEFAULT_DESIGN.color.success, danger: DEFAULT_DESIGN.color.danger,
+  },
+  type: {
+    ...DEFAULT_DESIGN.type,
+    display: 'Favorit, Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+    heading: 'Favorit, Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+    body: 'Favorit, Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+    base: 16, scale: 1.2, leading: 1.33, weight: 400,
+  },
+  space: { unit: 4, section: 64, container: 1440 },
+  shape: { sm: 0, md: 0, lg: 0, pill: 4 },
+  elevation: { low: 0, high: 0 },
+  layout: { columns: 4, gap: 16, align: 'start' },
+};
+
 /**
  * Registered themes. A theme is catalog data: adding one needs no engine change,
  * and a judgment may only choose among the ids listed here.
  */
 export const THEMES: Record<string, Design> = {
   'editorial-light': DEFAULT_DESIGN,
+  'editorial-lookbook': lookbook,
   'editorial-chalk': chalk,
   'streetwear-dark': streetwear,
   'minimal-clean': minimal,

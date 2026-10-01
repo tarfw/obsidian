@@ -420,4 +420,52 @@ describe('v1 migration', () => {
     expect(updated.schema).toBe(DOCUMENT_VERSION);
     expect(updated.revision).toBe(site.revision + 1);
   });
+
+  it('generates and compiles an editorial-lookbook storefront with Adanola tokens', async () => {
+    const client = await createTestWorkspace();
+    const bucket = releaseBucket();
+    const generated = await Effect.runPromise(executeGateway(client, ownerAccess, {
+      actionId: 'site.generate',
+      idempotencyKey: 'lookbook-generate',
+      input: {
+        title: 'Adanola',
+        prompt: 'Build an Adanola editorial lookbook storefront with Favorit typography, black announcement bar, ghost CTA buttons and 4-column product grid.',
+        theme: 'editorial-lookbook',
+      },
+    }));
+    const siteId = String(generated.siteId);
+    const site = generated.site as SiteDocument;
+    expect(site.design.theme).toBe('editorial-lookbook');
+    expect(site.design.color.canvas).toBe('#ffffff');
+    expect(site.design.color.ink).toBe('#000000');
+    expect(site.design.shape.sm).toBe(0);
+    expect(site.design.shape.pill).toBe(4);
+    expect(site.pages[0].sections.some((section) => section.id === 'announcement')).toBe(true);
+
+    const compiled = await Effect.runPromise(executeGateway(client, ownerAccess, {
+      actionId: 'site.compile', idempotencyKey: 'lookbook-compile', input: { siteId },
+    }, { siteReleases: bucket }));
+    const prefix = `workspaces/${ownerAccess.workspace.id}/sites/${siteId}/releases/${compiled.releaseId}`;
+    const html = bucket.objects.get(`${prefix}/index.html`)!;
+    expect(html).toContain('THE ADANOLA REWARDS CLUB');
+    expect(html).toContain('Layering Season');
+    expect(html).toContain('SHOP OUTERWEAR');
+    expect(html).toContain('New &amp; Trending');
+    expect(html).toContain('Transitioning everyday uniform');
+    expect(html).toContain('SHOP NOW');
+    expect(html).toContain('NEW HERE?');
+    expect(html).toContain('tar-chat-bubble');
+    const css = bucket.objects.get(`${prefix}/style.css`)!;
+    expect(css).toContain('--color-canvas: #ffffff');
+    expect(css).toContain('--color-ink: #000000');
+    expect(css).toContain('--font-display: Favorit');
+
+    const report = JSON.parse(bucket.objects.get(`${prefix}/report.json`)!) as { inspection: { blocking: unknown[] } };
+    expect(report.inspection.blocking.length).toBe(0);
+
+    const published = await Effect.runPromise(executeGateway(client, ownerAccess, {
+      actionId: 'site.publish', idempotencyKey: 'lookbook-publish', input: { siteId, releaseId: compiled.releaseId, hash: compiled.hash },
+    }, { siteReleases: bucket }));
+    expect(published.state).toBe('live');
+  });
 });

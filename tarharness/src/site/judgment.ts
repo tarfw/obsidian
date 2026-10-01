@@ -1,14 +1,17 @@
 /**
  * Bounded Jev judgments for the site workflow.
  *
- * Each judgment answers one narrow question over state code has already
- * prepared. Code owns the values, thresholds, permissions and commits; a
- * judgment can only choose, rank or flag. Aesthetics may proceed on low
- * confidence; evidence failures fail safe and block publication.
+ * Each function is one batched call over state code has already prepared. Code
+ * owns the values, thresholds, permissions and commits; a judgment can only
+ * choose, rank or flag among options it is given. Every question carries a
+ * `keep`/`none` escape, and a low-confidence answer falls back to the
+ * deterministic default instead of a guess. Independent questions are always
+ * batched: creation is one call, an ambiguous edit is one call.
  */
 
 import { askSystemOne, choiceOf, noulOf, scoreOf, JEV_MODEL, type SystemOneQuestion } from '../brain/systemone.ts';
-import { THEME_NAMES, type ThemeName } from './schema.ts';
+import { PURPOSE_IDEAS, THEME_IDS } from './design.ts';
+import type { Density, Tone } from './build.ts';
 
 /** Named thresholds, evaluated on our briefs, languages and failure costs. */
 export const JUDGMENT = {
@@ -19,6 +22,7 @@ export const JUDGMENT = {
   assetConfidence: 0.6,
   claimConfidence: 0.6,
   issueProbability: 0.7,
+  purposeProbability: 0.55,
   timeout: 8_000,
 } as const;
 
@@ -66,225 +70,231 @@ async function answers(
   return outcome.value.answers;
 }
 
-/** Aesthetic advice only. Site facts, policy, and publishing remain deterministic. */
-export async function chooseSiteTheme(apiKey: string | undefined, title: string, instruction: string): Promise<ThemeName | null> {
-  if (!apiKey || !instruction) return null;
-  const outcome = await askSystemOne(apiKey, {
-    state: { title, instruction },
-    timeout: 5_000,
-    questions: {
-      theme: {
-        type: 'choice',
-        instructions: 'Which visual theme best fits the supplied business description? Choose from the provided themes only. This choice does not assert any business fact.',
-        criteria: {
-          'editorial-chalk': 'Warm editorial visual identity for descriptive storytelling.',
-          'streetwear-dark': 'Bold, high-contrast visual identity for expressive brands.',
-          'minimal-clean': 'Neutral, restrained visual identity for a broad range of businesses.',
-        },
-      },
-    },
-  });
-  if (!outcome.ok) return null;
-  const answer = choiceOf(outcome.value.answers.theme);
-  return typeof answer.choice === 'string' && THEME_NAMES.includes(answer.choice as ThemeName) ? answer.choice as ThemeName : null;
-}
+const DENSITY_LEVELS: readonly string[] = ['Compact and dense', 'Balanced spacing', 'Airy with generous breathing room'];
+const COLUMN_CHOICES: Record<string, string> = { '2': 'Two items beside each other.', '3': 'Three items across.', '4': 'Four items across.', none: 'Let the builder default decide.' };
 
-export interface TargetJudgment {
-  target: string | null;
-  confidence: number | null;
-}
-
-/** Resolve "change this" among known sections. Exact matches never reach Jev. */
-export async function chooseTarget(
-  apiKey: string | undefined,
-  cache: JudgmentCache,
-  input: { command: string; targets: readonly { id: string; label: string; purpose?: string }[] },
-): Promise<TargetJudgment> {
-  if (!input.targets.length) return { target: null, confidence: null };
-  const criteria = Object.fromEntries(input.targets.map((entry) => [entry.id, `${entry.label}${entry.purpose ? ` (${entry.purpose})` : ''}`]));
-  criteria.none = 'No supplied section matches the request.';
-  const state = {
-    command: input.command,
-    targets: input.targets.map((entry) => ({ id: entry.id, label: entry.label, purpose: entry.purpose || '' })),
-  };
-  const result = await answers(apiKey, cache, 'site.target', state, {
-    target: {
-      type: 'choice',
-      instructions: 'Which supplied section does the request most likely target? Choose exactly one supplied id, or none when no section fits. Do not invent ids. This choice selects an edit target only.',
-      criteria,
-    },
-  });
-  const answer = choiceOf(result?.target);
-  const target = answer.choice && input.targets.some((entry) => entry.id === answer.choice) ? answer.choice : null;
-  if (!target || (answer.confidence !== null && answer.confidence < JUDGMENT.targetConfidence)) return { target: null, confidence: answer.confidence };
-  return { target, confidence: answer.confidence };
-}
-
-export interface LayoutJudgment {
+export interface CreateJudgment {
+  theme: string | null;
+  density: Density | null;
+  tone: Tone | null;
   columns: number | null;
-  align: 'start' | 'center' | null;
-  density: 'airy' | 'balanced' | 'compact' | null;
-}
-
-/** Jev decides layout structure (1 vs 2 columns, alignment, spacing density) for a section. */
-export async function chooseLayout(
-  apiKey: string | undefined,
-  cache: JudgmentCache,
-  input: { command: string; target: string; currentColumns?: number; currentAlign?: string },
-): Promise<LayoutJudgment> {
-  const result = await answers(apiKey, cache, 'site.layout', input, {
-    columns: {
-      type: 'choice',
-      instructions: 'How many columns should this section layout use based on the request? Choose 1, 2, or keep.',
-      criteria: {
-        '1': 'Single column / stacked layout.',
-        '2': 'Two columns / side-by-side layout (e.g. image left/right, text right/left).',
-        'keep': 'Leave columns unchanged.',
-      },
-    },
-    align: {
-      type: 'choice',
-      instructions: 'How should content inside this section be aligned? Choose start, center, or keep.',
-      criteria: {
-        'start': 'Left-aligned content.',
-        'center': 'Centered content.',
-        'keep': 'Leave alignment unchanged.',
-      },
-    },
-    density: {
-      type: 'choice',
-      instructions: 'What spacing density best fits the request? Choose airy, balanced, compact, or keep.',
-      criteria: {
-        'airy': 'Spacious layout with generous breathing room.',
-        'balanced': 'Standard balanced spacing.',
-        'compact': 'Tight, compact spacing.',
-        'keep': 'Leave spacing unchanged.',
-      },
-    },
-  });
-  const col = choiceOf(result?.columns).choice;
-  const alg = choiceOf(result?.align).choice;
-  const den = choiceOf(result?.density).choice;
-  return {
-    columns: col === '1' ? 1 : col === '2' ? 2 : null,
-    align: alg === 'start' || alg === 'center' ? alg : null,
-    density: den === 'airy' || den === 'balanced' || den === 'compact' ? den : null,
-  };
-}
-
-/** Jev decides section tone (light/canvas, dark/ink, surface, accent). */
-export async function chooseTone(
-  apiKey: string | undefined,
-  cache: JudgmentCache,
-  input: { command: string; target: string },
-): Promise<'canvas' | 'surface' | 'ink' | 'accent' | null> {
-  const result = await answers(apiKey, cache, 'site.tone', input, {
-    tone: {
-      type: 'choice',
-      instructions: 'Which color tone should the selected section use? Choose canvas (light), surface (neutral card), ink (dark/black), accent (brand accent), or keep.',
-      criteria: {
-        canvas: 'Light background with dark ink text.',
-        surface: 'Slightly raised or tinted background panel.',
-        ink: 'Dark/black background with light text.',
-        accent: 'Brand accent colored background.',
-        keep: 'Leave tone unchanged.',
-      },
-    },
-  });
-  const tone = choiceOf(result?.tone).choice;
-  return tone === 'canvas' || tone === 'surface' || tone === 'ink' || tone === 'accent' ? tone : null;
+  /** Purposes whose evidence exists and whose noul cleared the threshold. */
+  purposes: string[];
+  /** Approved asset ids, best match first. */
+  assets: string[];
+  enquiry: boolean | null;
 }
 
 /**
- * Choose values for editable properties when the request is ambiguous.
- * `keep` preserves an existing value; `none` clears it.
+ * One creation fan-out: every independent question about a brief in a single
+ * batched call. Dependent questions (what a chosen block should say) never
+ * appear here; they belong to the prose pass.
  */
-export async function chooseValues(
+export async function fanOut(
   apiKey: string | undefined,
   cache: JudgmentCache,
-  input: { command: string; target: string; options: Record<string, readonly string[]> },
-): Promise<Record<string, string>> {
-  const properties = Object.entries(input.options).filter(([, values]) => values.length > 0);
-  if (!properties.length) return {};
-  const questions = Object.fromEntries(properties.map(([property, values]) => [`p:${property}`, {
-    type: 'choice' as const,
-    instructions: `For the requested change, which value should property "${property}" take? Choose one supplied value, keep to leave it unchanged, or none to clear it. Choose keep when the request does not clearly ask to change this property.`,
-    criteria: Object.fromEntries([...values.map((value) => [value, `Set ${property} to ${value}.`]), ['keep', 'Leave the current value unchanged.'], ['none', 'Clear the value.']]),
-  }]));
-  const result = await answers(apiKey, cache, 'site.options', { command: input.command, target: input.target, options: input.options }, questions);
-  const chosen: Record<string, string> = {};
-  for (const [property, values] of properties) {
-    const answer = choiceOf(result?.[`p:${property}`]);
-    if (!answer.choice || answer.choice === 'keep') continue;
-    if (answer.choice !== 'none' && !values.includes(answer.choice)) continue;
-    if (answer.confidence !== null && answer.confidence < JUDGMENT.optionConfidence) continue;
-    chosen[property] = answer.choice;
-  }
-  return chosen;
+  input: {
+    brief: { goal: string; audience: string; tone: string };
+    facts: Record<string, unknown>;
+    purposes: readonly string[];
+    assets: readonly { id: string; description: string }[];
+    avoid?: readonly string[];
+  },
+): Promise<CreateJudgment> {
+  const purposes = input.purposes.filter((purpose) => Object.hasOwn(PURPOSE_IDEAS, purpose));
+  const assets = input.assets.slice(0, 8);
+  const themes = THEME_IDS.filter((id) => !input.avoid?.includes(id));
+  const questions: Record<string, SystemOneQuestion> = {
+    theme: {
+      type: 'choice',
+      instructions: 'Which registered theme best fits the brief? Choose one supplied id, or none when no theme fits. This choice sets appearance only and asserts no business fact.',
+      criteria: Object.fromEntries([...themes.map((id) => [id, THEME_GUIDE[id] || id]), ['none', 'No supplied theme fits.']]),
+    },
+    density: {
+      type: 'score',
+      instructions: 'How much breathing room does this brief ask for? Level 1 is compact, level 2 balanced, level 3 airy.',
+      criteria: DENSITY_LEVELS,
+    },
+    tone: {
+      type: 'choice',
+      instructions: 'Which opening section tone suits the brief? Choose canvas, surface, ink or accent, or none. This sets colour only.',
+      criteria: {
+        canvas: 'Light canvas background.', surface: 'Tinted panel background.', ink: 'Dark background.', accent: 'Brand accent background.',
+        none: 'No clear preference.',
+      },
+    },
+    columns: {
+      type: 'choice',
+      instructions: 'How many columns should a catalogue grid use on a wide screen? Choose 2, 3 or 4, or none.',
+      criteria: COLUMN_CHOICES,
+    },
+    ...Object.fromEntries(purposes.map((purpose) => [`p:${purpose}`, {
+      type: 'noul' as const,
+      instructions: `Should the site include a ${purpose} block? ${PURPOSE_IDEAS[purpose]} Answer yes only when the supplied facts or brief support it.`,
+    }])),
+    ...Object.fromEntries(assets.map((asset, index) => [`a${index}`, {
+      type: 'score' as const,
+      instructions: `How well does asset \`assets[${index}]\` fit the brief? Judge subject and mood only; availability and rights are already checked by code.`,
+      criteria: ['Unrelated subject or mood', 'Plausible but generic choice', 'Clearly the intended subject and mood'],
+    }])),
+    enquiry: {
+      type: 'noul',
+      instructions: 'Does the brief indicate the owner wants to collect enquiries from the public site? Answer from the brief only.',
+    },
+  };
+  const result = await answers(apiKey, cache, 'site.create', {
+    brief: input.brief, facts: input.facts, purposes,
+    assets: assets.map((asset) => asset.description),
+    themes,
+  }, questions);
+  if (!result) return { theme: null, density: null, tone: null, columns: null, purposes: [], assets: [], enquiry: null };
+
+  const theme = choiceOf(result.theme);
+  const densityLevel = scoreOf(result.density);
+  const tone = choiceOf(result.tone);
+  const columns = choiceOf(result.columns);
+  const purposesChosen = purposes.filter((purpose) => {
+    const probability = noulOf(result[`p:${purpose}`]).probability;
+    return probability !== null && probability >= JUDGMENT.purposeProbability;
+  });
+  const scored = assets.map((asset, index) => ({ id: asset.id, ...scoreOf(result[`a${index}`]) }))
+    .filter((entry) => entry.score !== null && (entry.confidence ?? 0) >= JUDGMENT.assetConfidence)
+    .sort((left, right) => (right.score as number) - (left.score as number));
+  const best = scored[0];
+  const ranked = scored.length === assets.length && best && (best.score as number) >= JUDGMENT.assetMinimum
+    && (scored.length < 2 || (best.score as number) - (scored[1].score as number) >= JUDGMENT.assetLead)
+    ? scored.map((entry) => entry.id) : assets.map((asset) => asset.id);
+  const enquiry = noulOf(result.enquiry).probability;
+  const numeric = columns.choice === '2' || columns.choice === '3' || columns.choice === '4' ? Number(columns.choice) : null;
+  return {
+    theme: theme.choice && themes.includes(theme.choice) && (theme.confidence ?? 0) >= JUDGMENT.optionConfidence ? theme.choice : null,
+    density: densityLevel.score === 1 ? 'compact' : densityLevel.score === 3 ? 'airy' : densityLevel.score === 2 ? 'balanced' : null,
+    tone: tone.choice === 'canvas' || tone.choice === 'surface' || tone.choice === 'ink' || tone.choice === 'accent' ? tone.choice : null,
+    columns: numeric,
+    purposes: purposesChosen,
+    assets: ranked,
+    enquiry: enquiry === null ? null : enquiry >= JUDGMENT.purposeProbability,
+  };
 }
 
-/** Rank supplied assets by brief relevance using comparable per-item Scores. */
-export async function rankAssets(
+const THEME_GUIDE: Record<string, string> = {
+  'editorial-light': 'Editorial white canvas, serif display.',
+  'editorial-chalk': 'Warm paper canvas, single blue accent.',
+  'streetwear-dark': 'High-contrast dark canvas for expressive brands.',
+  'minimal-clean': 'Neutral restrained canvas for any business.',
+};
+
+export interface EditJudgment {
+  target: string | null;
+  /** One value per ambiguous question: `keep` and `none` are filtered out. */
+  values: Record<string, string>;
+  /** Questions Jev could not resolve, so the caller can ask the owner. */
+  open: string[];
+}
+
+export interface EditQuestion {
+  key: string;
+  label: string;
+  values: readonly string[];
+  instructions?: string;
+}
+
+/**
+ * One ambiguous edit: target plus every ambiguous property in a single batched
+ * call. Exact values the owner typed never reach here.
+ */
+export async function interpret(
   apiKey: string | undefined,
   cache: JudgmentCache,
-  input: { brief: string; assets: readonly { id: string; description: string }[] },
-): Promise<string[]> {
-  const candidates = input.assets.slice(0, 8);
-  if (candidates.length < 2) return candidates.map((entry) => entry.id);
-  const questions = Object.fromEntries(candidates.map((entry, index) => [`a${index}`, {
-    type: 'score' as const,
-    instructions: `How well does asset \`assets[${index}]\` fit the site brief? Judge subject and mood only; ignore availability and rights, which code already checked.`,
-    criteria: ['Unrelated subject or mood', 'Plausible but generic choice', 'Clearly the intended subject and mood'],
-  }]));
-  const result = await answers(apiKey, cache, 'site.assets', { brief: input.brief, assets: candidates.map((entry) => entry.description) }, questions);
-  if (!result) return [];
-  const scored = candidates.map((entry, index) => ({ id: entry.id, ...scoreOf(result[`a${index}`]) }))
-    .filter((entry) => entry.score !== null && entry.confidence !== null && (entry.confidence as number) >= JUDGMENT.assetConfidence)
-    .sort((left, right) => (right.score as number) - (left.score as number));
-  if (scored.length !== candidates.length) return [];
-  const best = scored[0];
-  if ((best.score as number) < JUDGMENT.assetMinimum) return [];
-  if (scored.length > 1 && (best.score as number) - (scored[1].score as number) < JUDGMENT.assetLead) return [];
-  return scored.map((entry) => entry.id);
+  input: { command: string; targets: readonly { id: string; label: string; purpose?: string }[]; questions: readonly EditQuestion[] },
+): Promise<EditJudgment> {
+  const questions: Record<string, SystemOneQuestion> = {};
+  if (input.targets.length) {
+    questions.target = {
+      type: 'choice',
+      instructions: 'Which supplied section does the request most likely target? Choose exactly one supplied id, or none when no section fits. Do not invent ids.',
+      criteria: { ...Object.fromEntries(input.targets.map((entry) => [entry.id, `${entry.label}${entry.purpose ? ` (${entry.purpose})` : ''}`])), none: 'No supplied section matches.' },
+    };
+  }
+  for (const question of input.questions) {
+    if (!question.values.length) continue;
+    questions[`q:${question.key}`] = {
+      type: 'choice',
+      instructions: `${question.instructions || `For "${question.label}", which value does the request ask for?`} Choose one supplied value, keep when the request does not clearly ask to change this, or none.`,
+      criteria: Object.fromEntries([...question.values.map((value) => [value, `${question.label}: ${value}.`]), ['keep', 'Leave it unchanged.'], ['none', 'No supplied value fits.']]),
+    };
+  }
+  const result = await answers(apiKey, cache, 'site.edit', { command: input.command, targets: input.targets.map((entry) => ({ id: entry.id, label: entry.label })), questions: input.questions.map((entry) => ({ key: entry.key, values: entry.values })) }, questions);
+  if (!result) return { target: null, values: {}, open: input.questions.map((entry) => entry.key) };
+  const target = choiceOf(result.target);
+  const values: Record<string, string> = {};
+  const open: string[] = [];
+  for (const question of input.questions) {
+    const answer = choiceOf(result[`q:${question.key}`]);
+    const choice = answer.choice;
+    if (choice === 'keep') continue;
+    if (!choice || choice === 'none' || !question.values.includes(choice) || (answer.confidence ?? 0) < JUDGMENT.optionConfidence) {
+      open.push(question.key);
+      continue;
+    }
+    values[question.key] = choice;
+  }
+  const chosenTarget = target.choice && input.targets.some((entry) => entry.id === target.choice) ? target.choice : null;
+  return {
+    target: chosenTarget && (target.confidence ?? 0) >= JUDGMENT.targetConfidence ? chosenTarget : null,
+    values,
+    open,
+  };
 }
 
 export type ClaimVerdict = 'supported' | 'contradicted' | 'unsupported';
 
-/** Check one prose claim against supplied evidence. Unresolved claims block publish. */
-export async function checkClaim(
+/** Batched evidence check: every prose claim in one call. Unresolved claims block publish. */
+export async function checkClaims(
   apiKey: string | undefined,
   cache: JudgmentCache,
-  input: { claim: string; evidence: readonly string[] },
-): Promise<{ verdict: ClaimVerdict; confidence: number | null }> {
-  if (!input.evidence.length) return { verdict: 'unsupported', confidence: null };
-  const result = await answers(apiKey, cache, 'site.claims', { claim: input.claim, evidence: input.evidence.slice(0, 8) }, {
-    verdict: {
-      type: 'choice',
-      instructions: 'Does the supplied evidence support the claim? Choose supported only when the evidence states it, contradicted when the evidence denies it, otherwise unsupported. Judge only the supplied evidence.',
-      criteria: {
-        supported: 'The evidence states this claim.',
-        contradicted: 'The evidence denies this claim.',
-        unsupported: 'The evidence neither states nor denies this claim.',
-      },
+  claims: readonly { text: string; evidence: readonly string[] }[],
+): Promise<{ text: string; verdict: ClaimVerdict; confidence: number | null }[]> {
+  const entries = claims.slice(0, 12);
+  if (!entries.length) return [];
+  const questions = Object.fromEntries(entries.map((claim, index) => [`c${index}`, {
+    type: 'choice' as const,
+    instructions: `Does the evidence supplied for claim ${index} state it (supported), deny it (contradicted), or neither (unsupported)? Judge only the supplied evidence.`,
+    criteria: {
+      supported: 'The evidence states this claim.',
+      contradicted: 'The evidence denies this claim.',
+      unsupported: 'The evidence neither states nor denies this claim.',
     },
+  }]));
+  const result = await answers(apiKey, cache, 'site.claims', { claims: entries.map((claim) => ({ text: claim.text, evidence: claim.evidence.slice(0, 8) })) }, questions);
+  return entries.map((claim, index) => {
+    const answer = choiceOf(result?.[`c${index}`]);
+    const verdict = answer.choice === 'supported' || answer.choice === 'contradicted' || answer.choice === 'unsupported' ? answer.choice : 'unsupported';
+    if (verdict !== 'unsupported' && (answer.confidence ?? 0) < JUDGMENT.claimConfidence) return { text: claim.text, verdict: 'unsupported' as const, confidence: answer.confidence };
+    if (!claim.evidence.length) return { text: claim.text, verdict: 'unsupported' as const, confidence: null };
+    return { text: claim.text, verdict, confidence: answer.confidence };
   });
-  const answer = choiceOf(result?.verdict);
-  const verdict = answer.choice === 'supported' || answer.choice === 'contradicted' || answer.choice === 'unsupported' ? answer.choice : 'unsupported';
-  if (verdict !== 'unsupported' && answer.confidence !== null && answer.confidence < JUDGMENT.claimConfidence) return { verdict: 'unsupported', confidence: answer.confidence };
-  return { verdict, confidence: answer.confidence };
 }
 
-/** Probability that one semantic issue applies to the supplied subject. */
-export async function detectIssue(
+/**
+ * One batched drift check for the scout: does this copy still hold today?
+ * Code supplies the date and the exact strings; Jev only flags, never edits.
+ */
+export async function flagDrift(
   apiKey: string | undefined,
   cache: JudgmentCache,
-  input: { subject: string; issue: string },
-): Promise<number | null> {
-  const result = await answers(apiKey, cache, 'site.issue', input, {
-    present: {
-      type: 'noul',
-      instructions: `${input.issue} Answer yes when it holds for the supplied subject, no when it does not.`,
-    },
-  });
-  return noulOf(result?.present).probability;
+  input: { today: string; subjects: readonly { id: string; text: string }[] },
+): Promise<string[]> {
+  const subjects = input.subjects.slice(0, 8);
+  if (!subjects.length) return [];
+  const questions = Object.fromEntries(subjects.map((subject, index) => [`d${index}`, {
+    type: 'noul' as const,
+    instructions: `State says today is ${input.today}. Does this site copy read as stale or expired on that date - a past season, a finished event, a date or offer already gone? Answer yes only when an owner would want to change it.`,
+  }]));
+  const result = await answers(apiKey, cache, 'site.drift', { today: input.today, subjects: subjects.map((subject) => subject.text) }, questions);
+  if (!result) return [];
+  return subjects.filter((subject, index) => {
+    const probability = noulOf(result[`d${index}`]).probability;
+    return probability !== null && probability >= JUDGMENT.issueProbability;
+  }).map((subject) => subject.id);
 }

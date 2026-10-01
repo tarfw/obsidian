@@ -1,16 +1,14 @@
 /**
- * Workers AI composition for the site agent.
+ * Bounded language model work for the site agent.
  *
- * The model proposes a typed plan and draft; code validates every value, keeps
- * prices, policy and permissions out of model reach, and repairs at most once.
- * A fabricated claim is caught by evidence checks and can block publication.
+ * The model writes original prose, in batches, over slots code has already
+ * placed. Code validates every value, keeps prices, policy and permissions out
+ * of model reach, and repairs at most once. A sentence that asserts a fact
+ * becomes a claim, and an unchecked claim blocks publication.
  */
 
 import { unavailable } from '../errors.ts';
-import { DEFAULT_DESIGN, type Design } from './design.ts';
-import { DOCUMENT_VERSION, type Journey, type SiteDocument } from './document.ts';
-import type { ClaimCheck } from './inspect.ts';
-import { validateDocument } from './validate.ts';
+import type { Journey } from './document.ts';
 
 export const SITE_MODEL_FALLBACKS = [
   '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
@@ -36,36 +34,10 @@ export class BudgetExceeded extends Error {
   constructor(readonly reason: string) { super(reason); }
 }
 
-export interface PlannedSection {
-  id: string;
-  purpose: string;
-  layout: 'flow' | 'flex' | 'grid' | 'stack';
-  summary: string;
-}
-
-export interface PlannedPage {
-  id: string;
-  path: string;
-  title: string;
-  description: string;
-  sections: PlannedSection[];
-}
-
-export interface SitePlan {
-  direction: string;
-  pages: PlannedPage[];
-  claims: { text: string; evidence: string }[];
-}
-
 const object = (value: unknown): Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 
 function text(value: unknown, max = 400): string {
   return typeof value === 'string' ? value.replace(/\s+/g, ' ').trim().slice(0, max) : '';
-}
-
-function slug(value: string, fallback: string): string {
-  const clean = value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60);
-  return /^[a-z][a-z0-9-]*$/.test(clean) ? clean : fallback;
 }
 
 export const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions';
@@ -196,91 +168,74 @@ const SYSTEM = `You compose a marketing website draft as strict JSON. Rules:
 - Layout kinds for sections: flow, flex, grid, stack.
 - Return JSON only.`;
 
-export interface ComposeInput {
-  brief: { goal: string; audience: string; tone: string };
-  facts: Record<string, unknown>;
-  design?: Design;
-  origin?: string;
+export interface ProseSlot {
+  id: string;
+  purpose: string;
+  current: string;
+  limit: number;
 }
 
-/** Plan pages and sections from the brief and approved facts. */
-export async function planSite(runner: ModelRunner, input: ComposeInput): Promise<SitePlan> {
-  return runner.json<SitePlan>({
+export interface CopyInput {
+  brief: { goal: string; audience: string; tone: string };
+  voice: string;
+  facts: Record<string, unknown>;
+  slots: ProseSlot[];
+}
+
+/**
+ * One batched prose pass. The model rewrites the supplied copy slots only; it
+ * never sees layout, tokens, prices or permissions, and code drops any slot it
+ * did not answer instead of failing the build.
+ */
+export async function writeCopy(runner: ModelRunner, input: CopyInput): Promise<Record<string, string>> {
+  const slots = input.slots.slice(0, 12);
+  if (!slots.length) return {};
+  return runner.json<Record<string, string>>({
     system: SYSTEM,
-    prompt: `Plan a distinctive site. Brief: ${JSON.stringify(input.brief)}. Approved facts: ${JSON.stringify(input.facts)}.
-Return JSON: { "direction": string, "pages": [ { "id": string, "path": string, "title": string, "description": string, "sections": [ { "id": string, "purpose": string, "layout": "flow|flex|grid|stack", "summary": string } ] } ], "claims": [ { "text": string, "evidence": string } ] }.
-Rules: 2 to 5 pages; the home path is "/"; other paths are lowercase like "/menu" or "/about"; 3 to 6 sections per page; vary section purposes so the page is not a formula; every claim must quote supplied evidence.`,
+    prompt: `Write the copy for these site slots. Brief: ${JSON.stringify(input.brief)}. Voice: ${input.voice}. Approved facts: ${JSON.stringify(input.facts)}.
+Slots: ${JSON.stringify(slots.map((slot) => ({ id: slot.id, purpose: slot.purpose, current: slot.current })))}.
+Return JSON: { "texts": [ { "id": string, "text": string, "claims": [ { "text": string, "evidence": string } ] } ] }.
+Rules: one entry per slot id, plain concrete copy within the slot's own length, no invented facts, and list every factual sentence as a claim with the fact it comes from.`,
+    maxTokens: 2_400,
+    temperature: 0.6,
     read: (value) => {
-      const pages = Array.isArray(value.pages) ? value.pages : [];
-      if (!pages.length) return null;
-      const planned: PlannedPage[] = [];
-      for (const [index, entry] of pages.entries()) {
-        const page = object(entry);
-        const title = text(page.title, 120);
-        if (!title) return null;
-        const rawPath = text(page.path, 80) || '/';
-        const path = rawPath === '/' ? '/' : `/${slug(rawPath, slug(title, `page-${index + 1}`))}`;
-        const sections = (Array.isArray(page.sections) ? page.sections : []).slice(0, 6).map((raw, sectionIndex) => {
-          const section = object(raw);
-          const layout = ['flow', 'flex', 'grid', 'stack'].includes(String(section.layout)) ? String(section.layout) as PlannedSection['layout'] : 'stack';
-          return {
-            id: slug(text(section.id, 40), `${slug(title, 'section')}-${sectionIndex + 1}`),
-            purpose: slug(text(section.purpose, 40), 'content'),
-            layout,
-            summary: text(section.summary, 240),
-          };
-        });
-        if (!sections.length) return null;
-        planned.push({
-          id: slug(text(page.id, 40), slug(title, `page-${index + 1}`)),
-          path, title, description: text(page.description, 240), sections,
-        });
+      const entries = Array.isArray(value.texts) ? value.texts : [];
+      const byId = new Map(slots.map((slot) => [slot.id, slot]));
+      const texts: Record<string, string> = {};
+      for (const entry of entries) {
+        const slot = object(entry);
+        const id = text(slot.id, 80);
+        const found = byId.get(id);
+        if (!found) continue;
+        const next = text(slot.text, found.limit);
+        if (next) texts[id] = next;
       }
-      if (!planned.some((page) => page.path === '/')) planned[0].path = '/';
-      const claims = (Array.isArray(value.claims) ? value.claims : []).slice(0, 12).map((raw) => {
-        const claim = object(raw);
+      return Object.keys(texts).length ? texts : null;
+    },
+  });
+}
+
+/** Claims the prose pass asserts, so code can check each against supplied facts. */
+export async function readClaims(runner: ModelRunner, input: { brief: CopyInput['brief']; texts: string[] }): Promise<{ text: string; evidence: string }[]> {
+  if (!input.texts.length) return [];
+  return runner.json<{ text: string; evidence: string }[]>({
+    system: SYSTEM,
+    prompt: `List each factual assertion in these site sentences: ${JSON.stringify(input.texts)}. Brief: ${JSON.stringify(input.brief)}.
+Return JSON: { "claims": [ { "text": string, "evidence": string } ] }. Evidence must quote the brief or a supplied fact; use an empty string when nothing supports it.`,
+    maxTokens: 800,
+    temperature: 0.2,
+    read: (value) => {
+      const claims = Array.isArray(value.claims) ? value.claims : [];
+      const parsed = claims.map((entry) => {
+        const claim = object(entry);
         return { text: text(claim.text, 300), evidence: text(claim.evidence, 400) };
       }).filter((claim) => claim.text);
-      return { direction: text(value.direction, 200) || input.design?.direction.idea || DEFAULT_DESIGN.direction.idea, pages: planned, claims };
+      return parsed.slice(0, 12);
     },
   });
 }
 
-export interface ComposeResult {
-  document: SiteDocument;
-  claims: ClaimCheck[];
-  usage: ModelUsage;
-}
-
-/** Compose the full typed draft, repairing once against validation errors. */
-export async function composeSite(runner: ModelRunner, plan: SitePlan, input: ComposeInput): Promise<ComposeResult> {
-  const design = input.design || DEFAULT_DESIGN;
-  const document = await runner.json<SiteDocument>({
-    system: SYSTEM,
-    prompt: `Write the typed site draft as JSON. Plan: ${JSON.stringify(plan)}. Brief: ${JSON.stringify(input.brief)}. Approved facts: ${JSON.stringify(input.facts)}. Design tokens: ${JSON.stringify({ color: design.color, space: design.space, shape: design.shape, layout: design.layout, type: design.type, motion: design.motion })}.
-Return JSON with this shape:
-{ "schema": "${DOCUMENT_VERSION}", "revision": 1, "brief": { "goal": string, "audience": string, "tone": string },
-  "locale": "en", "timezone": string, "currency": string,
-  "design": <the supplied design tokens verbatim in their typed shape>,
-  "assets": [], "components": [],
-  "pages": [ { "id": string, "path": string, "title": string, "meta": { "description": string }, "sections": [ { "id": string, "purpose": string, "layout": { "kind": "flow|flex|grid|stack" }, "nodes": [ ... ] } ] } ],
-  "journeys": [], "redirects": [], "locks": [], "policy": { "allowedCurrencies": [currency] } }
-Nodes: { "id": string, "kind": string, "props": object, "style": { "base": { "background": "token:color.surface", "pad": "md", "size": "heading" }, "small": {...} } }.
-Node props by kind: heading {text, level}, text {text}, list {items: string[]}, link {label, href}, button {label, href}, divider {}, spacer {}, image {asset}, collection {title, items: []}, navigation {brand, links: [{label, href}]}, footer {brand, links: []}, card/flex/grid/stack {children: [nodes]}, accordion {children: [{props: {label}, children: [nodes]}]}, tabs {children as accordion}, form {journey}.
-Every page starts with a navigation section and ends with a footer section. Use only "/" internal hrefs that match planned page paths.`,
-    maxTokens: 6_000,
-    temperature: 0.5,
-    read: (value) => {
-      const candidate = { ...value, schema: DOCUMENT_VERSION, claims: [] } as unknown as SiteDocument;
-      validateDocument(candidate);
-      return candidate;
-    },
-  });
-  const claims: ClaimCheck[] = plan.claims.map((claim) => ({ text: claim.text, verdict: 'unsupported', evidence: [claim.evidence] }));
-  return { document, claims, usage: runner.spent() };
-}
-
-/** Write replacement copy for one node; never states facts that were not supplied. */
+/** Write replacement copy for one element; never states facts that were not supplied. */
 export async function draftCopy(runner: ModelRunner, input: { instruction: string; current: string; facts: Record<string, unknown>; limit?: number }): Promise<string> {
   return runner.json<string>({
     system: SYSTEM,

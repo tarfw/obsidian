@@ -8,9 +8,9 @@
  */
 
 import { EASING_CSS } from './document.ts';
-import type { Asset, Binding, Node, Page, Section, SiteDocument, Style, StyleSet } from './document.ts';
+import type { Asset, Binding, Node, Page, Persona, Section, SiteDocument, Style, StyleSet } from './document.ts';
 import { escapeAttribute, escapeHtml, formatMoney, isSafeHref, safeHref, slugify } from './html.ts';
-import { resolveToken, type Design } from './design.ts';
+import { resolveToken, TONE_STYLE, type Design } from './design.ts';
 
 export interface CompiledFile {
   path: string;
@@ -40,6 +40,8 @@ export interface CompileResult {
   hash: string;
   itemCount: number;
   redirects: { from: string; to: string; status: 308 }[];
+  /** Match rules for the variants this release compiled, in the order the edge tests them. */
+  personas: { id: string; when: Persona['when']; priority: number }[];
 }
 
 const sha = async (value: string): Promise<string> => {
@@ -577,6 +579,43 @@ ${body}
 </html>`;
 }
 
+/** Hiding a node never removes the page's level-one heading; an emptied container goes with it. */
+function withoutHidden(nodes: Node[], hidden: Set<string>): Node[] {
+  const kept: Node[] = [];
+  for (const node of nodes) {
+    if (hidden.has(node.id) && !(node.kind === 'heading' && Number(node.props.level) === 1)) continue;
+    const children = node.children ? withoutHidden(node.children, hidden) : undefined;
+    if (node.children && !children?.length) continue;
+    kept.push({ ...node, ...(children ? { children } : {}) });
+  }
+  return kept;
+}
+
+/**
+ * A persona variant is a projection of the same document: it can hide, reorder
+ * or retint what is already there, never add a fact. Resolution happens at the
+ * edge from these compiled files, so a visit costs one path lookup.
+ */
+function variantOf(doc: SiteDocument, persona: Persona): SiteDocument {
+  const hidden = new Set(persona.hide || []);
+  const rank = new Map((persona.order || []).map((id, index) => [id, index]));
+  const pages = doc.pages.map((page) => {
+    const sections = page.sections
+      .filter((section) => !hidden.has(section.id))
+      .map((section) => {
+        const nodes = withoutHidden(section.nodes, hidden);
+        if (!nodes.length) return null;
+        const tint = TONE_STYLE[String(persona.tone?.[section.id] || '')];
+        const base = { ...(section.style?.base || {}), ...(tint || {}) };
+        return { ...section, nodes, ...(section.style || tint ? { style: { ...section.style, base } } : {}) } as Section;
+      })
+      .filter((section): section is Section => section !== null)
+      .sort((left, right) => (rank.get(left.id) ?? Number.MAX_SAFE_INTEGER) - (rank.get(right.id) ?? Number.MAX_SAFE_INTEGER));
+    return { ...page, sections: sections.length ? sections : page.sections };
+  });
+  return { ...doc, pages };
+}
+
 export async function compileDocument(doc: SiteDocument, options: CompileOptions = {}): Promise<CompileResult> {
   const collector: CssCollector = { classes: new Map(), runtime: new Set() };
   const files: CompiledFile[] = [];
@@ -623,6 +662,18 @@ export async function compileDocument(doc: SiteDocument, options: CompileOptions
     }
   }
 
+  // Persona variants compile beside the base pages so the edge only picks a path.
+  const variants = [...(doc.personas || [])].sort((left, right) => right.priority - left.priority).slice(0, 4);
+  for (const persona of variants) {
+    const variant = variantOf(doc, persona);
+    for (const page of variant.pages) {
+      const body = page.sections.map((section) => renderSection(section, contexts())).join('\n');
+      const html = pageHtml(variant, page, body, options.origin, page.path, '/style.css', collector.runtime.size > 0);
+      const path = `/.persona/${persona.id}${page.path === '/' ? '' : page.path}/index.html`;
+      files.push({ path, mime: 'text/html; charset=utf-8', body: html, hash: await sha(html) });
+    }
+  }
+
   for (const entry of detailPages) {
     const inner = renderNodes(entry.detailNodes, { ...contexts(entry.item) });
     const body = `<section class="tar-section" data-purpose="detail"><div class="tar-wrap tar-stack">${inner}</div></section>`;
@@ -653,5 +704,5 @@ export async function compileDocument(doc: SiteDocument, options: CompileOptions
   files.push({ path: '/robots.txt', mime: 'text/plain; charset=utf-8', body: robots, hash: await sha(robots) });
 
   const hash = await sha(files.map((file) => `${file.path}:${file.hash}`).join('|'));
-  return { files, hash, itemCount, redirects: doc.redirects.map((redirect) => ({ ...redirect })) };
+  return { files, hash, itemCount, redirects: doc.redirects.map((redirect) => ({ ...redirect })), personas: variants.map((persona) => ({ id: persona.id, when: persona.when, priority: persona.priority })) };
 }

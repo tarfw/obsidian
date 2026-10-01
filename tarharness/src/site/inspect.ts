@@ -32,8 +32,6 @@ export interface Inspection {
   };
 }
 
-const LAYOUT_KINDS = ['flex', 'grid', 'stack', 'card'];
-
 function walkNodes(nodes: Node[] | undefined): Node[] {
   return (nodes || []).flatMap((node) => [node, ...walkNodes(node.children)]);
 }
@@ -164,9 +162,4 @@ export function inspectDocument(doc: SiteDocument, options: InspectOptions = {})
       claims: (options.claims || doc.claims || []).length,
     },
   };
-}
-
-/** Advisory findings that deserve a visible recommendation rather than a veto. */
-export function recommendations(inspection: Inspection): string[] {
-  return inspection.advisory.slice(0, 12).map((issue) => `${issue.path}: ${issue.message}`);
 }

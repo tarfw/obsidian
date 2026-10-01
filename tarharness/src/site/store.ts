@@ -1,75 +1,24 @@
-import type { Client } from '@libsql/client/web';
+import type { Client, InStatement } from '@libsql/client/web';
 import { badRequest, conflict, notFound, unavailable } from '../errors.ts';
 import { eventStatement } from '../gateway/commit.ts';
 import type { AccessContext } from '../types.ts';
-import { compileSiteHtml } from './renderer.ts';
 import { compileDocument, type CompiledFile } from './compile.ts';
 import { validateDocument } from './validate.ts';
-import { applyLegacyOperations, isV2, readDocument, upgrade, THEMES, type LegacyOperation } from './adapt.ts';
+import { readDocument } from './adapt.ts';
 import { inspectDocument } from './inspect.ts';
 import { assetReader } from './asset.ts';
-import { DEFAULT_DESIGN, type Design } from './design.ts';
-import { BudgetExceeded, DEFAULT_BUDGET, ModelRunner, SITE_MODEL_FALLBACKS, composeSite, planSite } from './model.ts';
+import { PURPOSE_IDEAS, THEME_IDS } from './design.ts';
+import { BudgetExceeded, DEFAULT_BUDGET, GROQ_DEFAULT_MODEL, ModelRunner, SITE_MODEL_FALLBACKS, readClaims, writeCopy } from './model.ts';
+import { buildSite, defaultBlueprint, tasteBias, type Blueprint, type Facts, type Slot } from './build.ts';
 import { slugify } from './html.ts';
-import { checkClaim, chooseSiteTheme } from './judgment.ts';
-import {
-  CARD_KINDS, DEFAULT_DESIGN_TOKENS, type CardDefinition, type PageDefinition,
-  type ReleaseFile, type ReleaseManifest, type SiteDefinition, type SitePatchOperation, type ThemeName,
-} from './schema.ts';
-import type { Page, Section, SiteDocument } from './document.ts';
+import { checkClaims, fanOut, flagDrift } from './judgment.ts';
+import { DOCUMENT_VERSION, type Asset, type Node, type Page, type PersonaRule, type ReleaseFile, type ReleaseManifest, type Section, type SiteDocument } from './document.ts';
 
 const now = () => Date.now();
 const reserved = new Set(['www', 'api', 'app', 'admin', 'mail', 'static', 'assets', 'preview', 'support', 'help', 'status']);
 const object = (value: unknown): Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const text = (value: unknown, max = 240) => typeof value === 'string' ? value.trim().slice(0, max) : '';
-const hash = async (value: string) => [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)))].map((byte) => byte.toString(16).padStart(2, '0')).join('');
-const filePath = (page: PageDefinition) => page.path === '/' ? '/index.html' : `/${page.path.replace(/^\/+|\/+$/g, '')}/index.html`;
-
-function navigation(title: string): CardDefinition {
-  return { id: 'navigation', kind: 'navigation', version: 1, props: { brand: title, links: [
-    { label: 'Home', href: '/' }, { label: 'Catalog', href: '/catalog' }, { label: 'About', href: '/about' }, { label: 'Contact', href: '/contact' },
-  ] } };
-}
-
-function footer(title: string): CardDefinition {
-  return { id: 'footer', kind: 'footer', version: 1, props: { brand: title, text: `© ${new Date().getFullYear()} ${title}`, links: [] } };
-}
-
-export function createDefaultSite(title: string, prompt: string, theme: ThemeName = 'editorial-chalk'): SiteDefinition {
-  const description = text(prompt, 500) || `${title} online`;
-  const pages: PageDefinition[] = [
-    { id: 'home', path: '/', title: 'Home', meta: { description }, cards: [
-      navigation(title),
-      { id: 'hero', kind: 'hero', version: 1, title, props: { headline: title, subtext: description, primaryCta: { label: 'Explore', href: '/catalog' }, secondaryCta: { label: 'Contact', href: '/contact' } } },
-      { id: 'features', kind: 'features', version: 1, title: 'What we offer', props: { features: [] } },
-      { id: 'proof', kind: 'proof', version: 1, title: 'Trusted by customers', props: { testimonials: [] } },
-      { id: 'cta', kind: 'cta', version: 1, title: 'Ready to begin?', props: { headline: `Talk to ${title}`, text: description, buttonLabel: 'Contact us', href: '/contact' } },
-      footer(title),
-    ] },
-    { id: 'catalog', path: '/catalog', title: 'Catalog', meta: { description: `Browse ${title}` }, cards: [
-      navigation(title),
-      { id: 'catalog', kind: 'collection', version: 1, title: 'Catalog', props: { items: [] }, bindings: [{ slot: 'items', query: 'catalog.public', version: 1, access: 'public', freshness: 300, empty: { items: [] } }] },
-      { id: 'faq', kind: 'faq', version: 1, title: 'Questions', props: { items: [] } },
-      footer(title),
-    ] },
-    { id: 'about', path: '/about', title: 'About', meta: { description: `About ${title}` }, cards: [
-      navigation(title), { id: 'about', kind: 'content', version: 1, title: `About ${title}`, props: { body: description } },
-      { id: 'about-proof', kind: 'proof', version: 1, title: 'Our work', props: { testimonials: [] } }, footer(title),
-    ] },
-    { id: 'contact', path: '/contact', title: 'Contact', meta: { description: `Contact ${title}` }, cards: [
-      navigation(title), { id: 'hours', kind: 'hours', version: 1, title: 'Hours', props: { schedule: [] } },
-      { id: 'contact-details', kind: 'contact', version: 1, title: 'Contact', props: {} },
-      { id: 'enquiry', kind: 'form', version: 1, title: 'Send an enquiry', props: { submitLabel: 'Send enquiry' }, actions: [{ id: 'enquiry', label: 'Send enquiry', target: 'record.create', payload: { type: 'enquiry' } }] },
-      footer(title),
-    ] },
-  ];
-  return {
-    schema: '1.0.0', design: DEFAULT_DESIGN_TOKENS[theme] || DEFAULT_DESIGN_TOKENS['editorial-chalk'],
-    locale: 'en', timezone: 'Asia/Kolkata', currency: 'INR', pages,
-    journeys: [{ id: 'enquiry', title: 'Customer enquiry', target: 'record.create', version: 1, input: { type: 'enquiry' }, outcome: 'Enquiry appears in Now' }],
-    variants: [], surfaces: [], policy: { publicOrdering: false, publicEnquiry: false, allowedCurrencies: ['INR'] },
-  };
-}
+const strings = (value: unknown, max = 12): string[] => Array.isArray(value) ? value.map((entry) => text(entry, 300)).filter(Boolean).slice(0, max) : [];
 
 export async function getSiteRecord(client: Client, siteId?: string): Promise<{ id: string; version: number; state: string; data: unknown } | null> {
   const result = await client.execute(siteId
@@ -77,54 +26,6 @@ export async function getSiteRecord(client: Client, siteId?: string): Promise<{ 
     : "SELECT * FROM records WHERE type='site' AND archived IS NULL ORDER BY CASE WHEN state='live' THEN 0 ELSE 1 END,updated DESC,created DESC LIMIT 1");
   const row = result.rows[0];
   return row ? { id: String(row.id), version: Number(row.version), state: String(row.state), data: JSON.parse(String(row.data)) as unknown } : null;
-}
-
-function validateSite(site: SiteDefinition): void {
-  if (!site || site.schema !== '1.0.0' || !Array.isArray(site.pages) || !site.pages.length || site.pages.length > 50
-    || JSON.stringify(site).length > 1_000_000) throw badRequest('Site definition is invalid.');
-  if (site.policy.publicEnquiry || site.policy.publicOrdering) {
-    throw badRequest('Public journeys require a configured public Action Gateway.');
-  }
-  const paths = new Set<string>();
-  for (const page of site.pages) {
-    if (typeof page.path !== 'string' || !/^\/(?:[a-z0-9-]+(?:\/[a-z0-9-]+)*)?$/.test(page.path)
-      || paths.has(page.path) || !Array.isArray(page.cards) || page.cards.length > 100
-      || typeof page.title !== 'string' || !page.title.trim() || page.title.length > 200) throw badRequest('Site page path or card count is invalid.');
-    paths.add(page.path);
-    const ids = new Set<string>();
-    for (const card of page.cards) {
-      if (!card || !CARD_KINDS.includes(card.kind) || typeof card.id !== 'string' || !/^[a-z][a-z0-9-]{0,79}$/.test(card.id)
-        || ids.has(card.id) || card.version !== 1 || !card.props || typeof card.props !== 'object' || Array.isArray(card.props)) throw badRequest('Site card is invalid.');
-      ids.add(card.id);
-      if ((card.kind === 'navigation' || card.kind === 'footer') && card.props.links !== undefined && !Array.isArray(card.props.links)) throw badRequest('Site links are invalid.');
-      for (const link of Array.isArray(card.props.links) ? card.props.links : []) {
-        const href = object(link).href;
-        if (typeof href !== 'string' || !safePublicHref(href)) throw badRequest('Site link must use a page path, HTTPS URL, email or phone link.');
-      }
-      const hrefs = card.kind === 'hero' ? [object(card.props.primaryCta).href, object(card.props.secondaryCta).href]
-        : card.kind === 'cta' ? [card.props.href] : [];
-      if (hrefs.some((href) => href !== undefined && (typeof href !== 'string' || !safePublicHref(href)))) throw badRequest('Site action link is invalid.');
-      for (const binding of card.bindings || []) {
-        if (binding.query !== 'catalog.public' || binding.slot !== 'items' || card.kind !== 'collection'
-          || binding.version !== 1 || binding.access !== 'public' || !Number.isSafeInteger(binding.freshness)
-          || binding.freshness < 0 || binding.freshness > 86_400) throw badRequest('Site binding is not registered.');
-        const params = binding.params || {};
-        const records = params.records ?? [];
-        if (Object.keys(params).some((key) => !['records', 'channel'].includes(key)) || !Array.isArray(records) || records.length > 100
-          || records.some((id) => typeof id !== 'string' || !/^[a-zA-Z0-9._:-]{1,160}$/.test(id))
-          || new Set(records).size !== records.length || (params.channel !== undefined && (typeof params.channel !== 'string' || !/^[a-zA-Z0-9-]{1,40}$/.test(params.channel))))
-          throw badRequest('Choose explicit public catalog records and a valid price channel.');
-      }
-    }
-  }
-}
-
-function safePublicHref(value: string): boolean {
-  if (!value || /[\u0000-\u001f\u007f\\]/.test(value)) return false;
-  if (value.startsWith('/') && !value.startsWith('//')) return true;
-  if (/^#[a-zA-Z][a-zA-Z0-9_-]*$/.test(value)) return true;
-  try { return ['https:', 'mailto:', 'tel:'].includes(new URL(value).protocol); }
-  catch { return false; }
 }
 
 async function publicCatalog(client: Client, records: readonly string[], channel: string): Promise<Record<string, unknown>[]> {
@@ -192,24 +93,6 @@ async function publicRecords(client: Client, records: readonly string[], type: s
   });
 }
 
-async function resolveBindings(client: Client, site: SiteDefinition): Promise<{ site: SiteDefinition; itemCount: number }> {
-  if (!site.pages.some((page) => page.cards.some((card) => card.bindings?.length))) return { site, itemCount: 0 };
-  const pages: PageDefinition[] = [];
-  let itemCount = 0;
-  for (const page of site.pages) {
-    const cards: CardDefinition[] = [];
-    for (const card of page.cards) {
-      const binding = card.bindings?.find((entry) => entry.query === 'catalog.public' && entry.slot === 'items');
-      if (!binding) { cards.push(card); continue; }
-      const items = await publicCatalog(client, (binding.params?.records || []) as string[], String(binding.params?.channel || 'default'));
-      itemCount += items.length;
-      cards.push({ ...card, props: { ...card.props, items } });
-    }
-    pages.push({ ...page, cards });
-  }
-  return { site: { ...site, pages }, itemCount };
-}
-
 function siteOrigin(domain: string | undefined, slug: string): string | undefined {
   if (domain?.startsWith('https://')) {
     try {
@@ -259,26 +142,13 @@ async function resolveDocumentBindings(client: Client, doc: SiteDocument): Promi
   return { doc: { ...doc, pages }, itemCount };
 }
 
-async function compileAll(client: Client, source: unknown, origin?: string, media?: (asset: import('./document.ts').Asset) => Promise<Uint8Array | null>): Promise<{ files: CompiledFile[]; hash: string; itemCount: number; redirects: { from: string; to: string; status: 308 }[] }> {
-  if (isV2(source)) {
-    validateDocument(source);
-    const resolved = await resolveDocumentBindings(client, source);
-    const compiled = await compileDocument(resolved.doc, { origin, media });
-    return { files: compiled.files, hash: compiled.hash, itemCount: resolved.itemCount, redirects: compiled.redirects };
-  }
-  if (source && typeof source === 'object' && (source as { schema?: string }).schema !== '1.0.0') throw badRequest('Site definition is invalid.');
-  const site = source as SiteDefinition;
-  validateSite(site);
-  const resolved = await resolveBindings(client, site);
-  const rendered = await Promise.all(resolved.site.pages.map(async (page, index) => ({ page, rendered: await compileSiteHtml(resolved.site, index, origin) })));
-  const files = await Promise.all(rendered.map(async ({ page, rendered }) => ({ path: filePath(page), mime: 'text/html; charset=utf-8', body: rendered.html, hash: await hash(rendered.html) })));
-  const css = rendered[0].rendered.css;
-  files.push({ path: '/style.css', mime: 'text/css; charset=utf-8', body: css, hash: await hash(css) });
-  const sitemap = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${origin ? resolved.site.pages.map((page) => `<url><loc>${origin}${page.path}</loc></url>`).join('') : ''}</urlset>`;
-  files.push({ path: '/sitemap.xml', mime: 'application/xml; charset=utf-8', body: sitemap, hash: await hash(sitemap) });
-  const robots = `User-agent: *\nAllow: /\n${origin ? `Sitemap: ${origin}/sitemap.xml\n` : ''}`;
-  files.push({ path: '/robots.txt', mime: 'text/plain; charset=utf-8', body: robots, hash: await hash(robots) });
-  return { files, hash: await hash(files.map((file) => `${file.path}:${file.hash}`).join('|')), itemCount: resolved.itemCount, redirects: [] };
+/** Compile any stored source through the one document compiler. */
+async function compileAll(client: Client, source: unknown, origin?: string, media?: (asset: Asset) => Promise<Uint8Array | null>): Promise<{ files: CompiledFile[]; hash: string; itemCount: number; redirects: { from: string; to: string; status: 308 }[]; personas: PersonaRule[] }> {
+  const doc = readDocument(source).doc;
+  validateDocument(doc);
+  const resolved = await resolveDocumentBindings(client, doc);
+  const compiled = await compileDocument(resolved.doc, { origin, media });
+  return { files: compiled.files, hash: compiled.hash, itemCount: resolved.itemCount, redirects: compiled.redirects, personas: compiled.personas };
 }
 
 function manifestFile(prefix: string, release: string, file: CompiledFile): ReleaseFile {
@@ -286,23 +156,21 @@ function manifestFile(prefix: string, release: string, file: CompiledFile): Rele
   return { path: file.path, mime: file.mime, bytes, hash: file.hash, key: `${prefix}/${release}${file.path}` };
 }
 
-/** Store the document in its current schema; v1 records upgrade on first edit. */
+/** Store the compiled document with its release so refresh never sees later edits. */
 async function saveRelease(client: Client, bucket: R2Bucket, content: R2Bucket | undefined, context: AccessContext, site: { id: string; version: number; data: unknown }, release: string, generation: number, domain?: string, epoch = 0) {
   const origin = siteOrigin(domain, context.workspace.slug);
-  const source = site.data;
-  const compiled = await compileAll(client, source, origin, assetReader(content, context, site.id)); const prefix = `workspaces/${context.workspace.id}/sites/${site.id}/releases`;
+  const document = readDocument(site.data).doc;
+  const compiled = await compileAll(client, site.data, origin, assetReader(content, context, site.id)); const prefix = `workspaces/${context.workspace.id}/sites/${site.id}/releases`;
   const files = compiled.files.map((file) => manifestFile(prefix, release, file));
   for (let index = 0; index < files.length; index += 1) await bucket.put(files[index].key, compiled.files[index].body as string | Uint8Array, { httpMetadata: { contentType: files[index].mime } });
-  const document = readDocument(source).doc;
   const inspection = inspectDocument(document, { compiled, origin, secrets: [context.workspace.id, site.id] });
   const manifest = {
     id: release, siteId: site.id, epoch, ...(origin ? { host: siteHost(domain, context.workspace.slug) } : {}),
     version: site.version, generation, created: now(), hash: compiled.hash, files,
-    compiler: isV2(source) ? '2.0.0' : '1.0.0', redirects: compiled.redirects,
+    compiler: DOCUMENT_VERSION, redirects: compiled.redirects, ...(compiled.personas.length ? { personas: compiled.personas } : {}),
     checks: { blocking: inspection.blocking.length, advisory: inspection.advisory.length },
   } satisfies ReleaseManifest;
-  // Keep the published definition with the release. Refresh must never compile later draft edits.
-  await bucket.put(`${prefix}/${release}/source.json`, JSON.stringify({ ...(source as Record<string, unknown>), currentRelease: null, releases: [] }), { httpMetadata: { contentType: 'application/json; charset=utf-8' } });
+  await bucket.put(`${prefix}/${release}/source.json`, JSON.stringify({ ...document, currentRelease: null, releases: [] }), { httpMetadata: { contentType: 'application/json; charset=utf-8' } });
   // The check report lives beside the release but outside manifest.files, so it is never served.
   await bucket.put(`${prefix}/${release}/report.json`, JSON.stringify({ inspection, created: now() }), { httpMetadata: { contentType: 'application/json; charset=utf-8' } });
   await bucket.put(`${prefix}/${release}/manifest.json`, JSON.stringify(manifest), { httpMetadata: { contentType: 'application/json; charset=utf-8' } });
@@ -316,7 +184,7 @@ async function readCandidate(bucket: R2Bucket, context: AccessContext, site: str
   if (!manifestObject || !sourceObject || manifestObject.size > 1_000_000 || sourceObject.size > 1_000_000) throw notFound('Site candidate was not found.');
   const manifest = JSON.parse(await manifestObject.text()) as ReleaseManifest;
   const source = JSON.parse(await sourceObject.text()) as unknown;
-  if (isV2(source)) validateDocument(source); else validateSite(source as SiteDefinition);
+  validateDocument(readDocument(source).doc);
   if (manifest.id !== release || manifest.siteId !== site || !Array.isArray(manifest.files) || !manifest.files.length
     || manifest.files.some((file) => !file.path.startsWith('/') || file.key !== `${prefix}${file.path}`)) throw badRequest('Site candidate is invalid.');
   return { manifest, source };
@@ -361,39 +229,59 @@ async function saveEvent(client: Client, context: AccessContext, action: string,
   await client.execute(eventStatement({ action, actor: context.identity.id, recordId: record, key, hash: inputHash, result }));
 }
 
+/**
+ * Create: one fan-out. Jev answers every independent question about the brief in
+ * a single batched call, the builder composes a valid document from approved
+ * facts, one prose pass rewrites the copy slots, and claims are checked in one
+ * batched call. With no model key the deterministic defaults still produce a
+ * valid site.
+ */
 export async function executeSiteGenerate(client: Client, context: AccessContext, input: Record<string, unknown>, key: string, inputHash: string, typesafe?: string, ai?: Ai, control?: D1Database, model?: string, groqApiKey?: string): Promise<Record<string, unknown>> {
   const title = text(input.title) || context.workspace.name || 'Workspace';
-  const prompt = text(input.prompt ?? input.description, 2000) || `${title} - official workspace catalog, products and services`;
-  if (input.theme !== undefined && !Object.hasOwn(DEFAULT_DESIGN_TOKENS, input.theme as string)) throw badRequest('Choose a registered site theme.');
-  const theme = (input.theme as ThemeName | undefined) || await chooseSiteTheme(typesafe, title, prompt) || 'editorial-chalk';
+  const prompt = text(input.prompt ?? input.description, 2000);
+  if (input.theme !== undefined && !THEME_IDS.includes(String(input.theme))) throw badRequest('Choose a registered site theme.');
   const existing = await getSiteRecord(client);
   const previous = existing ? readDocument(existing.data).doc : null;
-  const design = input.theme ? THEMES[String(input.theme)] || DEFAULT_DESIGN : previous?.design || DEFAULT_DESIGN;
-  const facts = await publicFacts(client, input);
-  const attempt = (ai || groqApiKey) && prompt
-    ? await tryCompose(ai, model, { goal: prompt, audience: text(input.audience, 200), tone: text(input.tone, 120) }, facts, design, typesafe, control, context, groqApiKey)
-    : { document: null, note: '' };
-  const composed = attempt.document;
-  const site = composed || upgrade({
-    ...createDefaultSite(title, prompt, theme),
-    currentRelease: previous?.currentRelease ?? null,
-    releases: previous?.releases || [],
+  const brief = { goal: prompt || `${title} online`, audience: text(input.audience, 200), tone: text(input.tone, 120) };
+  const gathered = await publicFacts(client, input, previous);
+  const cache = { control, workspace: context.workspace.id, version: 'create-1' };
+  const avoided = [...tasteBias(previous?.taste)];
+  const judged = await fanOut(typesafe, cache, {
+    brief,
+    facts: gathered.judged,
+    purposes: Object.keys(PURPOSE_IDEAS),
+    assets: gathered.assets,
+    avoid: avoided,
   });
-  if (composed && previous) { site.currentRelease = previous.currentRelease ?? null; site.releases = previous.releases || []; }
-  if (!composed) site.claims = previous?.claims || [];
+  const defaults = defaultBlueprint(brief, previous?.taste);
+  const blueprint: Blueprint = {
+    theme: input.theme ? String(input.theme) : judged.theme || defaults.theme,
+    density: judged.density || defaults.density,
+    tone: judged.tone || defaults.tone,
+    columns: Math.min(4, Math.max(2, judged.columns || defaults.columns)),
+    purposes: judged.purposes.length ? judged.purposes : defaults.purposes,
+    extras: strings(input.pages, 3),
+    assets: judged.assets.slice(0, 3),
+    enquiry: input.enquiry === true || judged.enquiry === true || Boolean(previous?.journeys.length),
+  };
+  const built = buildSite({ title, brief, facts: gathered.facts, blueprint, assets: gathered.assetsRegistered, previous });
+  const site = built.doc;
+  const prose = await writeDraft(ai, model, groqApiKey, site, built.slots, gathered.judged);
+  let note = prose.note;
+  if (prose.claims.length) {
+    const checked = await checkClaims(typesafe, cache, prose.claims);
+    site.claims = checked.map((claim) => ({ text: claim.text, verdict: claim.verdict }));
+  }
+  if (note && !site.claims?.length) site.claims = [];
   validateDocument(site);
   const siteId = existing?.id || `site_${crypto.randomUUID()}`; const at = now();
   const compiled = await compileDocument(site);
   const rawHtml = String(compiled.files.find((file) => file.path === '/index.html')?.body || '');
   const css = String(compiled.files.find((file) => file.path === '/style.css')?.body || '');
-  const preview = {
-    html: rawHtml.replace('</head>', `<style>${css}</style></head>`),
-    css,
-    hash: compiled.hash,
-  };
+  const preview = { html: rawHtml.replace('</head>', `<style>${css}</style></head>`), css, hash: compiled.hash };
   const version = existing ? existing.version + 1 : 1;
   const state = existing?.state === 'live' ? 'live' : 'draft';
-  const result = { siteId, version, state, site, preview, composed: Boolean(composed), ...(attempt.note ? { note: attempt.note } : {}) };
+  const result = { siteId, version, state, site, preview, composed: Boolean(prose.wrote), blueprint, ...(note ? { note } : {}) };
   if (existing) {
     const saved = await client.batch([
       { sql: 'UPDATE records SET title=?,data=?,version=?,updated=? WHERE id=? AND version=?', args: [title, JSON.stringify(site), version, at, siteId, existing.version] },
@@ -409,25 +297,6 @@ export async function executeSiteGenerate(client: Client, context: AccessContext
       SELECT ?, 'action', ?, 'site.generate', 'accepted', ?, ?, ?, ?, ?, ? WHERE changes()=1`, args: [`evt_${crypto.randomUUID()}`, siteId, context.identity.id, inputHash, key, JSON.stringify({ result }), at, at] },
   ], 'write');
   if (created[0].rowsAffected !== 1 || created[1].rowsAffected !== 1) throw conflict('A site was created concurrently. Refresh and edit that site.');
-  return result;
-}
-
-export async function executeSiteUpdate(client: Client, context: AccessContext, input: Record<string, unknown>, key: string, inputHash: string): Promise<Record<string, unknown>> {
-  const siteId = text(input.siteId, 160); const base = Number(input.baseVersion); const current = await getSiteRecord(client, siteId);
-  if (!siteId || !Number.isSafeInteger(base) || !current) throw notFound('Site was not found.');
-  if (current.version !== base) throw conflict('Site was modified concurrently. Refresh and try again.');
-  const operations = Array.isArray(input.operations) ? input.operations as SitePatchOperation[] : [];
-  if (operations.length > 100) throw badRequest('Too many site changes.');
-  const { doc } = readDocument(current.data);
-  const site = applyLegacyOperations(doc, operations as LegacyOperation[]);
-  site.revision = doc.revision + 1;
-  validateDocument(site); const at = now(); const version = base + 1; const result = { siteId, version, site };
-  const saved = await client.batch([
-    { sql: 'UPDATE records SET data=?,version=?,updated=? WHERE id=? AND version=?', args: [JSON.stringify(site), version, at, siteId, base] },
-    { sql: `INSERT INTO events(id,kind,record_id,action_id,state,actor_id,input_hash,idempotency_key,data,created_at,updated_at)
-      SELECT ?, 'action', ?, 'site.update', 'accepted', ?, ?, ?, ?, ?, ? WHERE changes()=1`, args: [`evt_${crypto.randomUUID()}`, siteId, context.identity.id, inputHash, key, JSON.stringify({ result }), at, at] },
-  ], 'write');
-  if (saved[0].rowsAffected !== 1 || saved[1].rowsAffected !== 1) throw conflict('Site was modified concurrently. Refresh and try again.');
   return result;
 }
 
@@ -484,7 +353,7 @@ async function publishCurrent(client: Client, bucket: R2Bucket | undefined, cont
     const snapshot = await bucket.get(key);
     if (!snapshot) throw unavailable('Published source snapshot is unavailable. Publish the site again before refreshing.');
     source = JSON.parse(await snapshot.text()) as unknown;
-    if (isV2(source)) validateDocument(source); else validateSite(source as SiteDefinition);
+    validateDocument(readDocument(source).doc);
   }
   const generation = (document.releases?.length || 0) + 1;
   const releaseId = candidate?.id || `rel_${crypto.randomUUID()}`;
@@ -568,53 +437,85 @@ export async function executeSiteUnpublish(client: Client, context: AccessContex
   return result;
 }
 
-/** Approved public facts only: private workspace records never reach a model or a draft. */
-async function publicFacts(client: Client, input: Record<string, unknown>): Promise<Record<string, unknown>> {
-  const records = Array.isArray(input.records) ? (input.records as unknown[]).filter((id): id is string => typeof id === 'string').slice(0, 40) : [];
-  const facts: Record<string, unknown> = {};
-  if (typeof input.goal === 'string') facts.goal = text(input.goal, 300);
-  if (!records.length) return facts;
-  const collected = await publicRecords(client, records, 'pos.product');
-  if (collected.length) facts.catalog = collected.slice(0, 20);
-  return facts;
+/**
+ * Approved facts only: private workspace records never reach a model or a draft.
+ * Prices and stock come from public bindings, copy details from the owner's own
+ * request, and assets from the approved store.
+ */
+async function publicFacts(client: Client, input: Record<string, unknown>, previous: SiteDocument | null): Promise<{ facts: Facts; judged: Record<string, unknown>; assets: { id: string; description: string }[]; assetsRegistered: Asset[] }> {
+  const records = strings(input.records, 40).filter((id) => /^[a-zA-Z0-9._:-]{1,160}$/.test(id));
+  const channel = text(input.channel, 40) || 'default';
+  const items = records.length ? await publicCatalog(client, records, channel) : [];
+  const features = strings(input.features, 6);
+  const hours = strings(input.hours, 8);
+  const proof = (Array.isArray(input.proof) ? input.proof : []).slice(0, 6).map((entry) => {
+    const quote = object(entry);
+    return { quote: text(quote.quote || quote.text, 300), author: text(quote.author || quote.name, 120) };
+  }).filter((entry) => entry.quote && entry.author);
+  const questions = (Array.isArray(input.faq) ? input.faq : []).slice(0, 12).map((entry) => {
+    const faq = object(entry);
+    return { q: text(faq.q || faq.question, 200), a: text(faq.a || faq.answer, 400) };
+  }).filter((entry) => entry.q && entry.a);
+  const facts: Facts = {
+    ...(items.length ? { items, channel } : {}),
+    ...(features.length ? { features } : {}),
+    ...(proof.length ? { proof } : {}),
+    ...(questions.length ? { questions } : {}),
+    ...(hours.length ? { hours } : {}),
+    ...(text(input.address, 200) ? { address: text(input.address, 200) } : {}),
+    ...(text(input.phone, 40) ? { phone: text(input.phone, 40) } : {}),
+    ...(text(input.email, 120) ? { email: text(input.email, 120) } : {}),
+  };
+  const judged = {
+    catalog: items.slice(0, 20).map((item) => ({ title: item.title, price: item.price, currency: item.currency })),
+    features, hours,
+    address: facts.address, phone: facts.phone, email: facts.email,
+    questions: questions.map((entry) => entry.q),
+  };
+  const approved = (previous?.assets || []).filter((asset) => asset.kind === 'image' && asset.rights.approved);
+  return {
+    facts,
+    judged,
+    assets: approved.map((asset) => ({ id: asset.id, description: asset.alt || asset.id })),
+    assetsRegistered: previous?.assets || [],
+  };
 }
 
 /**
- * One bounded plan -> compose pass, followed by evidence checks on prose claims.
- * A model outage keeps the product usable: the retained generator drafts the
- * site and the reason is reported instead of failing the request.
+ * One bounded prose pass over the slots the builder left. A model outage keeps
+ * the product usable: the deterministic copy stands and the reason is reported
+ * instead of failing the request.
  */
-async function tryCompose(
+async function writeDraft(
   ai: Ai | undefined,
   model: string | undefined,
-  brief: { goal: string; audience: string; tone: string },
+  groqApiKey: string | undefined,
+  site: SiteDocument,
+  slots: Slot[],
   facts: Record<string, unknown>,
-  design: Design,
-  typesafe: string | undefined,
-  control: D1Database | undefined,
-  context: AccessContext,
-  groqApiKey?: string,
-): Promise<{ document: SiteDocument | null; note: string }> {
-  const runner = new ModelRunner(ai, model || (groqApiKey ? 'qwen/qwen3.8-27b' : SITE_MODEL_FALLBACKS[0]), DEFAULT_BUDGET, groqApiKey);
+): Promise<{ wrote: boolean; claims: { text: string; evidence: readonly string[] }[]; note: string }> {
+  if (!slots.length || (!ai && !groqApiKey)) return { wrote: false, claims: [], note: '' };
+  const runner = new ModelRunner(ai, model || (groqApiKey ? GROQ_DEFAULT_MODEL : SITE_MODEL_FALLBACKS[0]), DEFAULT_BUDGET, groqApiKey);
   try {
-    const plan = await planSite(runner, { brief, facts, design });
-    const composed = await composeSite(runner, plan, { brief, facts, design });
-    const document = composed.document;
-    document.brief = brief;
-    document.design = design;
-    const cache = { control, workspace: context.workspace.id, version: 'claims-1' };
-    const checked: NonNullable<SiteDocument['claims']> = [];
-    for (const claim of composed.claims.slice(0, 8)) {
-      const verdict = typesafe ? await checkClaim(typesafe, cache, { claim: claim.text, evidence: claim.evidence || [] }) : { verdict: 'unsupported' as const, confidence: null };
-      checked.push({ text: claim.text, verdict: verdict.verdict, ...(claim.evidence?.length ? { evidence: [...claim.evidence] } : {}) });
-    }
-    document.claims = checked;
-    return { document, note: '' };
+    const texts = await writeCopy(runner, { brief: site.brief, voice: site.design.direction.voice, facts, slots });
+    const ids = new Set(slots.map((slot) => slot.id));
+    const walk = (nodes: Node[]) => nodes.forEach((node) => {
+      const copy = texts[node.id];
+      if (copy && ids.has(node.id)) node.props = { ...node.props, text: copy };
+      walk(node.children || []);
+    });
+    site.pages.forEach((page) => page.sections.forEach((section) => walk(section.nodes)));
+    const claims = await readClaims(runner, { brief: site.brief, texts: Object.values(texts) });
+    return {
+      wrote: true,
+      claims: claims.map((claim) => ({ text: claim.text, evidence: claim.evidence ? [claim.evidence] : [] })),
+      note: '',
+    };
   } catch (error) {
     const reason = error instanceof BudgetExceeded
       ? 'The model budget for this run was reached.'
-      : 'The model was unavailable, so the standard structure was used.';
-    return { document: null, note: reason };
+      : 'The model was unavailable, so plain brief copy was used.';
+    return { wrote: false, claims: [], note: reason };
   }
 }
 
@@ -637,4 +538,97 @@ export async function executeSiteChecks(client: Client, bucket: R2Bucket | undef
   if (!report) throw notFound('No checks were stored for this candidate.');
   const parsed = JSON.parse(await report.text()) as { inspection?: Record<string, unknown>; created?: number };
   return { siteId: current.id, releaseId: release, checks: parsed.inspection || null, created: parsed.created || null };
+}
+
+/** Copy that ties the site to a window of time, so the scout can ask if it still holds. */
+const TEMPORAL = /(spring|summer|autumn|winter|christmas|xmas|easter|halloween|valentine|new year|black friday|cyber monday|season|launch|opening|limited|ending|expires|expired|through\s+\d|(?:jan|feb|mar|apr|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b|(?:19|20)\d{2})/i;
+
+interface ScoutFinding {
+  check: string;
+  target: string;
+  detail: string;
+  fixed: boolean;
+}
+
+/**
+ * Scout: schedule, then declared checks, then a draft revision and a Space
+ * inbox item. Code re-resolves what the site publicly promises and repairs only
+ * unambiguous drift; Jev flags time-sensitive copy it is given. Nothing here
+ * publishes - the owner reviews the revision and closes the task.
+ */
+export async function executeSiteScout(client: Client, context: AccessContext, input: Record<string, unknown>, key: string, inputHash: string, typesafe?: string, control?: D1Database): Promise<Record<string, unknown>> {
+  const current = await getSiteRecord(client, text(input.siteId, 160) || undefined);
+  if (!current) throw notFound('Site was not found.');
+  const { doc } = readDocument(current.data);
+  const findings: ScoutFinding[] = [];
+  const next: SiteDocument = structuredClone(doc);
+
+  // Declared check: every collection the site promises still resolves publicly.
+  for (const page of next.pages) {
+    for (const section of page.sections) {
+      const binding = section.bindings?.[0];
+      const declared = binding?.params?.records || [];
+      if (!binding || !declared.length) continue;
+      const items = binding.query === 'records.public'
+        ? await publicRecords(client, declared, String(binding.params?.type || 'pos.product'))
+        : await publicCatalog(client, declared, String(binding.params?.channel || 'default'));
+      const live = new Set(items.map((item) => String(item.id)));
+      const stale = declared.filter((id) => !live.has(id));
+      if (!stale.length) continue;
+      section.bindings = [{ ...binding, params: { ...binding.params, records: declared.filter((id) => live.has(id)) } }];
+      findings.push({ check: 'catalog', target: section.id, detail: `${stale.length} bound record(s) no longer resolve publicly and were dropped.`, fixed: true });
+    }
+  }
+
+  // Declared check: publication blockers the site already carries.
+  const inspection = inspectDocument(next);
+  for (const issue of inspection.blocking.filter((entry) => entry.area === 'link' || entry.area === 'asset' || entry.area === 'journey').slice(0, 6)) {
+    findings.push({ check: 'links', target: issue.path, detail: issue.message, fixed: false });
+  }
+
+  // Declared check: time-sensitive copy, in one batched judgment.
+  const dated: { id: string; text: string }[] = [];
+  for (const page of next.pages) for (const section of page.sections) {
+    const walk = (nodes: Node[]) => nodes.forEach((node) => {
+      const copy = text(node.props.text, 400);
+      if ((node.kind === 'heading' || node.kind === 'text') && copy && TEMPORAL.test(copy)) dated.push({ id: node.id, text: copy });
+      walk(node.children || []);
+    });
+    walk(section.nodes);
+  }
+  if (dated.length && typesafe) {
+    const flagged = new Set(await flagDrift(typesafe, { control, workspace: context.workspace.id, version: 'scout-1' }, {
+      today: new Date().toISOString().slice(0, 10),
+      subjects: dated.slice(0, 8),
+    }));
+    for (const subject of dated) if (flagged.has(subject.id)) findings.push({ check: 'season', target: subject.id, detail: `Copy reads as time-bound: "${subject.text.slice(0, 90)}"`, fixed: false });
+  }
+
+  const repaired = findings.some((finding) => finding.fixed);
+  const revision = repaired ? doc.revision + 1 : doc.revision;
+  if (repaired) validateDocument(next);
+
+  let taskId: string | null = null;
+  if (findings.length) {
+    const pending = await client.execute({ sql: "SELECT id FROM records WHERE type='task' AND state='open' AND archived IS NULL AND json_extract(data,'$.key')=? LIMIT 1", args: [`site.scout:${current.id}`] });
+    if (!pending.rows.length) taskId = `rec_${crypto.randomUUID()}`;
+  }
+
+  const at = now();
+  const result = { siteId: current.id, revision, findings: findings.slice(0, 12), taskId, published: false };
+  const statements: InStatement[] = [];
+  if (repaired) statements.push({ sql: 'UPDATE records SET data=?,version=?,updated=? WHERE id=? AND version=?', args: [JSON.stringify(next), current.version + 1, at, current.id, current.version] });
+  if (taskId) statements.push({
+    sql: 'INSERT INTO records (id,type,title,state,data,owner,assignee,due,version,created,updated) VALUES (?,?,?,?,?,?,?,NULL,1,?,?)',
+    args: [taskId, 'task', `Review site: ${findings.length} finding${findings.length === 1 ? '' : 's'}`, 'open',
+      JSON.stringify({ key: `site.scout:${current.id}`, siteId: current.id, findings: findings.slice(0, 12), description: findings.slice(0, 4).map((finding) => `${finding.check}: ${finding.detail}`).join(' ') }),
+      context.identity.id, context.identity.id, at, at],
+  });
+  statements.push(repaired
+    ? { sql: `INSERT INTO events(id,kind,record_id,action_id,state,actor_id,input_hash,idempotency_key,data,created_at,updated_at)
+      SELECT ?, 'action', ?, 'site.scout', 'accepted', ?, ?, ?, ?, ?, ? WHERE changes()=1`, args: [`evt_${crypto.randomUUID()}`, current.id, context.identity.id, inputHash, key, JSON.stringify({ result }), at, at] }
+    : eventStatement({ action: 'site.scout', actor: context.identity.id, recordId: current.id, key, hash: inputHash, result }));
+  const saved = await client.batch(statements, 'write');
+  if (saved.some((response) => response.rowsAffected !== 1)) throw conflict('Site changed while the scout was running. Refresh and try again.');
+  return result;
 }

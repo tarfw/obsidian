@@ -1,14 +1,42 @@
 const MAX_MANIFEST = 1024 * 1024;
 const MAX_HTML = 2 * 1024 * 1024;
+const PERSONA = '/.persona/';
 
 function filePath(pathname) {
   if (/%(?:2f|5c|00|25)/i.test(pathname)) return null;
   let path;
   try { path = decodeURIComponent(pathname); } catch { return null; }
   if (!path.startsWith('/') || /[\\\u0000-\u001f]/.test(path) || path.split('/').some((part) => part === '.' || part === '..')) return null;
+  if (path.startsWith(PERSONA)) return null;
   if (path === '/') return '/index.html';
   if (path.endsWith('/')) return `${path}index.html`;
   return /\.[^/]+$/.test(path) ? path : `${path}/index.html`;
+}
+
+/** Persona signals, read from the request only: no model, no database, no rewrite. */
+function device(userAgent) {
+  if (/ipad|tablet|playbook|silk|android(?!.*mobile)/i.test(userAgent)) return 'tablet';
+  return /mobile|iphone|ipod|android|windows phone/i.test(userAgent) ? 'mobile' : 'desktop';
+}
+function channel(url, referer) {
+  const word = /^[a-z][a-z0-9-]{0,39}$/;
+  const given = (url.searchParams.get('channel') || '').toLowerCase();
+  if (word.test(given)) return given;
+  const host = ((referer || '').split('/')[2] || '').replace(/^www\./, '').split('.')[0];
+  return word.test(host) ? host : '';
+}
+function returning(request) {
+  return /(?:^|;\s*)tar_return=1\b/.test(request.headers.get('cookie') || '');
+}
+function personaFor(manifest, signals) {
+  for (const rule of [...(manifest.personas || [])].sort((left, right) => (right.priority || 0) - (left.priority || 0))) {
+    const when = rule.when || {};
+    if (when.device && when.device !== signals.device) continue;
+    if (when.channel && when.channel !== signals.channel) continue;
+    if (when.returning !== undefined && when.returning !== signals.returning) continue;
+    return rule.id;
+  }
+  return null;
 }
 
 function mime(path) {
@@ -85,10 +113,18 @@ export default {
       const manifest = await object.json();
       if (manifest.id !== site.release || manifest.siteId !== site.site || manifest.hash !== site.hash
         || (manifest.host && manifest.host !== site.domain) || !Array.isArray(manifest.files)) return response(503, 'Release unavailable');
-      const file = manifest.files.find((entry) => entry.path === path);
+      const signals = {
+        device: device(request.headers.get('user-agent') || ''),
+        channel: channel(url, request.headers.get('referer')),
+        returning: returning(request),
+      };
+      const variant = personaFor(manifest, signals);
+      const wanted = variant && path.endsWith('/index.html') ? `${PERSONA}${variant}${path}` : '';
+      const file = (wanted ? manifest.files.find((entry) => entry.path === wanted) : null)
+        || manifest.files.find((entry) => entry.path === path);
       if (!file) return response(404, 'Page not found');
-      const contentType = mime(path);
-      if (!contentType || file.key !== `${prefix}${path}` || file.mime !== contentType || !Number.isSafeInteger(file.bytes) || file.bytes < 0) return response(503, 'Release unavailable');
+      const contentType = mime(file.path);
+      if (!contentType || file.key !== `${prefix}${file.path}` || file.mime !== contentType || !Number.isSafeInteger(file.bytes) || file.bytes < 0) return response(503, 'Release unavailable');
       const isHtml = contentType.startsWith('text/html');
       const asset = request.method === 'HEAD' && !isHtml ? await env.SITE_RELEASES.head(file.key) : await env.SITE_RELEASES.get(file.key);
       if (!asset || asset.size !== file.bytes) return response(503, 'Release unavailable');
@@ -104,6 +140,8 @@ export default {
         'x-frame-options': 'DENY',
         ...await securityHeaders(contentType, html),
       });
+      // The second visit is a different reader: one first-party flag, no personal data.
+      if (isHtml && !signals.returning && manifest.personas?.length) headers.append('set-cookie', 'tar_return=1; Path=/; Max-Age=15552000; SameSite=Lax');
       return new Response(request.method === 'HEAD' ? null : isHtml ? html : asset.body, { status: 200, headers });
     } catch (error) {
       console.error(JSON.stringify({ event: 'sites.serve.error', message: String(error) }));

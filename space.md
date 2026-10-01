@@ -189,4 +189,4 @@ Space is correct when it can model the sample day entirely as data, changes
 automatically only on a clear result, labels workspace/role/owner, never expands
 access, and lets Inbox act across workspaces without changing Space.
 
-See the linked [commerce.md](commerce.md) and [aisites.md](aisites.md) contracts.
+See the linked [commerce.md](commerce.md) and [agenticsite.md](agenticsite.md) contracts.

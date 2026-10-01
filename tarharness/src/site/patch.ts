@@ -9,7 +9,7 @@
 
 import { badRequest, conflict, notFound } from '../errors.ts';
 import { resolveToken, TOKENS } from './design.ts';
-import type { Journey, Lock, Node, Section, SiteDocument, StyleSet } from './document.ts';
+import type { Journey, Lock, Node, Persona, Section, SiteDocument, StyleSet } from './document.ts';
 
 export type PatchOperation =
   | { op: 'set_text'; target: string; value: string }
@@ -29,6 +29,8 @@ export type PatchOperation =
   | { op: 'set_redirect'; from: string; to: string | null }
   | { op: 'set_page'; page: string; value: { title?: string; description?: string; path?: string } }
   | { op: 'set_brief'; value: Partial<SiteDocument['brief']> }
+  | { op: 'set_persona'; persona: Persona }
+  | { op: 'remove_persona'; target: string }
   | { op: 'set_policy'; value: Partial<SiteDocument['policy']> }
   | { op: 'set_asset_rights'; target: string; value: { approved?: boolean; license?: string; source?: string; alt?: string } }
   | { op: 'add_asset'; asset: SiteDocument['assets'][number] }
@@ -45,7 +47,7 @@ export interface PatchInput {
 
 export interface DiffEntry {
   target: string;
-  kind: 'text' | 'prop' | 'style' | 'structure' | 'token' | 'journey' | 'policy' | 'lock' | 'brief' | 'asset';
+  kind: 'text' | 'prop' | 'style' | 'structure' | 'token' | 'journey' | 'persona' | 'policy' | 'lock' | 'brief' | 'asset';
   from: string;
   to: string;
 }
@@ -289,6 +291,25 @@ export function applyPatch(doc: SiteDocument, input: PatchInput): SiteDocument {
       case 'set_brief':
         next.brief = { ...next.brief, ...operation.value };
         break;
+      case 'set_persona': {
+        if (!/^[a-z][a-z0-9-]{0,39}$/.test(operation.persona?.id || '')) throw badRequest('Persona id must be a lowercase word.');
+        const persona = structuredClone(operation.persona);
+        const personas = [...(next.personas || [])];
+        const index = personas.findIndex((entry) => entry.id === persona.id);
+        if (index >= 0) personas[index] = persona;
+        else personas.push(persona);
+        if (personas.length > 4) throw badRequest('A site compiles at most four persona variants.');
+        next.personas = personas;
+        break;
+      }
+      case 'remove_persona': {
+        const personas = [...(next.personas || [])];
+        const index = personas.findIndex((entry) => entry.id === operation.target);
+        if (index < 0) throw notFound('Site persona was not found.');
+        personas.splice(index, 1);
+        next.personas = personas;
+        break;
+      }
       case 'set_policy':
         next.policy = { ...next.policy, ...operation.value };
         break;
@@ -397,6 +418,7 @@ export function diffSummary(before: SiteDocument, after: SiteDocument): DiffEntr
   }
   for (const [key, section] of beforeSections) if (!afterSections.has(key)) entries.push({ target: section.id, kind: 'structure', from: 'removed section', to: '' });
   if (JSON.stringify(before.journeys) !== JSON.stringify(after.journeys)) entries.push({ target: 'journeys', kind: 'journey', from: `${before.journeys.length}`, to: `${after.journeys.length}` });
+  if (JSON.stringify(before.personas || []) !== JSON.stringify(after.personas || [])) entries.push({ target: 'personas', kind: 'persona', from: `${(before.personas || []).length}`, to: `${(after.personas || []).length}` });
   if (JSON.stringify(before.redirects) !== JSON.stringify(after.redirects)) entries.push({ target: 'redirects', kind: 'structure', from: `${before.redirects.length}`, to: `${after.redirects.length}` });
   if (JSON.stringify(before.locks) !== JSON.stringify(after.locks)) entries.push({ target: 'locks', kind: 'lock', from: `${before.locks.length}`, to: `${after.locks.length}` });
   if (JSON.stringify(before.assets) !== JSON.stringify(after.assets)) entries.push({ target: 'assets', kind: 'asset', from: `${before.assets.length}`, to: `${after.assets.length}` });

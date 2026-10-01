@@ -6,7 +6,7 @@
  * resolved a conflict, ambiguity or unsupported value.
  */
 
-import { DENSITY_VALUES, EASING_VALUES, LIMITS } from './document.ts';
+import { DENSITY_VALUES, EASING_VALUES, LIMITS, type Style } from './document.ts';
 
 export interface DesignDirection {
   audience: string;
@@ -123,9 +123,86 @@ export const DEFAULT_DESIGN: Design = {
   guidance: [],
 };
 
+const chalk: Design = {
+  ...DEFAULT_DESIGN,
+  theme: 'editorial-chalk',
+  direction: { ...DEFAULT_DESIGN.direction, idea: 'warm editorial paper canvas with a single blue accent' },
+  color: {
+    canvas: '#edebe4', ink: '#01273e', accent: '#000bfa', accentink: '#ffffff',
+    surface: '#f6f5f0', border: '#dcd9cf', muted: '#617282',
+    success: DEFAULT_DESIGN.color.success, danger: DEFAULT_DESIGN.color.danger,
+  },
+  type: { ...DEFAULT_DESIGN.type, display: SERIF, heading: SERIF },
+  space: { unit: 8, section: 96, container: 1140 },
+  shape: { sm: 4, md: 8, lg: 16, pill: 9999 },
+};
+
+const streetwear: Design = {
+  ...DEFAULT_DESIGN,
+  theme: 'streetwear-dark',
+  direction: { ...DEFAULT_DESIGN.direction, idea: 'bold high-contrast dark canvas for expressive brands' },
+  color: {
+    canvas: '#111111', ink: '#f8fafc', accent: '#5e6ad2', accentink: '#ffffff',
+    surface: '#1a1a1a', border: '#2a2a2a', muted: '#94a3b8',
+    success: DEFAULT_DESIGN.color.success, danger: DEFAULT_DESIGN.color.danger,
+  },
+  type: { ...DEFAULT_DESIGN.type, display: 'Impact, "Arial Black", sans-serif', heading: 'Impact, "Arial Black", sans-serif', scale: 1.333 },
+  space: { unit: 8, section: 96, container: 1200 },
+  shape: { sm: 2, md: 4, lg: 8, pill: 9999 },
+};
+
+const minimal: Design = {
+  ...DEFAULT_DESIGN,
+  theme: 'minimal-clean',
+  direction: { ...DEFAULT_DESIGN.direction, idea: 'neutral restrained white canvas for a broad range of businesses' },
+  color: {
+    canvas: '#ffffff', ink: '#18181b', accent: '#2563eb', accentink: '#ffffff',
+    surface: '#fafafa', border: '#e4e4e7', muted: '#71717a',
+    success: DEFAULT_DESIGN.color.success, danger: DEFAULT_DESIGN.color.danger,
+  },
+  type: { ...DEFAULT_DESIGN.type, display: SANS, heading: SANS, scale: 1.2 },
+  space: { unit: 8, section: 96, container: 1100 },
+  shape: { sm: 6, md: 10, lg: 14, pill: 9999 },
+};
+
+/**
+ * Registered themes. A theme is catalog data: adding one needs no engine change,
+ * and a judgment may only choose among the ids listed here.
+ */
+export const THEMES: Record<string, Design> = {
+  'editorial-light': DEFAULT_DESIGN,
+  'editorial-chalk': chalk,
+  'streetwear-dark': streetwear,
+  'minimal-clean': minimal,
+};
+
+export const THEME_IDS: readonly string[] = Object.keys(THEMES);
+
+/** Registered section purposes a creation fan-out may include, by any domain. */
+export const PURPOSE_IDEAS: Record<string, string> = {
+  introduction: 'open the page with the offer in one line',
+  collection: 'show bound items with live prices and availability',
+  features: 'state what makes the offer practical',
+  proof: 'carry evidence such as results or reviews',
+  story: 'explain the business in its own words',
+  questions: 'answer common questions',
+  hours: 'state when the business is open',
+  contact: 'show how to reach the business',
+  action: 'invite the visitor to start one clear next step',
+};
+
 export const COLOR_KEYS: readonly (keyof DesignColor)[] = [
   'canvas', 'ink', 'accent', 'accentink', 'surface', 'border', 'muted', 'success', 'danger',
 ];
+
+/** The four colour pairs an owner can name for a section, shared by builder, router and variants. */
+export const TONE_STYLE: Record<string, Style> = {
+  canvas: { background: 'token:color.canvas', color: 'token:color.ink' },
+  surface: { background: 'token:color.surface', color: 'token:color.ink' },
+  ink: { background: 'token:color.ink', color: 'token:color.canvas' },
+  accent: { background: 'token:color.accent', color: 'token:color.accentink' },
+};
+export const TONE_KEYS: readonly string[] = Object.keys(TONE_STYLE);
 
 interface TokenEntry { group: string; key: string; kind: 'color' | 'number' | 'font' | 'enum' }
 

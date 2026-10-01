@@ -47,10 +47,14 @@ export interface Node { id: string; kind: string; props: Record<string, unknown>
 export interface Section { id: string; purpose: string; layout: { kind: string; columns?: number; gap?: string; align?: string; width?: string }; style?: StyleSet; nodes: Node[]; bindings?: Record<string, unknown>[] }
 export interface Page { id: string; path: string; title: string; meta?: { description?: string }; sections: Section[] }
 export interface Journey { id: string; title: string; kind: string; target: string; enabled: boolean; fields: { key: string; label: string; kind: string; required?: boolean }[] }
+export interface PersonaWhen { channel?: string; device?: string; returning?: boolean }
+export interface Persona { id: string; when: PersonaWhen; priority: number; hide?: string[]; order?: string[]; tone?: Record<string, string> }
+export interface Taste { accepted?: string[]; rejected?: string[]; voice?: string }
 export interface ReleaseFile { path: string; mime: string; bytes: number; hash: string; key: string }
 export interface ReleaseManifest {
   id: string; siteId: string; version: number; generation: number; created: number; hash: string;
   files: ReleaseFile[]; host?: string; epoch?: number; compiler?: string; checks?: { blocking: number; advisory: number };
+  personas?: Pick<Persona, 'id' | 'when' | 'priority'>[];
 }
 export interface Lock { target: string; kind: 'section' | 'node' | 'token' | 'component' | 'brand'; at: number }
 export interface Claim { text: string; verdict: 'supported' | 'contradicted' | 'unsupported'; evidence?: string[] }
@@ -68,6 +72,8 @@ export interface SiteDocument {
   redirects: { from: string; to: string; status: number }[];
   locks: Lock[];
   policy: { publicEnquiry?: boolean; publicOrdering?: boolean; allowedCurrencies?: string[]; turnstile?: string };
+  personas?: Persona[];
+  taste?: Taste;
   claims?: Claim[];
   currentRelease?: string | null;
   releases?: ReleaseManifest[];
@@ -77,6 +83,7 @@ export type PatchOperation =
   | { op: 'set_text'; target: string; value: string }
   | { op: 'set_props'; target: string; value: Record<string, unknown> }
   | { op: 'set_style'; target: string; value: StyleSet | null }
+  | { op: 'set_layout'; target: string; value: Section['layout'] }
   | { op: 'move_node'; target: string; before?: string; after?: string }
   | { op: 'move_section'; target: string; index: number }
   | { op: 'add_section'; page: string; section: Section; index?: number }
@@ -90,6 +97,8 @@ export type PatchOperation =
   | { op: 'set_redirect'; from: string; to: string | null }
   | { op: 'set_page'; page: string; value: { title?: string; description?: string; path?: string } }
   | { op: 'set_brief'; value: Partial<SiteDocument['brief']> }
+  | { op: 'set_persona'; persona: Persona }
+  | { op: 'remove_persona'; target: string }
   | { op: 'set_policy'; value: Partial<SiteDocument['policy']> }
   | { op: 'set_asset_rights'; target: string; value: { approved?: boolean; license?: string; source?: string; alt?: string } }
   | { op: 'add_asset'; asset: Asset }
@@ -104,7 +113,7 @@ export interface HistoryEntry { revision: number; at: number; summary: string }
 
 export interface AskOutcome {
   siteId: string; base: number; target: string | null; targetKind: 'section' | 'node' | null;
-  operations: PatchOperation[]; summary: string; questions: string[];
+  operations: PatchOperation[]; summary: string; questions: string[]; choices: Record<string, string>;
 }
 export interface EditOutcome { siteId: string; version: number; revision: number; site: SiteDocument; diff: DiffEntry[]; html?: string }
 export interface SiteSnapshot {

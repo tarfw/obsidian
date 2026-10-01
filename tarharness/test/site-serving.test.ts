@@ -63,7 +63,8 @@ it('publishes, isolates, unpublishes and restores two real D1/R2 releases', asyn
   expect((await control.prepare('SELECT COUNT(*) AS count FROM hosts').first())?.count).toBe(0);
   const page = await runtime.dispatchFetch(`${origin}/alpha/`);
   expect(page.status).toBe(200);
-  expect(await page.text()).toContain('href="/alpha/catalog"');
+  // The edge worker rewrites root-relative asset links into the path prefix.
+  expect(await page.text()).toContain('href="/alpha/style.css"');
   expect((await runtime.dispatchFetch(`${origin}/beta/`)).status).toBe(200);
   expect((await runtime.dispatchFetch(`${origin}/alpha/beta/`)).status).toBe(404);
   await alpha.run('site.unpublish', 'alpha-unpublish', { siteId: alpha.siteId });
@@ -72,10 +73,10 @@ it('publishes, isolates, unpublishes and restores two real D1/R2 releases', asyn
   await alpha.run('site.rollback', 'alpha-restore', { siteId: alpha.siteId, releaseId: alpha.releaseId });
   expect((await runtime.dispatchFetch(`${origin}/alpha/`)).status).toBe(200);
   expect((await alpha.client.execute({ sql: 'SELECT state FROM records WHERE id=?', args: [alpha.siteId] })).rows[0].state).toBe('live');
+  // A collection bound to a live product publishes; archiving that product makes
+  // the retained facts differ, so restoring the old release is refused.
   await alpha.client.execute("INSERT INTO records(id,type,title,state,data,owner,version,created,updated) VALUES('product','pos.product','Approved product','active','{\"price\":100}','owner',1,1,1)");
-  await alpha.run('site.update', 'alpha-approve', { siteId: alpha.siteId, baseVersion: 4, operations: [{
-    op: 'update_card', path: 'catalog', value: { id: 'catalog', bindings: [{ slot: 'items', query: 'catalog.public', version: 1, access: 'public', freshness: 300, params: { records: ['product'] } }] },
-  }] });
+  await alpha.run('site.generate', 'alpha-catalog', { title: 'alpha', prompt: 'A supplied business description', records: ['product'] });
   const checked = await alpha.run('site.compile', 'alpha-recompile', { siteId: alpha.siteId });
   await alpha.run('site.publish', 'alpha-republish', { siteId: alpha.siteId, releaseId: checked.releaseId, hash: checked.hash });
   await alpha.run('site.unpublish', 'alpha-withdraw', { siteId: alpha.siteId });

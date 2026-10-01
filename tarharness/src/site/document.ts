@@ -1,12 +1,10 @@
 /**
- * TAR Site document v2 - the typed, versioned source of truth for a site.
+ * TAR Site document - the typed, versioned source of truth for a site.
  *
- * The document contract lives in aisites.md section 2. Fields and identifiers
- * use one lowercase semantic word; structure supplies qualification.
- * The v1 card model in schema.ts remains readable through adapt.ts.
+ * The document contract lives in agenticsite.md. Fields
+ * and identifiers use one lowercase semantic word; structure supplies
+ * qualification. Retained v1 card records are readable through adapt.ts.
  */
-
-import type { ReleaseManifest } from './schema.ts';
 
 export const DOCUMENT_VERSION = '2.0.0';
 
@@ -228,6 +226,58 @@ export interface SitePolicy {
   readonly turnstile?: string;
 }
 
+/** A compiled persona branch: a code-resolved patch over this document. */
+export interface Persona {
+  readonly id: string;
+  readonly when: PersonaWhen;
+  readonly priority: number;
+  readonly hide?: readonly string[];
+  readonly order?: readonly string[];
+  readonly tone?: Record<string, string>;
+}
+
+export interface PersonaWhen {
+  readonly channel?: string;
+  readonly device?: string;
+  readonly returning?: boolean;
+}
+
+/** What the edge needs to pick a variant: match rules only, never content. */
+export type PersonaRule = Pick<Persona, 'id' | 'when' | 'priority'>;
+
+/** Learned taste from accepted and rejected edits; biases defaults, never decides. */
+export interface Taste {
+  readonly accepted?: readonly string[];
+  readonly rejected?: readonly string[];
+  readonly voice?: string;
+}
+
+export interface ReleaseFile {
+  readonly path: string;
+  readonly mime: string;
+  readonly bytes: number;
+  readonly hash: string;
+  readonly key: string;
+}
+
+export interface ReleaseManifest {
+  readonly id: string;
+  readonly siteId: string;
+  readonly host?: string;
+  readonly epoch?: number;
+  readonly version: number;
+  readonly generation: number;
+  readonly created: number;
+  readonly hash: string;
+  readonly files: ReleaseFile[];
+  /** Document schema the compiler consumed. */
+  readonly compiler?: string;
+  /** Compiled persona variants, best match first; content stays in the release files. */
+  readonly personas?: readonly PersonaRule[];
+  readonly redirects?: readonly { readonly from: string; readonly to: string; readonly status: 308 }[];
+  readonly checks?: { readonly blocking: number; readonly advisory: number };
+}
+
 export interface SiteDocument {
   schema: typeof DOCUMENT_VERSION;
   revision: number;
@@ -243,6 +293,8 @@ export interface SiteDocument {
   redirects: Redirect[];
   locks: Lock[];
   policy: SitePolicy;
+  personas?: Persona[];
+  taste?: Taste;
   /** Prose claims checked against supplied evidence; unresolved claims block publish. */
   claims?: { text: string; verdict: 'supported' | 'contradicted' | 'unsupported'; evidence?: string[] }[];
   /** Compatibility projection of the live release. CONTROL D1 remains the authority. */

@@ -9,7 +9,6 @@ import { DOCUMENT_VERSION, type Asset, type SiteDocument } from '../src/site/doc
 import { compileDocument } from '../src/site/compile.ts';
 import { collectIssues, validateDocument } from '../src/site/validate.ts';
 import { upgrade } from '../src/site/adapt.ts';
-import { createDefaultSite } from '../src/site/store.ts';
 
 const clients: ReturnType<typeof createClient>[] = [];
 afterEach(() => {
@@ -337,36 +336,39 @@ describe('site v2 compiler', () => {
   });
 });
 
+// A stored v1 card record, in the read-only legacy shape `upgrade` consumes.
+function legacyDefinition(): never {
+  return {
+    schema: '1.0.0',
+    locale: 'en', timezone: 'Asia/Kolkata', currency: 'INR',
+    policy: { publicEnquiry: true },
+    journeys: [{ id: 'enquiry', title: 'Enquiry', target: 'record.create', version: 1, input: { type: 'enquiry' }, outcome: 'Appears in Now' }],
+    pages: [
+      { id: 'home', path: '/', title: 'Home', meta: { description: 'A local business' }, cards: [
+        { id: 'bar', kind: 'navigation', version: 1, props: { brand: 'Northstar', links: [] } },
+        { id: 'hero', kind: 'hero', version: 1, props: { headline: 'Northstar', subtext: 'A local business', primaryCta: { label: 'Menu', href: '/menu' } } },
+        { id: 'why', kind: 'features', version: 1, props: { title: 'Why us', features: [{ icon: 'star', title: 'Fast', description: 'Ready in 20 minutes' }] } },
+        { id: 'praise', kind: 'proof', version: 1, props: { title: 'Praise', testimonials: [{ quote: 'Best slice', author: 'Ravi' }] } },
+        { id: 'menu', kind: 'collection', version: 1, title: 'Menu', props: { items: [] }, bindings: [{ slot: 'items', query: 'catalog.public', version: 1, access: 'public', freshness: 300, params: { records: ['p1'], channel: 'web' } }] },
+        { id: 'talk', kind: 'cta', version: 1, props: { headline: 'Talk to us', text: 'We answer fast', href: '/contact', buttonLabel: 'Contact' } },
+        { id: 'end', kind: 'footer', version: 1, props: { brand: 'Northstar', links: [] } },
+      ] },
+      { id: 'contact', path: '/contact', title: 'Contact', cards: [
+        { id: 'cbar', kind: 'navigation', version: 1, props: { brand: 'Northstar', links: [] } },
+        { id: 'form', kind: 'form', version: 1, title: 'Send a message', props: { submitLabel: 'Send' } },
+        { id: 'hours', kind: 'hours', version: 1, props: { title: 'Hours', schedule: [{ days: 'Mon-Fri', hours: '9-5' }] } },
+        { id: 'faq', kind: 'faq', version: 1, props: { title: 'Questions', items: [{ q: 'Delivery?', a: 'Within 5km' }] } },
+        { id: 'cend', kind: 'footer', version: 1, props: { brand: 'Northstar', links: [] } },
+      ] },
+    ],
+  } as never;
+}
+
 describe('v1 migration', () => {
-  it('upgrades every card family and keeps the retained v1 compiler working', async () => {
-    const empty = createDefaultSite('Northstar', 'A local business');
-    const emptyKinds = upgrade(empty).pages.flatMap((page) => page.sections.flatMap((section) => section.nodes.map((node) => node.kind)));
-    expect(emptyKinds).not.toContain('accordion');
-    expect(emptyKinds).not.toContain('list');
-
-    const v1 = createDefaultSite('Northstar', 'A local business');
-    type MutableCard = { kind: string; props: Record<string, unknown> };
-    type MutablePage = { id: string; cards: MutableCard[] };
-    const pages = (v1 as unknown as { pages: MutablePage[] }).pages;
-    const home = pages.find((page) => page.id === 'home')!;
-    home.cards = home.cards.map((card) => card.kind === 'features'
-      ? { ...card, props: { features: [{ icon: 'star', title: 'Fast', description: 'Ready in 20 minutes' }] } }
-      : card.kind === 'proof'
-        ? { ...card, props: { testimonials: [{ quote: 'Best slice', author: 'Ravi' }] } }
-        : card);
-    const catalog = pages.find((page) => page.id === 'catalog')!;
-    catalog.cards = catalog.cards.map((card) => card.kind === 'faq'
-      ? { ...card, props: { items: [{ q: 'Delivery?', a: 'Within 5km' }] } } : card);
-    const contact = pages.find((page) => page.id === 'contact')!;
-    contact.cards = contact.cards.map((card) => card.kind === 'hours'
-      ? { ...card, props: { schedule: [{ days: 'Mon-Fri', hours: '9-5' }] } }
-      : card.kind === 'contact'
-        ? { ...card, props: { address: '12 Beach Road', phone: '+91 90000 00000', email: 'hi@slice.test' } }
-        : card);
-
-    const upgraded = upgrade(v1);
+  it('upgrades every legacy card family into one valid v2 document', () => {
+    const upgraded = upgrade(legacyDefinition());
     expect(upgraded.schema).toBe(DOCUMENT_VERSION);
-    expect(upgraded.pages.map((page) => page.path)).toEqual(['/', '/catalog', '/about', '/contact']);
+    expect(upgraded.pages.map((page) => page.path)).toEqual(['/', '/contact']);
     const kindsOf = (list: { kind: string; children?: unknown[] }[]): string[] =>
       list.flatMap((node) => [node.kind, ...kindsOf((node.children || []) as { kind: string; children?: unknown[] }[])]);
     const kinds = upgraded.pages.flatMap((page) => page.sections.flatMap((section) => kindsOf(section.nodes)));
@@ -374,63 +376,48 @@ describe('v1 migration', () => {
       expect(kinds).toContain(kind);
     }
     expect(() => validateDocument(upgraded)).not.toThrow();
+    // The retained reader is read-only: the legacy currency and locale survive the upgrade.
+    expect(upgraded.currency).toBe('INR');
+    expect(upgraded.journeys.some((journey) => journey.id === 'enquiry')).toBe(true);
+  });
 
+  it('compiles a stored v1 record with the single v2 compiler', async () => {
     const client = await createTestWorkspace();
     const bucket = releaseBucket();
-    const generated = await Effect.runPromise(executeGateway(client, ownerAccess, {
-      actionId: 'site.generate', idempotencyKey: 'v2-generate', input: { title: 'Slice House', prompt: 'Pizza' },
-    }));
-    const siteId = String(generated.siteId);
-    const compiled = await Effect.runPromise(executeGateway(client, ownerAccess, {
-      actionId: 'site.compile', idempotencyKey: 'v2-compile', input: { siteId },
-    }, { siteReleases: bucket }));
-    const prefix = `workspaces/${ownerAccess.workspace.id}/sites/${siteId}/releases/${compiled.releaseId}`;
-
-    // A generated draft is a v2 document compiled by the v2 compiler.
-    const stored = await client.execute({ sql: 'SELECT data FROM records WHERE id=?', args: [siteId] });
-    expect(JSON.parse(String(stored.rows[0].data)).schema).toBe(DOCUMENT_VERSION);
-    const manifest = JSON.parse(bucket.objects.get(`${prefix}/manifest.json`)!);
-    expect(manifest.compiler).toBe('2.0.0');
-    expect(bucket.objects.get(`${prefix}/index.html`)).toContain('<!DOCTYPE html>');
-
-    // A retained v1 record still compiles with the frozen v1 compiler.
     const at = Date.now();
     await client.execute({
       sql: "INSERT INTO records(id,type,title,state,data,owner,version,created,updated) VALUES('site_legacy','site','Legacy','draft',?, 'owner_1',1,?,?)",
-      args: [JSON.stringify(createDefaultSite('Legacy', 'Old release')), at, at],
+      args: [JSON.stringify(legacyDefinition()), at, at],
     });
-    const legacy = await Effect.runPromise(executeGateway(client, ownerAccess, {
-      actionId: 'site.compile', idempotencyKey: 'v1-compile', input: { siteId: 'site_legacy' },
+    const compiled = await Effect.runPromise(executeGateway(client, ownerAccess, {
+      actionId: 'site.compile', idempotencyKey: 'legacy-compile', input: { siteId: 'site_legacy' },
     }, { siteReleases: bucket }));
-    const legacyPrefix = `workspaces/${ownerAccess.workspace.id}/sites/site_legacy/releases/${legacy.releaseId}`;
-    expect(JSON.parse(bucket.objects.get(`${legacyPrefix}/manifest.json`)!).compiler).toBe('1.0.0');
-    expect(bucket.objects.get(`${legacyPrefix}/index.html`)).toContain('<style>');
+    const prefix = `workspaces/${ownerAccess.workspace.id}/sites/site_legacy/releases/${compiled.releaseId}`;
+    // There is no v1 compiler: a legacy record upgrades in memory and compiles as v2.
+    expect(JSON.parse(bucket.objects.get(`${prefix}/manifest.json`)!).compiler).toBe(DOCUMENT_VERSION);
+    const home = bucket.objects.get(`${prefix}/index.html`)!;
+    expect(home).toContain('<!DOCTYPE html>');
+    expect(home).not.toContain('<style>');
+    expect(bucket.objects.get(`${prefix}/style.css`)).toContain('--color-accent');
   });
 
-  it('applies retained card operations to the upgraded document', async () => {
+  it('applies v2 patch operations to a generated draft', async () => {
     const client = await createTestWorkspace();
     const generated = await Effect.runPromise(executeGateway(client, ownerAccess, {
-      actionId: 'site.generate', idempotencyKey: 'legacy-generate', input: { title: 'Slice House', prompt: 'Pizza' },
+      actionId: 'site.generate', idempotencyKey: 'edit-generate', input: { title: 'Slice House', prompt: 'Pizza' },
     }));
     const siteId = String(generated.siteId);
-    await Effect.runPromise(executeGateway(client, ownerAccess, {
-      actionId: 'site.update', idempotencyKey: 'legacy-edit', input: {
-        siteId, baseVersion: 1,
-        operations: [
-          { op: 'update_card', path: 'home', value: { id: 'hero', props: { headline: 'Chennai’s Best Slice', subtext: 'Wood fired daily' } } },
-          { op: 'update_card', path: 'catalog', value: { id: 'catalog', bindings: [{ slot: 'items', query: 'catalog.public', version: 1, access: 'public', freshness: 300, params: { records: ['prod_1'], channel: 'web' } }] } },
-        ],
+    const site = generated.site as SiteDocument;
+    const edited = await Effect.runPromise(executeGateway(client, ownerAccess, {
+      actionId: 'site.edit', idempotencyKey: 'edit-patch', input: {
+        siteId, base: site.revision, summary: 'Copy',
+        operations: [{ op: 'set_text', target: 'hero-title', value: 'Chennai’s Best Slice' }],
       },
-    }));
-    const stored = await client.execute({ sql: 'SELECT data FROM records WHERE id=?', args: [siteId] });
-    const site = JSON.parse(String(stored.rows[0].data));
-    const hero = site.pages[0].sections.find((section: { id: string }) => section.id === 'hero');
-    expect(hero.nodes.find((node: { kind: string }) => node.kind === 'heading').props.text).toBe('Chennai’s Best Slice');
-    expect(hero.nodes.find((node: { kind: string }) => node.kind === 'text').props.text).toBe('Wood fired daily');
-    const catalog = site.pages[1].sections.find((section: { id: string }) => section.id === 'catalog');
-    expect(catalog.bindings[0].query).toBe('catalog.public');
-    expect(catalog.bindings[0].params.records).toEqual(['prod_1']);
-    expect(site.schema).toBe(DOCUMENT_VERSION);
-    expect(site.revision).toBe(2);
+    }, { siteReleases: releaseBucket() }));
+    const updated = edited.site as SiteDocument;
+    const hero = updated.pages[0].sections.find((section) => section.id === 'hero')!;
+    expect(hero.nodes.find((node) => node.kind === 'heading')?.props.text).toBe('Chennai’s Best Slice');
+    expect(updated.schema).toBe(DOCUMENT_VERSION);
+    expect(updated.revision).toBe(site.revision + 1);
   });
 });

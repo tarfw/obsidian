@@ -8,7 +8,7 @@
  */
 
 import { badRequest } from '../errors.ts';
-import { auditDesign, isTokenRef, resolveToken, type Design } from './design.ts';
+import { auditDesign, isTokenRef, resolveToken, TONE_KEYS, type Design } from './design.ts';
 import {
   ALIGN_VALUES, ASPECT_VALUES, BORDER_VALUES, DOCUMENT_VERSION, DENSITY_VALUES, EASING_VALUES,
   JOURNEY_TARGETS, LIMITS, MASK_VALUES, NODE_KINDS, PAD_VALUES, PUBLIC_TYPES, RESERVED_PATHS,
@@ -375,6 +375,37 @@ export function collectIssues(doc: SiteDocument): Issue[] {
     if (!page.sections.some((section) => section.nodes.some((node) => node.kind === 'footer'))) issues.push({ level: 'advisory', area: 'a11y', path: at, message: 'Every page benefits from a footer.' });
   });
   if (totalNodes > 1000) issues.push({ level: 'blocking', area: 'node', path: 'pages', message: 'The site holds too many nodes for one build.' });
+
+  const variantIds = new Set<string>();
+  for (const page of doc.pages) for (const section of page.sections) {
+    variantIds.add(text(section.id));
+    const gather = (nodes: Node[]) => nodes.forEach((node) => { variantIds.add(node.id); gather(node.children || []); });
+    gather(section.nodes);
+  }
+  const personaIds = new Set<string>();
+  if (doc.personas !== undefined) {
+    if (!Array.isArray(doc.personas) || doc.personas.length > 4) issues.push({ level: 'blocking', area: 'persona', path: 'personas', message: 'A site compiles at most four persona variants.' });
+    doc.personas.forEach((persona, index) => {
+      const at = `personas[${index}]`;
+      if (!ID.test(text(persona.id)) || personaIds.has(persona.id)) issues.push({ level: 'blocking', area: 'persona', path: at, message: 'Persona id must be unique and lowercase.' });
+      personaIds.add(text(persona.id));
+      if (!Number.isSafeInteger(persona.priority) || persona.priority < 1 || persona.priority > 100) issues.push({ level: 'blocking', area: 'persona', path: at, message: 'Persona priority must be 1 to 100.' });
+      const when = object(persona.when);
+      if (Object.keys(when).some((key) => !['channel', 'device', 'returning'].includes(key))) issues.push({ level: 'blocking', area: 'persona', path: at, message: 'Persona conditions accept channel, device and returning.' });
+      if (when.channel !== undefined && !/^[a-z][a-z0-9-]{0,39}$/.test(text(when.channel))) issues.push({ level: 'blocking', area: 'persona', path: at, message: 'Persona channel must be a lowercase word.' });
+      if (when.device !== undefined && !['mobile', 'tablet', 'desktop'].includes(text(when.device))) issues.push({ level: 'blocking', area: 'persona', path: at, message: 'Persona device must be mobile, tablet or desktop.' });
+      if (when.returning !== undefined && typeof when.returning !== 'boolean') issues.push({ level: 'blocking', area: 'persona', path: at, message: 'Persona returning must be true or false.' });
+      if (!Object.keys(when).length) issues.push({ level: 'blocking', area: 'persona', path: at, message: 'A persona variant needs at least one condition.' });
+      for (const list of [persona.hide, persona.order]) {
+        if (list === undefined) continue;
+        if (!Array.isArray(list) || list.length > 40 || list.some((entry) => !variantIds.has(text(entry)))) issues.push({ level: 'blocking', area: 'persona', path: at, message: 'Persona targets must name up to 40 existing sections or nodes.' });
+      }
+      const tones = object(persona.tone);
+      for (const [target, value] of Object.entries(tones)) {
+        if (!variantIds.has(target) || !TONE_KEYS.includes(String(value))) issues.push({ level: 'blocking', area: 'persona', path: at, message: 'Persona tones retint an existing target with a registered tone.' });
+      }
+    });
+  }
 
   if (doc.claims !== undefined) {
     if (!Array.isArray(doc.claims) || doc.claims.length > 40) issues.push({ level: 'blocking', area: 'claim', path: 'claims', message: 'Claims must be a list of at most 40 entries.' });

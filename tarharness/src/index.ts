@@ -12,8 +12,8 @@ import { buildWorkspaceCanvas } from './registry/canvas.ts';
 import { posSummary, readPos } from './pos/store.ts';
 import { readProductContent } from './pos/content.ts';
 import { serveSitePreview } from './site/preview.ts';
-import { isV2, upgrade, readDocument } from './site/adapt.ts';
-import { createDefaultSite } from './site/store.ts';
+import { readDocument } from './site/adapt.ts';
+import { defaultSite } from './site/build.ts';
 import { exportDesign } from './site/design.ts';
 import { compileDocument } from './site/compile.ts';
 import { canExecute, canReadRecord, canRunFlowStep, canUseWorkRole, isCook, managesMembers, workRoleNames } from './access.ts';
@@ -118,6 +118,36 @@ async function withNowDatabase<A>(env: RuntimeEnv, user: string, work: (client: 
   const database = await ensureNowDatabase(tursoEnv(env), user);
   const client = await Effect.runPromise(openWorkspaceDatabase(tursoEnv(env), database.Name, database.Hostname));
   try { return await work(client); } finally { client.close(); }
+}
+
+// The scout audits a published site at most once a day. CONTROL holds the last
+// audit time so the background fan-out never opens a workspace database that is
+// not due; the run only drafts a revision and files a Space item, never publishes.
+const SCOUT_INTERVAL = 24 * 60 * 60_000;
+async function scoutPublishedSites(env: RuntimeEnv): Promise<void> {
+  if (!env.SITE_RELEASES) return;
+  const due = await env.CONTROL.prepare("SELECT s.workspace,s.site,s.scouted,w.name,w.slug,w.database_name,w.database_host,w.owner_id FROM sites s JOIN workspaces w ON w.id=s.workspace WHERE s.status='active' AND s.release<>'' AND w.state='active' AND w.database_host IS NOT NULL AND s.scouted<? ORDER BY s.scouted LIMIT 20")
+    .bind(now() - SCOUT_INTERVAL).all<{ workspace: string; site: string; scouted: number; name: string; slug: string; database_name: string; database_host: string; owner_id: string }>();
+  for (const item of due.results) {
+    // Claim the slot first so overlapping crons never scout the same site twice.
+    const claim = await env.CONTROL.prepare('UPDATE sites SET scouted=? WHERE workspace=? AND scouted=?').bind(now(), item.workspace, item.scouted).run();
+    if (claim.meta.changes !== 1) continue;
+    const context: AccessContext = {
+      identity: { id: item.owner_id, email: '', name: 'Site scout' },
+      workspace: { id: item.workspace, name: item.name, slug: item.slug, mode: 'work', databaseName: item.database_name, databaseHost: item.database_host, state: 'active' },
+      member: { workspaceId: item.workspace, userId: item.owner_id, role: 'owner', state: 'active' },
+    };
+    try {
+      const client = await Effect.runPromise(openWorkspaceDatabase(tursoEnv(env), item.database_name, item.database_host));
+      try {
+        await Effect.runPromise(executeGateway(client, context, {
+          actionId: 'site.scout', idempotencyKey: `scout-${item.site}-${now()}`, input: { siteId: item.site },
+        }, { typesafe: env.TYPESAFE_API_KEY, publication: env.CONTROL }));
+      } finally { client.close(); }
+    } catch (cause) {
+      console.error(JSON.stringify({ event: 'site.scout.failed', workspace: item.workspace, error: cause instanceof Error ? cause.message : String(cause) }));
+    }
+  }
 }
 
 async function provision(control: ControlStore, env: RuntimeEnv, pending: { id: string; databaseName: string }) {
@@ -259,7 +289,7 @@ async function createWorkspace(request: Request, env: RuntimeEnv): Promise<Respo
   try {
     const client = await Effect.runPromise(openWorkspaceDatabase(tursoEnv(env), pending.databaseName, provisioned.host));
     try {
-      const siteDoc = upgrade(createDefaultSite(name, `${name} — official online store, products and services.`));
+      const siteDoc = defaultSite(name, `${name} — official online store, products and services.`);
       const siteId = `site_${crypto.randomUUID()}`;
       const at = Date.now();
       await client.batch([
@@ -482,7 +512,7 @@ async function handle(request: Request, env: RuntimeEnv, ctx: ExecutionContext):
     if (request.method === 'GET' && nested === 'site') {
       let siteRows = await Effect.runPromise(query<Record<string, unknown>>(client, { sql: "SELECT * FROM records WHERE type='site' AND archived IS NULL ORDER BY updated DESC LIMIT 1" }));
       if (!siteRows.length) {
-        const initialDoc = upgrade(createDefaultSite(current.workspace.name, `${current.workspace.name} — official online store, products and services.`));
+        const initialDoc = defaultSite(current.workspace.name, `${current.workspace.name} — official online store, products and services.`);
         const siteId = `site_${crypto.randomUUID()}`;
         const at = Date.now();
         await client.batch([
@@ -650,6 +680,7 @@ export default {
   },
   async scheduled(_controller: ScheduledController, env: RuntimeEnv): Promise<void> {
     await sweepFlowDispatches(env);
+    await scoutPublishedSites(env);
     await env.CONTROL.prepare('DELETE FROM previews WHERE expires<=?').bind(Date.now()).run();
     await env.CONTROL.prepare('DELETE FROM channel_link_requests WHERE expires_at<=?').bind(Date.now()).run();
     await env.CONTROL.prepare("UPDATE channel_commands SET state='failed',result='Processing interrupted. Check TAR before retrying.' WHERE state='processing' AND attempts>=5 AND due_at<=?").bind(Date.now()).run();

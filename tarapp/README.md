@@ -49,4 +49,4 @@ npx eas build --platform android --profile production
 ```
 
 See [space.md](../space.md) for the current Space contract and its linked
-[commerce.md](../commerce.md) and [aisites.md](../aisites.md) contracts.
+[commerce.md](../commerce.md) and [agenticsite.md](../agenticsite.md) contracts.

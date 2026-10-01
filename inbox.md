@@ -346,7 +346,7 @@ TypeSafe: [State](https://docs.typesafe.ai/concepts/state),
 | Row | `[type] title ... STATUS >` + source/parent/station/due/blocker line + divider; header and Ask stay reachable. |
 | Find | Default = all authorized work. Applied filter = `Filtered: ... / Clear`; no context switch. |
 | Scroll | Stable-key virtualization, progressive load, full-set urgency; due work crosses workspace boundaries. |
-| Commit | Recheck at source Gateway; [commerce.md](commerce.md) and [aisites.md](aisites.md) own their contracts. |
+| Commit | Recheck at source Gateway; [commerce.md](commerce.md) and [agenticsite.md](agenticsite.md) own their contracts. |
 | Payment | Customer self-pay waits for a verified adapter; cashier-recorded payment can advance receipt. |
 
 ## Now screens by person and time

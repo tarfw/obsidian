@@ -1,23 +1,21 @@
 /**
- * Scoped site editing.
+ * Scoped site editing: one router, three lanes.
  *
- * `site.ask` resolves an instruction into a small, reviewable patch: exact names
- * and values resolve in code, Jev only interprets ambiguity, and nothing is
- * applied until `site.edit` commits the reviewed operations. Undo writes a new
- * revision rather than rewriting history.
+ * `site.ask` turns an instruction into a small, reviewable patch. Exact values
+ * the owner typed resolve in code with zero model calls; only ambiguity goes to
+ * Jev, in one batched call; new prose goes to the language model. Nothing is
+ * applied until `site.edit` commits the reviewed operations, and undo writes a
+ * new revision instead of rewriting history.
  */
 
 import type { Client } from '@libsql/client/web';
 import { badRequest, conflict, notFound, unavailable } from '../errors.ts';
 import type { AccessContext } from '../types.ts';
-import { eventStatement } from '../gateway/commit.ts';
-import {
-  ALIGN_VALUES, ASPECT_VALUES, BORDER_VALUES, MASK_VALUES, PAD_VALUES, SHADOW_VALUES, SIZE_VALUES, WIDTH_VALUES,
-  type Node, type Section, type SiteDocument, type Style,
-} from './document.ts';
-import { COLOR_KEYS, exportDesign, parseDesign } from './design.ts';
+import { ALIGN_VALUES, PAD_VALUES, SIZE_VALUES, WIDTH_VALUES, type Node, type Persona, type Section, type SectionLayoutSpec, type SiteDocument, type Style } from './document.ts';
+import { COLOR_KEYS, TONE_STYLE, exportDesign, parseDesign } from './design.ts';
 import { applyPatch, diffSummary, type DiffEntry, type PatchOperation } from './patch.ts';
-import { chooseLayout, chooseTarget, chooseTone, chooseValues, type JudgmentCache } from './judgment.ts';
+import { interpret, type EditQuestion, type JudgmentCache } from './judgment.ts';
+import { DEFAULT_BUDGET, GROQ_DEFAULT_MODEL, ModelRunner, SITE_MODEL_FALLBACKS, draftCopy } from './model.ts';
 import { readDocument } from './adapt.ts';
 import { validateDocument } from './validate.ts';
 import { getSiteRecord } from './store.ts';
@@ -39,12 +37,10 @@ export const PROPERTY_OPTIONS: Record<string, readonly string[]> = {
   pad: PAD_VALUES,
   gap: PAD_VALUES,
   radius: ['token:shape.sm', 'token:shape.md', 'token:shape.lg', 'token:shape.pill'],
-  border: BORDER_VALUES,
-  shadow: SHADOW_VALUES,
+  border: ['none', 'hairline'],
+  shadow: ['none', 'low', 'high'],
   align: ALIGN_VALUES,
   width: WIDTH_VALUES,
-  aspect: ASPECT_VALUES,
-  mask: MASK_VALUES,
   size: SIZE_VALUES,
 };
 
@@ -58,26 +54,27 @@ export const SYNONYMS: Record<string, string> = {
   hairline: 'hairline', none: 'none',
   pill: 'token:shape.pill', rounded: 'token:shape.lg', sharp: 'token:shape.sm', square: 'token:shape.sm',
   spacious: 'token:space.section', tight: 'token:space.unit',
-  soft: 'soft', flat: 'none',
-  centered: 'center', centre: 'center', left: 'start', right: 'end',
+  soft: 'low', flat: 'none',
+  centered: 'center', centre: 'center', left: 'start', right: 'end', between: 'between',
   full: 'full', wide: 'wide', content: 'content',
   large: 'lg', small: 'sm', medium: 'md',
+  display: 'display', heading: 'heading', body: 'body', label: 'label',
 };
 
 const PROPERTY_WORDS: Record<string, string[]> = {
   background: ['background', 'bg', 'backdrop'],
-  color: ['colour', 'color', 'text colour', 'ink'],
+  color: ['colour', 'color', 'text colour'],
   pad: ['padding', 'pad', 'spacing'],
-  gap: ['gap', 'spacing between'],
-  radius: ['radius', 'corner', 'corners', 'rounded'],
+  gap: ['gap'],
+  radius: ['radius', 'corner', 'corners'],
   border: ['border', 'outline'],
   shadow: ['shadow', 'elevation', 'depth'],
   align: ['align', 'alignment', 'centre', 'center'],
-  width: ['width', 'full width', 'wide'],
-  aspect: ['aspect', 'ratio', 'shape'],
-  size: ['type size', 'text size', 'font size', 'size'],
-  mask: ['mask', 'fade'],
+  width: ['width', 'full width'],
+  size: ['type size', 'text size', 'font size'],
 };
+
+const DENSITY_PAD: Record<string, string> = { airy: 'token:space.section', balanced: 'lg', compact: 'token:space.unit' };
 
 export interface AskResult {
   siteId: string;
@@ -87,74 +84,172 @@ export interface AskResult {
   operations: PatchOperation[];
   summary: string;
   questions: string[];
+  /** Values resolved without a model, so taste memory can credit the owner. */
+  choices: Record<string, string>;
 }
 
-function styleTarget(doc: SiteDocument, target: string): 'section' | 'node' | null {
-  if (doc.pages.some((page) => page.sections.some((section) => section.id === target || section.purpose.toLowerCase() === target.toLowerCase()))) return 'section';
-  const walk = (nodes: Node[]): boolean => nodes.some((node) => node.id === target || walk(node.children || []));
-  if (doc.pages.some((page) => page.sections.some((section) => walk(section.nodes)))) return 'node';
-  return null;
-}
-
-function sectionFor(doc: SiteDocument, target: string): Section | null {
-  for (const page of doc.pages) {
-    const section = page.sections.find((entry) => entry.id === target);
-    if (section) return section;
-    const walk = (nodes: Node[]): Node | undefined => {
-      for (const node of nodes) {
-        if (node.id === target) return node;
-        const nested = node.children ? walk(node.children) : undefined;
-        if (nested) return nested;
-      }
-      return undefined;
-    };
-    if (page.sections.some((section2) => walk(section2.nodes))) {
-      const found = page.sections.find((section2) => walk(section2.nodes));
-      if (found) return found;
-    }
-  }
-  return null;
-}
-
-function explicitStyle(doc: SiteDocument, command: string, target: string): { ops: PatchOperation[]; unresolved: Record<string, readonly string[]> } {
-  const lower = command.toLowerCase();
-  const ops: PatchOperation[] = [];
-  const unresolved: Record<string, readonly string[]> = {};
-  const node = (() => {
-    const walk = (nodes: Node[]): Node | null => {
-      for (const entry of nodes) {
-        if (entry.id === target) return entry;
-        const nested = entry.children ? walk(entry.children) : null;
-        if (nested) return nested;
-      }
-      return null;
-    };
-    for (const page of doc.pages) for (const entry of page.sections) {
-      const found = walk(entry.nodes);
-      if (found) return found;
+function findNode(doc: SiteDocument, id: string): Node | null {
+  const walk = (nodes: Node[]): Node | null => {
+    for (const node of nodes) {
+      if (node.id === id) return node;
+      const nested = node.children ? walk(node.children) : null;
+      if (nested) return nested;
     }
     return null;
-  })();
-  const section = node ? null : doc.pages.flatMap((page) => page.sections).find((entry) => entry.id === target) || null;
-  const existing = node?.style || section?.style;
-  const current = { ...(existing?.base || {}) } as Style;
-  let changed = false;
-  for (const [property, words] of Object.entries(PROPERTY_WORDS)) {
-    if (!words.some((word) => lower.includes(word))) continue;
-    const allowed = PROPERTY_OPTIONS[property];
-    if (!allowed) continue;
-    const match = allowed.find((value) => lower.includes(value.replace('token:', '').split('.').pop() || value));
-    const synonym = Object.entries(SYNONYMS).find(([word]) => lower.includes(word) && allowed.includes(SYNONYMS[word]));
-    const chosen = match || (synonym ? SYNONYMS[synonym[0]] : undefined);
-    if (chosen && allowed.includes(chosen)) {
-      (current as Record<string, unknown>)[property] = chosen;
-      changed = true;
-    } else {
-      unresolved[property] = allowed;
+  };
+  for (const page of doc.pages) for (const section of page.sections) {
+    const found = walk(section.nodes);
+    if (found) return found;
+  }
+  return null;
+}
+
+function sectionOf(doc: SiteDocument, id: string): Section | null {
+  return doc.pages.flatMap((page) => page.sections).find((section) => section.id === id) || null;
+}
+
+function targetKindOf(doc: SiteDocument, target: string): 'section' | 'node' | null {
+  if (sectionOf(doc, target)) return 'section';
+  if (findNode(doc, target)) return 'node';
+  return null;
+}
+
+function candidates(doc: SiteDocument): { id: string; label: string; purpose?: string }[] {
+  return doc.pages.flatMap((page) => page.sections.map((section) => ({
+    id: section.id,
+    label: `${page.title}: ${String(section.nodes.find((node) => node.kind === 'heading')?.props.text || section.purpose)}`,
+    purpose: section.purpose,
+  })));
+}
+
+/** Lane 1: exact values the owner typed. Returns the ops and the properties still open. */
+function exact(doc: SiteDocument, command: string, target: string): { ops: PatchOperation[]; open: EditQuestion[]; choices: Record<string, string> } {
+  const lower = command.toLowerCase();
+  const ops: PatchOperation[] = [];
+  const choices: Record<string, string> = {};
+  const open: EditQuestion[] = [];
+  const section = sectionOf(doc, target);
+  const node = section ? null : findNode(doc, target);
+  const existing = section?.style || node?.style || {};
+  const base: Record<string, unknown> = { ...(existing.base || {}) };
+  let changedStyle = false;
+  const spoken: Record<string, string> = { one: '1', two: '2', three: '3', four: '4', five: '5', six: '6' };
+  const digits = /(?:^|\s)([1-6])\s*(?:col|column)/.exec(lower)?.[1];
+  const word = /(?:^|\s)(one|two|three|four|five|six)\s*(?:col|column)/.exec(lower)?.[1];
+  const value = digits || (word ? spoken[word] : undefined) || (lower.includes('side by side') ? '2' : undefined);
+  let layout: Record<string, unknown> | null = section ? { ...section.layout } : null;
+  let changedLayout = false;
+  if (section) {
+    if (value) {
+      const columns = Math.min(6, Math.max(1, Number(value)));
+      layout = { ...layout, kind: columns > 1 ? 'grid' : 'stack', columns };
+      changedLayout = true;
+      choices.columns = String(columns);
+    } else if (/(?:col|column|grid|layout)/.test(lower)) {
+      open.push({ key: 'columns', label: 'Columns', values: ['2', '3', '4'] });
     }
   }
-  if (changed) ops.push({ op: 'set_style', target, value: { ...(existing || {}), base: current } });
-  return { ops, unresolved };
+
+  const align = lower.includes('centre') || lower.includes('center') ? 'center'
+    : lower.includes('align left') || lower.includes('left align') ? 'start'
+      : lower.includes('align right') || lower.includes('right align') ? 'end'
+        : lower.includes('justify') || lower.includes('between') ? 'between' : undefined;
+  if (align && ALIGN_VALUES.includes(align)) {
+    if (section) { layout = { ...layout, align }; changedLayout = true; }
+    else { base.align = align; changedStyle = true; }
+    choices.align = align;
+  }
+
+  const density = lower.includes('airy') || lower.includes('spacious') || lower.includes('breathing room') ? 'airy'
+    : lower.includes('compact') || lower.includes('tight') || lower.includes('dense') ? 'compact' : undefined;
+  if (density) {
+    base.pad = DENSITY_PAD[density];
+    changedStyle = true;
+    choices.density = density;
+  } else if (lower.includes('spacing') || lower.includes('padding')) {
+    open.push({ key: 'density', label: 'Spacing density', values: ['airy', 'balanced', 'compact'] });
+  }
+
+  const tone = Object.keys(TONE_STYLE).find((entry) => lower.includes(entry))
+    || (lower.includes('black') ? 'ink' : lower.includes('white') ? 'canvas' : undefined);
+  if (tone) {
+    Object.assign(base, TONE_STYLE[tone]);
+    changedStyle = true;
+    choices.tone = tone;
+  } else if (/(?:tone|look|feel)/.test(lower)) {
+    open.push({ key: 'tone', label: 'Section tone', values: Object.keys(TONE_STYLE) });
+  }
+
+  for (const [property, words] of Object.entries(PROPERTY_WORDS)) {
+    if (!words.some((entry) => lower.includes(entry))) continue;
+    const allowed = PROPERTY_OPTIONS[property];
+    const chosen = allowed.find((entry) => lower.includes(entry.replace('token:', '').split('.').pop() || entry))
+      ?? Object.entries(SYNONYMS).find(([entry]) => lower.includes(entry) && allowed.includes(SYNONYMS[entry]))?.[1];
+    if (chosen && allowed.includes(chosen)) {
+      (base as Record<string, unknown>)[property] = chosen;
+      changedStyle = true;
+      choices[property] = chosen;
+    } else {
+      open.push({ key: property, label: property, values: allowed });
+    }
+  }
+  if (layout && changedLayout && layout.kind) ops.push({ op: 'set_layout', target, value: layout as unknown as SectionLayoutSpec });
+  if (changedStyle) ops.push({ op: 'set_style', target, value: { ...existing, base: base as unknown as Style } });
+
+  const quote = /["“']([^"”']+)["”']/.exec(command);
+  if (quote) {
+    const copy = (section?.nodes || [node].filter(Boolean) as Node[]).find((entry) => ['heading', 'text', 'button'].includes(entry.kind));
+    if (copy) {
+      ops.push(copy.kind === 'button'
+        ? { op: 'set_props', target: copy.id, value: { label: quote[1].slice(0, 120) } }
+        : { op: 'set_text', target: copy.id, value: quote[1].slice(0, 4000) });
+      choices.text = 'exact';
+    }
+  }
+  return { ops, open, choices };
+}
+
+const AUDIENCE: Record<string, Persona['when']> = {
+  mobile: { device: 'mobile' }, phone: { device: 'mobile' }, tablet: { device: 'tablet' }, desktop: { device: 'desktop' },
+  returning: { returning: true }, repeat: { returning: true }, regular: { returning: true },
+  new: { returning: false }, first: { returning: false }, fresh: { returning: false },
+};
+
+/**
+ * "Hide this for first-time visitors" is a variant, not an edit: the base page
+ * keeps every fact and the compiled branch carries the difference. Resolved at
+ * the edge from the request alone.
+ */
+function variant(doc: SiteDocument, command: string, target: string): PatchOperation | null {
+  const spoken = /(?:for|to)\s+(?:only\s+)?(mobile|phone|tablet|desktop|returning|repeat|regular|new|first|fresh)(?:\s+(?:visitors|users|customers|buyers|traffic|ones|readers))?/.exec(command.toLowerCase());
+  const when = spoken ? AUDIENCE[spoken[1]] : undefined;
+  if (!when) return null;
+  const value = Object.values(when)[0];
+  const id = typeof value === 'string' ? value : value ? 'returning' : 'new';
+  const existing = (doc.personas || []).find((entry) => entry.id === id);
+  const priority = existing?.priority || 10;
+  if (/(hide|remove|drop|skip|cut|without)/.test(command.toLowerCase())) {
+    return { op: 'set_persona', persona: { id, when, priority, hide: [...new Set([...(existing?.hide || []), target])] } };
+  }
+  if (/(show|lead|front|first|promote|highlight|put)/.test(command.toLowerCase())) {
+    return { op: 'set_persona', persona: { id, when, priority, order: [target, ...(existing?.order || []).filter((entry) => entry !== target)] } };
+  }
+  return null;
+}
+
+/** Lane 3: new prose. One bounded call for one element. */
+async function prose(runner: ModelRunner | null, doc: SiteDocument, command: string, target: string): Promise<PatchOperation[]> {
+  if (!runner) return [];
+  const section = sectionOf(doc, target);
+  const node = (section?.nodes || [findNode(doc, target)].filter(Boolean) as Node[]).find((entry) => entry.kind === 'text' || entry.kind === 'heading');
+  if (!node) return [];
+  const limit = node.kind === 'heading' ? 120 : 600;
+  try {
+    const copy = await draftCopy(runner, { instruction: command, current: text(node.props.text, limit), facts: { brief: doc.brief, voice: doc.design.direction.voice }, limit });
+    return [{ op: 'set_text', target: node.id, value: copy }];
+  } catch {
+    return [];
+  }
 }
 
 export async function executeSiteAsk(
@@ -163,6 +258,9 @@ export async function executeSiteAsk(
   input: Record<string, unknown>,
   typesafe?: string,
   control?: D1Database,
+  ai?: Ai,
+  model?: string,
+  groqApiKey?: string,
 ): Promise<Record<string, unknown>> {
   const siteId = text(input.siteId, 160);
   const current = await getSiteRecord(client, siteId);
@@ -170,194 +268,101 @@ export async function executeSiteAsk(
   const { doc } = readDocument(current.data);
   const command = text(input.command, 600);
   if (!command) throw badRequest('Describe the change you want.');
+  const lower = command.toLowerCase();
+  const cache: JudgmentCache = { control, workspace: context.workspace.id, version: 'ask-2' };
 
+  // Lane 1 begins with the target: an exact id, purpose or heading needs no inference.
   const requested = text(input.target, 120);
   let target: string | null = null;
-  let targetKind: 'section' | 'node' | null = null;
   if (requested) {
-    targetKind = styleTarget(doc, requested);
-    if (!targetKind) throw notFound('The selected section was not found.');
+    if (!targetKindOf(doc, requested)) throw notFound('The selected section was not found.');
     target = requested;
   } else {
-    // Exact id or heading text matches resolve without inference.
-    const lower = command.toLowerCase();
     outer: for (const page of doc.pages) {
       for (const section of page.sections) {
-        if (lower.includes(section.id.toLowerCase()) || lower.includes(section.purpose.toLowerCase())) { target = section.id; targetKind = 'section'; break outer; }
+        if (lower.includes(section.id.toLowerCase()) || lower.includes(section.purpose.toLowerCase())) { target = section.id; break outer; }
         const heading = section.nodes.find((node) => node.kind === 'heading' && typeof node.props.text === 'string' && lower.includes(String(node.props.text).toLowerCase().slice(0, 24)));
-        if (heading) { target = section.id; targetKind = 'section'; break outer; }
+        if (heading) { target = section.id; break outer; }
       }
     }
   }
-  const cache: JudgmentCache = { control, workspace: context.workspace.id, version: 'ask-1' };
+
   const questions: string[] = [];
-  if (!target) {
-    const candidates = doc.pages.flatMap((page) => page.sections.map((section) => ({
-      id: section.id,
-      label: `${page.title}: ${String(section.nodes.find((node) => node.kind === 'heading')?.props.text || section.purpose)}`,
-      purpose: section.purpose,
-    })));
-    if (typesafe) {
-      const judged = await chooseTarget(typesafe, cache, { command, targets: candidates });
-      if (judged.target) { target = judged.target; targetKind = 'section'; }
-      else questions.push('Which section should this change?');
-    } else {
-      questions.push('Which section should this change?');
-    }
-  }
-
   const operations: PatchOperation[] = [];
-  let summary = '';
+  const choices: Record<string, string> = {};
+  let targetKind: 'section' | 'node' | null = target ? targetKindOf(doc, target) : null;
+
+  if (!target && typesafe) {
+    const judged = await interpret(typesafe, cache, { command, targets: candidates(doc), questions: [] });
+    if (judged.target) { target = judged.target; targetKind = 'section'; }
+  }
+  if (!target) questions.push('Which section should this change?');
+
   if (target && targetKind) {
-    const wanted = target;
-    const targetSection = doc.pages.flatMap((page) => page.sections).find((s) => s.id === wanted || s.purpose.toLowerCase() === wanted.toLowerCase());
-    if (targetSection) {
-      target = targetSection.id;
-      const lower = command.toLowerCase();
-      // Layout Decision (columns, alignment, density)
-      let cols: number | null = null;
-      if (lower.includes('2 col') || lower.includes('two col') || lower.includes('side by side') || lower.includes('split')) cols = 2;
-      else if (lower.includes('3 col') || lower.includes('three col')) cols = 3;
-      else if (lower.includes('4 col') || lower.includes('four col')) cols = 4;
-      else if (lower.includes('1 col') || lower.includes('one col') || lower.includes('single col') || lower.includes('stack')) cols = 1;
-
-      let align: 'start' | 'center' | 'end' | null = null;
-      if (lower.includes('align center') || lower.includes('center align') || lower.includes('centered') || lower.includes('centre')) align = 'center';
-      else if (lower.includes('align left') || lower.includes('left align')) align = 'start';
-      else if (lower.includes('align right') || lower.includes('right align')) align = 'end';
-
-      let density: 'airy' | 'compact' | null = null;
-      if (lower.includes('airy') || lower.includes('breathing room') || lower.includes('spacious') || lower.includes('more room')) density = 'airy';
-      else if (lower.includes('compact') || lower.includes('tight') || lower.includes('dense')) density = 'compact';
-
-      if (typesafe && (lower.includes('layout') || lower.includes('align') || lower.includes('columns') || lower.includes('spacing'))) {
-        const layoutChoice = await chooseLayout(typesafe, cache, { command, target, currentColumns: targetSection.layout.columns, currentAlign: targetSection.layout.align });
-        if (layoutChoice.columns) cols = layoutChoice.columns;
-        if (layoutChoice.align) align = layoutChoice.align;
-        if (layoutChoice.density && layoutChoice.density !== 'balanced') density = layoutChoice.density;
-      }
-
-      if (cols !== null || align !== null) {
-        const nextLayout = {
-          ...targetSection.layout,
-          ...(cols !== null ? { columns: cols, kind: (cols > 1 ? 'grid' : 'stack') as import('./document.ts').SectionLayout } : {}),
-          ...(align !== null ? { align } : {}),
-        };
-        operations.push({ op: 'set_layout', target, value: nextLayout });
-        summary = summary ? `${summary}, updated layout` : `Updated ${target} layout`;
-      }
-
-      if (density !== null) {
-        const padVal = density === 'airy' ? 'token:space.section' : 'token:space.unit';
-        const existingStyle = targetSection.style || {};
-        const nextBase = { ...(existingStyle.base || {}), pad: padVal };
-        operations.push({ op: 'set_style', target, value: { ...existingStyle, base: nextBase } });
-        summary = summary ? `${summary}, set spacing to ${density}` : `Set ${target} spacing to ${density}`;
-      }
-
-      // Tone Decision (canvas, surface, ink, accent)
-      let toneChoice: 'canvas' | 'surface' | 'ink' | 'accent' | null = null;
-      if (lower.includes('dark') || lower.includes('ink') || lower.includes('black')) toneChoice = 'ink';
-      else if (lower.includes('light') || lower.includes('canvas') || lower.includes('white')) toneChoice = 'canvas';
-      else if (lower.includes('surface') || lower.includes('raised') || lower.includes('card')) toneChoice = 'surface';
-      else if (lower.includes('accent') || lower.includes('royal blue') || lower.includes('blue') || lower.includes('brand')) toneChoice = 'accent';
-
-      if (typesafe && (lower.includes('tone') || lower.includes('color') || lower.includes('theme') || lower.includes('look'))) {
-        const judgedTone = await chooseTone(typesafe, cache, { command, target });
-        if (judgedTone) toneChoice = judgedTone;
-      }
-
-      if (toneChoice) {
-        const toneMap: Record<string, { bg: string; color: string }> = {
-          canvas: { bg: 'token:color.canvas', color: 'token:color.ink' },
-          surface: { bg: 'token:color.surface', color: 'token:color.ink' },
-          ink: { bg: 'token:color.ink', color: 'token:color.canvas' },
-          accent: { bg: 'token:color.accent', color: 'token:color.accentink' },
-        };
-        const existingStyle = targetSection.style || {};
-        const nextBase = { ...(existingStyle.base || {}), background: toneMap[toneChoice].bg, color: toneMap[toneChoice].color };
-        operations.push({ op: 'set_style', target, value: { ...existingStyle, base: nextBase } });
-        summary = summary ? `${summary}, set tone to ${toneChoice}` : `Set ${target} tone to ${toneChoice}`;
-      }
-
-      // Borders and Elevation
-      if (lower.includes('soft border') || lower.includes('soft borders') || lower.includes('rounded')) {
-        const existingStyle = targetSection.style || {};
-        const nextBase = { ...(existingStyle.base || {}), border: 'hairline', radius: 'token:shape.md' };
-        operations.push({ op: 'set_style', target, value: { ...existingStyle, base: nextBase } });
-        summary = summary ? `${summary}, soft borders` : `Added soft borders to ${target}`;
-      }
-      if (lower.includes('raised') || lower.includes('shadow') || lower.includes('elevation')) {
-        const existingStyle = targetSection.style || {};
-        const nextBase = { ...(existingStyle.base || {}), shadow: 'soft' };
-        operations.push({ op: 'set_style', target, value: { ...existingStyle, base: nextBase } });
-        summary = summary ? `${summary}, raised cards` : `Added raised elevation to ${target}`;
-      }
-
-      // Exact text rewrite if quoted
-      const quoteMatch = command.match(/["']([^"']+)["']/);
-      if (quoteMatch) {
-        const textTarget = targetSection.nodes.find((n) => n.kind === 'heading' || n.kind === 'text' || n.kind === 'button');
-        if (textTarget) {
-          if (textTarget.kind === 'button') {
-            operations.push({ op: 'set_props', target: textTarget.id, value: { label: quoteMatch[1] } });
-          } else {
-            operations.push({ op: 'set_text', target: textTarget.id, value: quoteMatch[1] });
-          }
-          summary = summary ? `${summary}, updated text` : `Updated text in ${target}`;
+    const lane = exact(doc, command, target);
+    operations.push(...lane.ops);
+    Object.assign(choices, lane.choices);
+    if (lane.open.length && typesafe) {
+      // Lane 2: everything still ambiguous, in one batched call.
+      const judged = await interpret(typesafe, cache, { command, targets: [], questions: lane.open });
+      const section = sectionOf(doc, target);
+      const node = section ? null : findNode(doc, target);
+      const existing = section?.style || node?.style || {};
+      const styled = operations.find((op) => op.op === 'set_style') as Extract<PatchOperation, { op: 'set_style' }> | undefined;
+      const laid = operations.find((op) => op.op === 'set_layout') as Extract<PatchOperation, { op: 'set_layout' }> | undefined;
+      const base = { ...(styled?.value?.base || existing.base || {}) } as Record<string, unknown>;
+      let nextLayout = { ...(laid?.value || section?.layout || { kind: 'stack' as const }) } as Record<string, unknown>;
+      let styleChanged = false;
+      let layoutChanged = false;
+      for (const [key, value] of Object.entries(judged.values)) {
+        if (key === 'columns' && section) {
+          const columns = Math.min(6, Math.max(1, Number(value) || 2));
+          nextLayout = { ...nextLayout, kind: columns > 1 ? 'grid' : 'stack', columns };
+          layoutChanged = true;
+        } else if (key === 'align' && section) {
+          nextLayout = { ...nextLayout, align: value };
+          layoutChanged = true;
+        } else if (key === 'density') {
+          base.pad = DENSITY_PAD[value] || 'lg';
+          styleChanged = true;
+        } else if (key === 'tone') {
+          Object.assign(base, TONE_STYLE[value] || TONE_STYLE.canvas);
+          styleChanged = true;
+        } else if (PROPERTY_OPTIONS[key]?.includes(value)) {
+          base[key] = value;
+          styleChanged = true;
+        } else if (key === 'align') {
+          base.align = value;
+          styleChanged = true;
         }
+        choices[key] = value;
       }
+      if (layoutChanged && laid) laid.value = nextLayout as unknown as SectionLayoutSpec;
+      else if (layoutChanged) operations.push({ op: 'set_layout', target, value: nextLayout as unknown as SectionLayoutSpec });
+      if (styleChanged && styled) styled.value = { ...existing, base: base as unknown as Style };
+      else if (styleChanged) operations.push({ op: 'set_style', target, value: { ...existing, base: base as unknown as Style } });
+      for (const key of judged.open) if (!questions.some((entry) => entry.startsWith(`Which ${key}`))) questions.push(`Which ${key} should it use?`);
+    } else {
+      for (const question of lane.open) questions.push(`Which ${question.label} should it use?`);
     }
 
-    const { ops, unresolved } = explicitStyle(doc, command, target);
-    for (const op of ops) {
-      const opTarget = 'target' in op ? (op as { target: string }).target : undefined;
-      const exists = operations.some((existing) => {
-        if (existing.op !== op.op) return false;
-        const existingTarget = 'target' in existing ? (existing as { target: string }).target : undefined;
-        return existingTarget === opTarget;
-      });
-      if (!exists) {
-        operations.push(op);
-      }
-    }
-    if (ops.length && !summary) summary = `Update the selected ${targetKind}: ${ops.length} style change${ops.length === 1 ? '' : 's'}.`;
-    const missing = Object.keys(unresolved);
-    if (missing.length && typesafe) {
-      const chosen = await chooseValues(typesafe, cache, { command, target, options: Object.fromEntries(missing.map((property) => [property, unresolved[property]])) });
-      const resolved = Object.entries(chosen).filter(([property, value]) => property in PROPERTY_OPTIONS && PROPERTY_OPTIONS[property].includes(value));
-      if (resolved.length) {
-        const node = (() => {
-          const walk = (nodes: Node[]): Node | null => {
-            for (const entry of nodes) {
-              if (entry.id === target) return entry;
-              const nested = entry.children ? walk(entry.children) : null;
-              if (nested) return nested;
-            }
-            return null;
-          };
-          for (const page of doc.pages) for (const section of page.sections) {
-            const found = walk(section.nodes);
-            if (found) return found;
-          }
-          return null;
-        })();
-        const section = node ? null : doc.pages.flatMap((page) => page.sections).find((entry) => entry.id === target) || null;
-        const existing = node?.style || section?.style;
-        const base = { ...(existing?.base || {}) } as Record<string, unknown>;
-        for (const [property, value] of resolved) base[property] = value;
-        operations.push({ op: 'set_style', target, value: { ...existing, base } });
-        summary = summary || `Update the selected ${targetKind}.`;
-      }
-      const stillMissing = missing.filter((property) => !(property in chosen));
-      for (const property of stillMissing) questions.push(`Which ${property} should it use?`);
-    } else {
-      for (const property of missing) questions.push(`Which ${property} should it use?`);
+    // A named audience compiles a variant instead of changing the base page.
+    const branch = variant(doc, command, target);
+    if (branch) operations.push(branch);
+
+    // Lane 3 only when nothing concrete was named and the owner asked for wording.
+    if (!operations.length && !lane.open.length && /(rewrite|wording|copy|say|headl|caption|tone of voice)/.test(lower)) {
+      const runner = (ai || groqApiKey) ? new ModelRunner(ai, model || (groqApiKey ? GROQ_DEFAULT_MODEL : SITE_MODEL_FALLBACKS[0]), DEFAULT_BUDGET, groqApiKey) : null;
+      operations.push(...await prose(runner, doc, command, target));
     }
   }
 
+  const summary = operations.length
+    ? `${operations.map((op) => op.op).filter((op, index, all) => all.indexOf(op) === index).join(', ')} in ${target}`
+    : '';
   if (!operations.length && !questions.length) questions.push('Describe the change with a section and a value, for example "make the hero background ink".');
-  return { siteId: current.id, base: doc.revision, target, targetKind, operations, summary, questions };
+  const result: AskResult = { siteId: current.id, base: doc.revision, target, targetKind, operations, summary, questions, choices };
+  return { ...result };
 }
 
 export interface EditResult {
@@ -366,6 +371,15 @@ export interface EditResult {
   revision: number;
   site: SiteDocument;
   diff: DiffEntry[];
+}
+
+/** Accepted taste is remembered so the next run offers it first; it never decides. */
+function remember(doc: SiteDocument, values: Record<string, string>, kind: 'accepted' | 'rejected'): SiteDocument {
+  const entries = Object.entries(values).map(([key, value]) => `${key}:${value}`);
+  if (!entries.length) return doc;
+  const taste = { ...(doc.taste || {}) };
+  const list = [...new Set([...(taste[kind] || []), ...entries])].slice(-20);
+  return { ...doc, taste: { ...taste, [kind]: list } };
 }
 
 export async function executeSiteEdit(
@@ -384,8 +398,11 @@ export async function executeSiteEdit(
   const { doc } = readDocument(current.data);
   if (doc.revision !== base) throw conflict('Site changed since this patch was prepared. Refresh and try again.');
   const operations = Array.isArray(input.operations) ? input.operations as PatchOperation[] : [];
-  const next = applyPatch(doc, { base, operations, respectLocks: input.respectLocks !== false });
+  let next = applyPatch(doc, { base, operations, respectLocks: input.respectLocks !== false });
   validateDocument(next);
+  const choices = object(input.choices);
+  const remembered = Object.fromEntries(Object.entries(choices).filter(([, value]) => typeof value === 'string') as [string, string][]);
+  if (Object.keys(remembered).length) next = remember(next, remembered, 'accepted');
   const diff = diffSummary(doc, next);
   const version = current.version + 1;
   const at = now();
@@ -398,14 +415,7 @@ export async function executeSiteEdit(
       SELECT ?, 'action', ?, 'site.edit', 'accepted', ?, ?, ?, ?, ?, ? WHERE changes()=1`, args: [`evt_${crypto.randomUUID()}`, siteId, context.identity.id, inputHash, key, JSON.stringify({ result }), at, at] },
   ], 'write');
   if (saved[0].rowsAffected !== 1 || saved[1].rowsAffected !== 1) throw conflict('Site changed while saving. Refresh and try again.');
-  let previewHtml = '';
-  try {
-    const compiled = await compileDocument(next);
-    const html = String(compiled.files.find((f) => f.path === '/index.html')?.body || '');
-    const css = String(compiled.files.find((f) => f.path === '/style.css')?.body || '');
-    previewHtml = html.replace('</head>', `<style>${css}</style></head>`);
-  } catch { /* ignore */ }
-  return { siteId, version, revision: next.revision, site: next, diff, html: previewHtml };
+  return { ...result, html: await previewHtml(next) };
 }
 
 /**
@@ -433,7 +443,18 @@ async function recordHistory(
   return { ...next, history } as SiteDocument & { history?: unknown[] };
 }
 
-/** Undo restores an earlier revision by writing a new revision. */
+async function previewHtml(doc: SiteDocument): Promise<string> {
+  try {
+    const compiled = await compileDocument(doc);
+    const html = String(compiled.files.find((file) => file.path === '/index.html')?.body || '');
+    const css = String(compiled.files.find((file) => file.path === '/style.css')?.body || '');
+    return html.replace('</head>', `<style>${css}</style></head>`);
+  } catch {
+    return '';
+  }
+}
+
+/** Undo restores an earlier revision as a new revision and records the taste it rejected. */
 export async function executeSiteUndo(
   client: Client,
   context: AccessContext,
@@ -454,12 +475,14 @@ export async function executeSiteUndo(
   const stored = await bucket.get(entry.key);
   if (!stored) throw notFound('The stored revision is unavailable.');
   const restored = JSON.parse(await stored.text()) as SiteDocument;
-  const merged: SiteDocument = {
+  const undone = text(entry.summary, 200);
+  const merged: SiteDocument = remember({
     ...restored,
     revision: doc.revision + 1,
     currentRelease: doc.currentRelease ?? null,
     releases: doc.releases || [],
-  };
+    taste: doc.taste || restored.taste,
+  }, { undo: undone }, 'rejected');
   validateDocument(merged);
   const diff = diffSummary(doc, merged);
   const version = current.version + 1;
@@ -472,14 +495,7 @@ export async function executeSiteUndo(
       SELECT ?, 'action', ?, 'site.undo', 'accepted', ?, ?, ?, ?, ?, ? WHERE changes()=1`, args: [`evt_${crypto.randomUUID()}`, siteId, context.identity.id, inputHash, key, JSON.stringify({ result }), at, at] },
   ], 'write');
   if (saved[0].rowsAffected !== 1 || saved[1].rowsAffected !== 1) throw conflict('Site changed while undoing. Refresh and try again.');
-  let previewHtml = '';
-  try {
-    const compiled = await compileDocument(merged);
-    const html = String(compiled.files.find((f) => f.path === '/index.html')?.body || '');
-    const css = String(compiled.files.find((f) => f.path === '/style.css')?.body || '');
-    previewHtml = html.replace('</head>', `<style>${css}</style></head>`);
-  } catch { /* ignore */ }
-  return { ...result, html: previewHtml };
+  return { ...result, html: await previewHtml(merged) };
 }
 
 /**
@@ -529,16 +545,4 @@ export async function executeSiteDesignImport(
   ], 'write');
   if (saved[0].rowsAffected !== 1 || saved[1].rowsAffected !== 1) throw conflict('Site changed while importing the design. Refresh and try again.');
   return result;
-}
-
-/** Impact preview for a shared component change. */
-export function componentImpact(doc: SiteDocument, componentId: string): { pages: string[]; sections: string[] } {
-  const pages = new Set<string>();
-  const sections = new Set<string>();
-  const walk = (nodes: Node[], page: string, section: string) => nodes.forEach((node) => {
-    if (node.component === componentId) { pages.add(page); sections.add(section); }
-    walk(node.children || [], page, section);
-  });
-  doc.pages.forEach((page) => page.sections.forEach((section) => walk(section.nodes, page.path, section.id)));
-  return { pages: [...pages], sections: [...sections] };
 }

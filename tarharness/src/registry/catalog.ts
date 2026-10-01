@@ -216,13 +216,12 @@ export const actionCatalog = [
     output: ['siteId', 'version', 'site', 'preview'], roles: ['owner', 'admin'], effects: ['record_create'],
   },
   {
-    id: 'site.update', version: 1, type: 'app', title: 'Update site',
-    description: 'Apply validated operations to site draft without second AI charge.', interfaceKey: 'form',
+    id: 'site.scout', version: 1, type: 'agent', title: 'Scout the site',
+    description: 'Run declared checks over the site, repair unambiguous drift as a draft revision, and place one review item in Space. Never publishes.', interfaceKey: 'form',
     fields: [
       { key: 'siteId', label: 'Site', kind: 'record', required: true },
-      { key: 'baseVersion', label: 'Version', kind: 'number', required: true },
     ],
-    output: ['siteId', 'version'], roles: ['owner', 'admin'], effects: ['record_update'],
+    output: ['siteId', 'revision', 'findings', 'taskId'], roles: ['owner', 'admin'], effects: ['record_update', 'inbox'],
   },
   {
     id: 'site.edit', version: 1, type: 'app', title: 'Edit site patch',

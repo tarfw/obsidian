@@ -30,7 +30,7 @@
 | 17  | Purchasing               | `purchase.create`, `purchase.receive`                                                                                      |
 | 18  | Commerce orders          | `order.create`, `order.fulfill`, `order.cancel`                                                                            |
 | 19  | Billing                  | `invoice.issue`, `payment.record`, `refund.record`                                                                         |
-| 20  | Site authoring           | `site.generate`, `site.update`, `site.edit`, `site.ask`, `site.undo`, `site.design.import`                                 |
+| 20  | Site authoring           | `site.generate`, `site.scout`, `site.edit`, `site.ask`, `site.undo`, `site.design.import`                                  |
 | 21  | Site assets              | `site.asset.upload`, `site.asset.generate`, `site.assets`                                                                  |
 | 22  | Site releases            | `site.releases`, `site.checks`, `site.compile`, `site.publish`, `site.rollback`, `site.refresh`, `site.unpublish`          |
 
@@ -74,7 +74,7 @@ Proposed IDs only; build and register before Jev can select them. Financial/tax 
 | Registry   | Actions declare delegation, required reads/writes, record scope and launcher dependencies.                                                 |
 | Access     | Source checks membership, capabilities, grants, scope and state on reads/commits. Unknown roles deny.                                      |
 | Projection | Code derives Tools without AI. Now includes authorized work across workspaces; Space changes focus only.                                   |
-| Site       | One setup brief; optional Site uses approved public facts/assets. Private preview + explicit Publish follow aisites.md; visits need no AI. |
+| Site       | One setup brief; optional Site uses approved public facts/assets. Private preview + explicit Publish follow agenticsite.md; visits need no AI. |
 | AI         | Choice has confidence; Noul has yes-probability. Batch independent judgments; clarify uncertainty.                                         |
 | Freshness  | Cache by identity/access, source/registry versions, context/request, question/model and relevant time. Source remains authoritative.       |
 | Business   | Reuse Commerce, Flows, idempotency and audit. Distinct approval/execution steps need distinct registered Actions.                          |
@@ -84,7 +84,7 @@ Proposed IDs only; build and register before Jev can select them. Financial/tax 
 | Reference         | Source                                                                                                                                                                                                           |
 | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Registry snapshot | 68 Actions; [Tools](tarharness/src/registry/tools.ts), [Actions](tarharness/src/registry/catalog.ts), [POS](tarharness/src/pos/catalog.ts), [Commerce](tarharness/src/commerce/catalog.ts)                       |
-| Product contracts | [Space](space.md), [Inbox](inbox.md), [Commerce](commerce.md), [AI Sites](aisites.md)                                                                                                                            |
+| Product contracts | [Space](space.md), [Inbox](inbox.md), [Commerce](commerce.md), [Agentic Site](agenticsite.md)                                                                                                                            |
 | Jev guidance      | [Choice](https://docs.typesafe.ai/primitives/choice), [Noul](https://docs.typesafe.ai/primitives/noul), [Confidence](https://docs.typesafe.ai/confidence), [Batching](https://docs.typesafe.ai/patterns/fan-out) |
 
 ## 3. End-to-end flow

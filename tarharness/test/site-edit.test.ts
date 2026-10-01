@@ -4,8 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { WORKSPACE_SCHEMA } from '../src/db/schema.ts';
 import { executeGateway } from '../src/gateway/actions.ts';
 import type { AccessContext } from '../src/types.ts';
-import { upgrade } from '../src/site/adapt.ts';
-import { createDefaultSite } from '../src/site/store.ts';
+import { defaultSite } from '../src/site/build.ts';
 import type { SiteDocument } from '../src/site/document.ts';
 
 const clients: ReturnType<typeof createClient>[] = [];
@@ -93,7 +92,7 @@ describe('site ask and edit', () => {
     const { siteId, site } = await generatedSite(client);
     const request = vi.fn().mockResolvedValue(new Response(JSON.stringify({
       model: 'jev-latest',
-      answers: { 'p:background': { type: 'choice', choice: 'token:color.accent', confidence: 0.92 } },
+      answers: { 'q:background': { type: 'choice', choice: 'token:color.accent', confidence: 0.92 } },
     }), { status: 200 }));
     vi.stubGlobal('fetch', request);
     const asked = await Effect.runPromise(executeGateway(client, ownerAccess, {
@@ -154,7 +153,7 @@ describe('site ask and edit', () => {
     const { siteId, site } = await generatedSite(client);
     const asked = await Effect.runPromise(executeGateway(client, ownerAccess, {
       actionId: 'site.ask', idempotencyKey: 'ask-two-cols',
-      input: { siteId, command: 'Two columns with airy spacing', target: 'introduction' },
+      input: { siteId, command: 'Two columns with airy spacing', target: 'hero' },
     }));
     const ops = asked.operations as { op: string; target: string; value: unknown }[];
     expect(ops.some((op) => op.op === 'set_layout')).toBe(true);
@@ -216,7 +215,7 @@ describe('site checks gate publication', () => {
   it('stores checks with a candidate and refuses to publish blocking findings', async () => {
     const client = await createTestWorkspace();
     const bucket = releaseBucket();
-    const legacy = upgrade(createDefaultSite('Slice House', 'Pizza'));
+    const legacy = defaultSite('Slice House', 'Pizza');
     const siteId = await seed(client, {
       ...legacy,
       assets: [{

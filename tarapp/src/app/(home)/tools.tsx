@@ -9,7 +9,7 @@ import SiteScreen from '@/components/site';
 import WorkspaceTeam from '@/components/WorkspaceTeam';
 import { useWorkspace } from '@/components/WorkspaceProvider';
 import { getCurrentUser } from '@/lib/auth';
-import { createOperationKey, HarnessRequestError, harness, type HarnessAction, type HarnessFlowBook, type HarnessFlowRun, type HarnessInterfaceContract, type HarnessTool, type HarnessTools, type HarnessWorkspace } from '@/lib/harness';
+import { createOperationKey, harness, type HarnessAction, type HarnessFlowBook, type HarnessFlowRun, type HarnessInterfaceContract, type HarnessTool, type HarnessTools, type HarnessWorkspace } from '@/lib/harness';
 
 const ink = '#1C2430';
 const muted = '#697586';

@@ -74,7 +74,6 @@ export default function WorkspaceTeam({
   const [email, setEmail] = useState('');
   const [duties, setDuties] = useState('');
   const [selectedRole, setSelectedRole] = useState(baseRoles[0]);
-  const [workRole, setWorkRole] = useState('general');
   const [grantedRoles, setGrantedRoles] = useState<string[]>(['general']);
   const [suggestedPermissions, setSuggestedPermissions] = useState<string[]>([]);
   const [matching, setMatching] = useState(false);
@@ -217,7 +216,6 @@ export default function WorkspaceTeam({
     setSelectedRole(baseRoles.find((r) => r.role === member.role) || baseRoles[0]);
     const existingGrants = member.roles?.length ? member.roles : [member.workRole || 'general'];
     setGrantedRoles(existingGrants);
-    setWorkRole(existingGrants[0] || 'general');
     setDuties(existingGrants.join(', '));
   };
 
@@ -234,12 +232,10 @@ export default function WorkspaceTeam({
         if (suggestion) {
           const roles = suggestion.roles?.length ? suggestion.roles : [suggestion.workRole || 'general'];
           setGrantedRoles(roles);
-          setWorkRole(suggestion.workRole || roles[0] || 'general');
           setSuggestedPermissions(suggestion.permissions || []);
         }
       } else {
         setGrantedRoles(['general']);
-        setWorkRole('general');
         setSuggestedPermissions([]);
       }
       setMemberStep(2);
@@ -251,7 +247,6 @@ export default function WorkspaceTeam({
         .filter(Boolean);
       const roles = parsed.length ? parsed : ['general'];
       setGrantedRoles(roles);
-      setWorkRole(roles[0] || 'general');
       setMemberStep(2);
     } finally {
       setMatching(false);
@@ -285,7 +280,6 @@ export default function WorkspaceTeam({
       setAdding(false);
       setMemberStep(1);
       setSelectedRole(baseRoles[0]);
-      setWorkRole('general');
       setGrantedRoles(['general']);
     });
 
@@ -370,7 +364,6 @@ export default function WorkspaceTeam({
                             setEmail('');
                             setDuties('');
                             setSelectedRole(baseRoles[0]);
-                            setWorkRole('general');
                             setGrantedRoles(['general']);
                             setMemberStep(1);
                             setAdding(true);

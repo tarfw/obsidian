@@ -95,9 +95,8 @@ export default function SiteScreen({
         void SecureStore.setItemAsync(siteStorageKey(slug), JSON.stringify(snap)).catch(() => undefined);
         setSnapshot(snap);
         if (snap.html) setHtml(snap.html);
-        if (snap.site.data.pages?.[0]?.id) {
-          setActivePageId((curr) => curr || snap.site.data.pages[0].id);
-        }
+        const firstPageId = snap.site.data.pages?.[0]?.id;
+        if (firstPageId) setActivePageId((curr) => curr || firstPageId);
       }
     } catch {
       // Retain existing snapshot if in memory
@@ -124,9 +123,8 @@ export default function SiteScreen({
                   siteSnapshotCache.set(slug, stored);
                   setSnapshot(stored);
                   if (stored.html) setHtml(stored.html);
-                  if (stored.site.data.pages?.[0]?.id) {
-                    setActivePageId((curr) => curr || stored.site.data.pages[0].id);
-                  }
+                  const firstPageId = stored.site.data.pages?.[0]?.id;
+                  if (firstPageId) setActivePageId((curr) => curr || firstPageId);
                   setInitialLoading(false);
                 }
               } catch { /* ignore */ }

@@ -19,7 +19,6 @@ const sections: { key: Section; label: string }[] = [
 export default function PosInterface(props: ActionInterfaceProps) {
   const insets = useSafeAreaInsets();
   const wide = useWindowDimensions().width >= 760;
-  const initialSection = 'sell' as Section;
   const initialOrderId = typeof props.initialInput?.orderId === 'string' ? props.initialInput.orderId : '';
   const savedSession = getPosSession(props.scope);
   const hasSavedProducts = savedSession?.products !== undefined;
@@ -271,10 +270,6 @@ export default function PosInterface(props: ActionInterfaceProps) {
       } });
     })().catch((cause: Error) => setError(cause.message));
   };
-  const adjust = (product: PosRecord) => setForm({ title: 'Adjust ' + product.title, submit: 'Update stock', fields: [
-    { key: 'delta', label: 'Quantity change', hint: 'Positive to receive stock. Negative to remove stock.' },
-    { key: 'reason', label: 'Reason' },
-  ], save: (values) => saveAction('pos.stock.adjust', { productId: product.id, version: product.version, delta: Number(values.delta), reason: values.reason }) });
   const customerForm = (existing?: PosRecord) => setForm({ title: existing ? 'Edit customer' : 'Add customer', submit: 'Save customer', fields: [
     { key: 'title', label: 'Name', value: existing?.title }, { key: 'phone', label: 'Phone', value: String(existing?.data.phone || '') }, { key: 'email', label: 'Email', value: String(existing?.data.email || '') },
   ], save: (values) => saveAction('pos.customer.save', { ...values, id: existing?.id, version: existing?.version }) });

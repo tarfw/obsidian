@@ -1,14 +1,14 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, AppState, FlatList, Keyboard, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, AppState, FlatList, Keyboard, Modal, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ActionInterfaceHost from '@/action-interfaces/ActionInterfaceHost';
 import { TarAvatar } from '@/components/TarAvatar';
 import { useWorkspace } from '@/components/WorkspaceProvider';
-import { createOperationKey, HarnessRequestError, harness, type HarnessAction, type HarnessInterfaceContract, type HarnessSpaceContext, type NowFeed } from '@/lib/harness';
+import { createOperationKey, HarnessRequestError, harness, type HarnessAction, type HarnessInterfaceContract, type NowFeed } from '@/lib/harness';
 import { cachedNow, refreshNow } from '@/lib/now-sync';
 import { takeNowReload } from '@/lib/now-navigation';
 
@@ -24,10 +24,9 @@ type AskSuggestion = { action: string | null; title: string | null; confidence: 
 export default function NowScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { workspaces, current, selectWorkspace } = useWorkspace();
+  const { workspaces, current } = useWorkspace();
   const personalId = workspaces.find((workspace) => workspace.mode === 'personal')?.id || current.id;
   const [feed, setFeed] = useState<NowFeed>(() => feedCache.get(personalId) || empty);
-  const [space, setSpace] = useState<{ context: HarnessSpaceContext; alternatives: HarnessSpaceContext[] } | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');

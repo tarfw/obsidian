@@ -19,11 +19,24 @@ export interface Blueprint {
   density: Density;
   tone: Tone;
   columns: number;
+  /** Hero treatment: full-bleed wide image, split editorial, or none. */
+  heroStyle: 'fullbleed_16_6' | 'split_16_9' | 'none';
+  /** Order sections follow on the home page. */
+  flow: 'classic_lookbook' | 'commerce_first' | 'editorial_first';
+  /** Whether product cards carry a quick-add action. */
+  quickAdd: boolean;
   purposes: string[];
   extras: string[];
   assets: string[];
   enquiry: boolean;
 }
+
+/** Home-page section order per declared flow. Purposes without evidence are skipped. */
+export const SECTION_FLOWS: Record<Blueprint['flow'], readonly string[]> = {
+  classic_lookbook: ['introduction', 'collection', 'split', 'story', 'recommendations', 'categories', 'promo'],
+  commerce_first: ['introduction', 'collection', 'recommendations', 'promo', 'split', 'categories', 'story'],
+  editorial_first: ['introduction', 'split', 'collection', 'story', 'categories', 'recommendations', 'promo'],
+};
 
 /** Approved facts, gathered by code. The builder never queries the database itself. */
 export interface Facts {
@@ -84,8 +97,11 @@ export function defaultBlueprint(brief: Brief, taste?: SiteDocument['taste']): B
     density,
     tone: 'canvas',
     columns: isLookbook ? 4 : 3,
+    heroStyle: isLookbook ? 'fullbleed_16_6' : 'none',
+    flow: 'classic_lookbook',
+    quickAdd: isLookbook,
     purposes: ['introduction', 'collection', 'story', 'action'],
-    extras: isLookbook ? ['new', 'shop', 'active', 'sweats', 'knits'] : [],
+    extras: isLookbook ? ['shop'] : [],
     assets: [],
     enquiry: false,
   };
@@ -112,11 +128,17 @@ function navigation(title: string, paths: string[]): Node {
   };
 }
 
-function buttons(at: string, paths: string[], enquiry: boolean, isLookbook = false): Node[] {
+function buttons(at: string, paths: string[], enquiry: boolean): Node[] {
   const entries: Node[] = [];
   if (enquiry) entries.push({ id: `${at}-ask`, kind: 'button', props: { label: 'Enquire', journey: 'enquiry' } });
-  else entries.push({ id: `${at}-more`, kind: 'button', props: { label: isLookbook ? 'SHOP OUTERWEAR' : 'Explore', href: paths.find((path) => path !== '/') || '/', ...(isLookbook ? { variant: 'outline' } : {}) } });
+  else entries.push({ id: `${at}-more`, kind: 'button', props: { label: 'Explore', href: paths.find((path) => path !== '/') || '/' } });
   return [{ id: `${at}-row`, kind: 'flex', props: {}, children: entries }];
+}
+
+/** Approved media among the blueprint's chosen assets, best match first. */
+function approvedMedia(input: BuildInput, kinds: readonly Asset['kind'][]): Asset[] {
+  const wanted = new Set(input.blueprint.assets);
+  return (input.assets || []).filter((asset) => wanted.has(asset.id) && asset.rights.approved && kinds.includes(asset.kind));
 }
 
 /** One section per declared purpose. Purposes without evidence are skipped. */
@@ -128,11 +150,27 @@ function block(purpose: string, at: string, input: BuildInput, paths: string[], 
     case 'chrome':
       return null;
     case 'introduction': {
-      const headline = isLookbook ? 'Layering Season' : input.title;
+      if (isLookbook) {
+        // Every word derives from the owner's own title and brief; the prose pass may rewrite the slots.
+        const headline = input.title || brief.goal.slice(0, 60);
+        const shop = paths.find((path) => path !== '/') || '/shop';
+        const hero: Section = {
+          id: at, purpose: 'introduction', layout: { kind: blueprint.heroStyle === 'split_16_9' ? 'flex' : 'stack' }, style: style(blueprint.density, blueprint.tone),
+          nodes: [
+            { id: `${at}-title`, kind: 'heading', props: { text: headline, level: 1 } },
+            { id: `${at}-cta`, kind: 'button', props: { label: 'Shop now', href: shop, variant: 'outline' } },
+          ],
+        };
+        const [media] = approvedMedia(input, ['image']);
+        if (media && blueprint.heroStyle !== 'none') hero.nodes.unshift({ id: `${at}-media`, kind: 'image', props: { asset: media.id, alt: media.alt || input.title } });
+        slots.push({ id: `${at}-title`, limit: 60, purpose, current: headline });
+        return hero;
+      }
+      const headline = input.title;
       const children: Node[] = [
         { id: `${at}-title`, kind: 'heading', props: { text: headline, level: 1 } },
         { id: `${at}-line`, kind: 'text', props: { text: plain } },
-        ...buttons(at, paths, blueprint.enquiry, isLookbook),
+        ...buttons(at, paths, blueprint.enquiry),
       ];
       const image = blueprint.assets.find((id) => (input.assets || []).some((asset) => asset.id === id && asset.kind === 'image'));
       if (image) children.push({ id: `${at}-image`, kind: 'image', props: { asset: image, alt: `${input.title}` } });
@@ -141,19 +179,21 @@ function block(purpose: string, at: string, input: BuildInput, paths: string[], 
     }
     case 'collection': {
       const ids = (facts.items || []).map((item) => String(item.id || '')).filter(Boolean);
-      const defaultLookbookItems = isLookbook && !ids.length ? [
-        { title: 'Funnel Neck Balloon Sleeve Down Puffer Jacket - Coffee Bean', price: 26500, currency: 'USD' },
-        { title: 'Knit Straight Leg Sweatpants - Oatmeal', price: 9500, currency: 'USD' },
-        { title: 'Oversized Knit Sweatshirt - Charcoal Grey', price: 9500, currency: 'USD' },
-        { title: 'Rib Knit Beanie - Damson', price: 6000, currency: 'USD' },
-      ] : [];
-      if (!ids.length && !defaultLookbookItems.length) return null;
+      if (!ids.length) {
+        // No catalog records yet: lookbook stores show placeholder cards the
+        // owner replaces the moment products exist. No prices, no fake stock.
+        if (!isLookbook) return null;
+        return {
+          id: at, purpose: 'collection', layout: { kind: 'grid', columns: blueprint.columns },
+          style: style(blueprint.density),
+          nodes: [{ id: `${at}-list`, kind: 'collection', props: { placeholders: blueprint.columns * 2 } }],
+        };
+      }
       return {
         id: at, purpose: 'collection', layout: { kind: 'grid', columns: blueprint.columns },
         style: style(blueprint.density),
         nodes: [
-          { id: `${at}-title`, kind: 'heading', props: { text: isLookbook ? 'New & Trending' : 'What we offer', level: 2 } },
-          { id: `${at}-list`, kind: 'collection', props: { title: isLookbook ? 'New & Trending' : '', items: defaultLookbookItems, slot: 'items' } },
+          { id: `${at}-list`, kind: 'collection', props: { title: isLookbook ? '' : 'What we offer', slot: 'items', ...(isLookbook && blueprint.quickAdd ? { quickAdd: true } : {}) } },
         ],
         ...(ids.length ? {
           bindings: [{
@@ -162,6 +202,53 @@ function block(purpose: string, at: string, input: BuildInput, paths: string[], 
             empty: { text: 'Availability is published here.' },
           }],
         } : {}),
+      };
+    }
+    case 'recommendations': {
+      // Second catalog slot: the tail of the same approved list, resolved by the same public query.
+      const ids = (facts.items || []).map((item) => String(item.id || '')).filter(Boolean).slice(-4).reverse();
+      if (!ids.length) return null;
+      return {
+        id: at, purpose: 'recommendations', layout: { kind: 'grid', columns: blueprint.columns },
+        style: style(blueprint.density),
+        nodes: [
+          { id: `${at}-list`, kind: 'collection', props: { slot: 'reco', ...(isLookbook && blueprint.quickAdd ? { quickAdd: true } : {}) } },
+        ],
+        bindings: [{
+          id: `${at}-bind`, slot: 'reco', query: 'catalog.public', version: 1, access: 'public',
+          freshness: 300, params: { records: ids, channel: facts.channel || 'default' },
+          empty: { text: 'More pieces are published here.' },
+        }],
+      };
+    }
+    case 'split': {
+      // Editorial two-up: only when two approved media assets exist. Never stock imagery.
+      const media = approvedMedia(input, ['image', 'video']).slice(0, 2);
+      if (media.length < 2) return null;
+      return {
+        id: at, purpose: 'split', layout: { kind: 'flex' }, style: style(blueprint.density),
+        nodes: media.map((asset): Node => ({ id: `${at}-${asset.id}`, kind: asset.kind === 'video' ? 'video' : 'image', props: { asset: asset.id, alt: asset.alt || input.title } })),
+      };
+    }
+    case 'categories': {
+      // Text-tab filter over the pages the owner actually declared. No invented category names.
+      const links = paths.filter((path) => path !== '/').slice(0, 6);
+      if (!links.length) return null;
+      return {
+        id: at, purpose: 'categories', layout: { kind: 'flex' }, style: { base: { gap: 'sm', align: 'center' } },
+        nodes: links.map((path): Node => ({ id: `${at}-${slug(path, 'cat')}`, kind: 'button', props: { label: path.slice(1).replace(/-/g, ' ').toUpperCase(), href: path, variant: 'outline' } })),
+      };
+    }
+    case 'promo': {
+      if (!(facts.items || []).length) return null;
+      const text = brief.goal || plain;
+      slots.push({ id: `${at}-line`, limit: 200, purpose, current: text });
+      return {
+        id: at, purpose: 'promo', layout: { kind: 'stack' }, style: { base: { ...TONE_STYLE.ink, pad: padFor(blueprint.density), align: 'center' } },
+        nodes: [
+          { id: `${at}-line`, kind: 'text', props: { text } },
+          { id: `${at}-cta`, kind: 'button', props: { label: isLookbook ? 'Shop now' : 'Explore', href: paths.find((path) => path !== '/') || '/', variant: 'outline' } },
+        ],
       };
     }
     case 'features': {
@@ -190,12 +277,15 @@ function block(purpose: string, at: string, input: BuildInput, paths: string[], 
     }
     case 'story': {
       if (isLookbook) {
+        const text = brief.goal || plain;
+        slots.push({ id: `${at}-body`, limit: 600, purpose, current: text });
+        const shop = paths.find((path) => path !== '/') || '/shop';
         return {
           id: at, purpose: 'story', layout: { kind: 'stack' }, style: style(blueprint.density),
           nodes: [
-            { id: `${at}-title`, kind: 'heading', props: { text: 'Transitioning everyday uniform', level: 2 } },
+            { id: `${at}-body`, kind: 'text', props: { text } },
             { id: `${at}-row`, kind: 'flex', props: {}, children: [
-              { id: `${at}-cta`, kind: 'button', props: { label: 'SHOP NOW', href: '/shop', variant: 'outline' } },
+              { id: `${at}-cta`, kind: 'button', props: { label: 'Shop now', href: shop, variant: 'outline' } },
             ] },
           ],
         };
@@ -297,7 +387,7 @@ export function buildSite(input: BuildInput): { doc: SiteDocument; slots: Slot[]
     purposes: ['introduction', ...input.blueprint.purposes.filter((purpose) => purpose !== 'introduction')],
   };
   const isLookbook = blueprint.theme === 'editorial-lookbook' || /adanola|lookbook/i.test(input.brief.goal || '');
-  const lookbookExtras = isLookbook ? ['new', 'shop', 'active', 'sweats', 'knits'] : [];
+  const lookbookExtras = isLookbook ? ['shop'] : [];
   const allExtras = [...new Set([...(blueprint.extras || []), ...lookbookExtras])];
   const wantsContact = blueprint.purposes.some((purpose) => ['contact', 'hours', 'enquiry'].includes(purpose)) || blueprint.enquiry
     || Boolean(input.facts.email || input.facts.address || input.facts.phone);
@@ -305,22 +395,24 @@ export function buildSite(input: BuildInput): { doc: SiteDocument; slots: Slot[]
   const distinct = [...new Set(paths)];
   const slots: Slot[] = [];
 
+  // The declared flow orders the home page; every purpose still needs evidence to appear.
+  const flowOrder = SECTION_FLOWS[blueprint.flow] || SECTION_FLOWS.classic_lookbook;
+  const ordered = isLookbook
+    ? [...flowOrder.filter((purpose) => blueprint.purposes.includes(purpose)),
+       ...blueprint.purposes.filter((purpose) => !flowOrder.includes(purpose))]
+    : blueprint.purposes;
+
   const homeSections: Section[] = [];
   if (isLookbook) {
-    homeSections.push({
+    const announcement = (input.title || '').toUpperCase();
+    if (announcement) homeSections.push({
       id: 'announcement', purpose: 'chrome', layout: { kind: 'stack' },
       style: { base: { background: 'token:color.ink', color: 'token:color.canvas', pad: 'token:space.unit', align: 'center' } },
-      nodes: [{ id: 'announcement-text', kind: 'text', props: { text: 'THE ADANOLA REWARDS CLUB' }, style: { base: { size: 'label', align: 'center' } } }],
+      nodes: [{ id: 'announcement-text', kind: 'text', props: { text: announcement }, style: { base: { size: 'label', align: 'center' } } }],
     });
   }
-  const brandTitle = isLookbook && (input.title === 'Ws14' || !input.title) ? 'ADANOLA' : input.title;
-  const navLinks = isLookbook ? [
-    { label: 'NEW', href: '/new' },
-    { label: 'SHOP', href: '/shop' },
-    { label: 'ACTIVE', href: '/active' },
-    { label: 'SWEATS', href: '/sweats' },
-    { label: 'KNITS', href: '/knits' },
-  ] : distinct.map((path) => ({ label: path === '/' ? 'Home' : path.slice(1).replace(/-/g, ' '), href: path }));
+  const brandTitle = input.title;
+  const navLinks = distinct.map((path) => ({ label: path === '/' ? 'Home' : path.slice(1).replace(/-/g, ' '), href: path }));
 
   homeSections.push({
     id: 'navigation', purpose: 'chrome', layout: { kind: 'stack' }, style: style('compact'),
@@ -329,7 +421,7 @@ export function buildSite(input: BuildInput): { doc: SiteDocument; slots: Slot[]
       props: { brand: brandTitle, links: navLinks },
     }],
   });
-  for (const purpose of blueprint.purposes) {
+  for (const purpose of ordered) {
     const at = purpose === 'introduction' ? 'hero' : slug(purpose, 'block');
     if (homeSections.some((section) => section.id === at)) continue;
     const section = block(purpose, at, input, distinct, slots);

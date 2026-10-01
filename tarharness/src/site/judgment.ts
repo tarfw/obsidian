@@ -78,12 +78,27 @@ export interface CreateJudgment {
   density: Density | null;
   tone: Tone | null;
   columns: number | null;
+  heroStyle: 'fullbleed_16_6' | 'split_16_9' | null;
+  flow: 'classic_lookbook' | 'commerce_first' | 'editorial_first' | null;
+  quickAdd: boolean | null;
   /** Purposes whose evidence exists and whose noul cleared the threshold. */
   purposes: string[];
   /** Approved asset ids, best match first. */
   assets: string[];
   enquiry: boolean | null;
 }
+
+const HERO_STYLE_GUIDE: Record<string, string> = {
+  fullbleed_16_6: 'One wide full-bleed image or band with a centered headline and ghost button.',
+  split_16_9: 'Headline beside imagery in a split editorial arrangement.',
+  none: 'No supplied style fits.',
+};
+
+const FLOW_GUIDE: Record<string, string> = {
+  classic_lookbook: 'Products lead after the hero, with an editorial break between grids.',
+  commerce_first: 'Every product surface leads; editorial content follows.',
+  editorial_first: 'Imagery and story lead; the product grid comes later.',
+};
 
 /**
  * One creation fan-out: every independent question about a brief in a single
@@ -128,6 +143,20 @@ export async function fanOut(
       instructions: 'How many columns should a catalogue grid use on a wide screen? Choose 2, 3 or 4, or none.',
       criteria: COLUMN_CHOICES,
     },
+    heroStyle: {
+      type: 'choice',
+      instructions: 'Which hero arrangement suits the brief? Choose one supplied style, or none. This sets layout only and asserts no fact.',
+      criteria: HERO_STYLE_GUIDE,
+    },
+    flow: {
+      type: 'choice',
+      instructions: 'Which home-page section order suits the brief? Choose one supplied flow, or none. This sets order only.',
+      criteria: FLOW_GUIDE,
+    },
+    quickAdd: {
+      type: 'noul',
+      instructions: 'Should product cards carry a quick-add action in this storefront? Answer yes only when the brief asks for a fast shopping experience.',
+    },
     ...Object.fromEntries(purposes.map((purpose) => [`p:${purpose}`, {
       type: 'noul' as const,
       instructions: `Should the site include a ${purpose} block? ${PURPOSE_IDEAS[purpose]} Answer yes only when the supplied facts or brief support it.`,
@@ -147,12 +176,15 @@ export async function fanOut(
     assets: assets.map((asset) => asset.description),
     themes,
   }, questions);
-  if (!result) return { theme: null, density: null, tone: null, columns: null, purposes: [], assets: [], enquiry: null };
+  if (!result) return { theme: null, density: null, tone: null, columns: null, heroStyle: null, flow: null, quickAdd: null, purposes: [], assets: [], enquiry: null };
 
   const theme = choiceOf(result.theme);
   const densityLevel = scoreOf(result.density);
   const tone = choiceOf(result.tone);
   const columns = choiceOf(result.columns);
+  const heroStyle = choiceOf(result.heroStyle);
+  const flow = choiceOf(result.flow);
+  const quickAdd = noulOf(result.quickAdd).probability;
   const purposesChosen = purposes.filter((purpose) => {
     const probability = noulOf(result[`p:${purpose}`]).probability;
     return probability !== null && probability >= JUDGMENT.purposeProbability;
@@ -171,6 +203,9 @@ export async function fanOut(
     density: densityLevel.score === 1 ? 'compact' : densityLevel.score === 3 ? 'airy' : densityLevel.score === 2 ? 'balanced' : null,
     tone: tone.choice === 'canvas' || tone.choice === 'surface' || tone.choice === 'ink' || tone.choice === 'accent' ? tone.choice : null,
     columns: numeric,
+    heroStyle: heroStyle.choice === 'fullbleed_16_6' || heroStyle.choice === 'split_16_9' ? heroStyle.choice : null,
+    flow: flow.choice === 'classic_lookbook' || flow.choice === 'commerce_first' || flow.choice === 'editorial_first' ? flow.choice : null,
+    quickAdd: quickAdd === null ? null : quickAdd >= JUDGMENT.purposeProbability,
     purposes: purposesChosen,
     assets: ranked,
     enquiry: enquiry === null ? null : enquiry >= JUDGMENT.purposeProbability,

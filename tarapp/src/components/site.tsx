@@ -83,6 +83,7 @@ export default function SiteScreen({
   const [command, setCommand] = useState('');
   const [selectedSectionId, setSelectedSectionId] = useState<string>('all');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [pendingInstruction, setPendingInstruction] = useState<string | null>(null);
 
   const chatScrollRef = useRef<ScrollView>(null);
 
@@ -150,7 +151,7 @@ export default function SiteScreen({
     mountedRef.current = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
     if (visible && slug) {
-      if (!initialCached) {
+      if (!siteSnapshotCache.has(slug)) {
         void SecureStore.getItemAsync(siteStorageKey(slug))
           .then((raw) => {
             if (raw && mountedRef.current) {
@@ -177,7 +178,7 @@ export default function SiteScreen({
       if (timer) clearTimeout(timer);
       mountedRef.current = false;
     };
-  }, [visible, slug, initialCached, loadSite]);
+  }, [visible, slug, loadSite]);
 
   // Auto scroll chat to bottom
   useEffect(() => {
@@ -268,10 +269,17 @@ export default function SiteScreen({
       return;
     }
 
+    const effectiveInstruction = pendingInstruction
+      ? `${pendingInstruction} in ${instruction}`
+      : instruction;
+
     try {
-      const proposal: AskOutcome = await harness.site.ask(slug, siteId, instruction, targetParam);
+      const proposal: AskOutcome = await harness.site.ask(slug, siteId, effectiveInstruction, targetParam);
 
       if (!proposal.operations?.length) {
+        if (proposal.questions?.length) {
+          setPendingInstruction(effectiveInstruction);
+        }
         const elapsed = Date.now() - start;
         setMessages((prev) => [
           ...prev,
@@ -288,6 +296,7 @@ export default function SiteScreen({
         return;
       }
 
+      setPendingInstruction(null);
       setBusyStep('Applying changes...');
       const summaryText = proposal.summary || instruction;
       const edited = await harness.site.edit(
@@ -336,7 +345,7 @@ export default function SiteScreen({
         setBusyStep('');
       }
     }
-  }, [slug, siteId, command, busy, site, selectedSectionId, loadSite]);
+  }, [slug, siteId, command, busy, site, selectedSectionId, pendingInstruction, loadSite]);
 
   // Undo last revision
   const undoLastEdit = useCallback(async () => {

@@ -7,7 +7,7 @@
  * Emits no arbitrary JavaScript; interaction behaviour is a fixed tested file.
  */
 
-import { EASING_CSS } from './document.ts';
+import { EASING_CSS, type SectionLayoutSpec } from './document.ts';
 import type { Asset, Binding, Node, Page, Persona, Section, SiteDocument, Style, StyleSet } from './document.ts';
 import { escapeAttribute, escapeHtml, formatMoney, isSafeHref, safeHref, slugify } from './html.ts';
 import { resolveToken, TONE_STYLE, type Design } from './design.ts';
@@ -27,6 +27,10 @@ export interface ResolvedItem {
   price?: number;
   currency?: string;
   image?: string;
+  image2?: string;
+  badge?: string;
+  colours?: number;
+  swatches?: string[];
 }
 
 export interface CompileOptions {
@@ -166,6 +170,7 @@ function compileCss(design: Design, collector: CssCollector): string {
   --type-heading: clamp(1.5rem, 3vw, ${(design.type.base * design.type.scale ** 2).toFixed(0)}px);
   --type-body: ${design.type.base}px;
   --type-label: ${Math.max(12, Math.round(design.type.base * 0.875))}px;
+  --type-tracking: ${design.type.tracking || 0}em;
   --leading: ${design.type.leading};
   --space-unit: ${design.space.unit}px;
   --space-section: ${design.space.section}px;
@@ -182,7 +187,7 @@ function compileCss(design: Design, collector: CssCollector): string {
 }
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html { font-size: var(--type-base); -webkit-text-size-adjust: 100%; }
-body { background: var(--color-canvas); color: var(--color-ink); font-family: var(--font-body); line-height: var(--leading); min-height: 100vh; display: flex; flex-direction: column; }
+body { background: var(--color-canvas); color: var(--color-ink); font-family: var(--font-body); line-height: var(--leading); letter-spacing: var(--type-tracking); min-height: 100vh; display: flex; flex-direction: column; }
 main { flex: 1; }
 img, video { max-width: 100%; height: auto; display: block; }
 a { color: inherit; }
@@ -229,20 +234,93 @@ h3.tar-title { font-size: var(--type-body); font-weight: ${Math.min(900, design.
 .tar-menu-btn { display: none; background: none; border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: ${space(1)} ${space(2)}; font-size: 1.1rem; cursor: pointer; }
 
 /* Product Grid and Card */
-.tar-product-card { background: var(--color-surface); border: none; border-radius: 0; padding: 0; gap: 8px; position: relative; }
-.tar-card-media { position: relative; overflow: hidden; width: 100%; aspect-ratio: 3 / 4; background: #f4f4f4; }
+.tar-product-card { background: var(--color-canvas); border: none; border-radius: 0; padding: 0; gap: 8px; position: relative; }
+.tar-card-media { position: relative; overflow: hidden; width: 100%; aspect-ratio: 3 / 4; background: var(--color-surface); }
 .tar-card-media img { width: 100%; height: 100%; object-fit: cover; border-radius: 0; }
-.tar-card-badge { position: absolute; bottom: 8px; left: 8px; background: #ffffff; color: #000000; font-size: 11px; font-weight: 500; padding: 2px 6px; border-radius: 2px; }
-.tar-card-wishlist { position: absolute; top: 8px; right: 8px; background: transparent; border: none; cursor: pointer; color: #000000; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; }
-.tar-card-wishlist svg { width: 18px; height: 18px; stroke: #000000; fill: none; }
-.tar-swatches { display: flex; gap: 6px; padding: 4px 0; }
-.tar-swatch { width: 14px; height: 14px; border-radius: 0; border: 1px solid rgba(0,0,0,0.15); display: inline-block; }
+.tar-card-media .tar-card-img-alt { position: absolute; inset: 0; opacity: 0; transition: opacity var(--motion) var(--ease); }
+.tar-product-card:hover .tar-card-img-alt { opacity: 1; }
+.tar-card-ph { border: none; outline: none; }
+.tar-card[data-placeholder] .tar-product-title { font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; font-size: 11px; }
+.tar-card-badge { position: absolute; bottom: 8px; left: 8px; background: var(--color-canvas); color: var(--color-ink); font-size: 11px; font-weight: 500; padding: 2px 6px; border-radius: 0; }
+.tar-card-wishlist { position: absolute; top: 8px; right: 8px; background: transparent; border: none; cursor: pointer; color: var(--color-ink); width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; }
+.tar-card-wishlist svg { width: 18px; height: 18px; stroke: var(--color-ink); fill: none; }
+.tar-swatches { display: flex; gap: 4px; padding: 4px 0; }
+.tar-swatch { width: 12px; height: 12px; border-radius: 0; display: inline-block; }
+.tar-swatch[data-active] { outline: 1px solid var(--color-ink); outline-offset: 1px; }
+.tar-card-colours { font-size: 12px; color: var(--color-muted); }
 .tar-card-meta { display: flex; flex-direction: column; gap: 4px; }
-.tar-product-title { font-size: 13px; font-weight: 400; color: #000000; line-height: 1.3; font-family: var(--font-body); }
+.tar-product-title { font-size: 12px; font-weight: 400; color: var(--color-ink); line-height: 1.3; font-family: var(--font-body); }
 .tar-card-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 4px; }
-.tar-card-footer .tar-price { font-size: 13px; font-weight: 600; color: #000000; }
-.tar-quick-add { background: #000000; color: #ffffff; font-size: 11px; font-weight: 500; padding: 6px 12px; border: none; border-radius: 4px; cursor: pointer; transition: opacity 0.15s ease; }
+.tar-card-footer .tar-price { font-size: 12px; font-weight: 400; color: var(--color-ink); }
+.tar-quick-add { background: var(--color-ink); color: var(--color-canvas); font-size: 12px; font-weight: 500; padding: 4px 10px; border: none; border-radius: 4px; cursor: pointer; transition: opacity 0.15s ease; }
 .tar-quick-add:hover { opacity: 0.85; }
+
+/* Lookbook Full-Width Hero: editorial, no overlay, no shadow — photography or paper carries it. */
+.tar-lookbook-hero {
+  position: relative;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  text-align: center;
+  padding: 120px 24px 80px;
+}
+.tar-lookbook-hero .tar-media { width: 100%; aspect-ratio: 8 / 3; object-fit: cover; }
+.tar-lookbook-hero .tar-wrap {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  text-align: center;
+}
+.tar-lookbook-hero h1, .tar-lookbook-hero .tar-title {
+  font-family: var(--font-display);
+  font-size: clamp(1.9rem, 3.5vw, 3rem);
+  font-weight: 400;
+  letter-spacing: 0.025em;
+  color: inherit;
+}
+.tar-lookbook-hero .tar-btn-outline { background: transparent; color: var(--color-ink); border: 1px solid var(--color-ink); font-size: 12px; font-weight: 500; letter-spacing: 0.025em; padding: 6px 24px; border-radius: var(--radius-pill); text-transform: uppercase; text-decoration: none; }
+.tar-lookbook-hero .tar-btn-outline:hover { background: var(--color-ink); color: var(--color-canvas); }
+
+/* Lookbook Editorial Band: surface banding, no imagery invention. */
+.tar-lookbook-midhero {
+  position: relative;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  background: var(--color-surface);
+  color: var(--color-ink);
+  text-align: center;
+  padding: 80px 24px;
+}
+.tar-lookbook-midhero .tar-media { width: 100%; aspect-ratio: 8 / 3; object-fit: cover; }
+.tar-lookbook-midhero .tar-wrap {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  text-align: center;
+}
+.tar-lookbook-midhero h2, .tar-lookbook-midhero .tar-title {
+  font-family: var(--font-display);
+  font-size: clamp(1.6rem, 3vw, 2.5rem);
+  font-weight: 400;
+  letter-spacing: 0.025em;
+  color: inherit;
+}
+.tar-lookbook-midhero .tar-btn-outline { background: transparent; color: var(--color-ink); border: 1px solid var(--color-ink); font-size: 12px; font-weight: 500; letter-spacing: 0.025em; padding: 6px 24px; border-radius: var(--radius-pill); text-transform: uppercase; text-decoration: none; }
+.tar-lookbook-midhero .tar-btn-outline:hover { background: var(--color-ink); color: var(--color-canvas); }
 
 /* Multi-Column Footer */
 .tar-footer { border-top: 1px solid var(--color-border); background: var(--color-surface); margin-top: auto; }
@@ -397,6 +475,7 @@ interface RenderContext {
   binding?: Binding;
   item?: ResolvedItem;
   index: number;
+  sectionLayout?: SectionLayoutSpec;
 }
 
 function itemSlug(item: ResolvedItem, index: number): string {
@@ -477,43 +556,73 @@ function renderNode(node: Node, context: RenderContext): string {
     case 'grid': return `<div id="${id}" class="tar-grid${style}">${renderChildren(node, context)}</div>`;
     case 'card': return `<div id="${id}" class="tar-card${style}">${renderChildren(node, context)}</div>`;
     case 'collection': {
-      const items = Array.isArray(merged.items) ? merged.items as ResolvedItem[] : [];
-      const title = merged.title ? `<div class="tar-flex" style="justify-content:space-between;align-items:center;margin-bottom:16px"><h2 class="tar-title" style="font-size:20px;font-weight:700">${escapeHtml(merged.title)}</h2><a href="/catalog" class="tar-btn-outline">VIEW ALL</a></div>` : '';
+      const isLookbook = context.doc.design.theme === 'editorial-lookbook' || /adanola|lookbook/i.test(context.doc.brief?.goal || '');
+      const items = Array.isArray(merged.items) ? merged.items as (ResolvedItem & { swatches?: string[] })[] : [];
+      const title = merged.title ? `<div class="tar-flex" style="justify-content:space-between;align-items:center;margin-bottom:24px"><h2 class="tar-title" style="font-size:24px;font-weight:700">${escapeHtml(merged.title)}</h2><a href="/shop" class="tar-btn-outline">VIEW ALL</a></div>` : '';
       const binding = context.binding;
       const detail = binding?.detail?.path;
+      const quickAdd = merged.quickAdd === true;
       if (!items.length) {
-        const empty = String(merged.empty || binding?.empty?.text || '');
-        return `<div id="${id}" class="tar-stack${style}">${title}${empty ? `<p class="tar-empty">${escapeHtml(empty)}</p>` : ''}</div>`;
+        const count = Math.max(0, Math.min(12, Number(merged.placeholders) || 0));
+        if (!count) {
+          const empty = String(merged.empty || binding?.empty?.text || '');
+          return `<div id="${id}" class="tar-stack${style}">${title}${empty ? `<p class="tar-empty">${escapeHtml(empty)}</p>` : ''}</div>`;
+        }
+        // Placeholder cards: a colour box instead of product photography. They
+        // disappear the moment real catalog items are bound to the slot.
+        const tones = ['var(--color-surface)', '#f0efe7', '#f5ebd5'];
+        const placeholders = Array.from({ length: count }, (_, index) => `
+          <div class="tar-card tar-product-card" data-placeholder="${index + 1}">
+            <div class="tar-card-media tar-card-ph" style="background:${tones[index % tones.length]}" role="img" aria-label="Product ${index + 1} placeholder"></div>
+            <div class="tar-card-meta">
+              <strong class="tar-product-title">Product ${index + 1}</strong>
+              <span class="tar-card-colours">Coming soon</span>
+            </div>
+          </div>`).join('\n');
+        const secCols = context.sectionLayout?.columns;
+        const secKind = context.sectionLayout?.kind;
+        const stack = secKind === 'stack' || secCols === 1;
+        const colCount = stack ? 1 : (typeof secCols === 'number' && secCols > 0 ? secCols : (isLookbook ? 4 : 3));
+        const grid = stack ? 'display:flex;flex-direction:column;gap:24px;max-width:720px;margin:0 auto;' : `grid-template-columns:repeat(${colCount}, minmax(0, 1fr));gap:24px;`;
+        return `<div id="${id}" class="tar-stack${style}" data-placeholders>${title}<div class="${stack ? 'tar-stack' : 'tar-grid'}" style="${grid}">${placeholders}</div></div>`;
       }
       const template = node.children && node.children.length ? node.children : null;
       const cards = items.map((entry, index) => {
         const slug = itemSlug(entry, index);
         const local: RenderContext = { ...context, item: entry, index };
+        const cardImg = entry.image && /^https:\/\//.test(entry.image) ? entry.image : '';
+        const cardImg2 = entry.image2 && /^https:\/\//.test(entry.image2) ? entry.image2 : '';
+        const media = `<div class="tar-card-media">${cardImg ? `<img class="tar-card-img" src="${escapeAttribute(cardImg)}" alt="${escapeAttribute(entry.title)}" loading="lazy">` : ''}${cardImg2 ? `<img class="tar-card-img-alt" src="${escapeAttribute(cardImg2)}" alt="" loading="lazy">` : ''}</div>`;
+        const cardSwatches = (Array.isArray(entry.swatches) && entry.swatches.length ? entry.swatches : [])
+          .map((color: string, swatch: number) => `<span class="tar-swatch"${swatch === 0 ? ' data-active' : ''} style="background:${escapeAttribute(color)}"></span>`).join('');
+        const badge = entry.badge ? `<span class="tar-card-badge">${escapeHtml(entry.badge)}</span>` : '';
+        const colours = Number(entry.colours) > 1 ? `<span class="tar-card-colours">${Number(entry.colours)} colours</span>` : '';
         const body = template
           ? renderNodes(template, local)
           : `<div class="tar-card tar-product-card">
-              <div class="tar-card-media">
-                ${entry.image ? `<img src="${escapeAttribute(entry.image)}" alt="${escapeAttribute(entry.title)}" loading="lazy">` : '<div style="width:100%;height:100%;background:#f0f0f0"></div>'}
-                <span class="tar-card-badge">New</span>
-                <button type="button" class="tar-card-wishlist" aria-label="Wishlist"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="${ICONS.heart}"></path></svg></button>
-              </div>
-              <div class="tar-swatches">
-                <span class="tar-swatch" style="background:#2b2826"></span>
-                <span class="tar-swatch" style="background:#5c6b73"></span>
-              </div>
+              ${media}
+              ${cardSwatches ? `<div class="tar-swatches">${cardSwatches}</div>` : ''}
               <div class="tar-card-meta">
                 <strong class="tar-product-title">${escapeHtml(entry.title)}</strong>
+                ${colours}
                 <div class="tar-card-footer">
                   <span class="tar-price">${entry.price !== undefined && entry.currency ? formatMoney(entry.price, entry.currency, context.doc.locale) : (entry.price !== undefined ? `$${entry.price}` : '')}</span>
-                  <button type="button" class="tar-quick-add">+ Quick Add</button>
+                  ${quickAdd ? `<button type="button" class="tar-quick-add" data-action="cart.add" data-item="${escapeAttribute(slug)}">Quick add</button>` : ''}
                 </div>
               </div>
             </div>`;
         const href = detail ? `${detail.replace('/:item', '')}/${encodeURIComponent(slug)}` : null;
-        const card = `<div data-item="${escapeAttribute(`${entry.title} ${entry.description || ''}`.toLowerCase())}">${body}</div>`;
+        const card = `<div data-item="${escapeAttribute(`${entry.title} ${entry.description || ''}`.toLowerCase())}">${badge}${body}</div>`;
         return href ? `<a class="tar-cardlink" href="${escapeAttribute(href)}">${card}</a>` : card;
       }).join('\n');
-      return `<div id="${id}" class="tar-stack${style}">${title}<div class="tar-grid" style="grid-template-columns:repeat(auto-fill, minmax(240px, 1fr))">${cards}</div></div>`;
+      const secCols = context.sectionLayout?.columns;
+      const secKind = context.sectionLayout?.kind;
+      const isStack = secKind === 'stack' || secCols === 1;
+      const cols = isStack ? 1 : (typeof secCols === 'number' && secCols > 0 ? secCols : (isLookbook ? 4 : 3));
+      const gridStyle = isStack
+        ? 'display:flex;flex-direction:column;gap:24px;max-width:720px;margin:0 auto;'
+        : `grid-template-columns:repeat(${cols}, minmax(0, 1fr));gap:24px;`;
+      return `<div id="${id}" class="tar-stack${style}">${title}<div class="${isStack ? 'tar-stack' : 'tar-grid'}" style="${gridStyle}">${cards}</div></div>`;
     }
     case 'navigation': {
       const links = Array.isArray(merged.links) ? merged.links as { label?: string; href?: string }[] : [];
@@ -530,27 +639,22 @@ function renderNode(node: Node, context: RenderContext): string {
     }
     case 'footer': {
       const isLookbook = context.doc.design.theme === 'editorial-lookbook' || /adanola|lookbook/i.test(context.doc.brief?.goal || '');
-      const brand = escapeHtml(merged.brand || 'ADANOLA');
+      const brand = escapeHtml(merged.brand || context.doc.pages[0]?.title || '');
+      const year = new Date().getFullYear();
       if (isLookbook) {
-        const columns = [
-          { title: 'COMPANY', links: [{ label: 'About Us' }, { label: 'Contact Us' }, { label: 'Stockists' }, { label: 'Careers' }] },
-          { title: 'CUSTOMER CARE', links: [{ label: 'Account' }, { label: 'Help & FAQs' }, { label: 'Shipping' }, { label: 'Returns' }, { label: 'Returns Policy' }, { label: 'Size Guide' }, { label: 'Gift Card' }, { label: 'Accessibility' }] },
-          { title: 'REWARDS & PAYMENTS', links: [{ label: 'Rewards Club' }, { label: 'Rewards Club T&Cs' }, { label: 'Reward Club FAQs' }, { label: 'Klarna FAQs' }] },
-          { title: 'LEGAL', links: [{ label: 'Accessibility Statement' }, { label: 'Cookie Policy' }, { label: 'Privacy Policy' }, { label: 'Terms and Conditions' }, { label: 'Website Terms of Use' }, { label: 'Modern Slavery' }, { label: 'Sitemap' }] },
-          { title: 'SOCIAL', links: [{ label: 'Instagram' }, { label: 'TikTok' }, { label: 'YouTube' }, { label: 'Substack' }, { label: 'Pinterest' }] },
-        ];
-        const renderedCols = columns.map((col) => {
-          const linksHtml = col.links.map((l) => `<li><a href="#">${escapeHtml(l.label)}</a></li>`).join('');
-          return `<div class="tar-footer-col"><h4 class="tar-footer-title">${escapeHtml(col.title)}</h4><ul class="tar-footer-links">${linksHtml}</ul></div>`;
+        const links = Array.isArray(merged.links) ? merged.links as { label?: string; href?: string }[] : [];
+        const renderedLinks = links.map((link) => {
+          const href = safeHref(link.href);
+          return href ? `<li><a href="${href}">${escapeHtml(link.label)}</a></li>` : '';
         }).join('');
-        return `<footer id="${escapeAttribute(node.id)}" class="tar-footer"><div class="tar-wrap"><div class="tar-footer-grid"><div class="tar-footer-newsletter"><h3 class="tar-footer-newsletter-title">NEW HERE?</h3><p class="tar-footer-newsletter-text">Sign up to receive 15% off your first order</p><form class="tar-footer-form" onsubmit="event.preventDefault()"><input type="email" class="tar-footer-input" placeholder="Email*" required><button type="submit" class="tar-footer-submit">SUBMIT</button></form><p class="tar-footer-disclaimer">*This code is valid for 14 days from receiving this email. Code available on 1st time orders only. 1 use per email address. £50 minimum spend. Can not be used in conjunction with other offers.</p><div class="tar-footer-wordmark">${brand}</div></div><div class="tar-footer-nav">${renderedCols}</div></div><div class="tar-footer-bottom"><div class="tar-footer-trustpilot"><strong>Excellent</strong> <span style="color:#00b67a">★★★★★</span> <strong>Trustpilot</strong></div><div class="tar-footer-payments"><span>Apple Pay</span><span>Google Pay</span><span>Visa</span><span>Mastercard</span><span>Amex</span><span>PayPal</span><span>Klarna</span></div><div class="tar-footer-country">Shipping to: <strong>Bermuda (USD $) ▾</strong></div></div></div></footer>`;
+        const copyright = escapeHtml(merged.text || `© ${year} ${brand}`);
+        return `<footer id="${escapeAttribute(node.id)}" class="tar-footer"><div class="tar-wrap"><div class="tar-footer-bottom"><div class="tar-footer-wordmark">${brand}</div><ul class="tar-footer-links">${renderedLinks}</ul><span>${copyright}</span></div></div></footer>`;
       }
       const links = Array.isArray(merged.links) ? merged.links as { label?: string; href?: string }[] : [];
       const rendered = links.map((link) => {
         const href = safeHref(link.href);
         return href ? `<li><a href="${href}">${escapeHtml(link.label)}</a></li>` : '';
       }).join('');
-      const year = new Date().getFullYear();
       const text = escapeHtml(merged.text || `© ${year} ${brand}`);
       return `<footer id="${escapeAttribute(node.id)}" class="tar-footer"><div class="tar-wrap tar-footer-inner"><span>${text}</span><ul class="tar-footer-links">${rendered}</ul></div></footer>`;
     }
@@ -613,12 +717,19 @@ function renderNode(node: Node, context: RenderContext): string {
 }
 
 function renderSection(section: Section, context: RenderContext): string {
+  const isLookbook = context.doc.design.theme === 'editorial-lookbook' || /adanola|lookbook/i.test(context.doc.brief?.goal || '');
   const layout = section.layout || { kind: 'flow' };
   const columns = typeof layout.columns === 'number' ? ` style="grid-template-columns:repeat(${layout.columns}, minmax(0, 1fr))"` : '';
   const kind = layout.kind === 'flow' ? '' : ` tar-${layout.kind}`;
   const style = styleClass(context.collector, section.style);
-  const body = renderNodes(section.nodes, { ...context, binding: section.bindings?.[0] });
+  const body = renderNodes(section.nodes, { ...context, binding: section.bindings?.[0], sectionLayout: section.layout });
   if (!body.trim()) return '';
+  if (isLookbook && (section.purpose === 'hero' || section.purpose === 'introduction')) {
+    return `<section id="${escapeAttribute(section.id)}" class="tar-section tar-lookbook-hero${style}" data-purpose="${escapeAttribute(section.purpose)}"><div class="tar-wrap${kind}"${columns}>${body}</div></section>`;
+  }
+  if (isLookbook && section.purpose === 'story') {
+    return `<section id="${escapeAttribute(section.id)}" class="tar-section tar-lookbook-midhero${style}" data-purpose="story"><div class="tar-wrap${kind}"${columns}>${body}</div></section>`;
+  }
   return `<section id="${escapeAttribute(section.id)}" class="tar-section${style}" data-purpose="${escapeAttribute(section.purpose)}"><div class="tar-wrap${kind}"${columns}>${body}</div></section>`;
 }
 

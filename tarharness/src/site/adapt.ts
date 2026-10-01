@@ -302,9 +302,88 @@ export function upgrade(site: SiteDefinition): SiteDocument {
   };
 }
 
-/** Read a stored site record as a current document, upgrading v1 in memory. */
+function walkNodes(nodes: Node[] | undefined): Node[] {
+  return (nodes || []).flatMap((node) => [node, ...walkNodes(node.children)]);
+}
+
+export function normalizeDocument(doc: SiteDocument): SiteDocument {
+  const brand = doc.pages[0]?.title || doc.brief?.goal?.slice(0, 40) || 'Storefront';
+  const pages = doc.pages;
+
+  const existingPaths = new Set(pages.map((p) => p.path));
+  const existingRedirects = new Set(doc.redirects.map((r) => r.from));
+  const missingPaths: string[] = [];
+
+  const allNodes = pages.flatMap((page) => page.sections.flatMap((section) => walkNodes(section.nodes)));
+  for (const node of allNodes) {
+    if (node.kind === 'link' || node.kind === 'button') {
+      const href = typeof node.props?.href === 'string' ? node.props.href : '';
+      if (href.startsWith('/') && !existingPaths.has(href) && !existingRedirects.has(href) && !href.startsWith('/#')) {
+        if (!missingPaths.includes(href)) missingPaths.push(href);
+      }
+    }
+    const links = node.kind === 'navigation' || node.kind === 'footer' || node.kind === 'menu' ? node.props?.links : undefined;
+    if (Array.isArray(links)) {
+      for (const link of links as { href?: string }[]) {
+        const href = typeof link.href === 'string' ? link.href : '';
+        if (href.startsWith('/') && !existingPaths.has(href) && !existingRedirects.has(href) && !href.startsWith('/#')) {
+          if (!missingPaths.includes(href)) missingPaths.push(href);
+        }
+      }
+    }
+  }
+
+  if (!missingPaths.length) return { ...doc, pages };
+
+  const navLinks = pages.map((p) => ({ label: p.path === '/' ? 'Home' : p.path.slice(1), href: p.path }));
+
+  const synthesizedPages: Page[] = missingPaths.map((path) => {
+    const rawSlug = path.replace(/^\/+/, '').replace(/[^a-z0-9-]/gi, '-');
+    const id = rawSlug || 'page';
+    const title = id.replace(/-/g, ' ').replace(/^./, (c) => c.toUpperCase());
+    return {
+      id,
+      path,
+      title,
+      meta: { description: `${title} — ${brand}` },
+      sections: [
+        {
+          id: `${id}-bar`,
+          purpose: 'chrome',
+          layout: { kind: 'stack' },
+          style: { base: { pad: 'token:space.unit' } },
+          nodes: [{ id: `${id}-nav`, kind: 'navigation', props: { brand, links: navLinks } }],
+        },
+        {
+          id: `${id}-intro`,
+          purpose: 'introduction',
+          layout: { kind: 'stack' },
+          style: { base: { pad: 'token:space.section' } },
+          nodes: [
+            { id: `${id}-title`, kind: 'heading', props: { text: title, level: 1 } },
+            { id: `${id}-body`, kind: 'text', props: { text: `${brand} ${title}` } },
+          ],
+        },
+        {
+          id: `${id}-foot`,
+          purpose: 'chrome',
+          layout: { kind: 'stack' },
+          style: { base: { pad: 'token:space.unit' } },
+          nodes: [{ id: `${id}-end`, kind: 'footer', props: { brand, text: `© ${new Date().getFullYear()} ${brand}`, links: [] } }],
+        },
+      ],
+    };
+  });
+
+  return {
+    ...doc,
+    pages: [...doc.pages, ...synthesizedPages],
+  };
+}
+
+/** Read a stored site record as a current document, upgrading v1 in memory and auto-healing route gaps. */
 export function readDocument(value: unknown): { doc: SiteDocument; migrated: boolean } {
-  if (isV2(value)) return { doc: value, migrated: false };
-  if (isV1(value)) return { doc: upgrade(value), migrated: true };
+  if (isV2(value)) return { doc: normalizeDocument(value), migrated: false };
+  if (isV1(value)) return { doc: normalizeDocument(upgrade(value)), migrated: true };
   throw badRequest('Site definition is invalid.');
 }

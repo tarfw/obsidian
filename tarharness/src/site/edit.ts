@@ -50,6 +50,7 @@ export const SYNONYMS: Record<string, string> = {
   white: 'token:color.canvas', light: 'token:color.canvas', plain: 'token:color.canvas',
   accent: 'token:color.accent', brand: 'token:color.accent',
   surface: 'token:color.surface', raised: 'token:color.surface', panel: 'token:color.surface',
+  mist: 'token:color.surface', banding: 'token:color.surface',
   muted: 'token:color.muted', subtle: 'token:color.muted',
   hairline: 'hairline', none: 'none',
   pill: 'token:shape.pill', rounded: 'token:shape.lg', sharp: 'token:shape.sm', square: 'token:shape.sm',
@@ -136,7 +137,12 @@ function exact(doc: SiteDocument, command: string, target: string): { ops: Patch
   const spoken: Record<string, string> = { one: '1', two: '2', three: '3', four: '4', five: '5', six: '6' };
   const digits = /(?:^|\s)([1-6])\s*(?:col|column)/.exec(lower)?.[1];
   const word = /(?:^|\s)(one|two|three|four|five|six)\s*(?:col|column)/.exec(lower)?.[1];
-  const value = digits || (word ? spoken[word] : undefined) || (lower.includes('side by side') ? '2' : undefined);
+  const isVertical = /(?:vertical|vertically|single\s*column|one\s*column|stacked|stack|as\s*a\s*list|list\s*view|column\s*view)/.test(lower);
+  const isHorizontal = /(?:horizontal|horizontally|grid|as\s*a\s*grid|side\s*by\s*side|across|row|rows|multi\s*column)/.test(lower);
+  const value = digits
+    || (word ? spoken[word] : undefined)
+    || (isVertical ? '1' : undefined)
+    || (isHorizontal ? (lower.includes('2') || lower.includes('two') ? '2' : lower.includes('3') || lower.includes('three') ? '3' : '4') : undefined);
   let layout: Record<string, unknown> | null = section ? { ...section.layout } : null;
   let changedLayout = false;
   if (section) {
@@ -271,18 +277,44 @@ export async function executeSiteAsk(
   const lower = command.toLowerCase();
   const cache: JudgmentCache = { control, workspace: context.workspace.id, version: 'ask-2' };
 
+  const normalize = (s: string) => s.toLowerCase().replace(/&/g, 'and').replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
+  const normalizedCommand = normalize(command);
+
+  const PURPOSE_SYNONYMS: Record<string, string[]> = {
+    collection: ['collection', 'product', 'products', 'grid', 'product grid', 'catalog', 'items', 'offer', 'shop', 'trending', 'new and trending', 'new & trending', 'what we offer'],
+    recommendations: ['recommendations', 'recommended', 'you will love', "you'll love", 'suggested', 'more pieces'],
+    introduction: ['hero', 'banner', 'intro', 'introduction', 'top', 'header'],
+    split: ['split', 'editorial', 'two images', 'media break', 'two-up'],
+    categories: ['categories', 'category', 'tabs', 'filter', 'shop by category'],
+    promo: ['promo', 'promotion', 'cta band', 'call to action', 'strip'],
+    story: ['story', 'about', 'about us'],
+    chrome: ['navigation', 'header', 'nav', 'menu', 'bar', 'footer', 'foot', 'bottom', 'end'],
+    contact: ['contact', 'enquire', 'enquiry', 'form', 'get in touch'],
+  };
+
   // Lane 1 begins with the target: an exact id, purpose or heading needs no inference.
   const requested = text(input.target, 120);
   let target: string | null = null;
-  if (requested) {
-    if (!targetKindOf(doc, requested)) throw notFound('The selected section was not found.');
-    target = requested;
-  } else {
+  if (requested && requested !== 'all') {
+    if (targetKindOf(doc, requested)) target = requested;
+  }
+  
+  if (!target) {
     outer: for (const page of doc.pages) {
       for (const section of page.sections) {
-        if (lower.includes(section.id.toLowerCase()) || lower.includes(section.purpose.toLowerCase())) { target = section.id; break outer; }
-        const heading = section.nodes.find((node) => node.kind === 'heading' && typeof node.props.text === 'string' && lower.includes(String(node.props.text).toLowerCase().slice(0, 24)));
-        if (heading) { target = section.id; break outer; }
+        const secId = section.id.toLowerCase();
+        const secPurpose = section.purpose.toLowerCase();
+        const synonyms = PURPOSE_SYNONYMS[secPurpose] || [secPurpose];
+        if (synonyms.some((syn) => normalizedCommand.includes(syn) || lower.includes(syn))) { target = section.id; break outer; }
+        if (normalizedCommand.includes(secId) || lower.includes(secId)) { target = section.id; break outer; }
+        const heading = section.nodes.find((node) => node.kind === 'heading' && typeof node.props.text === 'string');
+        if (heading && typeof heading.props.text === 'string') {
+          const normHeading = normalize(heading.props.text);
+          if (normHeading && (normalizedCommand.includes(normHeading) || normHeading.includes(normalizedCommand))) {
+            target = section.id;
+            break outer;
+          }
+        }
       }
     }
   }
@@ -360,7 +392,15 @@ export async function executeSiteAsk(
   const summary = operations.length
     ? `${operations.map((op) => op.op).filter((op, index, all) => all.indexOf(op) === index).join(', ')} in ${target}`
     : '';
-  if (!operations.length && !questions.length) questions.push('Describe the change with a section and a value, for example "make the hero background ink".');
+  if (!operations.length && !questions.length) {
+    if (target) {
+      const sec = sectionOf(doc, target);
+      const title = sec?.nodes.find((n) => n.kind === 'heading')?.props.text || sec?.purpose || target;
+      questions.push(`What change would you like for ${title} (e.g. "horizontal grid", "vertical layout", "dark background", "airy spacing")?`);
+    } else {
+      questions.push('Describe the change with a section and a value, for example "make the hero background ink".');
+    }
+  }
   const result: AskResult = { siteId: current.id, base: doc.revision, target, targetKind, operations, summary, questions, choices };
   return { ...result };
 }

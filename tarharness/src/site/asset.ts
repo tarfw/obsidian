@@ -65,7 +65,7 @@ export function assetReader(bucket: R2Bucket | undefined, context: AccessContext
   };
 }
 
-interface StoredAsset {
+export interface StoredAsset {
   id: string;
   kind: string;
   mime: string;
@@ -77,13 +77,14 @@ interface StoredAsset {
   rights: { source: string; license: string; approved: boolean; note?: string };
   generated?: boolean;
   prompt?: string;
+  placeholder?: boolean;
 }
 
-async function store(
+export async function store(
   bucket: R2Bucket | undefined,
   context: AccessContext,
   siteId: string,
-  input: { mime: string; kind: string; bytes: Uint8Array; alt?: string; source: string; license: string; approved: boolean; generated?: boolean; prompt?: string; width?: number; height?: number },
+  input: { mime: string; kind: string; bytes: Uint8Array; alt?: string; source: string; license: string; approved: boolean; generated?: boolean; prompt?: string; width?: number; height?: number; placeholder?: boolean },
 ): Promise<StoredAsset> {
   if (!bucket) throw unavailable('Site asset storage is not configured.');
   const allowed = ASSET_TYPES[input.mime];
@@ -97,15 +98,16 @@ async function store(
     rights: { source: input.source.slice(0, 200), license: input.license.slice(0, 120), approved: input.approved },
     ...(input.generated ? { generated: true } : {}),
     ...(input.prompt ? { prompt: input.prompt.slice(0, 300) } : {}),
+    ...(input.placeholder ? { placeholder: true } : {}),
   };
   await bucket.put(assetKey(context, siteId, asset), input.bytes, {
     httpMetadata: { contentType: input.mime },
-    customMetadata: { workspace: context.workspace.id, site: siteId, asset: id, generated: input.generated ? 'true' : 'false' },
+    customMetadata: { workspace: context.workspace.id, site: siteId, asset: id, generated: input.generated ? 'true' : 'false', placeholder: input.placeholder ? 'true' : 'false' },
   });
   return asset;
 }
 
-async function attach(
+export async function attach(
   client: Client,
   context: AccessContext,
   siteId: string,

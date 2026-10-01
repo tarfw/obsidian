@@ -7,6 +7,7 @@ import { validateDocument } from './validate.ts';
 import { readDocument } from './adapt.ts';
 import { inspectDocument } from './inspect.ts';
 import { assetReader } from './asset.ts';
+import { applyPexels } from './pexels.ts';
 import { PURPOSE_IDEAS, THEME_IDS } from './design.ts';
 import { BudgetExceeded, DEFAULT_BUDGET, GROQ_DEFAULT_MODEL, ModelRunner, SITE_MODEL_FALLBACKS, readClaims, writeCopy } from './model.ts';
 import { buildSite, defaultBlueprint, tasteBias, type Blueprint, type Facts, type Slot } from './build.ts';
@@ -236,7 +237,7 @@ async function saveEvent(client: Client, context: AccessContext, action: string,
  * batched call. With no model key the deterministic defaults still produce a
  * valid site.
  */
-export async function executeSiteGenerate(client: Client, context: AccessContext, input: Record<string, unknown>, key: string, inputHash: string, typesafe?: string, ai?: Ai, control?: D1Database, model?: string, groqApiKey?: string): Promise<Record<string, unknown>> {
+export async function executeSiteGenerate(client: Client, context: AccessContext, input: Record<string, unknown>, key: string, inputHash: string, typesafe?: string, ai?: Ai, control?: D1Database, model?: string, groqApiKey?: string, content?: R2Bucket, pexelsApiKey?: string): Promise<Record<string, unknown>> {
   const title = text(input.title) || context.workspace.name || 'Workspace';
   const prompt = text(input.prompt ?? input.description, 2000);
   if (input.theme !== undefined && !THEME_IDS.includes(String(input.theme))) throw badRequest('Choose a registered site theme.');
@@ -259,6 +260,9 @@ export async function executeSiteGenerate(client: Client, context: AccessContext
     density: judged.density || defaults.density,
     tone: judged.tone || defaults.tone,
     columns: Math.min(4, Math.max(2, judged.columns || defaults.columns)),
+    heroStyle: judged.heroStyle || defaults.heroStyle,
+    flow: judged.flow || defaults.flow,
+    quickAdd: judged.quickAdd === null ? defaults.quickAdd : judged.quickAdd,
     purposes: judged.purposes.length ? judged.purposes : defaults.purposes,
     extras: strings(input.pages, 3),
     assets: judged.assets.slice(0, 3),
@@ -282,6 +286,18 @@ export async function executeSiteGenerate(client: Client, context: AccessContext
   const version = existing ? existing.version + 1 : 1;
   const state = existing?.state === 'live' ? 'live' : 'draft';
   const result = { siteId, version, state, site, preview, composed: Boolean(prose.wrote), blueprint, ...(note ? { note } : {}) };
+  // Placeholder photography lands as a follow-up revision so creation stays fast.
+  const withPlaceholders = async (): Promise<Record<string, unknown>> => {
+    if (!content || !pexelsApiKey || input.photos === false) return result;
+    if (site.assets.some((asset) => asset.rights.source.startsWith('pexels'))) return result;
+    try {
+      const applied = await applyPexels(content, client, context, siteId, pexelsApiKey, site);
+      if (!applied) return result;
+      return { ...result, version: applied.version, site: applied.site, assets: applied.assets, placeholders: true };
+    } catch {
+      return result;
+    }
+  };
   if (existing) {
     const saved = await client.batch([
       { sql: 'UPDATE records SET title=?,data=?,version=?,updated=? WHERE id=? AND version=?', args: [title, JSON.stringify(site), version, at, siteId, existing.version] },
@@ -289,7 +305,7 @@ export async function executeSiteGenerate(client: Client, context: AccessContext
         SELECT ?, 'action', ?, 'site.generate', 'accepted', ?, ?, ?, ?, ?, ? WHERE changes()=1`, args: [`evt_${crypto.randomUUID()}`, siteId, context.identity.id, inputHash, key, JSON.stringify({ result }), at, at] },
     ], 'write');
     if (saved[0].rowsAffected !== 1 || saved[1].rowsAffected !== 1) throw conflict('Site was modified concurrently. Refresh and try again.');
-    return result;
+    return withPlaceholders();
   }
   const created = await client.batch([
     { sql: "INSERT INTO records(id,type,title,state,data,owner,version,created,updated) SELECT ?,'site',?,'draft',?,?,1,?,? WHERE NOT EXISTS(SELECT 1 FROM records WHERE type='site' AND archived IS NULL)", args: [siteId, title, JSON.stringify(site), context.identity.id, at, at] },
@@ -297,7 +313,7 @@ export async function executeSiteGenerate(client: Client, context: AccessContext
       SELECT ?, 'action', ?, 'site.generate', 'accepted', ?, ?, ?, ?, ?, ? WHERE changes()=1`, args: [`evt_${crypto.randomUUID()}`, siteId, context.identity.id, inputHash, key, JSON.stringify({ result }), at, at] },
   ], 'write');
   if (created[0].rowsAffected !== 1 || created[1].rowsAffected !== 1) throw conflict('A site was created concurrently. Refresh and edit that site.');
-  return result;
+  return withPlaceholders();
 }
 
 export async function executeSiteCompile(client: Client, bucket: R2Bucket | undefined, context: AccessContext, input: Record<string, unknown>, key: string, inputHash: string, control?: D1Database, domain?: string, content?: R2Bucket): Promise<Record<string, unknown>> {
@@ -323,12 +339,13 @@ async function publishCurrent(client: Client, bucket: R2Bucket | undefined, cont
   const document = readDocument(current.data).doc;
   if (action === 'site.refresh' && (current.state !== 'live' || !document.currentRelease)) throw badRequest('Publish the site before refreshing its public bindings.');
   let epoch = 0;
-  if (action === 'site.refresh' && control) {
+  if (control) {
     const live = await control.withSession('first-primary').prepare('SELECT site,release,status,epoch FROM sites WHERE workspace=?')
       .bind(context.workspace.id).first<{ site: string; release: string; status: string; epoch: number }>();
-    if (!live || live.site !== current.id || live.status !== 'active' || live.release !== document.currentRelease)
+    if (action === 'site.refresh' && (!live || live.site !== current.id || live.status !== 'active' || live.release !== document.currentRelease)) {
       throw conflict('Live publication changed. Refresh the site state before updating public facts.');
-    epoch = live.epoch;
+    }
+    if (live) epoch = live.epoch;
   }
   let source: unknown = current.data;
   let candidate: ReleaseManifest | undefined;
@@ -363,7 +380,7 @@ async function publishCurrent(client: Client, bucket: R2Bucket | undefined, cont
   const site = { ...document, currentRelease: releaseId, releases: [...(document.releases || []), manifest] }; const at = now(); const version = current.version + 1;
   const common = { siteId: current.id, releaseId, liveUrl: `/v1/sites/${encodeURIComponent(context.workspace.slug)}`, generation, state: 'live' };
   const result: Record<string, unknown> = action === 'site.refresh' ? { ...common, refreshed: true, itemCount } : common;
-  const publicUrl = await activatePublication(control, domain, context, current.id, manifest, manifest.epoch);
+  const publicUrl = await activatePublication(control, domain, context, current.id, manifest, candidate ? manifest.epoch : undefined);
   if (publicUrl) { result.publicUrl = publicUrl; result.liveUrl = publicUrl; }
   const saved = await client.batch([
     { sql: "UPDATE records SET state='live',data=?,version=?,updated=? WHERE id=? AND version=?", args: [JSON.stringify(site), version, at, current.id, current.version] },

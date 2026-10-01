@@ -36,6 +36,8 @@ export interface DesignType {
   scale: number;
   leading: number;
   weight: number;
+  /** Global letter-spacing in em (0 default); the lookbook uses 0.025. */
+  tracking?: number;
 }
 
 export interface DesignSpace {
@@ -178,7 +180,7 @@ const lookbook: Design = {
   },
   color: {
     canvas: '#ffffff', ink: '#000000', accent: '#000000', accentink: '#ffffff',
-    surface: '#ffffff', border: '#000000', muted: '#333333',
+    surface: '#e5e7eb', border: '#000000', muted: '#333333',
     success: DEFAULT_DESIGN.color.success, danger: DEFAULT_DESIGN.color.danger,
   },
   type: {
@@ -186,12 +188,13 @@ const lookbook: Design = {
     display: 'Favorit, Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
     heading: 'Favorit, Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
     body: 'Favorit, Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-    base: 16, scale: 1.2, leading: 1.33, weight: 400,
+    base: 16, scale: 1.2, leading: 1.33, weight: 400, tracking: 0.025,
   },
   space: { unit: 4, section: 64, container: 1440 },
   shape: { sm: 0, md: 0, lg: 0, pill: 4 },
   elevation: { low: 0, high: 0 },
   layout: { columns: 4, gap: 16, align: 'start' },
+  guidance: ['Warm fog #f0efe7 and blush sand #f5ebd5 are section banding tones; soft mist #e5e7eb alternates surfaces.', 'Product photography carries all colour; chrome stays monochrome.'],
 };
 
 /**
@@ -212,6 +215,10 @@ export const THEME_IDS: readonly string[] = Object.keys(THEMES);
 export const PURPOSE_IDEAS: Record<string, string> = {
   introduction: 'open the page with the offer in one line',
   collection: 'show bound items with live prices and availability',
+  recommendations: 'surface more bound items the visitor may like',
+  split: 'present two approved media assets side by side as an editorial break',
+  categories: 'link the declared pages as a text-tab filter',
+  promo: 'a full-width band carrying one clear call to action',
   features: 'state what makes the offer practical',
   proof: 'carry evidence such as results or reviews',
   story: 'explain the business in its own words',
@@ -241,7 +248,7 @@ export const TOKENS: readonly TokenEntry[] = [
   { group: 'type', key: 'display', kind: 'font' }, { group: 'type', key: 'heading', kind: 'font' },
   { group: 'type', key: 'body', kind: 'font' }, { group: 'type', key: 'base', kind: 'number' },
   { group: 'type', key: 'scale', kind: 'number' }, { group: 'type', key: 'leading', kind: 'number' },
-  { group: 'type', key: 'weight', kind: 'number' },
+  { group: 'type', key: 'weight', kind: 'number' }, { group: 'type', key: 'tracking', kind: 'number' },
   { group: 'space', key: 'unit', kind: 'number' }, { group: 'space', key: 'section', kind: 'number' },
   { group: 'space', key: 'container', kind: 'number' },
   { group: 'shape', key: 'sm', kind: 'number' }, { group: 'shape', key: 'md', kind: 'number' },
@@ -433,6 +440,8 @@ export function parseDesign(markdown: string, previous: Design = DEFAULT_DESIGN)
       if (scale && /scale|ratio/i.test(key)) { assign('scale', scale); continue; }
       const leading = /^(\d\.\d+)$/.exec(value)?.[1];
       if (leading && /leading|line/i.test(key)) { assign('leading', leading); continue; }
+      const tracking = /^(0\.\d+)em$/i.exec(value)?.[1] ?? (/tracking/i.test(key) ? /^0\.\d+$/.exec(value)?.[1] : undefined);
+      if (tracking && /tracking/i.test(key)) { assign('tracking', tracking); continue; }
       const font = FONT_ALIASES[value.toLowerCase().replace(/[^a-z]/g, '')];
       if (font && /display|heading|body|font/i.test(key)) { assign(key.includes('body') ? 'body' : 'heading', font); continue; }
       if (/figma|google|licensed|font/i.test(body)) {
@@ -536,6 +545,7 @@ export function exportDesign(design: Design | undefined | null): string {
   lines.push(`- scale: ${type.scale || 1.25}`);
   lines.push(`- leading: ${type.leading || 1.6}`);
   lines.push(`- weight: ${type.weight || 600}`);
+  if (type.tracking) lines.push(`- tracking: ${type.tracking}em`);
   lines.push('');
   lines.push('## Spacing');
   lines.push(`- unit: ${space.unit || 8}px`);

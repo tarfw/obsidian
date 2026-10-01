@@ -438,6 +438,7 @@ describe('v1 migration', () => {
     expect(site.design.theme).toBe('editorial-lookbook');
     expect(site.design.color.canvas).toBe('#ffffff');
     expect(site.design.color.ink).toBe('#000000');
+    expect(site.design.color.surface).toBe('#e5e7eb');
     expect(site.design.shape.sm).toBe(0);
     expect(site.design.shape.pill).toBe(4);
     expect(site.pages[0].sections.some((section) => section.id === 'announcement')).toBe(true);
@@ -447,18 +448,23 @@ describe('v1 migration', () => {
     }, { siteReleases: bucket }));
     const prefix = `workspaces/${ownerAccess.workspace.id}/sites/${siteId}/releases/${compiled.releaseId}`;
     const html = bucket.objects.get(`${prefix}/index.html`)!;
-    expect(html).toContain('THE ADANOLA REWARDS CLUB');
-    expect(html).toContain('Layering Season');
-    expect(html).toContain('SHOP OUTERWEAR');
-    expect(html).toContain('New &amp; Trending');
-    expect(html).toContain('Transitioning everyday uniform');
-    expect(html).toContain('SHOP NOW');
-    expect(html).toContain('NEW HERE?');
+    // Every visible word derives from the owner's brief and title — nothing fabricated.
+    expect(html).toContain('ADANOLA');
+    expect(html).toContain('Shop now');
+    // Evidence-gated: no catalog records were supplied, so cards are placeholders.
+    expect(html).toContain('data-placeholders');
+    expect(html).toContain('Product 1');
+    expect(html).toContain('tar-card-ph');
+    expect(html).not.toContain('unsplash');
+    expect(html).not.toContain('tar-quick-add');
     expect(html).toContain('tar-chat-bubble');
     const css = bucket.objects.get(`${prefix}/style.css`)!;
     expect(css).toContain('--color-canvas: #ffffff');
     expect(css).toContain('--color-ink: #000000');
+    expect(css).toContain('--color-surface: #e5e7eb');
     expect(css).toContain('--font-display: Favorit');
+    expect(css).toContain('--type-tracking: 0.025em');
+    expect(css).not.toContain('images.unsplash.com');
 
     const report = JSON.parse(bucket.objects.get(`${prefix}/report.json`)!) as { inspection: { blocking: unknown[] } };
     expect(report.inspection.blocking.length).toBe(0);

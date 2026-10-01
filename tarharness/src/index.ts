@@ -30,7 +30,7 @@ import { nextInTie } from './inbox/rank.ts';
 import { suggestCapabilities, suggestMember } from './brain/workspace-ai.ts';
 export { FlowWorkflow } from './flows/workflow.ts';
 
-type RuntimeEnv = Env & ChannelEnv & { readonly TURSO_PLATFORM_TOKEN?: string; readonly TINYFISH_API_KEY?: string; readonly TYPESAFE_API_KEY?: string; readonly GROQ_API_KEY?: string; readonly SITE_BASE_DOMAIN?: string; readonly SITE_WORKER_ORIGIN?: string; readonly SITE_MODEL?: string };
+type RuntimeEnv = Env & ChannelEnv & { readonly TURSO_PLATFORM_TOKEN?: string; readonly TINYFISH_API_KEY?: string; readonly TYPESAFE_API_KEY?: string; readonly GROQ_API_KEY?: string; readonly PEXELS_API_KEY?: string; readonly SITE_BASE_DOMAIN?: string; readonly SITE_WORKER_ORIGIN?: string; readonly SITE_MODEL?: string };
 const jsonHeaders = { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' };
 const corsHeaders = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Authorization, Content-Type, Idempotency-Key', 'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS' };
 const now = () => Date.now();
@@ -651,7 +651,7 @@ async function handle(request: Request, env: RuntimeEnv, ctx: ExecutionContext):
         input.workspace = target.workspace.slug;
       }
       const action = { actionId, idempotencyKey: key, input };
-      const result = await Effect.runPromise(executeGateway(client, current, action, { productContent: env.PRODUCT_CONTENT, siteReleases: env.SITE_RELEASES, publication: env.CONTROL, siteDomain: env.SITE_WORKER_ORIGIN || env.SITE_BASE_DOMAIN, ai: env.AI, tinyfish: env.TINYFISH_API_KEY, typesafe: env.TYPESAFE_API_KEY, siteModel: env.SITE_MODEL, groqApiKey: env.GROQ_API_KEY }));
+      const result = await Effect.runPromise(executeGateway(client, current, action, { productContent: env.PRODUCT_CONTENT, siteReleases: env.SITE_RELEASES, publication: env.CONTROL, siteDomain: env.SITE_WORKER_ORIGIN || env.SITE_BASE_DOMAIN, ai: env.AI, tinyfish: env.TINYFISH_API_KEY, typesafe: env.TYPESAFE_API_KEY, siteModel: env.SITE_MODEL, groqApiKey: env.GROQ_API_KEY, pexelsApiKey: env.PEXELS_API_KEY }));
       ctx.waitUntil(enqueueInboxSync(env, current.workspace.id).catch((error) => console.error(JSON.stringify({ event: 'inbox.queue.failed', error: error instanceof Error ? error.message.slice(0, 300) : String(error).slice(0, 300) }))));
       return response(result, 201);
     }
@@ -671,7 +671,7 @@ export default {
       }
       if (body.kind !== 'chat.command' || typeof body.id !== 'string') { message.ack(); continue; }
       try {
-        await processCommand(env.CONTROL, body.id, (current, work) => withWorkspace(env, current, work), { productContent: env.PRODUCT_CONTENT, siteReleases: env.SITE_RELEASES, publication: env.CONTROL, siteDomain: env.SITE_WORKER_ORIGIN || env.SITE_BASE_DOMAIN, ai: env.AI, typesafe: env.TYPESAFE_API_KEY, siteModel: env.SITE_MODEL, groqApiKey: env.GROQ_API_KEY });
+        await processCommand(env.CONTROL, body.id, (current, work) => withWorkspace(env, current, work), { productContent: env.PRODUCT_CONTENT, siteReleases: env.SITE_RELEASES, publication: env.CONTROL, siteDomain: env.SITE_WORKER_ORIGIN || env.SITE_BASE_DOMAIN, ai: env.AI, typesafe: env.TYPESAFE_API_KEY, siteModel: env.SITE_MODEL, groqApiKey: env.GROQ_API_KEY, pexelsApiKey: env.PEXELS_API_KEY });
         const completed = await env.CONTROL.prepare("SELECT workspace_id FROM channel_commands WHERE id=? AND state='completed'").bind(body.id).first<{ workspace_id: string }>();
         if (completed) await enqueueInboxSync(env, completed.workspace_id);
         message.ack();

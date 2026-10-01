@@ -1,7 +1,7 @@
 /**
  * TAR Site document - the typed, versioned source of truth for a site.
  *
- * The document contract lives in agenticsite.md. Fields
+ * The document contract lives in siteai.md. Fields
  * and identifiers use one lowercase semantic word; structure supplies
  * qualification. Retained v1 card records are readable through adapt.ts.
  */
@@ -198,6 +198,8 @@ export interface Asset {
   rights: AssetRights;
   generated?: boolean;
   prompt?: string;
+  /** Stand-in media (for example Pexels) the owner should replace with real photography. */
+  placeholder?: boolean;
 }
 
 export interface ComponentVariant {

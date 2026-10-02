@@ -173,42 +173,46 @@ function starterItems(brief: Brief, title: string): Record<string, unknown>[] {
     {
       id: 'item_1',
       title: 'Funnel Neck Balloon Sleeve Down Puffer Jacket - Coffee Bean',
-      price: 95,
+      price: 14800,
       currency: 'USD',
       badge: 'New',
       image: 'https://images.pexels.com/photos/4056723/pexels-photo-4056723.jpeg?auto=compress&cs=tinysrgb&w=800',
       image2: 'https://images.pexels.com/photos/4056535/pexels-photo-4056535.jpeg?auto=compress&cs=tinysrgb&w=800',
       swatches: ['#2b211b', '#3b4349', '#1d1d1d'],
+      colours: 3,
     },
     {
       id: 'item_2',
       title: 'Knit Straight Leg Sweatpants - Oatmeal',
-      price: 95,
+      price: 8800,
       currency: 'USD',
       badge: 'New',
       image: 'https://images.pexels.com/photos/6311612/pexels-photo-6311612.jpeg?auto=compress&cs=tinysrgb&w=800',
       image2: 'https://images.pexels.com/photos/6311613/pexels-photo-6311613.jpeg?auto=compress&cs=tinysrgb&w=800',
       swatches: ['#dfccbe', '#1d1d1d', '#5B6554'],
+      colours: 3,
     },
     {
       id: 'item_3',
       title: 'Oversized Knit Sweatshirt - Charcoal Grey',
-      price: 95,
+      price: 9200,
       currency: 'USD',
       badge: 'New',
       image: 'https://images.pexels.com/photos/4498574/pexels-photo-4498574.jpeg?auto=compress&cs=tinysrgb&w=800',
       image2: 'https://images.pexels.com/photos/4498576/pexels-photo-4498576.jpeg?auto=compress&cs=tinysrgb&w=800',
       swatches: ['#2F3440', '#dfccbe', '#000000'],
+      colours: 3,
     },
     {
       id: 'item_4',
       title: 'Rib Knit Beanie - Damson',
-      price: 60,
+      price: 3600,
       currency: 'USD',
       badge: 'New',
       image: 'https://images.pexels.com/photos/6311614/pexels-photo-6311614.jpeg?auto=compress&cs=tinysrgb&w=800',
       image2: 'https://images.pexels.com/photos/6311612/pexels-photo-6311612.jpeg?auto=compress&cs=tinysrgb&w=800',
       swatches: ['#4a2530', '#1d1d1d', '#dfccbe'],
+      colours: 3,
     },
   ];
 }
@@ -218,42 +222,46 @@ function recommendationItems(): Record<string, unknown>[] {
     {
       id: 'item_5',
       title: 'Studio Henley Sweatshirt - Coffee Bean',
-      price: 95,
+      price: 9500,
       currency: 'USD',
       badge: 'New',
       image: 'https://images.pexels.com/photos/6311613/pexels-photo-6311613.jpeg?auto=compress&cs=tinysrgb&w=800',
       image2: 'https://images.pexels.com/photos/4056723/pexels-photo-4056723.jpeg?auto=compress&cs=tinysrgb&w=800',
       swatches: ['#2b211b', '#dfccbe'],
+      colours: 2,
     },
     {
       id: 'item_6',
       title: 'Studio V-Neck Relaxed Sweatshirt - Oatmeal Marl',
-      price: 85,
+      price: 8500,
       currency: 'USD',
       badge: 'New',
       image: 'https://images.pexels.com/photos/4056535/pexels-photo-4056535.jpeg?auto=compress&cs=tinysrgb&w=800',
       image2: 'https://images.pexels.com/photos/6311612/pexels-photo-6311612.jpeg?auto=compress&cs=tinysrgb&w=800',
       swatches: ['#dfccbe', '#000000'],
+      colours: 2,
     },
     {
       id: 'item_7',
       title: 'Studio Loose Fit Sweatpants - Oatmeal Marl',
-      price: 85,
+      price: 8400,
       currency: 'USD',
       badge: 'New',
       image: 'https://images.pexels.com/photos/4498576/pexels-photo-4498576.jpeg?auto=compress&cs=tinysrgb&w=800',
       image2: 'https://images.pexels.com/photos/4498574/pexels-photo-4498574.jpeg?auto=compress&cs=tinysrgb&w=800',
       swatches: ['#dfccbe', '#2F3440'],
+      colours: 2,
     },
     {
       id: 'item_8',
       title: 'Studio Relaxed Zip Through Hoodie - Marshmallow White',
-      price: 95,
+      price: 9800,
       currency: 'USD',
       badge: 'New',
       image: 'https://images.pexels.com/photos/6311612/pexels-photo-6311612.jpeg?auto=compress&cs=tinysrgb&w=800',
       image2: 'https://images.pexels.com/photos/6311614/pexels-photo-6311614.jpeg?auto=compress&cs=tinysrgb&w=800',
       swatches: ['#f5ebd5', '#1d1d1d'],
+      colours: 2,
     },
   ];
 }
@@ -286,7 +294,7 @@ function block(purpose: string, at: string, input: BuildInput, paths: string[], 
       const items = ids.length ? [] : (isLookbook ? starterItems(input.brief, input.title) : []);
       if (!ids.length && !items.length) return null;
       return {
-        id: at, purpose: 'collection', layout: { kind: 'grid', columns: blueprint.columns },
+        id: at, purpose: 'collection', layout: { kind: 'stack' },
         style: style(blueprint.density),
         nodes: [
           { id: `${at}-list`, kind: 'collection', props: { title: 'New & Trending', slot: 'items', ...(items.length ? { items } : {}), ...(blueprint.quickAdd ? { quickAdd: true } : {}) } },
@@ -306,7 +314,7 @@ function block(purpose: string, at: string, input: BuildInput, paths: string[], 
       const ids = (facts.services || []).map((entry) => String(entry.id || '')).filter(Boolean);
       if (!ids.length) return null;
       return {
-        id: at, purpose: 'services', layout: { kind: 'grid', columns: blueprint.columns },
+        id: at, purpose: 'services', layout: { kind: 'stack' },
         style: style(blueprint.density),
         nodes: [{
           id: `${at}-list`, kind: 'collection', props: { slot: 'services', title: '' },
@@ -329,7 +337,7 @@ function block(purpose: string, at: string, input: BuildInput, paths: string[], 
       const items = ids.length ? [] : (isLookbook ? recommendationItems() : []);
       if (!ids.length && !items.length) return null;
       return {
-        id: at, purpose: 'recommendations', layout: { kind: 'grid', columns: blueprint.columns },
+        id: at, purpose: 'recommendations', layout: { kind: 'stack' },
         style: style(blueprint.density),
         nodes: [
           { id: `${at}-list`, kind: 'collection', props: { slot: 'reco', title: 'Studio Sweats', ...(items.length ? { items } : {}), ...(blueprint.quickAdd ? { quickAdd: true } : {}) } },

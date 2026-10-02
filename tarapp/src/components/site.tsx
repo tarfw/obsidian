@@ -1,5 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as SecureStore from 'expo-secure-store';
+import * as WebBrowser from 'expo-web-browser';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -781,9 +782,21 @@ export default function SiteScreen({
               <Text style={styles.previewTitle}>{workspaceName}</Text>
 
               <TouchableOpacity
-                onPress={() => {
-                  if (publicUrl) void Linking.openURL(publicUrl);
-                  else void Linking.openURL(`https://${slug}.workers.dev`);
+                onPress={async () => {
+                  const target = publicUrl || `https://${slug}.workers.dev`;
+                  try {
+                    if (Platform.OS === 'web') {
+                      void Linking.openURL(target);
+                    } else {
+                      await WebBrowser.openBrowserAsync(target, {
+                        presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
+                        toolbarColor: '#000000',
+                        controlsColor: '#ffffff',
+                      });
+                    }
+                  } catch {
+                    void Linking.openURL(target);
+                  }
                 }}
                 style={styles.browserLinkBtn}
               >

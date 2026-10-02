@@ -151,6 +151,8 @@ function compileCss(design: Design, collector: CssCollector): string {
     }
   });
   return `
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700&display=swap');
+
 :root {
   --color-canvas: ${design.color.canvas};
   --color-ink: ${design.color.ink};
@@ -191,9 +193,9 @@ main { flex: 1; }
 img, video { max-width: 100%; height: auto; display: block; }
 a { color: inherit; }
 :focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
-.tar-skip { position: absolute; left: -9999px; }
-.tar-skip:focus { position: static; display: inline-block; padding: ${space(2)} ${space(4)}; background: var(--color-accent); color: var(--color-accentink); }
-.tar-wrap { width: 100%; max-width: var(--layout-content); margin: 0 auto; padding: 0 ${space(4)}; }
+.tar-skip { position: absolute; top: -9999px; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+.tar-skip:focus { position: static; display: inline-block; padding: ${space(2)} ${space(4)}; background: var(--color-accent); color: var(--color-accentink); width: auto; height: auto; }
+.tar-wrap { width: 100%; max-width: var(--layout-content); margin: 0 auto; padding: 0 clamp(16px, 4vw, 48px); }
 .tar-section { padding: var(--space-section) 0; }
 .tar-flex { display: flex; flex-direction: row; gap: ${space(4)}; align-items: flex-start; flex-wrap: wrap; }
 .tar-stack { display: flex; flex-direction: column; gap: ${space(4)}; }
@@ -238,46 +240,47 @@ h3.tar-title { font-size: var(--type-body); font-weight: ${Math.min(900, design.
 }
 
 .tar-nav { position: sticky; top: 0; z-index: 50; background: var(--color-canvas); border-bottom: 1px solid var(--color-border); }
-.tar-nav-inner { display: flex; align-items: center; justify-content: space-between; gap: ${space(4)}; min-height: ${space(14)}; padding: 0 24px; }
-.tar-brand { font-family: var(--font-display); font-size: 24px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; text-decoration: none; color: var(--color-ink); }
-.tar-navlinks { display: flex; gap: ${space(5)}; list-style: none; flex-wrap: wrap; text-transform: uppercase; font-size: 12px; font-weight: 500; letter-spacing: 0.025em; margin: 0; padding: 0; }
-.tar-navlinks a { text-decoration: none; color: var(--color-ink); }
-.tar-navlinks a:hover { color: var(--color-muted); }
-.tar-nav-actions { display: flex; align-items: center; gap: 16px; }
+.tar-nav-inner { display: flex; align-items: center; justify-content: space-between; gap: ${space(4)}; min-height: 56px; padding: 0 24px; max-width: var(--layout-content); margin: 0 auto; }
+.tar-brand { font-family: var(--font-display); font-size: 22px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; text-decoration: none; color: var(--color-ink); }
+.tar-navlinks { display: flex; gap: 20px; list-style: none; flex-wrap: wrap; text-transform: uppercase; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; margin: 0; padding: 0; }
+.tar-navlinks a { text-decoration: none; color: var(--color-ink); transition: opacity 0.15s ease; }
+.tar-navlinks a:hover { opacity: 0.6; }
+.tar-nav-actions { display: flex; align-items: center; gap: 18px; }
 .tar-nav-icon { display: inline-flex; align-items: center; cursor: pointer; color: var(--color-ink); position: relative; }
 .tar-bag-count { position: absolute; top: -4px; right: -8px; background: #000000; color: #ffffff; font-size: 9px; font-weight: 700; border-radius: 9999px; width: 14px; height: 14px; display: flex; align-items: center; justify-content: center; }
 .tar-menu-btn { display: none; background: none; border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: ${space(1)} ${space(2)}; font-size: 1.1rem; cursor: pointer; }
 
 /* Product Grid and Card */
-.tar-product-card { background: var(--color-canvas); border: none; border-radius: 0; padding: 0; gap: 6px; position: relative; display: flex; flex-direction: column; }
-.tar-card-media { position: relative; overflow: hidden; width: 100%; aspect-ratio: 3 / 4; background: var(--color-surface); border-radius: 0; }
+.tar-product-card { background: var(--color-canvas); border: none; border-radius: 0; padding: 0; gap: 6px; position: relative; display: flex; flex-direction: column; width: 100%; }
+.tar-card-media { position: relative; overflow: hidden; width: 100%; aspect-ratio: 3 / 4; background: #f3f4f6; border-radius: 0; }
 .tar-card-media img, .tar-card-media .tar-card-img { width: 100%; height: 100%; object-fit: cover; border-radius: 0; display: block; transition: opacity var(--motion) var(--ease); }
 .tar-card-media .tar-card-img-alt { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity var(--motion) var(--ease); border-radius: 0; }
 .tar-product-card:hover .tar-card-img-alt { opacity: 1; }
-.tar-card-badge { position: absolute; top: 8px; left: 8px; background: var(--color-canvas); color: var(--color-ink); font-size: 10px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; padding: 3px 8px; border-radius: 0; z-index: 3; }
-.tar-card-wishlist { position: absolute; top: 8px; right: 8px; background: transparent; border: none; cursor: pointer; color: var(--color-ink); width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; z-index: 3; }
-.tar-card-wishlist svg { width: 16px; height: 16px; stroke: var(--color-ink); fill: none; stroke-width: 1.5; transition: fill 0.15s ease; }
-.tar-card-wishlist:hover svg { fill: var(--color-ink); }
-.tar-card-sizes { position: absolute; bottom: 0; left: 0; right: 0; background: rgba(255, 255, 255, 0.96); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 12px; transform: translateY(100%); transition: transform 0.2s ease; z-index: 4; }
+.tar-card-badge { position: absolute; top: 8px; left: 8px; background: #000000; color: #ffffff; font-size: 9px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; padding: 3px 6px; border-radius: 0; z-index: 3; }
+.tar-card-wishlist { position: absolute; top: 8px; right: 8px; background: rgba(255, 255, 255, 0.85); border: none; border-radius: 50%; cursor: pointer; color: var(--color-ink); width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; z-index: 3; transition: background 0.15s ease; }
+.tar-card-wishlist:hover { background: #ffffff; }
+.tar-card-wishlist svg { width: 14px; height: 14px; stroke: #000000; fill: none; stroke-width: 1.5; transition: fill 0.15s ease; }
+.tar-card-wishlist:hover svg { fill: #000000; }
+.tar-card-sizes { position: absolute; bottom: 0; left: 0; right: 0; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; gap: 4px; padding: 8px 6px; transform: translateY(100%); transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1); z-index: 4; }
 .tar-product-card:hover .tar-card-sizes { transform: translateY(0); }
-.tar-size-btn { background: transparent; border: 1px solid var(--color-border); border-radius: 2px; color: var(--color-ink); font-family: var(--font-body); font-size: 10px; font-weight: 500; padding: 3px 6px; cursor: pointer; transition: all 0.15s ease; }
-.tar-size-btn:hover { background: var(--color-ink); color: var(--color-canvas); border-color: var(--color-ink); }
-.tar-swatches { display: flex; gap: 4px; padding: 4px 0 2px; }
-.tar-swatch { width: 12px; height: 12px; border-radius: 0; display: inline-block; cursor: pointer; }
-.tar-swatch[data-active] { outline: 1px solid var(--color-ink); outline-offset: 1px; }
+.tar-size-btn { background: #ffffff; border: 1px solid #e5e7eb; border-radius: 2px; color: #000000; font-family: var(--font-body); font-size: 11px; font-weight: 500; padding: 4px 8px; cursor: pointer; transition: all 0.15s ease; flex: 1; text-align: center; }
+.tar-size-btn:hover { background: #000000; color: #ffffff; border-color: #000000; }
+.tar-swatches { display: flex; gap: 5px; padding: 6px 0 2px; align-items: center; }
+.tar-swatch { width: 12px; height: 12px; border-radius: 50%; display: inline-block; cursor: pointer; border: 1px solid rgba(0,0,0,0.1); }
+.tar-swatch[data-active] { outline: 1px solid #000000; outline-offset: 1px; }
 .tar-card-colours { font-size: 11px; color: var(--color-muted); }
-.tar-card-meta { display: flex; flex-direction: column; gap: 2px; }
-.tar-product-title { font-size: 12px; font-weight: 400; color: var(--color-ink); line-height: 1.33; font-family: var(--font-body); letter-spacing: 0.01em; }
+.tar-card-meta { display: flex; flex-direction: column; gap: 3px; }
+.tar-product-title { font-size: 13px; font-weight: 400; color: var(--color-ink); line-height: 1.35; font-family: var(--font-body); letter-spacing: -0.01em; }
 .tar-card-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 2px; }
-.tar-card-footer .tar-price { font-size: 12px; font-weight: 400; color: var(--color-ink); font-family: var(--font-body); }
+.tar-card-footer .tar-price { font-size: 13px; font-weight: 500; color: var(--color-ink); font-family: var(--font-body); }
 .tar-quick-add { background: var(--color-ink); color: var(--color-canvas); font-size: 11px; font-weight: 500; padding: 4px 10px; border: none; border-radius: 4px; cursor: pointer; transition: opacity 0.15s ease; }
 .tar-quick-add:hover { opacity: 0.85; }
 
-/* Lookbook Full-Width Hero: full-bleed lifestyle imagery with whisper-weight centered headline */
+/* Lookbook Full-Width Hero */
 .tar-lookbook-hero {
   position: relative;
   width: 100%;
-  min-height: 80vh;
+  min-height: 75vh;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -308,23 +311,23 @@ h3.tar-title { font-size: var(--type-body); font-weight: ${Math.min(900, design.
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 20px;
+  gap: 16px;
   text-align: center;
   max-width: 840px;
 }
 .tar-lookbook-hero h1, .tar-lookbook-hero .tar-title {
   font-family: var(--font-display);
-  font-size: clamp(1.8rem, 3.5vw, 30px);
+  font-size: clamp(2rem, 4vw, 36px);
   font-weight: 400;
-  letter-spacing: 0.025em;
+  letter-spacing: 0.02em;
   color: #ffffff;
   margin: 0;
 }
 .tar-lookbook-hero p {
   font-size: 14px;
   font-weight: 400;
-  letter-spacing: 0.025em;
-  color: rgba(255,255,255,0.9);
+  letter-spacing: 0.02em;
+  color: rgba(255,255,255,0.92);
   max-width: 560px;
   margin: 0;
 }
@@ -335,31 +338,47 @@ h3.tar-title { font-size: var(--type-body); font-weight: ${Math.min(900, design.
   font-family: var(--font-body);
   font-size: 12px;
   font-weight: 500;
-  letter-spacing: 0.05em;
-  padding: 8px 28px;
+  letter-spacing: 0.06em;
+  padding: 10px 32px;
   border-radius: 4px;
   text-transform: uppercase;
   text-decoration: none;
   cursor: pointer;
   transition: all 0.2s ease;
+  margin-top: 8px;
 }
 .tar-lookbook-hero .tar-btn:hover, .tar-lookbook-hero .tar-btn-outline:hover {
   background: #ffffff;
   color: #000000;
 }
 
-/* Lookbook Editorial Band: surface banding */
+/* Lookbook Editorial Mid-Hero Banner */
 .tar-lookbook-midhero {
   position: relative;
   width: 100%;
+  min-height: 480px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: var(--color-surface);
-  color: var(--color-ink);
+  background: #2b211b;
+  color: #ffffff;
   text-align: center;
-  padding: 80px 24px;
+  padding: 100px 24px;
+  overflow: hidden;
+}
+.tar-lookbook-midhero .tar-midhero-bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.85;
+}
+.tar-lookbook-midhero .tar-hero-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0.5) 100%);
 }
 .tar-lookbook-midhero .tar-wrap {
   position: relative;
@@ -367,71 +386,148 @@ h3.tar-title { font-size: var(--type-body); font-weight: ${Math.min(900, design.
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 20px;
+  justify-content: center;
+  gap: 16px;
   text-align: center;
+  max-width: 680px;
 }
 .tar-lookbook-midhero h2, .tar-lookbook-midhero .tar-title {
   font-family: var(--font-display);
-  font-size: clamp(1.6rem, 3vw, 24px);
+  font-size: clamp(1.8rem, 3.5vw, 32px);
   font-weight: 400;
-  letter-spacing: 0.025em;
-  color: inherit;
+  letter-spacing: 0.02em;
+  color: #ffffff;
+  margin: 0;
+}
+.tar-lookbook-midhero p, .tar-lookbook-midhero .tar-prose {
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: 0.015em;
+  color: rgba(255,255,255,0.92);
+  margin: 0;
+  max-width: 520px;
+}
+.tar-lookbook-midhero .tar-btn, .tar-lookbook-midhero .tar-btn-outline {
+  background: transparent;
+  color: #ffffff;
+  border: 1px solid #ffffff;
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  padding: 10px 32px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-top: 8px;
+}
+.tar-lookbook-midhero .tar-btn:hover, .tar-lookbook-midhero .tar-btn-outline:hover {
+  background: #ffffff;
+  color: #000000;
+}
+
+/* Lookbook Action Ribbon */
+.tar-lookbook-action {
+  background: #000000;
+  color: #ffffff;
+  padding: 64px 24px;
+  text-align: center;
+  width: 100%;
+}
+.tar-lookbook-action .tar-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+}
+.tar-lookbook-action h2 {
+  font-family: var(--font-display);
+  font-size: clamp(1.4rem, 2.5vw, 24px);
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #ffffff;
+}
+.tar-lookbook-action .tar-btn-outline {
+  background: #ffffff;
+  color: #000000;
+  border: 1px solid #ffffff;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  padding: 10px 32px;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+.tar-lookbook-action .tar-btn-outline:hover {
+  background: transparent;
+  color: #ffffff;
 }
 
 /* Press Strip */
 .tar-press-strip {
-  padding: 40px 0;
-  border-top: 1px solid var(--color-border);
-  border-bottom: 1px solid var(--color-border);
-  background: var(--color-canvas);
+  padding: 48px 0;
+  border-top: 1px solid #e5e7eb;
+  border-bottom: 1px solid #e5e7eb;
+  background: #ffffff;
   text-align: center;
   width: 100%;
 }
 .tar-press-title {
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 0.1em;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--color-muted);
-  margin-bottom: 20px;
+  color: #6b7280;
+  margin-bottom: 24px;
 }
 .tar-press-logos {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 48px;
+  gap: clamp(24px, 5vw, 64px);
   flex-wrap: wrap;
 }
 .tar-press-logo {
-  font-family: var(--font-display);
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 700;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--color-ink);
-  opacity: 0.55;
+  color: #111827;
+  opacity: 0.65;
+  transition: opacity 0.2s ease;
 }
+.tar-press-logo:hover { opacity: 1; }
+.tar-press-vogue { font-family: 'Didot', 'Bodoni MT', 'Cinzel', 'Georgia', serif; font-weight: 700; letter-spacing: 0.18em; font-size: 20px; }
+.tar-press-elle { font-family: 'Didot', 'Bodoni MT', 'Cinzel', 'Georgia', serif; font-weight: 900; letter-spacing: 0.22em; font-size: 22px; }
+.tar-press-grazia { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-weight: 800; letter-spacing: 0.2em; font-size: 17px; }
+.tar-press-harpers { font-family: 'Didot', 'Bodoni MT', 'Cinzel', 'Georgia', serif; font-weight: 600; letter-spacing: 0.15em; font-size: 16px; }
+.tar-press-dazed { font-family: Impact, "Arial Black", sans-serif; font-weight: 900; letter-spacing: 0.15em; font-size: 19px; }
+.tar-press-gq { font-family: 'Didot', 'Bodoni MT', 'Cinzel', 'Georgia', serif; font-weight: 800; letter-spacing: 0.12em; font-size: 22px; }
 
 /* Multi-Column Footer */
-.tar-footer { border-top: 1px solid var(--color-border); background: var(--color-surface); margin-top: auto; }
+.tar-footer { border-top: 1px solid #e5e5e5; background: #ffffff; margin-top: auto; }
 .tar-footer-inner { display: flex; justify-content: space-between; flex-wrap: wrap; gap: ${space(3)}; padding: ${space(8)} 0; font-size: 0.9rem; color: var(--color-muted); }
-.tar-footer-grid { display: grid; grid-template-columns: 1.3fr 3fr; gap: 48px; padding: 48px 0; border-bottom: 1px solid var(--color-border); }
-.tar-footer-newsletter-title { font-size: 14px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 8px; }
-.tar-footer-newsletter-text { font-size: 13px; color: var(--color-muted); margin-bottom: 16px; }
-.tar-footer-form { display: flex; max-width: 340px; margin-bottom: 12px; }
-.tar-footer-input { flex: 1; padding: 8px 12px; border: 1px solid #000000; border-right: none; font-size: 13px; outline: none; border-radius: 0; background: #ffffff; }
-.tar-footer-submit { background: #000000; color: #ffffff; border: 1px solid #000000; padding: 8px 16px; font-size: 12px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; cursor: pointer; border-radius: 0; }
-.tar-footer-disclaimer { font-size: 10px; color: var(--color-muted); line-height: 1.4; margin-bottom: 24px; max-width: 340px; }
-.tar-footer-wordmark { font-family: var(--font-heading); font-size: 32px; font-weight: 800; letter-spacing: 0.02em; text-transform: uppercase; }
-.tar-footer-nav { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; }
-.tar-footer-col { display: flex; flex-direction: column; gap: 10px; }
-.tar-footer-title { font-size: 12px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
-.tar-footer-links { list-style: none; display: flex; flex-direction: column; gap: 8px; font-size: 12px; color: var(--color-muted); margin: 0; padding: 0; }
-.tar-footer-links a { text-decoration: none; color: inherit; }
+.tar-footer-grid { display: grid; grid-template-columns: 1.2fr 2.8fr; gap: 48px; padding: 64px 0 48px; border-bottom: 1px solid #e5e5e5; }
+.tar-footer-newsletter-title { font-size: 13px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 8px; color: #000000; }
+.tar-footer-newsletter-text { font-size: 12px; color: #6b7280; margin-bottom: 16px; line-height: 1.5; }
+.tar-footer-form { display: flex; max-width: 360px; margin-bottom: 10px; }
+.tar-footer-input { flex: 1; padding: 10px 14px; border: 1px solid #000000; border-right: none; font-size: 12px; outline: none; border-radius: 0; background: #ffffff; color: #000000; }
+.tar-footer-submit { background: #000000; color: #ffffff; border: 1px solid #000000; padding: 10px 20px; font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; border-radius: 0; transition: background 0.15s ease; }
+.tar-footer-submit:hover { background: #333333; }
+.tar-footer-disclaimer { font-size: 10px; color: #9ca3af; line-height: 1.4; margin-bottom: 24px; max-width: 360px; }
+.tar-footer-wordmark { font-family: var(--font-heading); font-size: 28px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: #000000; }
+.tar-footer-nav { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; }
+.tar-footer-col { display: flex; flex-direction: column; gap: 12px; }
+.tar-footer-title { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #000000; }
+.tar-footer-links { list-style: none; display: flex; flex-direction: column; gap: 8px; font-size: 12px; color: #6b7280; margin: 0; padding: 0; }
+.tar-footer-links a { text-decoration: none; color: inherit; transition: color 0.15s ease; }
 .tar-footer-links a:hover { color: #000000; text-decoration: underline; }
-.tar-footer-bottom { display: flex; align-items: center; justify-content: space-between; padding: 24px 0; font-size: 12px; flex-wrap: wrap; gap: 16px; }
-.tar-footer-trustpilot { display: flex; align-items: center; gap: 6px; }
-.tar-footer-payments { display: flex; gap: 12px; color: var(--color-muted); font-size: 11px; }
+.tar-footer-bottom { display: flex; align-items: center; justify-content: space-between; padding: 28px 0; font-size: 11px; color: #6b7280; flex-wrap: wrap; gap: 16px; }
+.tar-footer-payments { display: flex; gap: 10px; color: #6b7280; font-size: 11px; font-weight: 500; }
 .tar-footer-country { display: flex; align-items: center; gap: 8px; }
 
 .tar-tabs [role="tablist"] { display: flex; gap: ${space(2)}; border-bottom: 1px solid var(--color-border); flex-wrap: wrap; }
@@ -458,14 +554,24 @@ h3.tar-title { font-size: var(--type-body); font-weight: ${Math.min(900, design.
 .tar-honeypot { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
 .tar-cta { background: var(--color-surface); border-radius: var(--radius-lg); padding: ${space(10)}; text-align: center; }
 ${blocks.join('\n')}
-@media (max-width: 640px) {
+@media (max-width: 768px) {
   .tar-flex { flex-direction: column; }
   .tar-menu[data-ready] .tar-navlinks { display: none; }
   .tar-menu[data-ready][data-open] .tar-navlinks { display: flex; flex-direction: column; padding: ${space(3)} 0; }
   .tar-menu-btn { display: inline-block; }
-  .tar-section { padding: min(var(--space-section), ${space(16)}) 0; }
-  .tar-footer-grid { grid-template-columns: 1fr; }
-  .tar-footer-nav { grid-template-columns: repeat(2, 1fr); }
+  .tar-section { padding: 48px 0; }
+  .tar-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 12px !important; }
+  .tar-footer-grid { grid-template-columns: 1fr; gap: 32px; padding: 40px 0 32px; }
+  .tar-footer-nav { grid-template-columns: repeat(2, 1fr); gap: 24px; }
+  .tar-press-logos { gap: 20px; }
+  .tar-press-logo { font-size: 14px; }
+  .tar-lookbook-hero { min-height: 60vh; padding: 60px 16px; margin-bottom: 24px; }
+  .tar-lookbook-midhero { min-height: 380px; padding: 60px 16px; margin: 24px 0; }
+}
+@media (min-width: 769px) and (max-width: 1024px) {
+  .tar-grid { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; gap: 14px !important; }
+  .tar-footer-grid { grid-template-columns: 1fr 2fr; }
+  .tar-footer-nav { grid-template-columns: repeat(4, 1fr); }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
@@ -681,7 +787,7 @@ function renderNode(node: Node, context: RenderContext): string {
                 ${colours}
                 <div class="tar-card-footer">
                   <span class="tar-price">${entry.price !== undefined && entry.currency ? formatMoney(entry.price, entry.currency, context.doc.locale) : (entry.price !== undefined ? `$${entry.price}` : '')}</span>
-                  ${quickAdd ? `<button type="button" class="tar-quick-add" data-action="cart.add" data-item="${escapeAttribute(slug)}">Quick add</button>` : ''}
+                  ${quickAdd && !isLookbook ? `<button type="button" class="tar-quick-add" data-action="cart.add" data-item="${escapeAttribute(slug)}">Quick add</button>` : ''}
                 </div>
               </div>
             </div>`;
@@ -694,9 +800,9 @@ function renderNode(node: Node, context: RenderContext): string {
       const isStack = secKind === 'stack' || secCols === 1;
       const cols = isStack ? 1 : (typeof secCols === 'number' && secCols > 0 ? secCols : (isLookbook ? 4 : 3));
       const gridStyle = isStack
-        ? 'display:flex;flex-direction:column;gap:24px;max-width:720px;margin:0 auto;'
+        ? (isLookbook ? 'grid-template-columns:repeat(4, minmax(0, 1fr));gap:16px;' : 'display:flex;flex-direction:column;gap:24px;max-width:720px;margin:0 auto;')
         : `grid-template-columns:repeat(${cols}, minmax(0, 1fr));gap:16px;`;
-      return `<div id="${id}" class="tar-stack${style}">${title}<div class="${isStack ? 'tar-stack' : 'tar-grid'}" style="${gridStyle}">${cards}</div></div>`;
+      return `<div id="${id}" class="tar-stack${style}">${title}<div class="${isStack && !isLookbook ? 'tar-stack' : 'tar-grid'}" style="${gridStyle}">${cards}</div></div>`;
     }
     case 'navigation': {
       const isLookbook = context.doc.design.theme === 'editorial-lookbook';
@@ -863,11 +969,17 @@ function renderSection(section: Section, context: RenderContext): string {
   const body = renderNodes(section.nodes, { ...context, binding: section.bindings?.[0], sectionLayout: section.layout });
   if (!body.trim()) return '';
   if (section.purpose === 'press') {
-    const logos = ['VOGUE', 'ELLE', 'GRAZIA', "HARPER'S BAZAAR", 'DAZED', 'GQ'];
     return `<section id="${escapeAttribute(section.id)}" class="tar-section tar-press-strip${style}" data-purpose="press">
       <div class="tar-wrap">
         <div class="tar-press-title">AS FEATURED IN</div>
-        <div class="tar-press-logos">${logos.map((logo) => `<span class="tar-press-logo">${logo}</span>`).join('')}</div>
+        <div class="tar-press-logos">
+          <span class="tar-press-logo tar-press-vogue">VOGUE</span>
+          <span class="tar-press-logo tar-press-elle">ELLE</span>
+          <span class="tar-press-logo tar-press-grazia">GRAZIA</span>
+          <span class="tar-press-logo tar-press-harpers">HARPER'S BAZAAR</span>
+          <span class="tar-press-logo tar-press-dazed">DAZED</span>
+          <span class="tar-press-logo tar-press-gq">GQ</span>
+        </div>
       </div>
     </section>`;
   }
@@ -880,7 +992,15 @@ function renderSection(section: Section, context: RenderContext): string {
     </section>`;
   }
   if (isLookbook && section.purpose === 'story') {
-    return `<section id="${escapeAttribute(section.id)}" class="tar-section tar-lookbook-midhero${style}" data-purpose="story"><div class="tar-wrap${kind}"${columns}>${body}</div></section>`;
+    const midheroBg = 'https://images.pexels.com/photos/6311612/pexels-photo-6311612.jpeg?auto=compress&cs=tinysrgb&w=1920';
+    return `<section id="${escapeAttribute(section.id)}" class="tar-section tar-lookbook-midhero${style}" data-purpose="story">
+      <img class="tar-midhero-bg" src="${midheroBg}" alt="Sweats fabrics lifestyle banner" loading="lazy">
+      <div class="tar-hero-overlay"></div>
+      <div class="tar-wrap${kind}"${columns}>${body}</div>
+    </section>`;
+  }
+  if (isLookbook && section.purpose === 'action') {
+    return `<section id="${escapeAttribute(section.id)}" class="tar-section tar-lookbook-action${style}" data-purpose="action"><div class="tar-wrap">${body}</div></section>`;
   }
   return `<section id="${escapeAttribute(section.id)}" class="tar-section${style}" data-purpose="${escapeAttribute(section.purpose)}"><div class="tar-wrap${kind}"${columns}>${body}</div></section>`;
 }

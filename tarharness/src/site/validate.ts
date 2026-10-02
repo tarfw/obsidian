@@ -8,7 +8,7 @@
  */
 
 import { badRequest } from '../errors.ts';
-import { auditDesign, isTokenRef, resolveToken, TONE_KEYS, type Design } from './design.ts';
+import { auditDesign, CATEGORY_IDS, isTokenRef, resolveToken, TONE_KEYS, type Design } from './design.ts';
 import {
   ALIGN_VALUES, ASPECT_VALUES, BORDER_VALUES, DOCUMENT_VERSION, DENSITY_VALUES, EASING_VALUES,
   JOURNEY_TARGETS, LIMITS, MASK_VALUES, NODE_KINDS, PAD_VALUES, PUBLIC_TYPES, RESERVED_PATHS,
@@ -306,6 +306,7 @@ export function collectIssues(doc: SiteDocument): Issue[] {
   checkText(issues, doc.brief?.goal, 300, 'Brief goal', 'brief.goal', false);
   checkText(issues, doc.brief?.audience, 300, 'Brief audience', 'brief.audience', false);
   checkText(issues, doc.brief?.tone, 300, 'Brief tone', 'brief.tone', false);
+  if (doc.category !== undefined && !CATEGORY_IDS.includes(doc.category)) issues.push({ level: 'blocking', area: 'document', path: 'category', message: 'Category must be a registered archetype.' });
 
   for (const report of auditDesign(doc.design)) issues.push({ level: report.level, area: `design.${report.area}`, path: 'design', message: report.message });
   for (const key of ['display', 'heading', 'body'] as const) {

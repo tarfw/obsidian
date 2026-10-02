@@ -26,7 +26,7 @@ export default function SourceRecord() {
     finally { setLoading(false); }
   }, [source, id]);
   useEffect(() => { const timer = setTimeout(() => { void load(); }, 0); return () => clearTimeout(timer); }, [load]);
-  return <View style={[styles.page, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+  return <View style={[styles.page, { paddingTop: insets.top, paddingBottom: Math.max(insets.bottom, 16) }]}>
     <View style={styles.header}><Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => router.back()} style={styles.back}><Ionicons name="chevron-back" size={22} color="#3157A8" /><Text style={styles.backText}>Back</Text></Pressable><Text style={styles.kind}>{record?.type || 'SOURCE'}</Text></View>
     {loading ? <ActivityIndicator color="#3157A8" style={{ marginTop: 50 }} /> : error ? <View style={styles.content}><Text style={styles.meta}>{error}</Text><Pressable onPress={() => void load()}><Text style={styles.backText}>Try again</Text></Pressable></View> : record ? <ScrollView contentContainerStyle={styles.content}>
       <Text style={styles.title}>{record.title}</Text><Text style={styles.meta}>Source: {source} / {record.id}</Text><Text style={styles.meta}>Owner: {record.owner || 'Workspace owner'}</Text>

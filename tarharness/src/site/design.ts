@@ -172,7 +172,7 @@ const lookbook: Design = {
   theme: 'editorial-lookbook',
   direction: {
     ...DEFAULT_DESIGN.direction,
-    audience: 'fashion and editorial apparel audience',
+    audience: 'fashion, activewear and editorial apparel audience',
     purpose: 'editorial lookbook on white paper with live catalog and photography',
     voice: 'understated, editorial and precise',
     density: 'compact',
@@ -180,7 +180,7 @@ const lookbook: Design = {
   },
   color: {
     canvas: '#ffffff', ink: '#000000', accent: '#000000', accentink: '#ffffff',
-    surface: '#e5e7eb', border: '#000000', muted: '#333333',
+    surface: '#e5e7eb', border: '#e5e5e5', muted: '#333333',
     success: DEFAULT_DESIGN.color.success, danger: DEFAULT_DESIGN.color.danger,
   },
   type: {
@@ -211,14 +211,64 @@ export const THEMES: Record<string, Design> = {
 
 export const THEME_IDS: readonly string[] = Object.keys(THEMES);
 
+/** Home-page section orders the builder and the `flow` judgment share. */
+export const FLOWS = ['classic_lookbook', 'commerce_first', 'editorial_first'] as const;
+export type Flow = typeof FLOWS[number];
+
+/** A commerce gate: which rail, binding and journey a category carries. */
+export type Gate = 'product' | 'service';
+
+export interface CategorySpec {
+  readonly id: string;
+  readonly sector: string;
+  /** Plain words the `category` judgment uses to match a brief. */
+  readonly criteria: string;
+  readonly flow: Flow;
+  readonly theme: string;
+  readonly gates: readonly Gate[];
+}
+
+/**
+ * Registered category archetypes (siteai.md §4). A category is catalog data: it
+ * sets the default flow, the floor theme and the commerce-gate priors, and the
+ * `category` judgment may only choose among these ids.
+ */
+export const CATEGORIES: Record<string, CategorySpec> = {
+  retail: { id: 'retail', sector: 'Goods', criteria: 'Physical goods, catalog, shipping', flow: 'classic_lookbook', theme: 'editorial-lookbook', gates: ['product'] },
+  estate: { id: 'estate', sector: 'Goods', criteria: 'Property listings, viewings', flow: 'editorial_first', theme: 'editorial-light', gates: ['product', 'service'] },
+  food: { id: 'food', sector: 'Hospitality', criteria: 'Food and drink, menu, hours', flow: 'commerce_first', theme: 'editorial-chalk', gates: ['product', 'service'] },
+  stay: { id: 'stay', sector: 'Hospitality', criteria: 'Room bookings, availability', flow: 'editorial_first', theme: 'editorial-light', gates: ['product', 'service'] },
+  event: { id: 'event', sector: 'Hospitality', criteria: 'Gatherings, tickets, schedule', flow: 'commerce_first', theme: 'streetwear-dark', gates: ['product'] },
+  care: { id: 'care', sector: 'Service', criteria: 'Personal or wellness appointments', flow: 'classic_lookbook', theme: 'minimal-clean', gates: ['service'] },
+  health: { id: 'health', sector: 'Service', criteria: 'Medical care, appointments, trust', flow: 'classic_lookbook', theme: 'minimal-clean', gates: ['service'] },
+  trade: { id: 'trade', sector: 'Service', criteria: 'Field work, quotes, jobs', flow: 'editorial_first', theme: 'minimal-clean', gates: ['service'] },
+  firm: { id: 'firm', sector: 'Professional', criteria: 'Scoped professional engagements', flow: 'editorial_first', theme: 'editorial-light', gates: ['service'] },
+  company: { id: 'company', sector: 'Professional', criteria: 'Business presence without a direct sale', flow: 'editorial_first', theme: 'editorial-light', gates: [] },
+  software: { id: 'software', sector: 'Professional', criteria: 'Software apps, features, demo', flow: 'commerce_first', theme: 'minimal-clean', gates: ['product', 'service'] },
+  expert: { id: 'expert', sector: 'Knowledge', criteria: 'Talks, reports, advisory', flow: 'editorial_first', theme: 'editorial-light', gates: ['product', 'service'] },
+  learning: { id: 'learning', sector: 'Knowledge', criteria: 'Courses, curriculum, coaching', flow: 'commerce_first', theme: 'minimal-clean', gates: ['product', 'service'] },
+  studio: { id: 'studio', sector: 'Knowledge', criteria: 'Creative portfolio, visual work', flow: 'editorial_first', theme: 'streetwear-dark', gates: [] },
+  media: { id: 'media', sector: 'Content', criteria: 'Articles, episodes, newsletter', flow: 'editorial_first', theme: 'editorial-light', gates: [] },
+  personal: { id: 'personal', sector: 'Content', criteria: 'Individual resume, creator identity', flow: 'editorial_first', theme: 'minimal-clean', gates: [] },
+  cause: { id: 'cause', sector: 'Mission', criteria: 'Non-profit, donations, volunteers', flow: 'editorial_first', theme: 'editorial-chalk', gates: [] },
+  civic: { id: 'civic', sector: 'Public', criteria: 'Official public body, notices', flow: 'classic_lookbook', theme: 'minimal-clean', gates: ['service'] },
+  club: { id: 'club', sector: 'Public', criteria: 'Member activities, joining', flow: 'classic_lookbook', theme: 'minimal-clean', gates: ['service'] },
+  none: { id: 'none', sector: 'Fallback', criteria: 'No clear archetype; gates come from supplied facts', flow: 'commerce_first', theme: 'minimal-clean', gates: [] },
+};
+
+export const CATEGORY_IDS: readonly string[] = Object.keys(CATEGORIES);
+
 /** Registered section purposes a creation fan-out may include, by any domain. */
 export const PURPOSE_IDEAS: Record<string, string> = {
   introduction: 'open the page with the offer in one line',
-  collection: 'show bound items with live prices and availability',
+  collection: 'show bound products with live prices and availability',
+  services: 'show bound bookable services with live availability',
   recommendations: 'surface more bound items the visitor may like',
   split: 'present two approved media assets side by side as an editorial break',
   categories: 'link the declared pages as a text-tab filter',
   promo: 'a full-width band carrying one clear call to action',
+  press: 'monochrome publication press logos affirming brand trust',
+  community: 'community photo mosaic and social hashtag grid',
   features: 'state what makes the offer practical',
   proof: 'carry evidence such as results or reviews',
   story: 'explain the business in its own words',

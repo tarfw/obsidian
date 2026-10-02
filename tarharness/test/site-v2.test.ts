@@ -8,7 +8,6 @@ import { DEFAULT_DESIGN, auditDesign, exportDesign, parseDesign } from '../src/s
 import { DOCUMENT_VERSION, type Asset, type SiteDocument } from '../src/site/document.ts';
 import { compileDocument } from '../src/site/compile.ts';
 import { collectIssues, validateDocument } from '../src/site/validate.ts';
-import { upgrade } from '../src/site/adapt.ts';
 
 const clients: ReturnType<typeof createClient>[] = [];
 afterEach(() => {
@@ -336,71 +335,7 @@ describe('site v2 compiler', () => {
   });
 });
 
-// A stored v1 card record, in the read-only legacy shape `upgrade` consumes.
-function legacyDefinition(): never {
-  return {
-    schema: '1.0.0',
-    locale: 'en', timezone: 'Asia/Kolkata', currency: 'INR',
-    policy: { publicEnquiry: true },
-    journeys: [{ id: 'enquiry', title: 'Enquiry', target: 'record.create', version: 1, input: { type: 'enquiry' }, outcome: 'Appears in Now' }],
-    pages: [
-      { id: 'home', path: '/', title: 'Home', meta: { description: 'A local business' }, cards: [
-        { id: 'bar', kind: 'navigation', version: 1, props: { brand: 'Northstar', links: [] } },
-        { id: 'hero', kind: 'hero', version: 1, props: { headline: 'Northstar', subtext: 'A local business', primaryCta: { label: 'Menu', href: '/menu' } } },
-        { id: 'why', kind: 'features', version: 1, props: { title: 'Why us', features: [{ icon: 'star', title: 'Fast', description: 'Ready in 20 minutes' }] } },
-        { id: 'praise', kind: 'proof', version: 1, props: { title: 'Praise', testimonials: [{ quote: 'Best slice', author: 'Ravi' }] } },
-        { id: 'menu', kind: 'collection', version: 1, title: 'Menu', props: { items: [] }, bindings: [{ slot: 'items', query: 'catalog.public', version: 1, access: 'public', freshness: 300, params: { records: ['p1'], channel: 'web' } }] },
-        { id: 'talk', kind: 'cta', version: 1, props: { headline: 'Talk to us', text: 'We answer fast', href: '/contact', buttonLabel: 'Contact' } },
-        { id: 'end', kind: 'footer', version: 1, props: { brand: 'Northstar', links: [] } },
-      ] },
-      { id: 'contact', path: '/contact', title: 'Contact', cards: [
-        { id: 'cbar', kind: 'navigation', version: 1, props: { brand: 'Northstar', links: [] } },
-        { id: 'form', kind: 'form', version: 1, title: 'Send a message', props: { submitLabel: 'Send' } },
-        { id: 'hours', kind: 'hours', version: 1, props: { title: 'Hours', schedule: [{ days: 'Mon-Fri', hours: '9-5' }] } },
-        { id: 'faq', kind: 'faq', version: 1, props: { title: 'Questions', items: [{ q: 'Delivery?', a: 'Within 5km' }] } },
-        { id: 'cend', kind: 'footer', version: 1, props: { brand: 'Northstar', links: [] } },
-      ] },
-    ],
-  } as never;
-}
-
-describe('v1 migration', () => {
-  it('upgrades every legacy card family into one valid v2 document', () => {
-    const upgraded = upgrade(legacyDefinition());
-    expect(upgraded.schema).toBe(DOCUMENT_VERSION);
-    expect(upgraded.pages.map((page) => page.path)).toEqual(['/', '/contact']);
-    const kindsOf = (list: { kind: string; children?: unknown[] }[]): string[] =>
-      list.flatMap((node) => [node.kind, ...kindsOf((node.children || []) as { kind: string; children?: unknown[] }[])]);
-    const kinds = upgraded.pages.flatMap((page) => page.sections.flatMap((section) => kindsOf(section.nodes)));
-    for (const kind of ['navigation', 'heading', 'text', 'button', 'collection', 'form', 'footer', 'grid', 'card', 'icon', 'accordion', 'list']) {
-      expect(kinds).toContain(kind);
-    }
-    expect(() => validateDocument(upgraded)).not.toThrow();
-    // The retained reader is read-only: the legacy currency and locale survive the upgrade.
-    expect(upgraded.currency).toBe('INR');
-    expect(upgraded.journeys.some((journey) => journey.id === 'enquiry')).toBe(true);
-  });
-
-  it('compiles a stored v1 record with the single v2 compiler', async () => {
-    const client = await createTestWorkspace();
-    const bucket = releaseBucket();
-    const at = Date.now();
-    await client.execute({
-      sql: "INSERT INTO records(id,type,title,state,data,owner,version,created,updated) VALUES('site_legacy','site','Legacy','draft',?, 'owner_1',1,?,?)",
-      args: [JSON.stringify(legacyDefinition()), at, at],
-    });
-    const compiled = await Effect.runPromise(executeGateway(client, ownerAccess, {
-      actionId: 'site.compile', idempotencyKey: 'legacy-compile', input: { siteId: 'site_legacy' },
-    }, { siteReleases: bucket }));
-    const prefix = `workspaces/${ownerAccess.workspace.id}/sites/site_legacy/releases/${compiled.releaseId}`;
-    // There is no v1 compiler: a legacy record upgrades in memory and compiles as v2.
-    expect(JSON.parse(bucket.objects.get(`${prefix}/manifest.json`)!).compiler).toBe(DOCUMENT_VERSION);
-    const home = bucket.objects.get(`${prefix}/index.html`)!;
-    expect(home).toContain('<!DOCTYPE html>');
-    expect(home).not.toContain('<style>');
-    expect(bucket.objects.get(`${prefix}/style.css`)).toContain('--color-accent');
-  });
-
+describe('site generation and editing', () => {
   it('applies v2 patch operations to a generated draft', async () => {
     const client = await createTestWorkspace();
     const generated = await Effect.runPromise(executeGateway(client, ownerAccess, {
@@ -421,7 +356,7 @@ describe('v1 migration', () => {
     expect(updated.revision).toBe(site.revision + 1);
   });
 
-  it('generates and compiles an editorial-lookbook storefront with Adanola tokens', async () => {
+  it('generates a deterministic category-floor storefront and honours an explicit theme', async () => {
     const client = await createTestWorkspace();
     const bucket = releaseBucket();
     const generated = await Effect.runPromise(executeGateway(client, ownerAccess, {
@@ -429,19 +364,25 @@ describe('v1 migration', () => {
       idempotencyKey: 'lookbook-generate',
       input: {
         title: 'Adanola',
-        prompt: 'Build an Adanola editorial lookbook storefront with Favorit typography, black announcement bar, ghost CTA buttons and 4-column product grid.',
+        prompt: 'Build an editorial storefront for a fashion label.',
         theme: 'editorial-lookbook',
       },
     }));
     const siteId = String(generated.siteId);
     const site = generated.site as SiteDocument;
+    // No model key and no bound records: the category falls to the deterministic floor (siteai.md §4).
+    expect(site.category).toBe('none');
+    // An explicit owner theme is honoured and drives the compiled tokens (siteai.md §5).
     expect(site.design.theme).toBe('editorial-lookbook');
     expect(site.design.color.canvas).toBe('#ffffff');
     expect(site.design.color.ink).toBe('#000000');
     expect(site.design.color.surface).toBe('#e5e7eb');
     expect(site.design.shape.sm).toBe(0);
     expect(site.design.shape.pill).toBe(4);
-    expect(site.pages[0].sections.some((section) => section.id === 'announcement')).toBe(true);
+    // No product gate without catalog records: one page, a disabled enquiry journey, no order journey.
+    expect(site.pages.map((page) => page.path)).toEqual(['/']);
+    expect(site.journeys.some((journey) => journey.kind === 'enquiry' && !journey.enabled)).toBe(true);
+    expect(site.journeys.some((journey) => journey.kind === 'order')).toBe(false);
 
     const compiled = await Effect.runPromise(executeGateway(client, ownerAccess, {
       actionId: 'site.compile', idempotencyKey: 'lookbook-compile', input: { siteId },
@@ -449,15 +390,15 @@ describe('v1 migration', () => {
     const prefix = `workspaces/${ownerAccess.workspace.id}/sites/${siteId}/releases/${compiled.releaseId}`;
     const html = bucket.objects.get(`${prefix}/index.html`)!;
     // Every visible word derives from the owner's brief and title — nothing fabricated.
-    expect(html).toContain('ADANOLA');
-    expect(html).toContain('Shop now');
-    // Evidence-gated: no catalog records were supplied, so cards are placeholders.
-    expect(html).toContain('data-placeholders');
-    expect(html).toContain('Product 1');
-    expect(html).toContain('tar-card-ph');
-    expect(html).not.toContain('unsplash');
+    expect(html).toContain('Adanola');
+    expect(html).toContain('Explore');
+    // Evidence-gated: no catalog records, so no invented products, placeholders, quick-add or fake chat.
+    expect(html).not.toContain('data-placeholders');
+    expect(html).not.toContain('Product 1');
+    expect(html).not.toContain('tar-card-ph');
+    expect(html).not.toContain('tar-chat-bubble');
     expect(html).not.toContain('tar-quick-add');
-    expect(html).toContain('tar-chat-bubble');
+    expect(html).not.toContain('unsplash');
     const css = bucket.objects.get(`${prefix}/style.css`)!;
     expect(css).toContain('--color-canvas: #ffffff');
     expect(css).toContain('--color-ink: #000000');

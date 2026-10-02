@@ -1,9 +1,8 @@
 /**
  * TAR Site document - the typed, versioned source of truth for a site.
  *
- * The document contract lives in siteai.md. Fields
- * and identifiers use one lowercase semantic word; structure supplies
- * qualification. Retained v1 card records are readable through adapt.ts.
+ * The document contract lives in siteai.md. Fields and identifiers use one
+ * lowercase semantic word; structure supplies qualification.
  */
 
 export const DOCUMENT_VERSION = '2.0.0';
@@ -284,6 +283,8 @@ export interface SiteDocument {
   schema: typeof DOCUMENT_VERSION;
   revision: number;
   brief: Brief;
+  /** Site archetype; sets the default flow, theme and commerce-gate priors. */
+  category?: string;
   locale: string;
   timezone: string;
   currency: string;
@@ -323,7 +324,7 @@ export const PUBLIC_TYPES = ['pos.product', 'item', 'service', 'article', 'proje
 export const JOURNEY_TARGETS: Record<string, readonly string[]> = {
   enquiry: ['record.create'],
   booking: ['record.create'],
-  order: ['order.place'],
+  order: ['order.create'],
   payment: [],
 };
 

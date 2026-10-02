@@ -17,7 +17,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { harness } from '@/lib/harness';
-import type { AskOutcome, Node, Section, SiteSnapshot } from '@/lib/site-schema';
+import type { AskOutcome, Node, Section, SiteDocument, SiteSnapshot } from '@/lib/site-schema';
 
 export interface SiteScreenProps {
   visible: boolean;
@@ -39,14 +39,27 @@ export interface ChatMessage {
 }
 
 const QUICK_PROMPTS = [
-  'Dark hero with generous breathing room',
-  'Two columns with live catalog prices',
-  'Set accent color to royal blue with 4px buttons',
-  'Clean minimalist lookbook layout',
+  'Run Festive Sale',
+  'Photo Bigger',
+  'Darker Theme',
+  'Add Location',
 ];
 
 const siteSnapshotCache = new Map<string, SiteSnapshot>();
 const siteStorageKey = (slug: string) => `tar_site_snap_${slug}`;
+
+/**
+ * The two opening chat messages, captured once when a storefront first loads.
+ * Seeded from the async load callbacks rather than an effect so the opener's
+ * revision stays frozen at its first value and never grows an Undo action.
+ */
+function buildSeedMessages(site: SiteDocument, workspaceName: string): ChatMessage[] {
+  const pagesSummary = site.pages.map((p) => p.title || p.path).join(', ');
+  return [
+    { id: 'brief_init', role: 'user', text: site.brief?.goal || `Build a storefront for ${workspaceName}.` },
+    { id: 'jev_init', role: 'jev', revision: site.revision || 1, text: `Storefront ready with live catalog bindings and pages [${pagesSummary}].` },
+  ];
+}
 
 export default function SiteScreen({
   visible,
@@ -82,7 +95,9 @@ export default function SiteScreen({
   // Input & Target State
   const [command, setCommand] = useState('');
   const [selectedSectionId, setSelectedSectionId] = useState<string>('all');
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>(() =>
+    initialCached?.site?.data ? buildSeedMessages(initialCached.site.data, workspaceName) : [],
+  );
   const [pendingInstruction, setPendingInstruction] = useState<string | null>(null);
 
   const chatScrollRef = useRef<ScrollView>(null);
@@ -99,42 +114,20 @@ export default function SiteScreen({
     return site.pages.find((p) => p.id === activePageId) || site.pages[0];
   }, [site, activePageId]);
 
-  // Sync conversation history
-  useEffect(() => {
-    if (!site) return;
-    setMessages((prev) => {
-      if (prev.length > 0) return prev;
-      const initialMsgs: ChatMessage[] = [];
-      const briefGoal = site.brief?.goal || `Build a storefront for ${workspaceName}.`;
-      initialMsgs.push({
-        id: 'brief_init',
-        role: 'user',
-        text: briefGoal,
-      });
-
-      const pagesSummary = site.pages.map((p) => p.title || p.path).join(', ');
-      initialMsgs.push({
-        id: 'jev_init',
-        role: 'jev',
-        revision: site.revision || 1,
-        text: `Storefront ready: ${site.design?.theme || 'editorial-lookbook'} theme, live catalog bindings, and pages [${pagesSummary}].`,
-      });
-      return initialMsgs;
-    });
-  }, [site, workspaceName]);
-
   // Load site snapshot
   const loadSite = useCallback(async () => {
     if (!slug) return;
     try {
       const snap = await harness.site.get(slug);
       if (mountedRef.current && snap?.site?.data) {
+        const siteData = snap.site.data;
         siteSnapshotCache.set(slug, snap);
         void SecureStore.setItemAsync(siteStorageKey(slug), JSON.stringify(snap)).catch(() => undefined);
         setSnapshot(snap);
         if (snap.html) setHtml(snap.html);
-        const firstPageId = snap.site.data.pages?.[0]?.id;
+        const firstPageId = siteData.pages?.[0]?.id;
         if (firstPageId) setActivePageId((curr) => curr || firstPageId);
+        setMessages((prev) => (prev.length > 0 ? prev : buildSeedMessages(siteData, workspaceName)));
       }
     } catch {
       // Retain existing snapshot
@@ -145,7 +138,7 @@ export default function SiteScreen({
         setBusyStep('');
       }
     }
-  }, [slug]);
+  }, [slug, workspaceName]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -158,11 +151,13 @@ export default function SiteScreen({
               try {
                 const stored = JSON.parse(raw) as SiteSnapshot;
                 if (stored?.site?.data) {
+                  const storedData = stored.site.data;
                   siteSnapshotCache.set(slug, stored);
                   setSnapshot(stored);
                   if (stored.html) setHtml(stored.html);
-                  const firstPageId = stored.site.data.pages?.[0]?.id;
+                  const firstPageId = storedData.pages?.[0]?.id;
                   if (firstPageId) setActivePageId((curr) => curr || firstPageId);
+                  setMessages((prev) => (prev.length > 0 ? prev : buildSeedMessages(storedData, workspaceName)));
                   setInitialLoading(false);
                 }
               } catch { /* ignore */ }
@@ -178,7 +173,7 @@ export default function SiteScreen({
       if (timer) clearTimeout(timer);
       mountedRef.current = false;
     };
-  }, [visible, slug, loadSite]);
+  }, [visible, slug, loadSite, workspaceName]);
 
   // Auto scroll chat to bottom
   useEffect(() => {
@@ -210,24 +205,22 @@ export default function SiteScreen({
 
     const start = Date.now();
 
-    // Check if this instruction is a full site generation / rebuild request
-    const isFullGeneration = targetParam === undefined && (
-      /^(build|create|generate|rebuild|make an exact clone|clone|adanola|lookbook)\b/i.test(instruction)
-      || instruction.length > 250
-      || instruction.includes('Design System')
-      || instruction.includes('Editorial Lookbook')
-      || instruction.includes('Adanola')
-      || instruction.includes('Tokens —')
-    );
+    // A full (re)generation is requested by a build verb or a long initial brief;
+    // every other fragment is a targeted correction for the 3-lane router.
+    const isFullGeneration = targetParam === undefined
+      && (/^(build|create|generate|rebuild|make|design|setup|adanola|lookbook)\b/i.test(instruction)
+          || /editorial|lookbook|activewear|storefront|4-column|monochrome|adanola/i.test(instruction)
+          || instruction.length > 80);
 
     if (isFullGeneration) {
       setBusyStep('Generating site...');
       try {
-        const theme = /adanola|lookbook|fashion|apparel|editorial/i.test(instruction) ? 'editorial-lookbook' : undefined;
+        // Theme, category and gates are judged server-side from the brief; pass explicit category if lookbook/retail is requested.
+        const isLookbookBrief = /editorial|lookbook|activewear|adanola/i.test(instruction);
         const genRes = await harness.site.generate(slug, {
           prompt: instruction,
-          ...(theme ? { theme } : {}),
-          title: workspaceName || 'Adanola',
+          title: workspaceName,
+          ...(isLookbookBrief ? { category: 'retail', theme: 'editorial-lookbook' } : {}),
         });
         const elapsed = Date.now() - start;
         if (mountedRef.current) {
@@ -251,7 +244,7 @@ export default function SiteScreen({
               role: 'jev',
               revision: genRes.version,
               ms: elapsed,
-              text: `Generated ${genRes.site?.design?.theme || 'editorial-lookbook'} storefront with live catalog bindings, 4-column product grid and Adanola tokens. (rev ${genRes.version})`,
+              text: `Storefront generated from your brief with live catalog bindings and published pages. (rev ${genRes.version})`,
             },
           ]);
         }
@@ -345,7 +338,7 @@ export default function SiteScreen({
         setBusyStep('');
       }
     }
-  }, [slug, siteId, command, busy, site, selectedSectionId, pendingInstruction, loadSite]);
+  }, [slug, siteId, command, busy, site, selectedSectionId, pendingInstruction, loadSite, workspaceName]);
 
   // Undo last revision
   const undoLastEdit = useCallback(async () => {

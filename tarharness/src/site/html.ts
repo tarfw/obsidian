@@ -1,4 +1,4 @@
-/** Shared HTML helpers for both the retained v1 renderer and the v2 compiler. */
+/** Shared HTML helpers for the site compiler. */
 
 export function escapeHtml(text: unknown): string {
   if (text === null || text === undefined) return '';

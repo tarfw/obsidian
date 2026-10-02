@@ -309,7 +309,7 @@ export default function ToolsScreen() {
     {page === 'more' ? <ScrollView style={styles.scroll} contentContainerStyle={[styles.content, { paddingBottom: bottom }]}>
       <Row icon="folder-outline" title="Browse records" arrow onPress={() => router.push({ pathname: '/(home)/records', params: { source: selected === 'all' ? current.slug : selected } })} />
       <Row icon="list-outline" title="Action registry" arrow onPress={() => router.push('/registry')} />
-      <Row icon="time-outline" title="Space routines" arrow onPress={() => router.push('/(home)/routines')} />
+      <Row icon="time-outline" title="Routines" arrow onPress={() => router.push('/(home)/routines')} />
       {active.some((workspace) => workspace.mode === 'work') ? <Row icon="people-outline" title="Members & chat" arrow onPress={() => {
         const work = active.filter((workspace) => workspace.mode === 'work');
         if (work.length === 1) setTeamScope(work[0].slug);

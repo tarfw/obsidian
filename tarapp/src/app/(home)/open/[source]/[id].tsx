@@ -97,9 +97,36 @@ export default function OpenNowRow() {
         {row?.action === 'purchase.receive' ? <View style={styles.quantity}><Text style={styles.meta}>Received quantity</Text><TextInput accessibilityLabel="Received quantity" keyboardType="number-pad" value={receivedQuantity} onChangeText={setReceivedQuantity} style={styles.input} /></View> : null}
         {!row?.action ? <Text style={styles.meta}>This step is waiting for its source to become ready.</Text> : null}
       </ScrollView>
-      {row?.action ? <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 12) }]}><Pressable accessibilityRole="button" disabled={committing || (registryLoading && row.action !== 'pos.order.item.update' && row.action !== 'purchase.receive')} onPress={() => void beginAction(row.action!)} style={styles.primary}><Text style={styles.primaryText}>{committing ? 'Working…' : registryLoading && row.action !== 'pos.order.item.update' && row.action !== 'purchase.receive' ? 'Loading action…' : buttonLabel}</Text></Pressable>
-        {row.action === 'pos.order.accept' ? <Pressable accessibilityRole="button" disabled={committing} onPress={() => void beginAction('pos.order.reject')} style={styles.secondary}><Text style={styles.link}>Reject order</Text></Pressable> : null}
-      </View> : <View style={{ height: insets.bottom, backgroundColor: '#FFFFFF' }} />}
+      {row?.action ? (
+        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom + 12, 24) }]}>
+          <Pressable
+            accessibilityRole="button"
+            disabled={committing || (registryLoading && row.action !== 'pos.order.item.update' && row.action !== 'purchase.receive')}
+            onPress={() => void beginAction(row.action!)}
+            style={styles.primary}
+          >
+            <Text style={styles.primaryText}>
+              {committing
+                ? 'Working…'
+                : registryLoading && row.action !== 'pos.order.item.update' && row.action !== 'purchase.receive'
+                ? 'Loading action…'
+                : buttonLabel}
+            </Text>
+          </Pressable>
+          {row.action === 'pos.order.accept' ? (
+            <Pressable
+              accessibilityRole="button"
+              disabled={committing}
+              onPress={() => void beginAction('pos.order.reject')}
+              style={styles.secondary}
+            >
+              <Text style={styles.link}>Reject order</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : (
+        <View style={{ height: Math.max(insets.bottom, 16), backgroundColor: '#FFFFFF' }} />
+      )}
     </> : null}
     <ActionInterfaceHost action={openedAction} contracts={contracts} scope={source} initialInput={row?.input} contextTitle={row?.title}
       onClose={() => setOpenedAction(null)} onSuccess={() => { setOpenedAction(null); requestNowReload(detail?.workspace.id || source); router.back(); }} />

@@ -23,3 +23,5 @@ SECRETS.md
 .wrangler/
 .mimocode/
 .freebuff/
+out_*/
+*_rel.json

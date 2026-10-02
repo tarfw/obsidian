@@ -251,7 +251,7 @@ async function prose(runner: ModelRunner | null, doc: SiteDocument, command: str
   if (!node) return [];
   const limit = node.kind === 'heading' ? 120 : 600;
   try {
-    const copy = await draftCopy(runner, { instruction: command, current: text(node.props.text, limit), facts: { brief: doc.brief, voice: doc.design.direction.voice }, limit });
+    const copy = await draftCopy(runner, { instruction: command, current: text(node.props.text, limit), facts: { brief: doc.brief, voice: doc.design.direction.voice }, locale: doc.locale, limit });
     return [{ op: 'set_text', target: node.id, value: copy }];
   } catch {
     return [];

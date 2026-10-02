@@ -15,15 +15,20 @@ import type { Asset, SiteDocument } from './document.ts';
 import { attach, store, type StoredAsset } from './asset.ts';
 import type { PatchOperation } from './patch.ts';
 
-const STOPWORDS = new Set(['a', 'an', 'and', 'are', 'as', 'at', 'be', 'build', 'but', 'by', 'for', 'from', 'give', 'in', 'into', 'is', 'it', 'like', 'make', 'me', 'my', 'of', 'on', 'or', 'our', 'shop', 'site', 'store', 'style', 'that', 'the', 'this', 'to', 'us', 'use', 'want', 'website', 'with', 'live', 'prices', 'page']);
+const STOPWORDS = new Set([
+  'a', 'an', 'and', 'are', 'as', 'at', 'be', 'build', 'building', 'but', 'by', 'for', 'from',
+  'give', 'in', 'into', 'is', 'it', 'like', 'make', 'me', 'my', 'of', 'on', 'or', 'our',
+  'shop', 'site', 'store', 'storefront', 'style', 'that', 'the', 'this', 'to', 'us', 'use',
+  'want', 'website', 'with', 'live', 'prices', 'page', 'we', 'are', 'goal',
+]);
 
 export function termsFromBrief(goal: string, title: string): string {
-  const words = `${title} ${goal}`
+  const words = `${goal} ${title}`
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, ' ')
     .split(/\s+/)
-    .filter((word) => word.length > 2 && !STOPWORDS.has(word) && !/^\d+$/.test(word));
-  return [...new Set(words)].slice(0, 3).join(' ') || 'fashion editorial';
+    .filter((word) => word.length > 2 && !STOPWORDS.has(word) && !/^\d+$/.test(word) && !/^ws\d+$/.test(word));
+  return [...new Set(words)].slice(0, 3).join(' ') || 'fashion activewear editorial';
 }
 
 interface PexelsPhoto {

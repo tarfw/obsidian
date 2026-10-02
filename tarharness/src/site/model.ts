@@ -168,6 +168,15 @@ const SYSTEM = `You compose a marketing website draft as strict JSON. Rules:
 - Layout kinds for sections: flow, flex, grid, stack.
 - Return JSON only.`;
 
+const LOCALE_NAMES: Record<string, string> = { en: 'English', ta: 'Tamil' };
+
+/** Prose follows the brief locale; structure, tokens and prices stay neutral. */
+function languageRule(locale?: string): string {
+  if (!locale) return '';
+  const name = LOCALE_NAMES[locale.slice(0, 2).toLowerCase()];
+  return name ? ` Write every text in ${name}.` : '';
+}
+
 export interface ProseSlot {
   id: string;
   purpose: string;
@@ -178,6 +187,7 @@ export interface ProseSlot {
 export interface CopyInput {
   brief: { goal: string; audience: string; tone: string };
   voice: string;
+  locale?: string;
   facts: Record<string, unknown>;
   slots: ProseSlot[];
 }
@@ -192,7 +202,7 @@ export async function writeCopy(runner: ModelRunner, input: CopyInput): Promise<
   if (!slots.length) return {};
   return runner.json<Record<string, string>>({
     system: SYSTEM,
-    prompt: `Write the copy for these site slots. Brief: ${JSON.stringify(input.brief)}. Voice: ${input.voice}. Approved facts: ${JSON.stringify(input.facts)}.
+    prompt: `Write the copy for these site slots. Brief: ${JSON.stringify(input.brief)}. Voice: ${input.voice}. Approved facts: ${JSON.stringify(input.facts)}.${languageRule(input.locale)}
 Slots: ${JSON.stringify(slots.map((slot) => ({ id: slot.id, purpose: slot.purpose, current: slot.current })))}.
 Return JSON: { "texts": [ { "id": string, "text": string, "claims": [ { "text": string, "evidence": string } ] } ] }.
 Rules: one entry per slot id, plain concrete copy within the slot's own length, no invented facts, and list every factual sentence as a claim with the fact it comes from.`,
@@ -236,10 +246,10 @@ Return JSON: { "claims": [ { "text": string, "evidence": string } ] }. Evidence 
 }
 
 /** Write replacement copy for one element; never states facts that were not supplied. */
-export async function draftCopy(runner: ModelRunner, input: { instruction: string; current: string; facts: Record<string, unknown>; limit?: number }): Promise<string> {
+export async function draftCopy(runner: ModelRunner, input: { instruction: string; current: string; facts: Record<string, unknown>; locale?: string; limit?: number }): Promise<string> {
   return runner.json<string>({
     system: SYSTEM,
-    prompt: `Rewrite the copy for one site element. Instruction: ${input.instruction}. Current text: ${JSON.stringify(input.current)}. Approved facts: ${JSON.stringify(input.facts)}.
+    prompt: `Rewrite the copy for one site element. Instruction: ${input.instruction}. Current text: ${JSON.stringify(input.current)}. Approved facts: ${JSON.stringify(input.facts)}.${languageRule(input.locale)}
 Return JSON: { "text": string } within ${input.limit || 300} characters.`,
     maxTokens: 400,
     temperature: 0.6,

@@ -10,7 +10,7 @@
  */
 
 import { askSystemOne, choiceOf, noulOf, scoreOf, JEV_MODEL, type SystemOneQuestion } from '../brain/systemone.ts';
-import { PURPOSE_IDEAS, THEME_IDS } from './design.ts';
+import { CATEGORIES, CATEGORY_IDS, PURPOSE_IDEAS, THEME_IDS, type Flow } from './design.ts';
 import type { Density, Tone } from './build.ts';
 
 /** Named thresholds, evaluated on our briefs, languages and failure costs. */
@@ -74,12 +74,18 @@ const DENSITY_LEVELS: readonly string[] = ['Compact and dense', 'Balanced spacin
 const COLUMN_CHOICES: Record<string, string> = { '2': 'Two items beside each other.', '3': 'Three items across.', '4': 'Four items across.', none: 'Let the builder default decide.' };
 
 export interface CreateJudgment {
+  /** Chosen catalog archetype, or null when the brief fits none above confidence. */
+  category: string | null;
+  /** Whether the brief carries physical goods (drives `/shop`, cart, order). */
+  product: boolean | null;
+  /** Whether the brief carries bookable services (drives `records.public`, booking). */
+  service: boolean | null;
   theme: string | null;
   density: Density | null;
   tone: Tone | null;
   columns: number | null;
   heroStyle: 'fullbleed_16_6' | 'split_16_9' | null;
-  flow: 'classic_lookbook' | 'commerce_first' | 'editorial_first' | null;
+  flow: Flow | null;
   quickAdd: boolean | null;
   /** Purposes whose evidence exists and whose noul cleared the threshold. */
   purposes: string[];
@@ -99,6 +105,12 @@ const FLOW_GUIDE: Record<string, string> = {
   commerce_first: 'Every product surface leads; editorial content follows.',
   editorial_first: 'Imagery and story lead; the product grid comes later.',
 };
+
+/** Plain-word criteria for each registered archetype, plus the `none` escape. */
+const CATEGORY_GUIDE: Record<string, string> = Object.fromEntries([
+  ...CATEGORY_IDS.map((id) => [id, `${CATEGORIES[id].sector}: ${CATEGORIES[id].criteria}.`]),
+  ['none', 'No supplied archetype clearly fits; gates come from the supplied facts.'],
+]);
 
 /**
  * One creation fan-out: every independent question about a brief in a single
@@ -120,6 +132,19 @@ export async function fanOut(
   const assets = input.assets.slice(0, 8);
   const themes = THEME_IDS.filter((id) => !input.avoid?.includes(id));
   const questions: Record<string, SystemOneQuestion> = {
+    category: {
+      type: 'choice',
+      instructions: 'Which registered catalog archetype best fits the brief and facts? Choose exactly one supplied id, or none when no archetype clearly fits. This sets the default flow, theme floor and commerce gates; it asserts no business fact.',
+      criteria: CATEGORY_GUIDE,
+    },
+    product: {
+      type: 'noul',
+      instructions: 'Does this business sell physical goods or catalog products a visitor would buy online? Answer yes only when the brief or facts show goods with prices. This drives the shop, cart and order journey.',
+    },
+    service: {
+      type: 'noul',
+      instructions: 'Does this business offer bookable services a visitor would schedule or request? Answer yes only when the brief or facts show services with availability. This drives the services rail and booking journey.',
+    },
     theme: {
       type: 'choice',
       instructions: 'Which registered theme best fits the brief? Choose one supplied id, or none when no theme fits. This choice sets appearance only and asserts no business fact.',
@@ -174,10 +199,14 @@ export async function fanOut(
   const result = await answers(apiKey, cache, 'site.create', {
     brief: input.brief, facts: input.facts, purposes,
     assets: assets.map((asset) => asset.description),
+    categories: CATEGORY_IDS,
     themes,
   }, questions);
-  if (!result) return { theme: null, density: null, tone: null, columns: null, heroStyle: null, flow: null, quickAdd: null, purposes: [], assets: [], enquiry: null };
+  if (!result) return { category: null, product: null, service: null, theme: null, density: null, tone: null, columns: null, heroStyle: null, flow: null, quickAdd: null, purposes: [], assets: [], enquiry: null };
 
+  const category = choiceOf(result.category);
+  const product = noulOf(result.product).probability;
+  const service = noulOf(result.service).probability;
   const theme = choiceOf(result.theme);
   const densityLevel = scoreOf(result.density);
   const tone = choiceOf(result.tone);
@@ -199,6 +228,9 @@ export async function fanOut(
   const enquiry = noulOf(result.enquiry).probability;
   const numeric = columns.choice === '2' || columns.choice === '3' || columns.choice === '4' ? Number(columns.choice) : null;
   return {
+    category: category.choice && CATEGORY_IDS.includes(category.choice) && (category.confidence ?? 0) >= JUDGMENT.optionConfidence ? category.choice : null,
+    product: product === null ? null : product >= JUDGMENT.purposeProbability,
+    service: service === null ? null : service >= JUDGMENT.purposeProbability,
     theme: theme.choice && themes.includes(theme.choice) && (theme.confidence ?? 0) >= JUDGMENT.optionConfidence ? theme.choice : null,
     density: densityLevel.score === 1 ? 'compact' : densityLevel.score === 3 ? 'airy' : densityLevel.score === 2 ? 'balanced' : null,
     tone: tone.choice === 'canvas' || tone.choice === 'surface' || tone.choice === 'ink' || tone.choice === 'accent' ? tone.choice : null,
@@ -214,6 +246,7 @@ export async function fanOut(
 
 const THEME_GUIDE: Record<string, string> = {
   'editorial-light': 'Editorial white canvas, serif display.',
+  'editorial-lookbook': 'High-fashion lookbook: tight tracking, four-column grids, restrained neutral canvas.',
   'editorial-chalk': 'Warm paper canvas, single blue accent.',
   'streetwear-dark': 'High-contrast dark canvas for expressive brands.',
   'minimal-clean': 'Neutral restrained canvas for any business.',

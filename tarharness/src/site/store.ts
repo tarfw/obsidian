@@ -8,7 +8,7 @@ import { readDocument } from './adapt.ts';
 import { inspectDocument } from './inspect.ts';
 import { assetReader } from './asset.ts';
 import { applyPexels } from './pexels.ts';
-import { PURPOSE_IDEAS, THEME_IDS } from './design.ts';
+import { CATEGORIES, CATEGORY_IDS, PURPOSE_IDEAS, THEME_IDS } from './design.ts';
 import { BudgetExceeded, DEFAULT_BUDGET, GROQ_DEFAULT_MODEL, ModelRunner, SITE_MODEL_FALLBACKS, readClaims, writeCopy } from './model.ts';
 import { buildSite, defaultBlueprint, tasteBias, type Blueprint, type Facts, type Slot } from './build.ts';
 import { slugify } from './html.ts';
@@ -69,6 +69,22 @@ async function publicCatalog(client: Client, records: readonly string[], channel
         ? { price: amount, currency } : {}),
     };
   })];
+}
+
+/**
+ * Owner-published catalog: commerce variants that carry a current active price in
+ * the public channel. A channel price is the owner's explicit publish signal, so
+ * auto-binding these still honours the invariant that a merely-existing record
+ * (a bare pos.product with no channel price) never reaches a public draft.
+ */
+async function publicVariants(client: Client, channel: string): Promise<string[]> {
+  const at = now();
+  const result = await client.execute({ sql: `SELECT v.id AS id FROM records v WHERE v.type='variant' AND v.state='active' AND v.archived IS NULL
+    AND EXISTS(SELECT 1 FROM records p WHERE p.type='price' AND p.state='active' AND p.archived IS NULL
+      AND json_extract(p.data,'$.variant')=v.id AND json_extract(p.data,'$.channel')=?
+      AND json_extract(p.data,'$.starts')<=? AND (json_extract(p.data,'$.ends') IS NULL OR json_extract(p.data,'$.ends')>?))
+    ORDER BY v.title,v.id LIMIT 40`, args: [channel, at, at] });
+  return result.rows.map((row) => String(row.id));
 }
 
 /** Public projection for declared non-catalog collections (services, articles, projects). */
@@ -245,7 +261,7 @@ export async function executeSiteGenerate(client: Client, context: AccessContext
   const previous = existing ? readDocument(existing.data).doc : null;
   const brief = { goal: prompt || `${title} online`, audience: text(input.audience, 200), tone: text(input.tone, 120) };
   const gathered = await publicFacts(client, input, previous);
-  const cache = { control, workspace: context.workspace.id, version: 'create-1' };
+  const cache = { control, workspace: context.workspace.id, version: 'create-2' };
   const avoided = [...tasteBias(previous?.taste)];
   const judged = await fanOut(typesafe, cache, {
     brief,
@@ -254,9 +270,22 @@ export async function executeSiteGenerate(client: Client, context: AccessContext
     assets: gathered.assets,
     avoid: avoided,
   });
-  const defaults = defaultBlueprint(brief, previous?.taste);
+  // Category resolves once: Jev's confident pick, else an explicit input, else the carried value, else the floor.
+  const requested = String(input.category || '');
+  const category = judged.category || (CATEGORY_IDS.includes(requested) ? requested : '') || previous?.category || 'none';
+  const spec = CATEGORIES[category] || CATEGORIES.none;
+  const hasItems = (gathered.facts.items || []).length > 0;
+  const hasServices = (gathered.facts.services || []).length > 0;
+  // Owner-bound facts always win; otherwise Jev decides, and the category gate is the floor.
+  const product = hasItems ? true : (judged.product ?? spec.gates.includes('product'));
+  const service = hasServices ? true : (judged.service ?? spec.gates.includes('service'));
+  const defaults = defaultBlueprint(category, previous?.taste);
+  const theme = input.theme ? String(input.theme) : judged.theme || defaults.theme;
   const blueprint: Blueprint = {
-    theme: input.theme ? String(input.theme) : judged.theme || defaults.theme,
+    category,
+    product,
+    service,
+    theme,
     density: judged.density || defaults.density,
     tone: judged.tone || defaults.tone,
     columns: Math.min(4, Math.max(2, judged.columns || defaults.columns)),
@@ -268,7 +297,8 @@ export async function executeSiteGenerate(client: Client, context: AccessContext
     assets: judged.assets.slice(0, 3),
     enquiry: input.enquiry === true || judged.enquiry === true || Boolean(previous?.journeys.length),
   };
-  const built = buildSite({ title, brief, facts: gathered.facts, blueprint, assets: gathered.assetsRegistered, previous });
+  const locale = text(input.locale, 8) || previous?.locale || 'en';
+  const built = buildSite({ title, brief, facts: gathered.facts, blueprint, assets: gathered.assetsRegistered, locale, previous });
   const site = built.doc;
   const prose = await writeDraft(ai, model, groqApiKey, site, built.slots, gathered.judged);
   let note = prose.note;
@@ -462,7 +492,12 @@ export async function executeSiteUnpublish(client: Client, context: AccessContex
 async function publicFacts(client: Client, input: Record<string, unknown>, previous: SiteDocument | null): Promise<{ facts: Facts; judged: Record<string, unknown>; assets: { id: string; description: string }[]; assetsRegistered: Asset[] }> {
   const records = strings(input.records, 40).filter((id) => /^[a-zA-Z0-9._:-]{1,160}$/.test(id));
   const channel = text(input.channel, 40) || 'default';
-  const items = records.length ? await publicCatalog(client, records, channel) : [];
+  // No hand-picked records: fall back to the owner's published catalog so a store
+  // with channel-priced stock gets a real /shop without selecting anything.
+  const bound = records.length ? records : await publicVariants(client, channel);
+  const items = bound.length ? await publicCatalog(client, bound, channel) : [];
+  const serviceIds = strings(input.services, 40).filter((id) => /^[a-zA-Z0-9._:-]{1,160}$/.test(id));
+  const services = serviceIds.length ? await publicRecords(client, serviceIds, 'service') : [];
   const features = strings(input.features, 6);
   const hours = strings(input.hours, 8);
   const proof = (Array.isArray(input.proof) ? input.proof : []).slice(0, 6).map((entry) => {
@@ -475,6 +510,7 @@ async function publicFacts(client: Client, input: Record<string, unknown>, previ
   }).filter((entry) => entry.q && entry.a);
   const facts: Facts = {
     ...(items.length ? { items, channel } : {}),
+    ...(services.length ? { services } : {}),
     ...(features.length ? { features } : {}),
     ...(proof.length ? { proof } : {}),
     ...(questions.length ? { questions } : {}),
@@ -485,6 +521,7 @@ async function publicFacts(client: Client, input: Record<string, unknown>, previ
   };
   const judged = {
     catalog: items.slice(0, 20).map((item) => ({ title: item.title, price: item.price, currency: item.currency })),
+    services: services.slice(0, 20).map((entry) => ({ title: entry.title })),
     features, hours,
     address: facts.address, phone: facts.phone, email: facts.email,
     questions: questions.map((entry) => entry.q),
@@ -514,7 +551,7 @@ async function writeDraft(
   if (!slots.length || (!ai && !groqApiKey)) return { wrote: false, claims: [], note: '' };
   const runner = new ModelRunner(ai, model || (groqApiKey ? GROQ_DEFAULT_MODEL : SITE_MODEL_FALLBACKS[0]), DEFAULT_BUDGET, groqApiKey);
   try {
-    const texts = await writeCopy(runner, { brief: site.brief, voice: site.design.direction.voice, facts, slots });
+    const texts = await writeCopy(runner, { brief: site.brief, voice: site.design.direction.voice, locale: site.locale, facts, slots });
     const ids = new Set(slots.map((slot) => slot.id));
     const walk = (nodes: Node[]) => nodes.forEach((node) => {
       const copy = texts[node.id];

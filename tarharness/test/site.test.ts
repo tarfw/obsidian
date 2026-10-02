@@ -188,7 +188,8 @@ describe('TAR Site lifecycle', () => {
       actionId: 'site.refresh', idempotencyKey: 'site-refresh-1', input: { siteId },
     }, { siteReleases: bucket }));
     expect(refreshed.refreshed).toBe(true);
-    expect(refreshed.itemCount).toBe(1);
+    // The home product rail and the /shop catalog both bind catalog.public, so the one record resolves twice.
+    expect(refreshed.itemCount).toBe(2);
 
     const site = await storedSite(client, siteId);
     expect(site.releases).toHaveLength(2);
@@ -338,5 +339,32 @@ describe('TAR Site lifecycle', () => {
     expect(page).toContain('$100.00');
     expect(page).not.toContain('Private variant');
     for (const price of ['$900.00', '$800.00', '$700.00', '$600.00']) expect(page).not.toContain(price);
+  });
+
+  it('auto-binds the owner\'s channel-priced catalog into a real shop with no hand-picked records', async () => {
+    const client = await createTestWorkspace();
+    const at = Date.now();
+    const records = [
+      { id: 'loaf', type: 'variant', title: 'Sourdough Loaf', data: { description: 'Wood fired daily' } },
+      { id: 'croissant', type: 'variant', title: 'Butter Croissant', data: {} },
+      { id: 'staff', type: 'variant', title: 'Staff Only Item', data: {} },
+      { id: 'p1', type: 'price', title: 'Loaf price', data: { variant: 'loaf', amount: 4500, currency: 'USD', channel: 'default', starts: 1 } },
+      { id: 'p2', type: 'price', title: 'Croissant price', data: { variant: 'croissant', amount: 300, currency: 'USD', channel: 'default', starts: 1 } },
+      { id: 'p3', type: 'price', title: 'Wholesale price', data: { variant: 'staff', amount: 100, currency: 'USD', channel: 'wholesale', starts: 1 } },
+    ];
+    await client.batch(records.map((record) => ({ sql: "INSERT INTO records(id,type,title,state,data,owner,version,created,updated) VALUES(?,?,?,'active',?,'owner_1',1,?,?)",
+      args: [record.id, record.type, record.title, JSON.stringify(record.data), at, at] })), 'write');
+    // No records passed: the two default-channel priced variants are discovered automatically,
+    // while a bare variant with only a wholesale price stays private.
+    const generated = await generate(client, 'autobind-generate', { title: 'Bakery', prompt: 'A wood fired bakery' });
+    const site = generated.site as SiteDocument;
+    expect(site.pages.map((page) => page.path)).toContain('/shop');
+    const bucket = releaseBucket();
+    const reviewed = await candidate(client, bucket, String(generated.siteId), 'autobind-compile');
+    const page = bucket.objects.get(`workspaces/${ownerAccess.workspace.id}/sites/${generated.siteId}/releases/${reviewed.releaseId}/index.html`);
+    expect(page).toContain('Sourdough Loaf');
+    expect(page).toContain('$45.00');
+    expect(page).toContain('Butter Croissant');
+    expect(page).not.toContain('Staff Only Item');
   });
 });

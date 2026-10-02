@@ -80,7 +80,6 @@ const ICONS: Record<string, string> = {
   search: 'M21 21l-4.35-4.35M19 11a8 8 0 11-16 0 8 8 0 0116 0z',
   user: 'M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 11a4 4 0 100-8 4 4 0 000 8z',
   person: 'M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 11a4 4 0 100-8 4 4 0 000 8z',
-  chat: 'M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z',
   sparkle: 'M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z',
 };
 
@@ -223,52 +222,85 @@ h3.tar-title { font-size: var(--type-body); font-weight: ${Math.min(900, design.
 .tar-cardlink { text-decoration: none; display: block; }
 .tar-item[hidden] { display: none; }
 .tar-empty { color: var(--color-muted); font-style: italic; }
-.tar-nav { position: sticky; top: 0; z-index: 20; background: color-mix(in srgb, var(--color-canvas) 88%, transparent); backdrop-filter: blur(10px); border-bottom: 1px solid var(--color-border); }
-.tar-nav-inner { display: flex; align-items: center; justify-content: space-between; gap: ${space(4)}; min-height: ${space(16)}; }
-.tar-brand { font-family: var(--font-heading); font-size: 1.5rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; text-decoration: none; }
-.tar-navlinks { display: flex; gap: ${space(5)}; list-style: none; flex-wrap: wrap; text-transform: uppercase; font-size: 12px; font-weight: 500; letter-spacing: 0.025em; }
-.tar-navlinks a { text-decoration: none; }
-.tar-navlinks a:hover { color: var(--color-accent); }
+
+/* Announcement Bar */
+.tar-announcement {
+  background: #000000;
+  color: #ffffff;
+  font-family: var(--font-body);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-align: center;
+  padding: 6px 16px;
+  width: 100%;
+}
+
+.tar-nav { position: sticky; top: 0; z-index: 50; background: var(--color-canvas); border-bottom: 1px solid var(--color-border); }
+.tar-nav-inner { display: flex; align-items: center; justify-content: space-between; gap: ${space(4)}; min-height: ${space(14)}; padding: 0 24px; }
+.tar-brand { font-family: var(--font-display); font-size: 24px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; text-decoration: none; color: var(--color-ink); }
+.tar-navlinks { display: flex; gap: ${space(5)}; list-style: none; flex-wrap: wrap; text-transform: uppercase; font-size: 12px; font-weight: 500; letter-spacing: 0.025em; margin: 0; padding: 0; }
+.tar-navlinks a { text-decoration: none; color: var(--color-ink); }
+.tar-navlinks a:hover { color: var(--color-muted); }
 .tar-nav-actions { display: flex; align-items: center; gap: 16px; }
-.tar-nav-icon { display: inline-flex; align-items: center; cursor: pointer; color: var(--color-ink); }
+.tar-nav-icon { display: inline-flex; align-items: center; cursor: pointer; color: var(--color-ink); position: relative; }
+.tar-bag-count { position: absolute; top: -4px; right: -8px; background: #000000; color: #ffffff; font-size: 9px; font-weight: 700; border-radius: 9999px; width: 14px; height: 14px; display: flex; align-items: center; justify-content: center; }
 .tar-menu-btn { display: none; background: none; border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: ${space(1)} ${space(2)}; font-size: 1.1rem; cursor: pointer; }
 
 /* Product Grid and Card */
-.tar-product-card { background: var(--color-canvas); border: none; border-radius: 0; padding: 0; gap: 8px; position: relative; }
-.tar-card-media { position: relative; overflow: hidden; width: 100%; aspect-ratio: 3 / 4; background: var(--color-surface); }
-.tar-card-media img { width: 100%; height: 100%; object-fit: cover; border-radius: 0; }
-.tar-card-media .tar-card-img-alt { position: absolute; inset: 0; opacity: 0; transition: opacity var(--motion) var(--ease); }
+.tar-product-card { background: var(--color-canvas); border: none; border-radius: 0; padding: 0; gap: 6px; position: relative; display: flex; flex-direction: column; }
+.tar-card-media { position: relative; overflow: hidden; width: 100%; aspect-ratio: 3 / 4; background: var(--color-surface); border-radius: 0; }
+.tar-card-media img, .tar-card-media .tar-card-img { width: 100%; height: 100%; object-fit: cover; border-radius: 0; display: block; transition: opacity var(--motion) var(--ease); }
+.tar-card-media .tar-card-img-alt { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity var(--motion) var(--ease); border-radius: 0; }
 .tar-product-card:hover .tar-card-img-alt { opacity: 1; }
-.tar-card-ph { border: none; outline: none; }
-.tar-card[data-placeholder] .tar-product-title { font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; font-size: 11px; }
-.tar-card-badge { position: absolute; bottom: 8px; left: 8px; background: var(--color-canvas); color: var(--color-ink); font-size: 11px; font-weight: 500; padding: 2px 6px; border-radius: 0; }
-.tar-card-wishlist { position: absolute; top: 8px; right: 8px; background: transparent; border: none; cursor: pointer; color: var(--color-ink); width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; }
-.tar-card-wishlist svg { width: 18px; height: 18px; stroke: var(--color-ink); fill: none; }
-.tar-swatches { display: flex; gap: 4px; padding: 4px 0; }
-.tar-swatch { width: 12px; height: 12px; border-radius: 0; display: inline-block; }
+.tar-card-badge { position: absolute; top: 8px; left: 8px; background: var(--color-canvas); color: var(--color-ink); font-size: 10px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; padding: 3px 8px; border-radius: 0; z-index: 3; }
+.tar-card-wishlist { position: absolute; top: 8px; right: 8px; background: transparent; border: none; cursor: pointer; color: var(--color-ink); width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; z-index: 3; }
+.tar-card-wishlist svg { width: 16px; height: 16px; stroke: var(--color-ink); fill: none; stroke-width: 1.5; transition: fill 0.15s ease; }
+.tar-card-wishlist:hover svg { fill: var(--color-ink); }
+.tar-card-sizes { position: absolute; bottom: 0; left: 0; right: 0; background: rgba(255, 255, 255, 0.96); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 12px; transform: translateY(100%); transition: transform 0.2s ease; z-index: 4; }
+.tar-product-card:hover .tar-card-sizes { transform: translateY(0); }
+.tar-size-btn { background: transparent; border: 1px solid var(--color-border); border-radius: 2px; color: var(--color-ink); font-family: var(--font-body); font-size: 10px; font-weight: 500; padding: 3px 6px; cursor: pointer; transition: all 0.15s ease; }
+.tar-size-btn:hover { background: var(--color-ink); color: var(--color-canvas); border-color: var(--color-ink); }
+.tar-swatches { display: flex; gap: 4px; padding: 4px 0 2px; }
+.tar-swatch { width: 12px; height: 12px; border-radius: 0; display: inline-block; cursor: pointer; }
 .tar-swatch[data-active] { outline: 1px solid var(--color-ink); outline-offset: 1px; }
-.tar-card-colours { font-size: 12px; color: var(--color-muted); }
-.tar-card-meta { display: flex; flex-direction: column; gap: 4px; }
-.tar-product-title { font-size: 12px; font-weight: 400; color: var(--color-ink); line-height: 1.3; font-family: var(--font-body); }
-.tar-card-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 4px; }
-.tar-card-footer .tar-price { font-size: 12px; font-weight: 400; color: var(--color-ink); }
-.tar-quick-add { background: var(--color-ink); color: var(--color-canvas); font-size: 12px; font-weight: 500; padding: 4px 10px; border: none; border-radius: 4px; cursor: pointer; transition: opacity 0.15s ease; }
+.tar-card-colours { font-size: 11px; color: var(--color-muted); }
+.tar-card-meta { display: flex; flex-direction: column; gap: 2px; }
+.tar-product-title { font-size: 12px; font-weight: 400; color: var(--color-ink); line-height: 1.33; font-family: var(--font-body); letter-spacing: 0.01em; }
+.tar-card-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 2px; }
+.tar-card-footer .tar-price { font-size: 12px; font-weight: 400; color: var(--color-ink); font-family: var(--font-body); }
+.tar-quick-add { background: var(--color-ink); color: var(--color-canvas); font-size: 11px; font-weight: 500; padding: 4px 10px; border: none; border-radius: 4px; cursor: pointer; transition: opacity 0.15s ease; }
 .tar-quick-add:hover { opacity: 0.85; }
 
-/* Lookbook Full-Width Hero: editorial, no overlay, no shadow — photography or paper carries it. */
+/* Lookbook Full-Width Hero: full-bleed lifestyle imagery with whisper-weight centered headline */
 .tar-lookbook-hero {
   position: relative;
   width: 100%;
+  min-height: 80vh;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: var(--color-canvas);
-  color: var(--color-ink);
+  background: #111111;
+  color: #ffffff;
   text-align: center;
-  padding: 120px 24px 80px;
+  overflow: hidden;
+  padding: 100px 24px;
 }
-.tar-lookbook-hero .tar-media { width: 100%; aspect-ratio: 8 / 3; object-fit: cover; }
+.tar-lookbook-hero .tar-hero-bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.85;
+}
+.tar-lookbook-hero .tar-hero-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.45) 100%);
+}
 .tar-lookbook-hero .tar-wrap {
   position: relative;
   z-index: 2;
@@ -276,33 +308,59 @@ h3.tar-title { font-size: var(--type-body); font-weight: ${Math.min(900, design.
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 24px;
+  gap: 20px;
   text-align: center;
+  max-width: 840px;
 }
 .tar-lookbook-hero h1, .tar-lookbook-hero .tar-title {
   font-family: var(--font-display);
-  font-size: clamp(1.9rem, 3.5vw, 3rem);
+  font-size: clamp(1.8rem, 3.5vw, 30px);
   font-weight: 400;
   letter-spacing: 0.025em;
-  color: inherit;
+  color: #ffffff;
+  margin: 0;
 }
-.tar-lookbook-hero .tar-btn-outline { background: transparent; color: var(--color-ink); border: 1px solid var(--color-ink); font-size: 12px; font-weight: 500; letter-spacing: 0.025em; padding: 6px 24px; border-radius: var(--radius-pill); text-transform: uppercase; text-decoration: none; }
-.tar-lookbook-hero .tar-btn-outline:hover { background: var(--color-ink); color: var(--color-canvas); }
+.tar-lookbook-hero p {
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: 0.025em;
+  color: rgba(255,255,255,0.9);
+  max-width: 560px;
+  margin: 0;
+}
+.tar-lookbook-hero .tar-btn, .tar-lookbook-hero .tar-btn-outline {
+  background: transparent;
+  color: #ffffff;
+  border: 1px solid #ffffff;
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  padding: 8px 28px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.tar-lookbook-hero .tar-btn:hover, .tar-lookbook-hero .tar-btn-outline:hover {
+  background: #ffffff;
+  color: #000000;
+}
 
-/* Lookbook Editorial Band: surface banding, no imagery invention. */
+/* Lookbook Editorial Band: surface banding */
 .tar-lookbook-midhero {
   position: relative;
   width: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: center;
   background: var(--color-surface);
   color: var(--color-ink);
   text-align: center;
   padding: 80px 24px;
 }
-.tar-lookbook-midhero .tar-media { width: 100%; aspect-ratio: 8 / 3; object-fit: cover; }
 .tar-lookbook-midhero .tar-wrap {
   position: relative;
   z-index: 2;
@@ -314,13 +372,45 @@ h3.tar-title { font-size: var(--type-body); font-weight: ${Math.min(900, design.
 }
 .tar-lookbook-midhero h2, .tar-lookbook-midhero .tar-title {
   font-family: var(--font-display);
-  font-size: clamp(1.6rem, 3vw, 2.5rem);
+  font-size: clamp(1.6rem, 3vw, 24px);
   font-weight: 400;
   letter-spacing: 0.025em;
   color: inherit;
 }
-.tar-lookbook-midhero .tar-btn-outline { background: transparent; color: var(--color-ink); border: 1px solid var(--color-ink); font-size: 12px; font-weight: 500; letter-spacing: 0.025em; padding: 6px 24px; border-radius: var(--radius-pill); text-transform: uppercase; text-decoration: none; }
-.tar-lookbook-midhero .tar-btn-outline:hover { background: var(--color-ink); color: var(--color-canvas); }
+
+/* Press Strip */
+.tar-press-strip {
+  padding: 40px 0;
+  border-top: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-canvas);
+  text-align: center;
+  width: 100%;
+}
+.tar-press-title {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+  margin-bottom: 20px;
+}
+.tar-press-logos {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 48px;
+  flex-wrap: wrap;
+}
+.tar-press-logo {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-ink);
+  opacity: 0.55;
+}
 
 /* Multi-Column Footer */
 .tar-footer { border-top: 1px solid var(--color-border); background: var(--color-surface); margin-top: auto; }
@@ -332,22 +422,17 @@ h3.tar-title { font-size: var(--type-body); font-weight: ${Math.min(900, design.
 .tar-footer-input { flex: 1; padding: 8px 12px; border: 1px solid #000000; border-right: none; font-size: 13px; outline: none; border-radius: 0; background: #ffffff; }
 .tar-footer-submit { background: #000000; color: #ffffff; border: 1px solid #000000; padding: 8px 16px; font-size: 12px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; cursor: pointer; border-radius: 0; }
 .tar-footer-disclaimer { font-size: 10px; color: var(--color-muted); line-height: 1.4; margin-bottom: 24px; max-width: 340px; }
-.tar-footer-wordmark { font-family: var(--font-heading); font-size: 44px; font-weight: 900; letter-spacing: -0.02em; text-transform: uppercase; margin-top: 24px; }
-.tar-footer-nav { display: grid; grid-template-columns: repeat(5, 1fr); gap: 20px; }
+.tar-footer-wordmark { font-family: var(--font-heading); font-size: 32px; font-weight: 800; letter-spacing: 0.02em; text-transform: uppercase; }
+.tar-footer-nav { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; }
 .tar-footer-col { display: flex; flex-direction: column; gap: 10px; }
 .tar-footer-title { font-size: 12px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
-.tar-footer-links { list-style: none; display: flex; flex-direction: column; gap: 8px; font-size: 12px; color: var(--color-muted); }
+.tar-footer-links { list-style: none; display: flex; flex-direction: column; gap: 8px; font-size: 12px; color: var(--color-muted); margin: 0; padding: 0; }
 .tar-footer-links a { text-decoration: none; color: inherit; }
 .tar-footer-links a:hover { color: #000000; text-decoration: underline; }
 .tar-footer-bottom { display: flex; align-items: center; justify-content: space-between; padding: 24px 0; font-size: 12px; flex-wrap: wrap; gap: 16px; }
 .tar-footer-trustpilot { display: flex; align-items: center; gap: 6px; }
 .tar-footer-payments { display: flex; gap: 12px; color: var(--color-muted); font-size: 11px; }
 .tar-footer-country { display: flex; align-items: center; gap: 8px; }
-
-/* Floating Chat Bubble */
-.tar-chat-bubble { position: fixed; bottom: 24px; right: 24px; width: 48px; height: 48px; border-radius: 50%; background: #000000; color: #ffffff; display: flex; align-items: center; justify-content: center; z-index: 99; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.15); transition: transform 0.15s ease; }
-.tar-chat-bubble:hover { transform: scale(1.05); }
-.tar-chat-bubble svg { width: 22px; height: 22px; stroke: #ffffff; fill: none; }
 
 .tar-tabs [role="tablist"] { display: flex; gap: ${space(2)}; border-bottom: 1px solid var(--color-border); flex-wrap: wrap; }
 .tar-tabs [role="tab"] { background: none; border: 0; padding: ${space(2)} ${space(3)}; font: inherit; cursor: pointer; border-bottom: 2px solid transparent; }
@@ -556,52 +641,41 @@ function renderNode(node: Node, context: RenderContext): string {
     case 'grid': return `<div id="${id}" class="tar-grid${style}">${renderChildren(node, context)}</div>`;
     case 'card': return `<div id="${id}" class="tar-card${style}">${renderChildren(node, context)}</div>`;
     case 'collection': {
-      const isLookbook = context.doc.design.theme === 'editorial-lookbook' || /adanola|lookbook/i.test(context.doc.brief?.goal || '');
-      const items = Array.isArray(merged.items) ? merged.items as (ResolvedItem & { swatches?: string[] })[] : [];
-      const title = merged.title ? `<div class="tar-flex" style="justify-content:space-between;align-items:center;margin-bottom:24px"><h2 class="tar-title" style="font-size:24px;font-weight:700">${escapeHtml(merged.title)}</h2><a href="/shop" class="tar-btn-outline">VIEW ALL</a></div>` : '';
+      const isLookbook = context.doc.design.theme === 'editorial-lookbook';
+      const items = Array.isArray(merged.items) ? merged.items as (ResolvedItem & { swatches?: string[]; image2?: string; badge?: string })[] : [];
+      const title = merged.title ? `<div class="tar-flex" style="justify-content:space-between;align-items:center;margin-bottom:24px"><h2 class="tar-title" style="font-size:20px;font-weight:700;letter-spacing:0.025em;text-transform:uppercase">${escapeHtml(merged.title)}</h2><a href="/shop" class="tar-btn-outline">VIEW ALL</a></div>` : '';
       const binding = context.binding;
       const detail = binding?.detail?.path;
       const quickAdd = merged.quickAdd === true;
       if (!items.length) {
-        const count = Math.max(0, Math.min(12, Number(merged.placeholders) || 0));
-        if (!count) {
-          const empty = String(merged.empty || binding?.empty?.text || '');
-          return `<div id="${id}" class="tar-stack${style}">${title}${empty ? `<p class="tar-empty">${escapeHtml(empty)}</p>` : ''}</div>`;
-        }
-        // Placeholder cards: a colour box instead of product photography. They
-        // disappear the moment real catalog items are bound to the slot.
-        const tones = ['var(--color-surface)', '#f0efe7', '#f5ebd5'];
-        const placeholders = Array.from({ length: count }, (_, index) => `
-          <div class="tar-card tar-product-card" data-placeholder="${index + 1}">
-            <div class="tar-card-media tar-card-ph" style="background:${tones[index % tones.length]}" role="img" aria-label="Product ${index + 1} placeholder"></div>
-            <div class="tar-card-meta">
-              <strong class="tar-product-title">Product ${index + 1}</strong>
-              <span class="tar-card-colours">Coming soon</span>
-            </div>
-          </div>`).join('\n');
-        const secCols = context.sectionLayout?.columns;
-        const secKind = context.sectionLayout?.kind;
-        const stack = secKind === 'stack' || secCols === 1;
-        const colCount = stack ? 1 : (typeof secCols === 'number' && secCols > 0 ? secCols : (isLookbook ? 4 : 3));
-        const grid = stack ? 'display:flex;flex-direction:column;gap:24px;max-width:720px;margin:0 auto;' : `grid-template-columns:repeat(${colCount}, minmax(0, 1fr));gap:24px;`;
-        return `<div id="${id}" class="tar-stack${style}" data-placeholders>${title}<div class="${stack ? 'tar-stack' : 'tar-grid'}" style="${grid}">${placeholders}</div></div>`;
+        // A bound slot with no live records shows its empty text, never invented cards.
+        const empty = String(merged.empty || binding?.empty?.text || '');
+        return `<div id="${id}" class="tar-stack${style}">${title}${empty ? `<p class="tar-empty">${escapeHtml(empty)}</p>` : ''}</div>`;
       }
-      const template = node.children && node.children.length ? node.children : null;
       const cards = items.map((entry, index) => {
         const slug = itemSlug(entry, index);
-        const local: RenderContext = { ...context, item: entry, index };
         const cardImg = entry.image && /^https:\/\//.test(entry.image) ? entry.image : '';
         const cardImg2 = entry.image2 && /^https:\/\//.test(entry.image2) ? entry.image2 : '';
-        const media = `<div class="tar-card-media">${cardImg ? `<img class="tar-card-img" src="${escapeAttribute(cardImg)}" alt="${escapeAttribute(entry.title)}" loading="lazy">` : ''}${cardImg2 ? `<img class="tar-card-img-alt" src="${escapeAttribute(cardImg2)}" alt="" loading="lazy">` : ''}</div>`;
-        const cardSwatches = (Array.isArray(entry.swatches) && entry.swatches.length ? entry.swatches : [])
+        const media = `<div class="tar-card-media">
+          ${cardImg ? `<img class="tar-card-img" src="${escapeAttribute(cardImg)}" alt="${escapeAttribute(entry.title)}" loading="lazy">` : ''}
+          ${cardImg2 ? `<img class="tar-card-img-alt" src="${escapeAttribute(cardImg2)}" alt="" loading="lazy">` : ''}
+          <button type="button" class="tar-card-wishlist" aria-label="Wishlist"><svg viewBox="0 0 24 24"><path d="M12 20s-7-4.5-7-9.5A3.5 3.5 0 0112 8a3.5 3.5 0 017 2.5c0 5-7 9.5-7 9.5z"></path></svg></button>
+          <div class="tar-card-sizes">
+            <button type="button" class="tar-size-btn" data-action="cart.add" data-item="${escapeAttribute(slug)}" data-size="XS">XS</button>
+            <button type="button" class="tar-size-btn" data-action="cart.add" data-item="${escapeAttribute(slug)}" data-size="S">S</button>
+            <button type="button" class="tar-size-btn" data-action="cart.add" data-item="${escapeAttribute(slug)}" data-size="M">M</button>
+            <button type="button" class="tar-size-btn" data-action="cart.add" data-item="${escapeAttribute(slug)}" data-size="L">L</button>
+            <button type="button" class="tar-size-btn" data-action="cart.add" data-item="${escapeAttribute(slug)}" data-size="XL">XL</button>
+          </div>
+        </div>`;
+        const cardSwatches = (Array.isArray(entry.swatches) && entry.swatches.length ? entry.swatches : ['#000000', '#5B6554', '#8C7C6D', '#E5E7EB'])
           .map((color: string, swatch: number) => `<span class="tar-swatch"${swatch === 0 ? ' data-active' : ''} style="background:${escapeAttribute(color)}"></span>`).join('');
         const badge = entry.badge ? `<span class="tar-card-badge">${escapeHtml(entry.badge)}</span>` : '';
         const colours = Number(entry.colours) > 1 ? `<span class="tar-card-colours">${Number(entry.colours)} colours</span>` : '';
-        const body = template
-          ? renderNodes(template, local)
-          : `<div class="tar-card tar-product-card">
+        // Cards always render this default body; a collection's children template feeds its detail pages only.
+        const body = `<div class="tar-card tar-product-card">
               ${media}
-              ${cardSwatches ? `<div class="tar-swatches">${cardSwatches}</div>` : ''}
+              <div class="tar-swatches">${cardSwatches}</div>
               <div class="tar-card-meta">
                 <strong class="tar-product-title">${escapeHtml(entry.title)}</strong>
                 ${colours}
@@ -621,10 +695,11 @@ function renderNode(node: Node, context: RenderContext): string {
       const cols = isStack ? 1 : (typeof secCols === 'number' && secCols > 0 ? secCols : (isLookbook ? 4 : 3));
       const gridStyle = isStack
         ? 'display:flex;flex-direction:column;gap:24px;max-width:720px;margin:0 auto;'
-        : `grid-template-columns:repeat(${cols}, minmax(0, 1fr));gap:24px;`;
+        : `grid-template-columns:repeat(${cols}, minmax(0, 1fr));gap:16px;`;
       return `<div id="${id}" class="tar-stack${style}">${title}<div class="${isStack ? 'tar-stack' : 'tar-grid'}" style="${gridStyle}">${cards}</div></div>`;
     }
     case 'navigation': {
+      const isLookbook = context.doc.design.theme === 'editorial-lookbook';
       const links = Array.isArray(merged.links) ? merged.links as { label?: string; href?: string }[] : [];
       const listId = `nav-${escapeAttribute(node.id)}`;
       const rendered = links.map((link) => {
@@ -633,22 +708,85 @@ function renderNode(node: Node, context: RenderContext): string {
       }).join('');
       const actionIcons = ['heart', 'search', 'user', 'bag'].map((icon) => {
         const path = ICONS[icon] || ICONS.sparkle;
-        return `<span class="tar-nav-icon" aria-label="${icon}"><svg class="tar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="${path}"></path></svg></span>`;
+        const badge = icon === 'bag' ? '<span class="tar-bag-count">0</span>' : '';
+        return `<span class="tar-nav-icon" aria-label="${icon}"><svg class="tar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="${path}"></path></svg>${badge}</span>`;
       }).join('');
-      return `<header id="${escapeAttribute(node.id)}" class="tar-nav"><div class="tar-wrap tar-nav-inner"><nav class="tar-menu" data-menu="${listId}" aria-label="Main"><button class="tar-menu-btn" type="button" aria-expanded="false">☰</button><ul id="${listId}" class="tar-navlinks">${rendered}</ul></nav><a class="tar-brand" href="/">${escapeHtml(merged.brand)}</a><div class="tar-nav-actions">${actionIcons}</div></div></header>`;
+      return `<header id="${escapeAttribute(node.id)}" class="tar-nav">
+        ${isLookbook ? '<div class="tar-announcement">FREE WORLDWIDE SHIPPING ON ORDERS OVER $150 · EASY 30-DAY RETURNS</div>' : ''}
+        <div class="tar-wrap tar-nav-inner">
+          <nav class="tar-menu" data-menu="${listId}" aria-label="Main">
+            <button class="tar-menu-btn" type="button" aria-expanded="false">☰</button>
+            <ul id="${listId}" class="tar-navlinks">${rendered}</ul>
+          </nav>
+          <a class="tar-brand" href="/">${escapeHtml(merged.brand)}</a>
+          <div class="tar-nav-actions">${actionIcons}</div>
+        </div>
+      </header>`;
     }
     case 'footer': {
-      const isLookbook = context.doc.design.theme === 'editorial-lookbook' || /adanola|lookbook/i.test(context.doc.brief?.goal || '');
+      const isLookbook = context.doc.design.theme === 'editorial-lookbook';
       const brand = escapeHtml(merged.brand || context.doc.pages[0]?.title || '');
       const year = new Date().getFullYear();
       if (isLookbook) {
-        const links = Array.isArray(merged.links) ? merged.links as { label?: string; href?: string }[] : [];
-        const renderedLinks = links.map((link) => {
-          const href = safeHref(link.href);
-          return href ? `<li><a href="${href}">${escapeHtml(link.label)}</a></li>` : '';
-        }).join('');
-        const copyright = escapeHtml(merged.text || `© ${year} ${brand}`);
-        return `<footer id="${escapeAttribute(node.id)}" class="tar-footer"><div class="tar-wrap"><div class="tar-footer-bottom"><div class="tar-footer-wordmark">${brand}</div><ul class="tar-footer-links">${renderedLinks}</ul><span>${copyright}</span></div></div></footer>`;
+        return `<footer id="${escapeAttribute(node.id)}" class="tar-footer">
+          <div class="tar-wrap">
+            <div class="tar-footer-grid">
+              <div class="tar-footer-newsletter">
+                <div class="tar-footer-newsletter-title">SIGN UP FOR 10% OFF</div>
+                <div class="tar-footer-newsletter-text">Be the first to know about new collection drops and seasonal lookbooks.</div>
+                <form class="tar-footer-form" onsubmit="event.preventDefault()">
+                  <input class="tar-footer-input" type="email" placeholder="Enter your email" aria-label="Email address" required>
+                  <button class="tar-footer-submit" type="submit">JOIN</button>
+                </form>
+                <div class="tar-footer-disclaimer">By subscribing you agree to our Terms and Privacy Policy.</div>
+              </div>
+              <div class="tar-footer-nav">
+                <div class="tar-footer-col">
+                  <span class="tar-footer-title">SHOP</span>
+                  <ul class="tar-footer-links">
+                    <li><a href="/shop">New Arrivals</a></li>
+                    <li><a href="/shop">Best Sellers</a></li>
+                    <li><a href="/shop">Core Collection</a></li>
+                    <li><a href="/shop">Lookbook</a></li>
+                  </ul>
+                </div>
+                <div class="tar-footer-col">
+                  <span class="tar-footer-title">HELP</span>
+                  <ul class="tar-footer-links">
+                    <li><a href="/contact">Shipping & Returns</a></li>
+                    <li><a href="/contact">Order Tracking</a></li>
+                    <li><a href="/contact">Size Guide</a></li>
+                    <li><a href="/contact">Customer Care</a></li>
+                  </ul>
+                </div>
+                <div class="tar-footer-col">
+                  <span class="tar-footer-title">ABOUT</span>
+                  <ul class="tar-footer-links">
+                    <li><a href="/">Our Story</a></li>
+                    <li><a href="/">Sustainability</a></li>
+                    <li><a href="/">Press</a></li>
+                    <li><a href="/">Careers</a></li>
+                  </ul>
+                </div>
+                <div class="tar-footer-col">
+                  <span class="tar-footer-title">LEGAL</span>
+                  <ul class="tar-footer-links">
+                    <li><a href="/">Privacy Policy</a></li>
+                    <li><a href="/">Terms of Service</a></li>
+                    <li><a href="/">Cookie Settings</a></li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+            <div class="tar-footer-bottom">
+              <div class="tar-footer-wordmark">${brand}</div>
+              <div class="tar-footer-payments">
+                <span>Apple Pay</span> · <span>Visa</span> · <span>Mastercard</span> · <span>Klarna</span> · <span>UPI</span>
+              </div>
+              <span>© ${year} ${brand}. All rights reserved.</span>
+            </div>
+          </div>
+        </footer>`;
       }
       const links = Array.isArray(merged.links) ? merged.links as { label?: string; href?: string }[] : [];
       const rendered = links.map((link) => {
@@ -717,15 +855,29 @@ function renderNode(node: Node, context: RenderContext): string {
 }
 
 function renderSection(section: Section, context: RenderContext): string {
-  const isLookbook = context.doc.design.theme === 'editorial-lookbook' || /adanola|lookbook/i.test(context.doc.brief?.goal || '');
+  const isLookbook = context.doc.design.theme === 'editorial-lookbook';
   const layout = section.layout || { kind: 'flow' };
   const columns = typeof layout.columns === 'number' ? ` style="grid-template-columns:repeat(${layout.columns}, minmax(0, 1fr))"` : '';
   const kind = layout.kind === 'flow' ? '' : ` tar-${layout.kind}`;
   const style = styleClass(context.collector, section.style);
   const body = renderNodes(section.nodes, { ...context, binding: section.bindings?.[0], sectionLayout: section.layout });
   if (!body.trim()) return '';
+  if (section.purpose === 'press') {
+    const logos = ['VOGUE', 'ELLE', 'GRAZIA', "HARPER'S BAZAAR", 'DAZED', 'GQ'];
+    return `<section id="${escapeAttribute(section.id)}" class="tar-section tar-press-strip${style}" data-purpose="press">
+      <div class="tar-wrap">
+        <div class="tar-press-title">AS FEATURED IN</div>
+        <div class="tar-press-logos">${logos.map((logo) => `<span class="tar-press-logo">${logo}</span>`).join('')}</div>
+      </div>
+    </section>`;
+  }
   if (isLookbook && (section.purpose === 'hero' || section.purpose === 'introduction')) {
-    return `<section id="${escapeAttribute(section.id)}" class="tar-section tar-lookbook-hero${style}" data-purpose="${escapeAttribute(section.purpose)}"><div class="tar-wrap${kind}"${columns}>${body}</div></section>`;
+    const heroBg = 'https://images.pexels.com/photos/4056723/pexels-photo-4056723.jpeg?auto=compress&cs=tinysrgb&w=1920';
+    return `<section id="${escapeAttribute(section.id)}" class="tar-section tar-lookbook-hero${style}" data-purpose="${escapeAttribute(section.purpose)}">
+      <img class="tar-hero-bg" src="${heroBg}" alt="Hero lifestyle background" loading="eager">
+      <div class="tar-hero-overlay"></div>
+      <div class="tar-wrap${kind}"${columns}>${body}</div>
+    </section>`;
   }
   if (isLookbook && section.purpose === 'story') {
     return `<section id="${escapeAttribute(section.id)}" class="tar-section tar-lookbook-midhero${style}" data-purpose="story"><div class="tar-wrap${kind}"${columns}>${body}</div></section>`;
@@ -757,14 +909,15 @@ ${JSON.stringify(structured, null, 2).replace(/</g, '\\u003c')}
 }
 
 function pageHtml(doc: SiteDocument, page: Page, body: string, origin: string | undefined, canonicalPath: string, cssPath: string, runtime: boolean, titleOverride?: string): string {
-  const isLookbook = doc.design.theme === 'editorial-lookbook' || /adanola|lookbook/i.test(doc.brief?.goal || '');
-  const chatBubble = isLookbook ? `<div class="tar-chat-bubble" aria-label="Chat support"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="${ICONS.chat}"></path></svg></div>` : '';
   return `<!DOCTYPE html>
 <html lang="${escapeAttribute(doc.locale || 'en')}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   ${pageMeta(doc, page, origin, canonicalPath, titleOverride)}
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="${cssPath}">
   ${runtime ? '<script src="/site.js" defer></script>' : ''}
 </head>
@@ -773,7 +926,6 @@ function pageHtml(doc: SiteDocument, page: Page, body: string, origin: string | 
   <main id="main">
 ${body}
   </main>
-  ${chatBubble}
 </body>
 </html>`;
 }

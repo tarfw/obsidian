@@ -491,7 +491,10 @@ export default function SiteScreen({
           <View key={node.id} style={styles.previewCollectionGrid}>
             {items.map((item: Record<string, unknown>, idx: number) => {
               const itemTitle = String(item.title || `Item ${idx + 1}`);
-              const itemPrice = item.price !== undefined ? `${item.currency === 'EUR' ? '€' : '$'}${item.price}` : '';
+              const rawPrice = Number(item.price);
+              const itemPrice = Number.isFinite(rawPrice)
+                ? (rawPrice >= 100 ? `$${(rawPrice / 100).toFixed(2)}` : `$${rawPrice}`)
+                : '';
               return (
                 <View
                   key={String(item.id || idx)}
@@ -1079,11 +1082,11 @@ const styles = StyleSheet.create({
   previewButton: { alignSelf: 'flex-start', paddingHorizontal: 16, paddingVertical: 9, borderRadius: 6, marginVertical: 4 },
   previewButtonText: { color: '#ffffff', fontSize: 12, fontWeight: '700' },
   previewCard: { padding: 14, borderRadius: 8, borderWidth: 1, marginVertical: 6 },
-  previewCollectionGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 8 },
-  previewProductCard: { width: '48%', padding: 10, borderRadius: 8, borderWidth: 1 },
-  productImageMock: { width: '100%', height: 90, borderRadius: 4, marginBottom: 8 },
-  productTitle: { fontSize: 12, fontWeight: '700', marginBottom: 3 },
-  productPrice: { fontSize: 12, fontWeight: '800' },
+  previewCollectionGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 8, width: '100%', justifyContent: 'space-between' },
+  previewProductCard: { width: '48%', padding: 10, borderRadius: 8, borderWidth: 1, marginBottom: 4 },
+  productImageMock: { width: '100%', aspectRatio: 3 / 4, borderRadius: 4, marginBottom: 8 },
+  productTitle: { fontSize: 12, fontWeight: '600', marginBottom: 3, lineHeight: 16 },
+  productPrice: { fontSize: 12, fontWeight: '700' },
   previewFlexRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginVertical: 4 },
   previewStack: { gap: 8 },
   nativeFooterBar: { padding: 24, alignItems: 'center', backgroundColor: '#f4f4f5', borderTopWidth: 1, borderTopColor: '#e4e4e7' },

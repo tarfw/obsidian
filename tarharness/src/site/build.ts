@@ -630,7 +630,7 @@ export function buildSite(input: BuildInput): { doc: SiteDocument; slots: Slot[]
           { id: 'shop-title', kind: 'heading', props: { text: 'Shop', level: 1 } },
           { id: 'shop-line', kind: 'text', props: { text: line } },
         ] },
-        { id: 'shop-catalog', purpose: 'collection', layout: { kind: 'grid', columns: blueprint.columns }, style: style(blueprint.density), nodes: [
+        { id: 'shop-catalog', purpose: 'collection', layout: { kind: 'stack', columns: blueprint.columns }, style: style(blueprint.density), nodes: [
           { id: 'shop-list', kind: 'collection', props: { slot: 'items', title: '', ...(blueprint.quickAdd ? { quickAdd: true } : {}) },
             children: [
               { id: 'shop-item-title', kind: 'heading', props: { text: 'Item', level: 1, field: 'title' } },

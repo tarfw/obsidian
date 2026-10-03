@@ -2,7 +2,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import * as SecureStore from 'expo-secure-store';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ActionInterfaceHost from '@/action-interfaces/ActionInterfaceHost';
 import SiteScreen from '@/components/site';
@@ -18,10 +18,49 @@ const line = '#E8ECF1';
 const groups = [
   { id: 'commerce', title: 'Commerce', icon: 'bag-handle-outline' },
   { id: 'site', title: 'Site Studio', icon: 'globe-outline' },
-  { id: 'flows', title: 'Flow Books', icon: 'git-branch-outline' },
   { id: 'create', title: 'Create', icon: 'add-circle-outline' },
-  { id: 'other', title: 'Other tools', icon: 'grid-outline' },
+  { id: 'other', title: 'Other actions', icon: 'grid-outline' },
 ] as const;
+
+const WORKSPACE_LIGHT_BGS = [
+  '#EBF3FE',
+  '#F0FDF4',
+  '#F5F3FF',
+  '#FEF3C7',
+  '#FFF1F2',
+  '#F0FDF9',
+  '#F8FAFC',
+  '#EFF6FF',
+  '#FDF4FF',
+  '#FAF5FF',
+];
+const WORKSPACE_INK_COLORS = [
+  '#1E40AF',
+  '#065F46',
+  '#5B21B6',
+  '#92400E',
+  '#9F1239',
+  '#115E59',
+  '#334155',
+  '#075985',
+  '#86198F',
+  '#6B21A8',
+];
+
+type WorkspaceBadge = { bg: string; color: string; initial: string };
+
+function getWorkspaceBadge(name: string, isPersonal?: boolean): WorkspaceBadge {
+  if (isPersonal) {
+    return { bg: '#EBF2FF', color: '#2B50A0', initial: (name || 'P').trim().charAt(0).toUpperCase() || 'P' };
+  }
+  const initial = (name || 'W').trim().charAt(0).toUpperCase() || 'W';
+  const seed = (name || 'w')
+    .split('')
+    .reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  const bg = WORKSPACE_LIGHT_BGS[seed % WORKSPACE_LIGHT_BGS.length];
+  const color = WORKSPACE_INK_COLORS[seed % WORKSPACE_INK_COLORS.length];
+  return { bg, color, initial };
+}
 type Page = 'home' | 'workspaces' | 'folder' | 'flows' | 'more' | 'manage' | 'teams';
 type ListedTool = HarnessTool & { scope: string; workspace: string; role: string };
 type ToolGroup = { id: string; title: string; icon: keyof typeof Ionicons.glyphMap; workspace: string; scope: string; tools: ListedTool[] };
@@ -74,8 +113,6 @@ export default function ToolsScreen() {
   const [folder, setFolder] = useState<ToolGroup | null>(null);
   const [flowPicker, setFlowPicker] = useState<FlowPicker | null>(null);
   const [backFromFlow, setBackFromFlow] = useState<Page>('home');
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [query, setQuery] = useState('');
   const [busy, setBusy] = useState('');
   const [openAction, setOpenAction] = useState<OpenAction | null>(null);
   const [siteOpen, setSiteOpen] = useState<{ scope: string; workspace: string } | null>(null);
@@ -152,11 +189,21 @@ export default function ToolsScreen() {
   const chosen = active.filter((workspace) => selected === 'all' || workspace.slug === selected);
   const allTools = active.flatMap((workspace) => (sources[workspace.slug]?.tools || []).map((tool) => ({ ...tool, scope: workspace.slug, workspace: workspace.name, role: sources[workspace.slug].role })));
   const visible = allTools.filter((tool) => selected === 'all' || tool.scope === selected);
-  const matches = allTools.filter((tool) => `${tool.title} ${tool.description} ${tool.workspace}`.toLowerCase().includes(query.trim().toLowerCase()));
   const toolGroups: ToolGroup[] = chosen.flatMap((workspace) => groups.flatMap((group) => {
     const tools = visible.filter((tool) => tool.scope === workspace.slug && bucket(tool) === group.id);
     return tools.length ? [{ ...group, icon: group.icon as keyof typeof Ionicons.glyphMap, scope: workspace.slug, workspace: workspace.name, tools }] : [];
   }));
+  const workspaceSections = chosen.map((workspace) => {
+    const tools = visible.filter((tool) => tool.scope === workspace.slug);
+    const wGroups = groups.flatMap((group) => {
+      const scopedTools = tools.filter((tool) => bucket(tool) === group.id);
+      return scopedTools.length ? [{ ...group, icon: group.icon as keyof typeof Ionicons.glyphMap, scope: workspace.slug, workspace: workspace.name, tools: scopedTools }] : [];
+    });
+    return {
+      workspace,
+      groups: wGroups,
+    };
+  });
   const pending = chosen.some((workspace) => !loadedScopes[workspace.slug]);
   const manageable = active.filter((workspace) => sources[workspace.slug]?.canManage);
   const managing = manageable.find((workspace) => workspace.slug === managedSlug) || manageable[0];
@@ -237,52 +284,103 @@ export default function ToolsScreen() {
     if (page === 'flows') { setFlowPicker(null); setPage(backFromFlow); }
     else if (page === 'manage' || page === 'teams') setPage('more');
     else if (page !== 'home') setPage('home');
-    else if (searchOpen) { setSearchOpen(false); setQuery(''); }
     else router.back();
   };
-  const title = page === 'home' ? 'Tools' : page === 'workspaces' ? 'Workspaces' : page === 'folder' ? folder?.title || 'Tools'
+  const title = page === 'home' ? 'Actions' : page === 'workspaces' ? 'Workspaces' : page === 'folder' ? folder?.title || 'Actions'
     : page === 'flows' ? 'Flow Books' : page === 'manage' ? 'Capabilities' : page === 'teams' ? 'Members & chat' : 'More';
   const bottom = Math.max(insets.bottom + 20, 36);
 
   return <View style={[styles.page, { paddingTop: insets.top }]}>
     <View style={styles.header}>
-      <Pressable accessibilityRole="button" accessibilityLabel={page === 'home' ? 'Back to Now' : 'Back to Tools'} onPress={back} style={styles.iconButton}><Ionicons name="arrow-back" size={22} color={ink} /></Pressable>
-      <Text style={styles.title} numberOfLines={1}>{title}</Text>
+      {page === 'home' ? (
+        <Text style={styles.titleHome} numberOfLines={1}>{title}</Text>
+      ) : (
+        <>
+          <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={back} style={styles.iconButton}><Ionicons name="arrow-back" size={22} color={ink} /></Pressable>
+          <Text style={styles.title} numberOfLines={1}>{title}</Text>
+        </>
+      )}
       {page === 'home' ? <View style={styles.headerActions}>
-        <Pressable accessibilityRole="button" accessibilityLabel={searchOpen ? 'Close search' : 'Search tools'} onPress={() => { setSearchOpen(!searchOpen); setQuery(''); }} style={styles.iconButton}><Ionicons name={searchOpen ? 'close' : 'search-outline'} size={21} color={ink} /></Pressable>
         <Pressable accessibilityRole="button" accessibilityLabel="More options" onPress={() => setPage('more')} style={styles.iconButton}><Ionicons name="ellipsis-horizontal" size={22} color={ink} /></Pressable>
       </View> : <View style={styles.iconButton} />}
     </View>
 
     {page === 'home' ? <>
-      <Pressable accessibilityRole="button" accessibilityLabel="Choose workspace for tools" onPress={() => setPage('workspaces')} style={styles.scopeRow}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Choose workspace for actions" onPress={() => setPage('workspaces')} style={styles.scopeRow}>
         <View style={styles.scopeCopy}>
           <Text style={styles.scopeName}>{selected === 'all' ? 'All workspaces' : selectedWorkspace?.name || current.name}</Text>
-          <Text style={styles.scopeRole}>
-            {selected === 'all' ? 'Your available tools' : sources[selected]?.role || selectedWorkspace?.workRole || selectedWorkspace?.role || 'Active workspace'}
-          </Text>
+          {selected !== 'all' ? (
+            <Text style={styles.scopeRole}>
+              {sources[selected]?.role || selectedWorkspace?.workRole || selectedWorkspace?.role || 'Active workspace'}
+            </Text>
+          ) : null}
         </View>
         <Ionicons name="chevron-down" size={19} color={muted} />
       </Pressable>
-      {searchOpen ? <View style={styles.searchWrap}><Ionicons name="search-outline" size={19} color={muted} /><TextInput autoFocus accessibilityLabel="Find a tool or workspace" placeholder="Find a tool or workspace" placeholderTextColor={muted} value={query} onChangeText={setQuery} style={styles.searchInput} /></View> : null}
       <ScrollView style={styles.scroll} keyboardShouldPersistTaps="handled" contentContainerStyle={[styles.content, { paddingBottom: bottom }]}>
         {pending && !toolGroups.length ? <ActivityIndicator color={blue} style={styles.loading} /> : <>
           {failed.length ? <Pressable accessibilityRole="button" onPress={() => void load()} style={styles.notice}><Text style={styles.noticeText}>Could not load {failed.join(', ')}. Retry</Text><Ionicons name="arrow-forward" size={17} color={blue} /></Pressable> : null}
-          {query.trim() ? <>
-            {matches.map((tool) => <Row key={`${tool.scope}:${tool.id}`} icon={tool.icon as keyof typeof Ionicons.glyphMap} title={tool.title} detail={selected === 'all' ? tool.workspace : undefined} busy={busy === `${tool.scope}:${tool.id}`} onPress={() => void openTool(tool)} />)}
-            {!matches.length && pending ? <View style={styles.refreshing}><ActivityIndicator size="small" color={blue} /><Text style={styles.rowDetail}>Loading tools…</Text></View> : !matches.length ? <Empty title="No matching tools" detail="Try another name or workspace." /> : null}
-          </> : <>
-            {toolGroups.map((group, index) => <View key={`${group.scope}:${group.id}`}>
-              {selected === 'all' && (index === 0 || toolGroups[index - 1].scope !== group.scope) ? <Text style={styles.groupHeading}>{group.workspace}</Text> : null}
-              <Row icon={group.icon} title={group.title} badge={group.tools.length > 1 ? group.tools.length : undefined} arrow={group.tools.length > 1} onPress={() => {
-                if (group.tools.length === 1) void openTool(group.tools[0]);
-                else { setFolder(group); setPage('folder'); }
-              }} />
-            </View>)}
-            {!toolGroups.length && !failed.length && !pending ? <Empty title="No tools available" detail="Try another workspace." /> : null}
+          {workspaceSections.map((section, index) => {
+            const badge = getWorkspaceBadge(section.workspace.name, section.workspace.mode === 'personal');
+            const showHeader = selected === 'all' || chosen.length > 1;
+            const isOwnedOrWork = section.workspace.mode === 'work';
+            const role = sources[section.workspace.slug]?.role || section.workspace.workRole || section.workspace.role;
+
+            return (
+              <View key={section.workspace.slug} style={styles.workspaceSection}>
+                {showHeader ? (
+                  <View style={styles.workspaceCard}>
+                    <View style={[styles.workspaceThumbnail, { backgroundColor: badge.bg }]}>
+                      <Text style={[styles.workspaceInitial, { color: badge.color }]}>{badge.initial}</Text>
+                    </View>
+                    <View style={styles.workspaceCardCopy}>
+                      <Text style={styles.workspaceCardTitle} numberOfLines={1}>
+                        {section.workspace.name}
+                      </Text>
+                      {section.workspace.mode !== 'personal' && role ? (
+                        <Text style={styles.workspaceCardRole} numberOfLines={1}>
+                          {role}
+                        </Text>
+                      ) : null}
+                    </View>
+                  </View>
+                ) : null}
+
+                {section.groups.map((group) => {
+                  const isCommerce = group.id === 'commerce';
+                  return (
+                    <View key={`${group.scope}:${group.id}`}>
+                      <Row
+                        icon={group.icon}
+                        title={group.title}
+                        onPress={() => {
+                          if (group.tools.length === 1) void openTool(group.tools[0]);
+                          else { setFolder(group); setPage('folder'); }
+                        }}
+                      />
+                      {isCommerce && isOwnedOrWork ? (
+                        <Row
+                          icon="people-outline"
+                          title="Members & chat"
+                          onPress={() => setTeamScope(section.workspace.slug)}
+                        />
+                      ) : null}
+                    </View>
+                  );
+                })}
+                {!section.groups.some((g) => g.id === 'commerce') && isOwnedOrWork ? (
+                  <Row
+                    icon="people-outline"
+                    title="Members & chat"
+                    onPress={() => setTeamScope(section.workspace.slug)}
+                  />
+                ) : null}
+              </View>
+            );
+          })}
+            {!toolGroups.length && !failed.length && !pending ? <Empty title="No actions available" detail="Try another workspace." /> : null}
+            {pending && toolGroups.length ? <View style={styles.refreshing}><ActivityIndicator size="small" color={blue} /><Text style={styles.rowDetail}>Loading more workspaces…</Text></View> : null}
           </>}
-          {pending && toolGroups.length ? <View style={styles.refreshing}><ActivityIndicator size="small" color={blue} /><Text style={styles.rowDetail}>Loading more workspaces…</Text></View> : null}
-        </>}
       </ScrollView>
     </> : null}
 
@@ -307,6 +405,23 @@ export default function ToolsScreen() {
     </ScrollView> : null}
 
     {page === 'more' ? <ScrollView style={styles.scroll} contentContainerStyle={[styles.content, { paddingBottom: bottom }]}>
+      <Row icon="git-branch-outline" title="Flow Books" arrow onPress={async () => {
+        const targetSlug = selected === 'all' ? current.slug : selected;
+        const targetWs = active.find((w) => w.slug === targetSlug) || current;
+        try {
+          setBusy(`flows:${targetSlug}`);
+          const registry = await harness.workspaceRegistry(targetSlug);
+          const action = registry.actions.find((item) => item.id === 'flow.start') || registry.actions[0];
+          const flows = await harness.flows(targetSlug);
+          setFlowPicker({ scope: targetSlug, workspace: targetWs.name, action, interfaces: registry.interfaces, ...flows });
+          setBackFromFlow('more');
+          setPage('flows');
+        } catch (cause) {
+          Alert.alert('Could not open Flow Books', cause instanceof Error ? cause.message : 'Try again.');
+        } finally {
+          setBusy('');
+        }
+      }} />
       <Row icon="folder-outline" title="Browse records" arrow onPress={() => router.push({ pathname: '/(home)/records', params: { source: selected === 'all' ? current.slug : selected } })} />
       <Row icon="list-outline" title="Action registry" arrow onPress={() => router.push('/registry')} />
       <Row icon="time-outline" title="Routines" arrow onPress={() => router.push('/(home)/routines')} />
@@ -370,18 +485,33 @@ function Empty({ title, detail }: { title: string; detail: string }) {
 
 const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: '#FFFFFF' }, scroll: { flex: 1 },
-  header: { minHeight: 58, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  header: { minHeight: 58, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   title: { color: ink, fontSize: 22, fontWeight: '700', flex: 1, marginLeft: 8 },
+  titleHome: { color: ink, fontSize: 22, fontWeight: '700', flex: 1, paddingLeft: 8 },
   headerActions: { flexDirection: 'row' }, iconButton: { width: 44, height: 44, justifyContent: 'center', alignItems: 'center' },
   scopeRow: { minHeight: 64, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 24, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: line, gap: 12 },
   scopeCopy: { flex: 1 },
   scopeName: { color: ink, fontSize: 16, fontWeight: '700' },
   scopeRole: { color: muted, fontSize: 12, marginTop: 3, textTransform: 'capitalize' },
-  searchWrap: { height: 48, marginHorizontal: 24, marginTop: 16, marginBottom: 4, paddingHorizontal: 14, borderRadius: 10, backgroundColor: '#F5F7FA', flexDirection: 'row', alignItems: 'center', gap: 9 },
-  searchInput: { flex: 1, height: '100%', color: ink, fontSize: 15 },
-  content: { paddingHorizontal: 24, paddingTop: 12 },
-  groupHeading: { color: muted, fontSize: 12, fontWeight: '700', marginTop: 20, marginBottom: 4 },
-  row: { minHeight: 58, flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: line },
+  content: { paddingTop: 0 },
+  workspaceSection: { width: '100%' },
+  workspaceCard: {
+    minHeight: 56,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    backgroundColor: '#FAFBFC',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: line,
+    gap: 12,
+  },
+  workspaceThumbnail: { width: 34, height: 34, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  workspaceInitial: { fontSize: 15, fontWeight: '800', textAlign: 'center' },
+  workspaceCardCopy: { flex: 1, justifyContent: 'center' },
+  workspaceCardTitle: { fontSize: 16, fontWeight: '800', color: ink, letterSpacing: -0.2 },
+  workspaceCardRole: { color: muted, fontSize: 12, lineHeight: 16, marginTop: 2, textTransform: 'capitalize' },
+  row: { minHeight: 58, flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 10, paddingHorizontal: 24, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: line, backgroundColor: '#FFFFFF' },
   compactRow: { minHeight: 48, paddingVertical: 11 },
   rowIcon: { width: 24 },
   rowCopy: { flex: 1 },
@@ -389,11 +519,11 @@ const styles = StyleSheet.create({
   rowDetail: { color: muted, fontSize: 12, lineHeight: 16, marginTop: 2 },
   badge: { minWidth: 22, height: 22, paddingHorizontal: 7, borderRadius: 11, backgroundColor: '#F0F3F8', alignItems: 'center', justifyContent: 'center', marginRight: 4 },
   badgeText: { color: muted, fontSize: 12, fontWeight: '700' },
-  caption: { color: muted, fontSize: 13, marginTop: 8, marginBottom: 8 },
-  notice: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, backgroundColor: '#F5F7FA', marginBottom: 12, borderRadius: 8 },
+  caption: { color: muted, fontSize: 13, marginHorizontal: 24, marginTop: 8, marginBottom: 8 },
+  notice: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginHorizontal: 24, paddingHorizontal: 12, backgroundColor: '#F5F7FA', marginBottom: 12, borderRadius: 8 },
   noticeText: { color: ink, fontSize: 13, flex: 1 }, loading: { marginTop: 48 },
-  helper: { color: muted, fontSize: 12, lineHeight: 18, marginTop: 24 }, refreshing: { minHeight: 42, flexDirection: 'row', alignItems: 'center', gap: 9, paddingVertical: 10 },
-  empty: { alignItems: 'center', paddingHorizontal: 18, paddingTop: 76 }, emptyTitle: { color: ink, fontSize: 17, fontWeight: '700' }, emptyDetail: { color: muted, fontSize: 14, lineHeight: 21, textAlign: 'center', marginTop: 8 },
-  chips: { gap: 8, paddingVertical: 8 }, chip: { paddingHorizontal: 14, minHeight: 35, borderRadius: 18, backgroundColor: '#F5F7FA', justifyContent: 'center' }, chipSelected: { backgroundColor: blue }, chipText: { color: ink, fontSize: 13 }, chipTextSelected: { color: '#FFFFFF' },
-  moduleRow: { minHeight: 74, flexDirection: 'row', alignItems: 'center', gap: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: line }, moduleCopy: { flex: 1, paddingVertical: 12 },
+  helper: { color: muted, fontSize: 12, lineHeight: 18, marginHorizontal: 24, marginTop: 24 }, refreshing: { minHeight: 42, flexDirection: 'row', alignItems: 'center', gap: 9, paddingHorizontal: 24, paddingVertical: 10 },
+  empty: { alignItems: 'center', paddingHorizontal: 24, paddingTop: 76 }, emptyTitle: { color: ink, fontSize: 17, fontWeight: '700' }, emptyDetail: { color: muted, fontSize: 14, lineHeight: 21, textAlign: 'center', marginTop: 8 },
+  chips: { gap: 8, paddingHorizontal: 24, paddingVertical: 8 }, chip: { paddingHorizontal: 14, minHeight: 35, borderRadius: 18, backgroundColor: '#F5F7FA', justifyContent: 'center' }, chipSelected: { backgroundColor: blue }, chipText: { color: ink, fontSize: 13 }, chipTextSelected: { color: '#FFFFFF' },
+  moduleRow: { minHeight: 74, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 24, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: line }, moduleCopy: { flex: 1, paddingVertical: 12 },
 });

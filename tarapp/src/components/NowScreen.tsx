@@ -345,22 +345,13 @@ export default function NowScreen() {
 
   return (
     <View style={[styles.page, { paddingTop: insets.top + 6 }]}>
-      {/* Top Header Bar: Clean Left-Aligned Inbox Header with Direct Tools Navigation */}
+      {/* Top Header Bar: Clean Left-Aligned Inbox Header */}
       <View style={styles.topHeader}>
         <View style={styles.headerLeft}>
           <Text numberOfLines={1} style={styles.headerTitle}>
             Inbox
           </Text>
         </View>
-
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Open tools"
-          onPress={() => router.push('/(home)/tools')}
-          style={styles.headerIconButton}
-        >
-          <Ionicons name="grid-outline" size={20} color={ink} />
-        </Pressable>
       </View>
 
       {/* Partial / Offline Retry Banner */}
@@ -418,9 +409,6 @@ export default function NowScreen() {
               <View style={styles.sectionBar}>
                 <Ionicons name={section.iconName} size={15} color={section.iconColor} />
                 <Text style={styles.sectionBarTitle}>{section.title}</Text>
-                <View style={styles.sectionBarBadge}>
-                  <Text style={styles.sectionBarBadgeText}>{section.data.length}</Text>
-                </View>
               </View>
 
               {/* Section Items */}
@@ -468,8 +456,19 @@ export default function NowScreen() {
         )}
       </ScrollView>
 
-      {/* Clean Flat Bottom Ask TAR Trigger (Zero Shadows, Zero Elevations) */}
+      {/* Clean Flat Bottom Ask TAR Trigger with Actions Chip (Zero Shadows, Zero Elevations) */}
       <View style={[styles.askSafeArea, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+        <View style={styles.actionsBar}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Open tools and actions"
+            onPress={() => router.push('/(home)/tools')}
+            style={styles.actionsChip}
+          >
+            <Text style={styles.actionsChipText}>Actions</Text>
+          </Pressable>
+        </View>
+
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Ask TAR"
@@ -590,31 +589,42 @@ const styles = StyleSheet.create({
   topHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderColor: borderLine,
   },
-  headerIconButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
+  headerLeft: {
+    flex: 1,
+  },
+  headerTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: ink,
+    letterSpacing: -0.3,
+  },
+  actionsBar: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 8,
+    backgroundColor: '#FFFFFF',
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  actionsChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: borderLine,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerLeft: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 6,
-    paddingRight: 8,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
+  actionsChipText: {
+    fontSize: 13,
+    fontWeight: '600',
     color: ink,
-    letterSpacing: -0.2,
   },
   partial: {
     padding: 12,
@@ -731,13 +741,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   askBar: {
-    minHeight: 50,
-    marginHorizontal: 16,
-    marginBottom: 4,
+    minHeight: 52,
     paddingHorizontal: 16,
-    borderWidth: 1,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     borderColor: borderLine,
-    borderRadius: 12,
     backgroundColor: '#FFFFFF',
     flexDirection: 'row',
     alignItems: 'center',

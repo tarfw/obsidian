@@ -12,7 +12,7 @@ import type { Client } from '@libsql/client/web';
 import { badRequest, conflict, notFound, unavailable } from '../errors.ts';
 import type { AccessContext } from '../types.ts';
 import { ALIGN_VALUES, PAD_VALUES, SIZE_VALUES, WIDTH_VALUES, type Node, type Persona, type Section, type SectionLayoutSpec, type SiteDocument, type Style } from './document.ts';
-import { COLOR_KEYS, TONE_STYLE, exportDesign, parseDesign } from './design.ts';
+import { COLOR_KEYS, TONE_STYLE, exportDesign, parseDesign, THEMES } from './design.ts';
 import { applyPatch, diffSummary, type DiffEntry, type PatchOperation } from './patch.ts';
 import { interpret, type EditQuestion, type JudgmentCache } from './judgment.ts';
 import { DEFAULT_BUDGET, GROQ_DEFAULT_MODEL, ModelRunner, SITE_MODEL_FALLBACKS, draftCopy } from './model.ts';
@@ -151,6 +151,21 @@ function exact(doc: SiteDocument, command: string, target: string): { ops: Patch
       layout = { ...layout, kind: columns > 1 ? 'grid' : 'stack', columns };
       changedLayout = true;
       choices.columns = String(columns);
+    } else if (/(?:photo\s*bigger|bigger\s*photo|larger\s*photo|photo\s*large|bigger\s*image|larger\s*image|big\s*photo)/.test(lower)) {
+      const curCols = Number(section.layout.columns) || 3;
+      const nextCols = curCols > 2 ? 2 : (curCols === 2 ? 1 : 2);
+      layout = { ...layout, kind: nextCols > 1 ? 'grid' : 'stack', columns: nextCols };
+      changedLayout = true;
+      choices.columns = String(nextCols);
+    } else if (/(?:split\s*layout|split\s*hero|split)/.test(lower)) {
+      layout = { ...layout, kind: 'flex', columns: 2 };
+      changedLayout = true;
+      choices.columns = '2';
+      choices.layout = 'flex';
+    } else if (/(?:full\s*bleed|fullbleed|hero\s*banner|full\s*width)/.test(lower)) {
+      layout = { ...layout, kind: 'stack', width: 'full' };
+      changedLayout = true;
+      choices.layout = 'stack';
     } else if (/(?:col|column|grid|layout)/.test(lower)) {
       open.push({ key: 'columns', label: 'Columns', values: ['2', '3', '4'] });
     }
@@ -176,14 +191,52 @@ function exact(doc: SiteDocument, command: string, target: string): { ops: Patch
     open.push({ key: 'density', label: 'Spacing density', values: ['airy', 'balanced', 'compact'] });
   }
 
-  const tone = Object.keys(TONE_STYLE).find((entry) => lower.includes(entry))
-    || (lower.includes('black') ? 'ink' : lower.includes('white') ? 'canvas' : undefined);
-  if (tone) {
+  const tone = lower.includes('accent') ? 'accent'
+    : lower.includes('surface') || lower.includes('panel') || lower.includes('dark card') || lower.includes('card') ? 'surface'
+    : lower.includes('dark') || lower.includes('black') || lower.includes('night') || lower.includes('ink') ? 'ink'
+    : lower.includes('light') || lower.includes('white') || lower.includes('canvas') ? 'canvas'
+    : Object.keys(TONE_STYLE).find((entry) => lower.includes(entry));
+
+  if (tone && TONE_STYLE[tone]) {
     Object.assign(base, TONE_STYLE[tone]);
     changedStyle = true;
     choices.tone = tone;
+  } else if (/(?:festive\s*sale|run\s*festive\s*sale|festive|special\s*sale)/.test(lower)) {
+    Object.assign(base, TONE_STYLE.accent);
+    changedStyle = true;
+    choices.tone = 'accent';
+    const copy = (section?.nodes || [node].filter(Boolean) as Node[]).find((entry) => ['heading', 'text', 'button'].includes(entry.kind));
+    if (copy && copy.kind === 'heading') {
+      ops.push({ op: 'set_text', target: copy.id, value: 'Festive Sale · Special Offers Live Now' });
+      choices.text = 'exact';
+    } else if (copy && copy.kind === 'button') {
+      ops.push({ op: 'set_props', target: copy.id, value: { label: 'Shop Festive Sale' } });
+      choices.text = 'exact';
+    }
+  } else if (/(?:add\s*location|location|address)/.test(lower)) {
+    Object.assign(base, TONE_STYLE.surface);
+    changedStyle = true;
+    choices.tone = 'surface';
   } else if (/(?:tone|look|feel)/.test(lower)) {
     open.push({ key: 'tone', label: 'Section tone', values: Object.keys(TONE_STYLE) });
+  }
+
+  if (/(?:bold\s*title|large\s*title|large\s*heading|big\s*title|bigger\s*title|display\s*title)/.test(lower)) {
+    const copy = (section?.nodes || [node].filter(Boolean) as Node[]).find((entry) => entry.kind === 'heading');
+    if (copy) {
+      ops.push({ op: 'set_props', target: copy.id, value: { level: 1 } });
+      choices.heading = 'display';
+    }
+  }
+
+  if (/(?:pill\s*tabs|pill|rounded\s*tabs)/.test(lower)) {
+    base.radius = 'token:shape.pill';
+    changedStyle = true;
+    choices.radius = 'token:shape.pill';
+  } else if (/(?:underline\s*style|underline)/.test(lower)) {
+    base.border = 'hairline';
+    changedStyle = true;
+    choices.border = 'hairline';
   }
 
   for (const [property, words] of Object.entries(PROPERTY_WORDS)) {
@@ -280,25 +333,66 @@ export async function executeSiteAsk(
   const normalize = (s: string) => s.toLowerCase().replace(/&/g, 'and').replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
   const normalizedCommand = normalize(command);
 
-  const PURPOSE_SYNONYMS: Record<string, string[]> = {
-    collection: ['collection', 'product', 'products', 'grid', 'product grid', 'catalog', 'items', 'offer', 'shop', 'trending', 'new and trending', 'new & trending', 'what we offer'],
-    recommendations: ['recommendations', 'recommended', 'you will love', "you'll love", 'suggested', 'more pieces'],
-    introduction: ['hero', 'banner', 'intro', 'introduction', 'top', 'header'],
-    split: ['split', 'editorial', 'two images', 'media break', 'two-up'],
-    categories: ['categories', 'category', 'tabs', 'filter', 'shop by category'],
-    promo: ['promo', 'promotion', 'cta band', 'call to action', 'strip'],
-    story: ['story', 'about', 'about us'],
-    chrome: ['navigation', 'header', 'nav', 'menu', 'bar', 'footer', 'foot', 'bottom', 'end'],
-    contact: ['contact', 'enquire', 'enquiry', 'form', 'get in touch'],
-  };
+  // Global theme handling (siteai.md §5, §7)
+  const isDarkTheme = /(?:darker|dark|night|black)\s*(?:theme|mode|look|canvas|palette)|(?:theme|mode|look|canvas|palette)\s*(?:darker|dark|night|black)|^(?:darker|dark|night|black)(?:\s*theme|\s*mode)?$/i.test(command.trim());
+  const isLightTheme = /(?:light(?:er)?|clean|minimal|white)\s*(?:theme|mode|look|canvas|palette)|(?:theme|mode|look|canvas|palette)\s*(?:light(?:er)?|clean|minimal|white)|^(?:light(?:er)?|clean|minimal|white)(?:\s*theme|\s*mode)?$/i.test(command.trim());
+  const isChalkTheme = /(?:chalk)\s*(?:theme|mode|look|canvas|palette)|(?:theme|mode|look|canvas|palette)\s*(?:chalk)|^chalk(?:\s*theme)?$/i.test(command.trim());
+  const isLookbookTheme = /(?:lookbook)\s*(?:theme|mode|look|canvas|palette)|(?:theme|mode|look|canvas|palette)\s*(?:lookbook)|^lookbook(?:\s*theme)?$/i.test(command.trim());
+  const isStreetwearTheme = /(?:streetwear)\s*(?:theme|mode|look|canvas|palette)|(?:theme|mode|look|canvas|palette)\s*(?:streetwear)|^streetwear(?:\s*theme)?$/i.test(command.trim());
+  const isEditorialTheme = /(?:editorial)\s*(?:theme|mode|look|canvas|palette)|(?:theme|mode|look|canvas|palette)\s*(?:editorial)|^editorial(?:\s*theme)?$/i.test(command.trim());
 
-  // Lane 1 begins with the target: an exact id, purpose or heading needs no inference.
   const requested = text(input.target, 120);
   let target: string | null = null;
   if (requested && requested !== 'all') {
     if (targetKindOf(doc, requested)) target = requested;
   }
-  
+
+  if ((!target || requested === 'all') && (isDarkTheme || isLightTheme || isChalkTheme || isLookbookTheme || isStreetwearTheme || isEditorialTheme)) {
+    const themeName = isDarkTheme || isStreetwearTheme ? 'streetwear-dark'
+      : isChalkTheme ? 'editorial-chalk'
+      : isLookbookTheme ? 'editorial-lookbook'
+      : isEditorialTheme ? 'editorial-light'
+      : 'minimal-clean';
+    const chosenTheme = THEMES[themeName] || THEMES['minimal-clean'];
+    const themeColor = chosenTheme.color;
+    const operations: PatchOperation[] = [
+      { op: 'set_token', token: 'token:color.canvas', value: themeColor.canvas },
+      { op: 'set_token', token: 'token:color.surface', value: themeColor.surface },
+      { op: 'set_token', token: 'token:color.ink', value: themeColor.ink },
+      { op: 'set_token', token: 'token:color.border', value: themeColor.border },
+      { op: 'set_token', token: 'token:color.accent', value: themeColor.accent },
+      { op: 'set_token', token: 'token:color.accentink', value: themeColor.accentink },
+      { op: 'set_token', token: 'token:color.muted', value: themeColor.muted },
+      { op: 'set_token', token: 'token:color.success', value: themeColor.success },
+      { op: 'set_token', token: 'token:color.danger', value: themeColor.danger },
+    ];
+    const summary = `Applied ${themeName} palette`;
+    const result: AskResult = {
+      siteId: current.id,
+      base: doc.revision,
+      target: null,
+      targetKind: null,
+      operations,
+      summary,
+      questions: [],
+      choices: { theme: themeName },
+    };
+    return { ...result };
+  }
+
+  const PURPOSE_SYNONYMS: Record<string, string[]> = {
+    collection: ['collection', 'product', 'products', 'grid', 'product grid', 'catalog', 'items', 'offer', 'shop', 'trending', 'new and trending', 'new & trending', 'what we offer', 'photo bigger', 'bigger photo', 'larger photo', 'photo size', 'image size', 'bigger image', 'larger image'],
+    recommendations: ['recommendations', 'recommended', 'you will love', "you'll love", 'suggested', 'more pieces'],
+    introduction: ['hero', 'banner', 'intro', 'introduction', 'top', 'header'],
+    split: ['split', 'editorial', 'two images', 'media break', 'two-up'],
+    categories: ['categories', 'category', 'tabs', 'filter', 'shop by category'],
+    promo: ['promo', 'promotion', 'cta band', 'call to action', 'strip', 'run festive sale', 'festive sale', 'sale', 'festive'],
+    story: ['story', 'about', 'about us'],
+    chrome: ['navigation', 'header', 'nav', 'menu', 'bar', 'footer', 'foot', 'bottom', 'end'],
+    contact: ['contact', 'enquire', 'enquiry', 'form', 'get in touch', 'add location', 'location', 'address', 'hours', 'opening hours'],
+    hours: ['hours', 'opening hours', 'schedule', 'timing', 'timings'],
+  };
+
   if (!target) {
     outer: for (const page of doc.pages) {
       for (const section of page.sections) {
@@ -319,6 +413,17 @@ export async function executeSiteAsk(
     }
   }
 
+  // Deterministic purpose fallbacks when target is not directly mentioned (siteai.md §1, §7)
+  if (!target) {
+    if (/(?:photo|image|picture|col|column|grid|list\s*view)/.test(lower)) {
+      target = doc.pages[0]?.sections.find((s) => s.purpose === 'collection' || s.purpose === 'split' || s.purpose === 'introduction')?.id || doc.pages[0]?.sections[0]?.id || null;
+    } else if (/(?:festive|sale|discount|promo|special\s*offer)/.test(lower)) {
+      target = doc.pages[0]?.sections.find((s) => s.purpose === 'promo' || s.purpose === 'introduction')?.id || doc.pages[0]?.sections[0]?.id || null;
+    } else if (/(?:location|address|hours|opening\s*hours|contact)/.test(lower)) {
+      target = doc.pages[0]?.sections.find((s) => s.purpose === 'contact' || s.purpose === 'hours')?.id || doc.pages[0]?.sections[0]?.id || null;
+    }
+  }
+
   const questions: string[] = [];
   const operations: PatchOperation[] = [];
   const choices: Record<string, string> = {};
@@ -328,7 +433,6 @@ export async function executeSiteAsk(
     const judged = await interpret(typesafe, cache, { command, targets: candidates(doc), questions: [] });
     if (judged.target) { target = judged.target; targetKind = 'section'; }
   }
-  if (!target) questions.push('Which section should this change?');
 
   if (target && targetKind) {
     const lane = exact(doc, command, target);

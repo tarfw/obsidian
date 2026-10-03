@@ -209,6 +209,158 @@ describe('site ask and edit', () => {
     const heading = hero?.nodes.find((node) => node.kind === 'heading');
     expect(heading?.props.text).toBe('Slice House');
   });
+
+  it('handles global theme changes directly via set_token operations with zero questions', async () => {
+    const client = await createTestWorkspace();
+    const { siteId, site } = await generatedSite(client);
+    const asked = await Effect.runPromise(executeGateway(client, ownerAccess, {
+      actionId: 'site.ask', idempotencyKey: 'ask-darker-theme',
+      input: { siteId, command: 'Darker Theme' },
+    }));
+    expect(asked.target).toBeNull();
+    expect(asked.questions).toEqual([]);
+    const operations = asked.operations as { op: string; token: string; value: string }[];
+    expect(operations.length).toBeGreaterThanOrEqual(7);
+    expect(operations.some((op) => op.op === 'set_token' && op.token === 'token:color.canvas' && op.value === '#111111')).toBe(true);
+
+    const edited = await Effect.runPromise(executeGateway(client, ownerAccess, {
+      actionId: 'site.edit', idempotencyKey: 'edit-darker-theme',
+      input: { siteId, base: site.revision, operations: asked.operations, summary: String(asked.summary) },
+    }, { siteReleases: releaseBucket() }));
+
+    const updated = edited.site as SiteDocument;
+    expect(updated.design.color.canvas).toBe('#111111');
+    expect(updated.design.color.ink).toBe('#f8fafc');
+
+    // Test Chalk theme
+    const askedChalk = await Effect.runPromise(executeGateway(client, ownerAccess, {
+      actionId: 'site.ask', idempotencyKey: 'ask-chalk-theme',
+      input: { siteId, command: 'Chalk Theme' },
+    }));
+    expect(askedChalk.questions).toEqual([]);
+    expect((askedChalk.operations as { op: string; token: string; value: string }[]).some((op) => op.token === 'token:color.canvas' && op.value === '#edebe4')).toBe(true);
+
+    // Test Lookbook theme
+    const askedLookbook = await Effect.runPromise(executeGateway(client, ownerAccess, {
+      actionId: 'site.ask', idempotencyKey: 'ask-lookbook-theme',
+      input: { siteId, command: 'Lookbook' },
+    }));
+    expect(askedLookbook.questions).toEqual([]);
+    expect((askedLookbook.operations as { op: string; token: string; value: string }[]).some((op) => op.token === 'token:color.ink' && op.value === '#000000')).toBe(true);
+
+    // Test Editorial theme
+    const askedEditorial = await Effect.runPromise(executeGateway(client, ownerAccess, {
+      actionId: 'site.ask', idempotencyKey: 'ask-editorial-theme',
+      input: { siteId, command: 'Editorial Theme' },
+    }));
+    expect(askedEditorial.questions).toEqual([]);
+    expect((askedEditorial.operations as { op: string; token: string; value: string }[]).some((op) => op.token === 'token:color.accent' && op.value === '#4d49fc')).toBe(true);
+  });
+
+  it('handles deterministic quick prompts without specified target', async () => {
+    const client = await createTestWorkspace();
+    const { siteId, site } = await generatedSite(client);
+
+    // Photo Bigger fallback to collection
+    const askedPhoto = await Effect.runPromise(executeGateway(client, ownerAccess, {
+      actionId: 'site.ask', idempotencyKey: 'ask-photo-bigger',
+      input: { siteId, command: 'Photo Bigger' },
+    }));
+    expect(askedPhoto.questions).toEqual([]);
+    expect((askedPhoto.operations as unknown[]).length).toBeGreaterThan(0);
+
+    // Run Festive Sale fallback to promo / intro
+    const askedSale = await Effect.runPromise(executeGateway(client, ownerAccess, {
+      actionId: 'site.ask', idempotencyKey: 'ask-festive-sale',
+      input: { siteId, command: 'Run Festive Sale' },
+    }));
+    expect(askedSale.questions).toEqual([]);
+    expect((askedSale.operations as unknown[]).length).toBeGreaterThan(0);
+
+    // Add Location fallback to contact / hours
+    const askedLocation = await Effect.runPromise(executeGateway(client, ownerAccess, {
+      actionId: 'site.ask', idempotencyKey: 'ask-add-location',
+      input: { siteId, command: 'Add Location' },
+    }));
+    expect(askedLocation.questions).toEqual([]);
+    expect((askedLocation.operations as unknown[]).length).toBeGreaterThan(0);
+  });
+
+  it('handles contextual visual director chip prompts targeted at sections', async () => {
+    const client = await createTestWorkspace();
+    const { siteId, site } = await generatedSite(client);
+
+    // 1. Dark Tone on Hero
+    const darkTone = await Effect.runPromise(executeGateway(client, ownerAccess, {
+      actionId: 'site.ask', idempotencyKey: 'ask-hero-dark-tone',
+      input: { siteId, target: 'hero', command: 'Dark Tone' },
+    }));
+    expect(darkTone.questions).toEqual([]);
+    const darkToneOps = darkTone.operations as { op: string; value: { base: Record<string, unknown> } }[];
+    expect(darkToneOps.some((op) => op.op === 'set_style' && op.value.base.background === 'token:color.ink')).toBe(true);
+
+    // 2. Light Tone on Hero
+    const lightTone = await Effect.runPromise(executeGateway(client, ownerAccess, {
+      actionId: 'site.ask', idempotencyKey: 'ask-hero-light-tone',
+      input: { siteId, target: 'hero', command: 'Light Tone' },
+    }));
+    expect(lightTone.questions).toEqual([]);
+    const lightToneOps = lightTone.operations as { op: string; value: { base: Record<string, unknown> } }[];
+    expect(lightToneOps.some((op) => op.op === 'set_style' && op.value.base.background === 'token:color.canvas')).toBe(true);
+
+    // 3. Split Layout on Hero
+    const splitLayout = await Effect.runPromise(executeGateway(client, ownerAccess, {
+      actionId: 'site.ask', idempotencyKey: 'ask-hero-split',
+      input: { siteId, target: 'hero', command: 'Split Layout' },
+    }));
+    expect(splitLayout.questions).toEqual([]);
+    const splitOps = splitLayout.operations as { op: string; value: { kind: string; columns?: number } }[];
+    expect(splitOps.some((op) => op.op === 'set_layout' && op.value.kind === 'flex')).toBe(true);
+
+    // 4. Full Bleed on Hero
+    const fullBleed = await Effect.runPromise(executeGateway(client, ownerAccess, {
+      actionId: 'site.ask', idempotencyKey: 'ask-hero-full-bleed',
+      input: { siteId, target: 'hero', command: 'Full Bleed' },
+    }));
+    expect(fullBleed.questions).toEqual([]);
+    const bleedOps = fullBleed.operations as { op: string; value: { kind: string; width?: string } }[];
+    expect(bleedOps.some((op) => op.op === 'set_layout' && op.value.width === 'full')).toBe(true);
+
+    // 5. Bold Title on Hero
+    const boldTitle = await Effect.runPromise(executeGateway(client, ownerAccess, {
+      actionId: 'site.ask', idempotencyKey: 'ask-hero-bold-title',
+      input: { siteId, target: 'hero', command: 'Bold Title' },
+    }));
+    expect(boldTitle.questions).toEqual([]);
+    const boldOps = boldTitle.operations as { op: string; value: { level?: number } }[];
+    expect(boldOps.some((op) => op.op === 'set_props' && op.value.level === 1)).toBe(true);
+
+    // 6. Retail site with collection section
+    const retailResult = await Effect.runPromise(executeGateway(client, ownerAccess, {
+      actionId: 'site.generate', idempotencyKey: `gen-retail-${Math.random()}`, input: { title: 'Kanchi Silks', prompt: 'Adanola luxury activewear retail', category: 'retail' },
+    }));
+    const retailSiteId = String(retailResult.siteId);
+    const retailSite = retailResult.site as SiteDocument;
+    const collectionId = retailSite.pages[0].sections.find((s) => s.purpose === 'collection')?.id || 'collection';
+
+    // List View on Collection
+    const listView = await Effect.runPromise(executeGateway(client, ownerAccess, {
+      actionId: 'site.ask', idempotencyKey: 'ask-collection-list-view',
+      input: { siteId: retailSiteId, target: collectionId, command: 'List View' },
+    }));
+    expect(listView.questions).toEqual([]);
+    const listOps = listView.operations as { op: string; value: { columns?: number } }[];
+    expect(listOps.some((op) => op.op === 'set_layout' && op.value.columns === 1)).toBe(true);
+
+    // 7. Dark Cards on Collection
+    const darkCards = await Effect.runPromise(executeGateway(client, ownerAccess, {
+      actionId: 'site.ask', idempotencyKey: 'ask-collection-dark-cards',
+      input: { siteId: retailSiteId, target: collectionId, command: 'Dark Cards' },
+    }));
+    expect(darkCards.questions).toEqual([]);
+    const cardOps = darkCards.operations as { op: string; value: { base: Record<string, unknown> } }[];
+    expect(cardOps.some((op) => op.op === 'set_style' && op.value.base.background === 'token:color.surface')).toBe(true);
+  });
 });
 
 describe('site checks gate publication', () => {

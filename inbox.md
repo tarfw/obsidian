@@ -464,7 +464,7 @@ Chef = detailed screen above. Other views:
 | [A] Pay electric bill            DUE NOW > |
 |     Personal / Bill #6                     |
 |--------------------------------------------|
-| [A] Reply to Mira              DUE 20:45 > |
+| [A] Reply to Kayalvizhi        DUE 20:45 > |
 |     Employer Sales / Mail #18              |
 |--------------------------------------------|
 | [S] Quote #12 approval              WAIT > |
@@ -823,7 +823,7 @@ FLOOR / ACTION
 | From Now | Opens |
 | --- | --- |
 | `Call home` during Chef | Personal Action; Back returns to Chef context and scroll |
-| `Reply to Mira` during Personal | Employer Sales Action for Mail #18; source checks access |
+| `Reply to Kayalvizhi` during Personal | Employer Sales Action for Mail #18; source checks access |
 | `Tools > Office mail` during Personal | Full Employer Sales mailbox; ordinary mail stays at source |
 
 ~~~text
@@ -838,7 +838,7 @@ PERSONAL / ACTION
 
 OFFICE / ACTION
 +--------------------------------------------+
-| < Now  Reply to Mira                       |
+| < Now  Reply to Kayalvizhi                 |
 | Employer Sales / Seller / Owner: Employer  |
 |--------------------------------------------|
 | Mail #18 / due 20:45 / thread at source    |
@@ -864,7 +864,7 @@ OFFICE MAIL / SOURCE TOOL
 | Employer Sales / Seller / Owner: Employer  |
 |--------------------------------------------|
 | Search mail / folders / unread           > |
-| Mail #18 / Mira                          > |
+| Mail #18 / Kayalvizhi                    > |
 | Other mail stays in this source mailbox    |
 +--------------------------------------------+
 ~~~

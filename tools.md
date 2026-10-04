@@ -23,8 +23,8 @@ Jev suggests; it never grants or publishes on its own.
 | Flow   | A reusable multi-step process              | Store Closing            | `flow`     |
 | Run    | One live, resumable use of a flow          | Closing, step 2 of 4     | `run`      |
 | Step   | One stage inside a flow                    | Count cash               | `step`     |
-| Brief  | Owner's plain text about a person or org   | "Priya runs the counter" | `brief`    |
-| Access | The tools and flows a person can open      | Priya: POS, Closing      | `access`   |
+| Brief  | Owner's plain text about a person or org   | "Kanimozhi runs the counter" | `brief`    |
+| Access | The tools and flows a person can open      | Kanimozhi: POS, Closing      | `access`   |
 | Member | A person authorized in a workspace         | Cashier, Manager         | `member`   |
 
 Changes from prior drafts:
@@ -42,6 +42,44 @@ Jev question types used:
 | Noul   | Chance of yes 0-1 | Does this person need this tool?          |
 | Choice | One of a set      | Which step kind fits this step?           |
 | Score  | Degree on levels  | Lead fit, risk level                      |
+
+---
+
+## Complete Tools Catalog & Kinds
+
+Work in TAR is shared between software (**`tool`**), people (**`human`**), communication (**`channel`**), checklists (**`flow`**), and the online store (**`site`**).
+
+Safety rule: Any step or tool touching **`money`** or **`customer`** **always asks the owner first** before acting.
+
+| Tool | Kind | What it does |
+| :--- | :--- | :--- |
+| **`pos`** (Point of sale) | `tool` | Fast counter sales, cart items, barcode scan, instant receipt |
+| **`register`** (Cash drawer) | `tool` | Open shift, log cash in/out, count physical cash, close drawer |
+| **`item`** (Products) | `tool` | Add/edit products, photos, variants, units, and prices |
+| **`inventory`** (Stock) | `tool` | Count stock, record damage/wastage, and branch transfers |
+| **`order`** (Orders) | `tool` | Take customer orders, reserve stock, track delivery status |
+| **`invoice`** (Billing) | `tool` | Issue commercial bills or GST-ready invoices |
+| **`payment`** (Payments) | `tool` | Record Cash/UPI/Card received or issue customer refunds |
+| **`expense`** (Expenses) | `tool` | Log daily shop expenses (tea, packing materials, travel, fuel) |
+| **`purchase`** (Purchases) | `tool` | Create supplier purchase orders and request quotes |
+| **`members`** (Team) | `tool` | Manage staff, roles (cashier, packer), and tool permissions |
+| **`contact`** (Contacts) | `tool` | Save customer, supplier, and vendor phone numbers |
+| **`human`** (You do / Person) | `human` | Physical or manual work (count cash, pack box, call customer, lock shop) |
+| **`flow`** (Checklist) | `flow` | Run or create repeatable shop routines (Opening, Closing, Handover) |
+| **`site`** (Online store) | `site` | Autopilot storefront, live catalog sync, and WhatsApp orders |
+| **`inbox`** (Team feed) | `channel` | Native zero-cost task feed for owner and staff (Mine, Available, Waiting) |
+| **`whatsapp`** (WhatsApp) | `channel` | Order confirmations, tracking & invoices to customer phone (₹0.15/msg) |
+| **`telegram`** (Team alerts) | `channel` | Free internal shop notifications, low-stock pings, and closing reports |
+
+### Tool & Work Kinds Explained
+
+| Kind | Shown as | Who acts | Role in business |
+| :--- | :--- | :--- | :--- |
+| **`human`** | **You do** | Person | Physical or subjective actions (pack parcel, lock shutter, count cash, call) |
+| **`tool`** | **App does** | Code / App | Atomic software transactions (record sale, adjust stock, issue invoice) |
+| **`channel`** | **Send** | Gateway | Communication router (WhatsApp for customers; Inbox/Telegram for team) |
+| **`flow`** | **Checklist** | Member + App | Step-by-step operational process connecting human and app steps |
+| **`site`** | **Store** | AI + Edge | Public customer-facing storefront served at edge ($0/visit) |
 
 ---
 
@@ -72,7 +110,7 @@ One request, many small Noul questions, all run in parallel (~100ms).
 One question per tool or flow active in the workspace:
 
 ```text
-state:    { brief: "Priya handles counter sales, takes payments,
+state:    { brief: "Kanimozhi handles counter sales, takes payments,
                     closes the drawer at night." }
 question: "Does `brief` say this person needs {tool.description}?"
 ```
@@ -86,7 +124,7 @@ Code reads each answer with two thresholds:
 | <= 0.20    | Off      | Hidden under "More"     |
 
 ```text
- Priya - Cashier                         [ Save ]
+ Kanimozhi - Cashier                     [ Save ]
  [x] Point of sale          0.97
  [x] Cash drawer & shift    0.93
  [x] Store Closing (flow)   0.91
@@ -326,7 +364,7 @@ New names stay one word (`access`, `workrole`).
 |      Role: Member                                |
 |                                                  |
 | PERSONAL (Default, 1 per user)                   |
-|  [ ] Alex Rivera                                 |
+|  [ ] Kayalvizhi                                  |
 |                                                  |
 |--------------------------------------------------|
 | [ + Create new workspace ]                       |
@@ -366,16 +404,16 @@ New names stay one word (`access`, `workrole`).
 +--------------------------------------------------+
 | SEARCH: [ Search members...                    ] |
 |--------------------------------------------------|
-| Alex Rivera (Owner)                              |
+| Kayalvizhi (Owner)                               |
 |  Full access - 8 tools, 3 flows                  |
 |                                                  |
-| Priya Patel (Cashier)                            |
+| Kanimozhi (Cashier)                              |
 |  Counter sales - 2 tools, 1 flow                 |
 |                                                  |
-| Marcus Chen (Kitchen lead)                       |
+| Elilarasi (Kitchen lead)                         |
 |  Orders & inventory - 3 tools                    |
 |                                                  |
-| Sarah Jenkins (Pending invite)                   |
+| Valarmathi (Pending invite)                      |
 |  Brief: "Weekend pastry chef"                    |
 |--------------------------------------------------|
 | [ + Add member ]                                 |
@@ -386,14 +424,14 @@ New names stay one word (`access`, `workrole`).
 
 ```text
 +--------------------------------------------------+
-| Member: Priya Patel                       [Cancel]|
+| Member: Kanimozhi                         [Cancel]|
 +--------------------------------------------------+
-| Name: Priya Patel     Role: Member               |
-| Email: priya@example.com                         |
+| Name: Kanimozhi       Role: Member               |
+| Email: kanimozhi@example.com                     |
 | Workrole: cashier                                |
 |                                                  |
 | Role Brief:                                      |
-| "Priya handles counter sales, takes payments,    |
+| "Kanimozhi handles counter sales, takes payments,|
 |  and closes the cash drawer at night."           |
 |                                     [ Re-eval ]  |
 |--------------------------------------------------|
@@ -497,14 +535,14 @@ runs already started keep the version they began with.
 +--------------------------------------------------+
 | Store Closing - Run #142                  [Pause]|
 +--------------------------------------------------+
-| Flow: Store Closing (v1)   Actor: Priya Patel    |
+| Flow: Store Closing (v1)   Actor: Kanimozhi      |
 | Started: 21:40            Status: Active         |
 |--------------------------------------------------|
 | [x] Step 1: Register snapshot (tool: pos)        |
 |                                                  |
 | [*] Step 2: Count physical cash (human)          |
-|     Drawer expected: $1,420.00                   |
-|     Actual count:   [$1,420.00     ]             |
+|     Drawer expected: ₹14,200                     |
+|     Actual count:   [₹14,200       ]             |
 |     [ Submit & Next Step ]                       |
 |                                                  |
 | [ ] Step 3: Check the cash (tool)                |

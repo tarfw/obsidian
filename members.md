@@ -5,8 +5,8 @@
 
                                     ONE CANONICAL USER IDENTITY
                                   ┌─────────────────────────────┐
-                                  │ users.id = "usr_ravi_101"   │
-                                  │ Name: "Ravi Kumar" (D1 Auth)│
+                                  │ users.id = "usr_kanimozhi_101"   │
+                                  │ Name: "Kanimozhi" (D1 Auth)│
                                   └──────────────┬──────────────┘
                                                  │
             ┌────────────────────────────────────┼────────────────────────────────────┐

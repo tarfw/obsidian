@@ -114,7 +114,7 @@ Proposed IDs only; build and register before Jev can select them. Financial/tax 
                     v                                           v
 +--------------------------------------+    +--------------------------------------+
 | MEMBER SETUP                         |    | SITE (IF SELECTED)                   |
-| Invite Ravi as member                |    | Reuse brief + approved public facts  |
+| Invite Kanimozhi as member           |    | Reuse brief + approved public facts  |
 | "Cashier + manage products"          |    | Reuse assets; ask missing details    |
 +--------------------------------------+    +--------------------------------------+
                     |                                           |
@@ -196,11 +196,11 @@ Proposed IDs only; build and register before Jev can select them. Financial/tax 
 
 +------------------------------------------+    +------------------------------------------+
 | 3. ADD MEMBER                            |    | 4. REVIEW MEMBER PERMISSIONS             |
-| Northstar                                |    | Northstar / Ravi / Member                |
+| Northstar                                |    | Northstar / Kanimozhi / Member           |
 |                                          |    |                                          |
-| Person: ravi@example.com                 |    | Suggested permissions:                   |
+| Person: kanimozhi@example.com            |    | Suggested permissions:                   |
 | Membership: Member                       |    | [x] Record sales                         |
-| What can Ravi do?                        |    | [x] Manage products                      |
+| What can Kanimozhi do?                   |    | [x] Manage products                      |
 | Cashier and manage products              |    | [View Actions] [Change duties]           |
 |                                          |    |                                          |
 | [Use saved role]                         |    | [Save as reusable role]                  |
@@ -208,9 +208,9 @@ Proposed IDs only; build and register before Jev can select them. Financial/tax 
 +------------------------------------------+    +------------------------------------------+
 
 +------------------------------------------+    +------------------------------------------+
-| 5. SITE - PRIVATE DRAFT                  |    | 6. TOOLS - RAVI                          |
-| Northstar / Owner: Mira                  |    | Northstar / Cashier + products           |
-|                                          |    | Owner: Mira                              |
+| 5. SITE - PRIVATE DRAFT                  |    | 6. TOOLS - KANIMOZHI                     |
+| Northstar / Owner: Kayalvizhi            |    | Northstar / Cashier + products           |
+|                                          |    | Owner: Kayalvizhi                        |
 | Draft: Saved                             |    |                                          |
 | [Preview] [Assets] [Undo]                |    | [T] POS                              >   |
 |                                          |    | [T] Products                         >   |

@@ -469,7 +469,7 @@ New names stay one word (`access`, `workrole`).
 +--------------------------------------------------+
 | Tools                                        ... |
 +--------------------------------------------------+
-| [N] Northstar Restaurant                       v |
+| [A] Aambal Neyvagam                          v |
 |     Cashier                                      |
 +--------------------------------------------------+
 | ACTIVE FLOWS                                     |

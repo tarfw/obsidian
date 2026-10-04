@@ -102,154 +102,178 @@ Rules kept in code:
 
 ---
 
-## Create a Flow from a description
+## Create a Flow (simple)
 
-Principle: Jev selects from what exists. The LLM writes only what does not.
-Code keeps order, limits and safety. Owner confirms.
+Principle: **start from something that exists.** Jev only picks from the owner's
+own list of tools. Nothing is written by AI. The owner sees a plain checklist,
+fixes any line, and taps Save.
 
-```text
- 1 DESCRIBE   "When a lead comes in, look up the company, score it,
-               email them, book a call, then update the CRM."
-                      |
- 2 SPLIT      Code cuts the text into clauses, in the order written.
-   (code)     6 clauses = 6 candidate steps. Order is never guessed.
-                      |
- 3 MATCH      Jev, ONE parallel request, per clause:
-   (Jev)        - Choice over the catalog + "none"   -> which tool
-                - Noul "waits for a person?"         -> human gate
-                - Noul "spends money / contacts a customer?" -> approval
-                      |
-          confident (>= 0.80)  -> step done, no LLM
-          close scores         -> owner picks from top 3
-          "none" wins          -> GAP
-                      |
- 4 FILL       LLM, ONE call, only if gaps exist. Sees the gap clauses
-   (LLM)      plus the matched steps for context. Writes step name,
-              instructions, and (for judgments) the Jev question.
-              It may NOT add tools. Unknown tool -> "request tool".
-                      |
- 5 VALIDATE   Code: schema ok, tools exist, <= 20 steps, no loops,
-   (code)     approval steps inserted, steps have an owner.
-                      |
- 6 VERIFY     Jev, one parallel request, ONLY on LLM-written steps:
-   (Jev)      grounded in the text? covered? right kind?
-                      |
- 7 REVIEW     Owner sees every step labelled by source.
-                      |
- 8 PUBLISH    Draft, then frozen as version 1.
-```
+Three ways to start (the first is what most people use):
 
-How Jev decides from the available list:
+| Way               | Owner does                         | Jev / code does                              |
+| :---------------- | :--------------------------------- | :------------------------------------------- |
+| Ready flow        | Taps "Closing the shop"            | Nothing. Ready flows are stored, no AI call  |
+| Say your steps    | Speaks or types, one step per line | 1 Jev request matches each line to a tool    |
+| Copy a flow       | Taps a flow they already have      | Nothing. Edit the copy                       |
+
+Ready flows are suggested when a workspace is created, from the same business
+brief that picks its tools. A baker sees "Opening", "New order", "Closing".
 
 ```text
-state:     { clause: "email them",
-             catalog: { email:    "Send an email to a person",
-                        proposal: "Send a priced proposal",
-                        calendar: "Book a meeting", ... } }
-question:  Choice  "Which catalog entry performs `clause`?"
-options:   one per catalog key, plus  none: "Nothing listed does this"
-answer:    email 0.52  proposal 0.41  calendar 0.02  none 0.05
-code:      top >= 0.80      -> accept
-           top < 0.80       -> ask owner with top 3
-           none is top      -> gap
+  1 SAY        Owner speaks or types the steps. Any language, one per line.
+                 "Count the cash"
+                 "Check the stock"
+                 "Send the day report to owner"
+                       |
+  2 SPLIT      Code: one line = one step. Order is exactly as written.
+    (code)     A single run-on paragraph is cut at full stops and line breaks;
+               the owner sees the cut and can fix it.
+                       |
+  3 MATCH      Jev, ONE request, ONE Choice per line:
+    (Jev)        "Which of these does this line?"  your tools,
+                 plus  "a person does this"  and  "nothing fits"
+                       |
+           top >= 0.80          -> App step
+           person / nothing     -> "You do" step, owner's own words
+           otherwise            -> two big buttons: top 2 tools + "I'll do it"
+                       |
+  4 CHECK      Code: tools exist, <= 12 steps, straight list (no loops),
+    (code)     steps that contact a customer or spend money get "Asks you first".
+                       |
+  5 SAVE       Owner checks the list, taps [ Save and use ]. Done.
 ```
 
-Efficiency rules:
-- Catalog entries are one plain sentence each. Jev reads meaning, not names.
-- Only tools the member's team may use are in the catalog (access first).
-- Large catalogs: group by area, Choice the area first, then the tool.
-- One Choice and two Nouls per clause, all in one request. Clauses run in
-  parallel, so 6 or 20 clauses cost about the same time (~100ms).
-- Jev answers are saved, so Edit text re-asks only changed clauses.
-- The LLM call is skipped when nothing is a gap. It never sees the full
-  catalog, only the gap clauses and the matched steps.
+How Jev decides from the owner's list:
+
+```text
+state:     { line: "send the day report to owner",
+             tools: { whatsapp: "Send a WhatsApp message",
+                      email:    "Send an email",
+                      stock:    "Check stock levels", ... } }
+question:  Choice  "Which entry performs `line`?"
+options:   one per tool, plus  person: "A person does this by hand"
+                          and  none:   "Nothing listed does this"
+answer:    whatsapp 0.86  email 0.09  person 0.03  none 0.02
+code:      top >= 0.80   -> use it
+           top <  0.80   -> ask: top 2 tools + "I'll do it"
+           person / none -> "You do" step
+```
+
+Simple on purpose:
+- **No AI writing.** A line nothing matches is kept as the owner's own words.
+  No gap-filling model call, no second check, no invented steps.
+- **One question per line.** Every line runs in parallel in one request (~100ms),
+  so 3 lines or 12 cost about the same.
+- **Numbers stay hidden.** Owners never see 0.86. They see an app name or two buttons.
+- **Safety is a rule, not a guess.** Each tool has a fixed `reach` set by us:
+  `none`, `customer`, `money` or `data`. `customer` and `money` tools always
+  ask the owner first. Jev cannot change this.
+- **Only tools this team may use** are in the list (access first).
+- **Large lists:** Choice the area first, then the tool.
+- **Edit re-asks only changed lines.** Raw answers are saved (`assessments`).
+- **No Jev or no key:** every line becomes a "You do" step. The flow still works.
 
 What each part does:
 
-| Part | Does                                          | Never does                      |
-| :--- | :-------------------------------------------- | :------------------------------ |
-| Code | Splits, orders, limits, forces approvals      | Interpret meaning               |
-| Jev  | Picks tool per clause, flags human/approval   | Write text or invent a tool     |
-| LLM  | Writes missing steps and judgment questions   | Choose tools, set order, publish|
-| Owner| Resolves close calls, edits, publishes        | -                               |
+| Part  | Does                                   | Never does                        |
+| :---- | :------------------------------------- | :-------------------------------- |
+| Code  | Splits lines, limits, safety asks      | Interpret meaning                 |
+| Jev   | Picks the tool for each line           | Write text, invent a tool, save   |
+| Owner | Fixes a line, picks, saves             | -                                 |
 
-Every step in the preview carries its source:
+### How Step Inputs and Outputs Work (No LLM Plumbing)
 
-| Source        | Meaning                                  |
-| :------------ | :--------------------------------------- |
-| matched       | Jev picked it, confident                 |
-| picked by you | Scores were close, owner chose           |
-| AI draft      | LLM wrote it to fill a gap               |
-| safety rule   | Code added it (e.g. approval before email)|
+**Are LLMs used to plan inputs and outputs between tools? NO.**
 
-Jev checks on LLM-written steps (narrow, independent):
+Having an LLM guess or write dynamic JSON mapping between steps is fragile, slow (~2s), and prone to hallucinations. Instead, TAR uses **Deterministic Typed Slots**:
 
-| Check           | Type   | Question (short form)                             | Then code           |
-| :-------------- | :----- | :------------------------------------------------ | :------------------ |
-| Not invented    | Noul   | Is `step.name` stated or implied by `clause`?     | Flag if < 0.50      |
-| Right kind      | Choice | Which kind fits `step.name`: human, agent, ...?   | Use if confident    |
-| Nothing missing | Noul   | Is `clause[i]` covered by some step?              | Flag uncovered text |
+```text
+  Step 1 (POS Tool)      ──writes──►  run.data.expected = 142000
+  Step 2 (You do: count) ──writes──►  run.data.actual   = 142000
+  Step 3 (Check Cash)    ──reads───►  compares actual vs expected (pure code)
+  Step 4 (Day Summary)   ──reads───►  packs summary into Inbox / notification
+```
 
-Step kinds (one word each):
+1. **Shared Run Context (`run.data`)**: Every flow run has an active typed record stored in Turso (`runs`). 
+2. **Standard Records**: Tools read and write directly to canonical workspace records (`item`, `order`, `shift`, `cash`). They do not wire proprietary APIs to each other.
+3. **No Schema Hallucinations**: Because code binds known slots, flows never break due to unexpected field renames or model drift.
 
-| Kind     | Who acts                          |
-| :------- | :-------------------------------- |
-| human    | A person reviews or decides       |
-| event    | An outside signal arrives         |
-| agent    | LLM does open-ended work          |
-| typesafe | Jev gives a calibrated judgment   |
-| tool     | A tool does a fixed action        |
+### Channel Rule: Customer vs Team (Cost Control)
 
-A `typesafe` step carries its own question and thresholds, drafted by the
-LLM and shown to the owner in the preview.
+WhatsApp Meta Business API costs **~₹0.15 to ₹0.75 per message** in India. Burning rupees on internal team alerts bleeds small business margins.
 
-Cost per new flow:
-
-| Call            | Count            | When                  |
-| :-------------- | :--------------- | :-------------------- |
-| Jev match       | 1 request        | Always                |
-| LLM fill        | 0 or 1 call      | Only if gaps exist    |
-| Jev verify      | 0 or 1 request   | Only if LLM wrote     |
+| Audience | Allowed Channels | Why |
+| :------- | :--------------- | :-- |
+| **Customers** | **WhatsApp**, SMS | High trust, high open rate; ₹0.15 pays for itself in order conversion |
+| **Team / Internal** | **`tarapp` Inbox** (default), **Telegram**, **Discord**, **Slack** | **₹0.00 cost**. Native Inbox keeps tasks organized by role. Telegram bots & Discord/Slack webhooks (Zerino/direct) provide free push notifications without per-message bills |
 
 ---
 
+Step kinds in v1 (three, in the owner's words):
 
-## Flow Models Examples
+| Kind  | Shown as    | Who acts                                  |
+| :---- | :---------- | :---------------------------------------- |
+| event | Starts when | Tap, a time of day, or a tool signal      |
+| human | You do      | A person does it and taps Done            |
+| tool  | App does    | A tool does a fixed action                |
 
-### 1. Sales Flow 01 (Deterministic & Human-in-the-Loop)
+Later, not in v1 (add when real owners ask): `typesafe` steps (a Jev judgment
+inside a run) and `agent` steps (open-ended AI work). Each needs its own
+question, thresholds and review, which is the complexity v1 avoids.
+
+Cost per new flow:
+
+| Call      | Count      | When                                    |
+| :-------- | :--------- | :-------------------------------------- |
+| Jev match | 1 request  | Only when the owner says their own steps|
+| LLM       | 0          | Not used in v1                          |
+
+---
+
+## Flow Examples
+
+Straight lists, 3 to 7 steps, plain words.
+
+### 1. Closing the shop
 
 ```text
-+---+--------------------+----------+------------------------------+
-| # | Step               | Kind     | Mechanism                    |
-+---+--------------------+----------+------------------------------+
-| 1 | Signal Capture     | event    | Lead form / webhook          |
-| 2 | Data Enrichment    | agent    | Company facts lookup         |
-| 3 | Lead Qualification | typesafe | Jev Fit Score (0..100)       |
-| 4 | Outreach Draft     | agent    | Tailored proposal draft      |
-| 5 | Objection Handling | human    | Sales rep reviews, replies   |
-| 6 | Meeting Scheduling | tool     | Calendar reservation invite  |
-| 7 | Pre-Call Brief     | agent    | Briefing document (R2)       |
-| 8 | Post-Call Update   | human    | CRM summary, deal stage      |
-+---+--------------------+----------+------------------------------+
++---+------------------------+----------+------------------------------+
+| # | Step                   | Kind     | Note                         |
++---+------------------------+----------+------------------------------+
+| 1 | Count the cash drawer  | human    | Type the amount              |
+| 2 | Check the stock        | tool     | Stock                        |
+| 3 | Send the day report    | tool     | Inbox / Telegram             |
+| 4 | Lock the shop          | human    | Tap Done                     |
++---+------------------------+----------+------------------------------+
 ```
 
-### 2. Sales Flow 02 (Autonomous Agentic Pipeline)
+### 2. New order (bakery, restaurant)
 
 ```text
-+---+--------------------+----------+------------------------------+
-| # | Step               | Kind     | Mechanism                    |
-+---+--------------------+----------+------------------------------+
-| 1 | Intent Detection   | typesafe | Jev signal scan & threshold  |
-| 2 | Account Enrichment | agent    | Firmographic auto-synthesis  |
-| 3 | Outreach Drafting  | agent    | Dynamic persona email draft  |
-| 4 | Reply Negotiation  | agent    | Inbox negotiation dialogue   |
-| 5 | Meeting Booking    | tool     | Calendar auto-booking        |
-| 6 | Call Copilot       | agent    | Live battlecard assistance   |
-| 7 | CRM Sync & Summary | tool     | Auto-transcript extraction   |
-| 8 | Customer Handoff   | tool     | Success trigger, project init|
-+---+--------------------+----------+------------------------------+
++---+------------------------+----------+------------------------------+
+| # | Step                   | Kind     | Note                         |
++---+------------------------+----------+------------------------------+
+| 1 | Order arrives          | event    | Customer order               |
+| 2 | Accept the order       | human    | Accept or reject             |
+| 3 | Prepare and pack       | human    | Kitchen                      |
+| 4 | Hand over / deliver    | human    | Counter or courier           |
+| 5 | Take payment           | tool     | Point of sale                |
++---+------------------------+----------+------------------------------+
 ```
 
+### 3. Sales follow-up
+
+```text
++---+------------------------+----------+------------------------------+
+| # | Step                   | Kind     | Note                         |
++---+------------------------+----------+------------------------------+
+| 1 | Enquiry arrives        | event    | Lead form or WhatsApp        |
+| 2 | Call the customer      | human    | Notes                        |
+| 3 | Send the price         | tool     | WhatsApp - asks you first    |
+| 4 | Book a visit           | tool     | Calendar                     |
+| 5 | Note the result        | human    | Won or lost                  |
++---+------------------------+----------+------------------------------+
+```
 
 ---
 
@@ -423,103 +447,49 @@ New names stay one word (`access`, `workrole`).
 +--------------------------------------------------+
 ```
 
-### 7. New Flow (preview) - four screens
+### 7. New Flow (preview) - two screens
 
-7a. Describe
-
-```text
-+--------------------------------------------------+
-| New flow                          1 of 4 [Cancel]|
-+--------------------------------------------------+
-| Describe the process in your own words:          |
-|                                                  |
-| "When a lead comes in, look up the company,      |
-|  score fit, email them, book a call, then        |
-|  update the CRM."                                |
-|                                                  |
-| Team that runs it: [ Sales            v ]        |
-|                                      [ Match ]   |
-+--------------------------------------------------+
-```
-
-7b. Match (Jev picks from your list)
+7a. Start
 
 ```text
 +--------------------------------------------------+
-| Matching your words to what you have  2 of 4     |
+| New flow                                  [Cancel]|
 +--------------------------------------------------+
-| 1 "a lead comes in"                              |
-|   > Lead form (tool)               0.94   OK     |
-|                                                  |
-| 2 "look up the company"                          |
-|   > Company lookup (tool)          0.91   OK     |
-|                                                  |
-| 3 "score fit"                                    |
-|   > Lead score (judgment)          0.88   OK     |
-|                                                  |
-| 4 "email them"                                   |
-|   ( ) Email (tool)                 0.52          |
-|   ( ) Send proposal (tool)         0.41          |
-|   [ Pick one ]  asked because scores are close   |
-|                                                  |
-| 5 "book a call"                                  |
-|   > Calendar (tool)                0.96   OK     |
-|                                                  |
-| 6 "update the CRM"                               |
-|   x Nothing in your list fits      0.12   GAP    |
+| START WITH A READY ONE                           |
+|  [ Closing the shop ]   [ Opening the shop ]     |
+|  [ New order ]          [ Daily stock check ]    |
 |--------------------------------------------------|
-| 4 matched   1 asked   1 gap          [ Continue ]|
+| OR SAY YOUR STEPS, ONE PER LINE            [Mic] |
+|  Count the cash                                  |
+|  Check the stock                                 |
+|  Send the day report to owner                    |
+|                                      [ Next ]    |
 +--------------------------------------------------+
 ```
 
-7c. Fill gaps (LLM drafts only what is missing)
+7b. Check and save (one screen: match, fix, save)
 
 ```text
 +--------------------------------------------------+
-| Filling the gaps                          3 of 4 |
+| Closing the shop                       [ Rename ]|
 +--------------------------------------------------+
-| Kept as matched (not changed):                   |
-|  1 Lead form   2 Company lookup   3 Lead score   |
-|  4 Email   5 Calendar                            |
+| 1  Count the cash            You do          [..]|
+| 2  Check the stock           App: Stock      [..]|
+| 3  Send the day report       App: Telegram       |
+|                              (or Inbox)      [..]|
+| 4  "update the register"     Pick one:           |
+|     [ Stock ]  [ Cash book ]  [ I'll do it ]     |
+| 5  Lock the shop             You do          [..]|
 |                                                  |
-| Drafted for you (AI):                            |
-|  6 Update CRM         step: human                |
-|    "Sales rep logs call notes and deal stage."   |
-|    ! No CRM tool yet. Using a person.            |
-|    [ Request CRM tool ]                          |
-|                                                  |
-| Added by safety rule (code):                     |
-|  4b Approve email     step: human                |
-|    "Emails to customers need a person's OK."     |
+| [ + Add a step ]                                 |
 |--------------------------------------------------|
-|                         [ Back ]  [ Continue ]   |
+|                [ Save and use ]                  |
 +--------------------------------------------------+
 ```
 
-7d. Review and publish
-
-```text
-+--------------------------------------------------+
-| Review                                    4 of 4 |
-+--------------------------------------------------+
-| Sales Flow 03                      [ Rename ]    |
-|                                                  |
-| 1 Lead form          event      matched          |
-| 2 Company lookup     tool       matched          |
-| 3 Lead score         typesafe   matched          |
-| 4 Email              tool       picked by you    |
-| 4b Approve email     human      safety rule      |
-| 5 Calendar           tool       matched          |
-| 6 Update CRM         human      AI draft         |
-|                                                  |
-| Checks:  all steps tie to your words       OK    |
-|          every sentence is covered         OK    |
-|          2 steps need a person             OK    |
-|--------------------------------------------------|
-|              [ Edit text ]  [ Save draft ]       |
-|                             [ Publish v1 ]       |
-+--------------------------------------------------+
-```
+Each `[..]` lets the owner edit the words, move the line, or remove it. Save
+publishes the flow at once; editing later makes the next version quietly, and
+runs already started keep the version they began with.
 
 ### 8. Live Flow Run (preview)
 
@@ -537,7 +507,7 @@ New names stay one word (`access`, `workrole`).
 |     Actual count:   [$1,420.00     ]             |
 |     [ Submit & Next Step ]                       |
 |                                                  |
-| [ ] Step 3: Variance check (typesafe)            |
+| [ ] Step 3: Check the cash (tool)                |
 | [ ] Step 4: Lock register & summary (tool)       |
 +--------------------------------------------------+
 ```

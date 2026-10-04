@@ -41,17 +41,172 @@
 
 ## 2. Merchant Reality (Tamil Nadu & India SMB)
 
+### 2.1 Who the Merchant Is
+
 | Reality | Implication for the agent |
 | :--- | :--- |
-| Owner runs the shop alone (saree shop, bakery, jewellery, electronics, boutique) | One-person ops: **no admin panels**, only cards and taps |
-| Phone is the only computer | Mobile-first merchant app; store is built and managed from the phone |
-| Speaks Tamil / Tanglish, types little | Voice and photo are primary inputs; Tamil + English are first-class |
-| Customers live on WhatsApp | WhatsApp order, share and float-button on every page; WhatsApp is a **channel**, not an add-on |
-| Pay by UPI and COD, trust is low | UPI + COD journeys, COD confirmation, clear return and delivery promises |
-| Local festivals drive sales (Pongal, Tamil New Year, Aadi, Deepavali) | Festival agent prepares offers and banners ahead of time |
+| Owner runs the shop alone ( example: saree shop, bakery, jewellery, electronics, boutique, ) | One-person ops: **no admin panels**, only cards and taps |
+| Family-run: spouse, son or daughter helps part-time, often with a different phone | Multiple helpers under one owner; roles (owner, packer, cashier) with the same 1-tap cards, no logins to remember (OTP only) |
+| Already sells offline for years; reputation is local and personal | Store must carry the **shop's real identity** (name, street, photos, owner story); never a generic "online store" look |
+| Customers know the owner by name and call or WhatsApp directly | Owner's name, face, phone and WhatsApp prominent on Home, PDP and Contact |
+| Wide range of trades: textiles, jewellery, groceries, sweets and snacks, bakery, electronics, mobiles, hardware, stationery, pharmacy, crafts, furniture, plants, gifts, home appliances, handloom | Category floor covers these archetypes; Builder never asks "which template" |
+| Education varies from school-level to graduate; English is a second language | Zero jargon anywhere: "Add product", "Confirm order", "Ship", never "SKU", "variant", "fulfilment" |
+| Not a "tech person"; afraid of breaking something | Every action reversible; **Undo** always visible; no destructive action without a plain-language confirm |
+| Mid-size merchants have 2–20 staff, several counters and sometimes branches | Same store scales to multiple categories, locations, staff roles without redesign |
+| Many merchants sell from home, a stall or a market shop with no shopfront | Store works without a street address (area + pincode + phone is enough) |
+| Women-run micro-businesses (home bakers, tailoring, handicrafts, self-help groups) are a large segment | Voice-first onboarding, WhatsApp-first orders, no "business registration" demands up front |
+| Wholesale and retail are sold by the same merchant (bulk price vs single piece) | Price records support quantity tiers later; v1 shows retail and a "Bulk enquiry" WhatsApp path |
 | No design or SEO knowledge | Agent owns look, copy, SEO, sitemap, schema, speed |
+
+### 2.2 Device, Network and Language
+
+| Reality | Implication for the agent |
+| :--- | :--- |
+| Phone is the only computer | Mobile-first merchant app; store is built and managed from the phone |
+| Mid-range or low-end Android, often 2–4 GB RAM, cracked screens | Merchant app and storefront stay light; no heavy animation on low-end devices (motion floor) |
+| Patchy mobile data, 4G drops in shops and villages | Store pages stay small, aggressive edge cache, images auto-resized, offline-tolerant merchant draft queue |
+| Prepaid data packs; customers avoid heavy sites | Lazy-loaded images, small hero, no auto-play video unless Jev picks `video` and the connection is good |
+| Speaks Tamil / Tanglish, types little | Voice and photo are primary inputs; Tamil + English are first-class |
+| Types Tamil words in English letters ("konjam", "periya", "sema") | Director understands Tanglish; transcripts are never "corrected" before Jev sees them |
+| Tamil keyboard is slow on phones; autocorrect mangles Tamil | Always offer a 🎤 mic; text input is secondary; show the heard text for 1-tap fix |
+| Regional accents and mixed Tamil-English sentences inside one voice note | Voice ASR must be code-mixed; quality tested on the Tamil/Tanglish set (§14) before launch |
+| Customers search in Tamil script, Tanglish and English | Search matches all three; product pages carry TA + EN names |
+| Tamil text renders badly with wrong fonts | Tamil-capable font stack in every theme; glyph fallback verified (§11) |
+| Other Indian languages come later (Telugu, Kannada, Malayalam, Hindi) | Language is a slot (`ta`, `en`, later more); layout never depends on language |
+| Dates, numbers and money are written the Indian way (₹ 1,25,000; DD/MM/YYYY) | Code formats all numbers and dates; LLM never writes a price or a date |
+| Shared phones: one phone, several people, often no email | OTP on mobile number only; no password and no email required |
+
+### 2.3 Customers of the Merchant
+
+| Reality | Implication for the agent |
+| :--- | :--- |
+| Customers live on WhatsApp | WhatsApp order, share and float-button on every page; WhatsApp is a **channel**, not an add-on |
+| Customers ask "price enna?", "stock irukka?" before anything else | Concierge answers price and stock from the catalog instantly; merchant only sees real exceptions |
+| Many customers still call the shop to confirm before paying | Call button and WhatsApp on every page; checkout never blocks a "call me" path |
+| Customers expect to see more photos and videos before buying | Gallery with several photos per product; owner can send a photo set in one go |
+| Customers expect bargaining and "best price" | Offers are approved by the merchant; the store never lowers a price by itself |
+| Repeat customers are neighbours, relatives, community and temple circles | Share cards for WhatsApp groups; order link per product; "Order again" shortcut |
+| Gift buyers order for relatives in another town, with a different delivery address | Separate "send to" address at checkout; gift note field |
+| NRI customers order for family in Tamil Nadu | Display currency stays ₹; international payment is out of scope for v1; WhatsApp enquiry path remains |
+| Customers compare with Amazon, Flipkart, Meesho and local competitors | Trust strip: real owner, real address, return window, COD; fast and clean pages |
+| Elderly and first-time online buyers | Larger tap targets (≥ 44px), clear Tamil text, 1-screen checkout, big "Call" button |
+| Customers hesitate to enter card details on unknown sites | UPI and COD are default; cards only through a verified payment adapter |
+| Customers expect an order confirmation on WhatsApp within minutes | Order creation triggers a confirmation message; merchant confirms with 1 tap |
+
+### 2.4 Payments and Money
+
+| Reality | Implication for the agent |
+| :--- | :--- |
+| Pay by UPI and COD. trust of online payment gateway and cards is low | UPI + COD journeys, COD confirmation, clear return and delivery promises |
+| UPI is the daily habit (PhonePe, Google Pay, Paytm, BHIM) | UPI deep link and QR on checkout; payment reference recorded against the order |
+| Merchant already has a UPI QR on the counter | Onboarding stores the UPI ID only; no payment-gateway account needed to start |
+| COD is expected and often the majority of orders | COD journey with address confirmation; Order Shield gives a risk hint, never auto-cancels |
+| Returned COD parcels (return-to-origin) cost real money | `vague` and `risk` hints on COD orders; advance token or UPI nudge as a merchant option |
+| Customers pay part now, part later (advance for custom or bridal items) | Partial payment recorded against the invoice; the commerce core already supports partial |
+| Cash lands in the shop, not in a bank, and is reconciled by memory | Daily cash / UPI / COD summary card; invoices and payments recorded exactly (integer minor units) |
+| Merchant fears payment-gateway fees and settlement delays | v1 does not require a gateway; the adapter stays optional and disabled until verified |
+| GST-registered and unregistered merchants both exist | Tax is a merchant fact: invoices show GST only when enabled; never guessed |
+| Prices are quoted in round numbers and often include tax | Price record stores tax mode (inclusive or exclusive); display rules in code |
+| Festival discounts are percentage or "flat ₹X off", often with a free gift | Offer types come from a code-supplied menu bounded by margin rules; Jev only chooses among them |
+| Credit sales ("kadan") to known customers are normal | Outside v1 checkout; invoice and receivable records exist in the commerce kernel for later |
+
+### 2.5 Logistics and Delivery
+
+| Reality | Implication for the agent |
+| :--- | :--- |
+| Delivery is by India Post, courier partners, local delivery boys or customer pickup | Fulfilment methods are a merchant fact: `pickup`, `local`, `courier`, `post`; only enabled ones are shown |
+| Merchant packs and ships himself or through a courier pickup | One "Ship" card per order with label and tracking field; no shipping dashboard |
+| Serviceable pincodes are limited or vary by courier | Delivery checker uses the merchant's own pincode list; unknown pincode → WhatsApp enquiry |
+| Local same-day delivery within the town is a big advantage | Local delivery area list; "Today" badge only when the merchant enables it |
+| Shipping charge varies by weight, distance and product | Shipping rules are code-owned tables; LLM never states a delivery time or charge |
+| Delivery time promises are often wrong and cause disputes | Delivery text comes from merchant facts only; claims guard blocks invented promises (§7.5) |
+| Customers want live status without calling the owner | `/track` page and WhatsApp status message from the order record |
+| Fragile and perishable goods (sweets, cake, flowers, pickles) need special handling | `perishable` Noul at intake → delivery window, same-day only, no courier option |
+| Returns and exchanges for clothing, mobiles and appliances are frequent | Return window is a merchant fact; Returns policy generated from it, never invented |
+| Heavy or bulky items (furniture, appliances) | Delivery by local transport; "Delivery quote on WhatsApp" path |
+| Rural pincodes have slow courier service | Merchant fact: allowed pincodes; the checker tells the truth |
+| Packing and label printing happen from a phone | Printable label / slip as an artifact from the order record |
+
+### 2.6 Compliance and Trust
+
+| Reality | Implication for the agent |
+| :--- | :--- |
+| Small merchants fear legal and tax paperwork | Policies, invoice wording and terms generated from facts and 1-tap approved; no legal jargon shown |
+| Policy pages (shipping, returns, privacy, terms, contact) are required for trust | Created Day 0 from merchant facts; Guardian blocks Publish if missing |
+| Product claims (pure silk, handloom, organic, branded, warranty) cause fraud complaints | Claims registry: every claim needs a merchant fact (§7.5); unsupported claims are dropped before approval |
+| Reviews and testimonials can be faked by AI | `proof` section shows **only real, merchant-approved** customer quotes; never generated |
+| Authenticity marks (handloom mark, silk mark, certifications) are valuable | Shown only when the merchant attaches proof; never inferred |
+| Brand names and logos are legally sensitive | Store never claims "authorised dealer" or uses third-party logos without a merchant fact |
+| Customers' phone and address are sensitive | Public pages never expose customer data; orders live in the workspace database |
+| Fake or scam stores damage trust in the whole segment | Verified owner phone (OTP), real address facts, visible owner contact on every page |
+| Consumer complaints go to the owner by WhatsApp or call | Contact is first-class; Concierge triage routes complaints to the merchant card immediately |
+| Fixed-price rules for some goods (medicines, books, packaged food MRP) | MRP is a record field; offers can never push price above MRP; code-enforced |
+| Food sellers need food-licence style declarations | Optional merchant fact shown in the footer only when provided |
+
+### 2.7 Seasonality and Local Calendar
+
+| Reality | Implication for the agent |
+| :--- | :--- |
+| Local festivals drive sales (Pongal, Tamil New Year, Aadi, Deepavali) | Festival agent prepares offers and banners ahead of time |
+| Other major sales moments: Navaratri and Golu, Karthigai Deepam, Vinayagar Chaturthi, Ayudha Pooja, Akshaya Tritiya, Valentine's, Christmas, Ramzan and Eid, school reopening | Calendar is data (not code): festival, date window, product-type affinity, tone; Marketer reads it |
+| Muhurtham and wedding seasons produce bulk textile and jewellery demand | Bridal and wedding sections can be proposed 30–45 days earlier from the calendar |
+| Agricultural seasons shape rural spend (harvest months) | Calendar entry per region; merchant may disable any festival |
+| Many festivals follow lunar dates that change every year | Dates are maintained as data with a yearly refresh; Marketer never computes them with a model |
+| Sales spike 1–2 weeks before a festival, then collapse | Proposals start ~14 days ahead; auto-expire the day after; banner and offer retire automatically |
+| Stock runs out fast during peak and is hard to restock | Stock badges and auto-hide at 0; "Low stock" proposal card before peak |
+| Merchants forget to remove old offers | Guardian removes expired offers and banners automatically (🟢 auto) |
+| Rain, strikes or local events change daily sales | Optional merchant "Closed today" or "Delayed delivery" 1-tap banner |
+
+### 2.8 Money, Margins and Cost Fear
+
+| Reality | Implication for the agent |
+| :--- | :--- |
 | Tight margins, fear of tech bills | Cost per store per month in rupees, not dollars (see §13) |
-| Mid-size businesses add staff and branches later | Same store scales to multiple categories, locations, staff roles without redesign |
+| Merchants distrust subscriptions with surprise charges | Plain price per month and a visible usage meter; no hidden per-order AI fees |
+| Pay-per-use fits low-volume months | Credits model (§13); a quiet month costs almost nothing |
+| Free options exist (WhatsApp Business, Instagram) | Show value: orders, repeat customers, hours saved; never feature-gate the basics |
+| Merchants rarely have an IT budget or a developer | The product replaces the developer; no "agency" or "setup fee" step |
+| Rupee-based thinking: ₹ per month, ₹ per order | Pricing, receipts and reports always in ₹ with Indian number grouping |
+| Time is the scarcest resource (shop open 10–12 hours a day) | Everything fits inside a 30-second gap: one card, one tap |
+
+### 2.9 What the Merchant Wants (Jobs to Be Done)
+
+| Reality | Implication for the agent |
+| :--- | :--- |
+| Wants customers to find the shop online without learning marketing | Channel agent publishes sitemap, structured data and feeds automatically (§12) |
+| Wants to show new stock to regular customers instantly | New product → 1-tap approve → WhatsApp share card |
+| Wants to stop answering the same price and stock questions all day | Concierge answers from the catalog; merchant sees only exceptions |
+| Wants orders written down correctly, not lost in chat history | Orders become records with an Inbox card; no manual notebooks |
+| Wants to know "what sold today" in one glance | Daily summary card: orders, revenue, cash, UPI, COD, low stock |
+| Wants help during festivals, not tools | Marketer proposes the whole festival kit; merchant taps once |
+| Wants to look professional next to big sellers | Design floor is Shopify-grade by default; no ugly "free template" feel |
+| Wants things done in Tamil, in the same words they use | Director and Concierge understand Tamil and Tanglish; replies are drafted in the customer's language |
+| Wants control without complexity | Approval cards are the only control surface; edits are optional |
+
+### 2.10 What Scares the Merchant (Fear Map)
+
+| Fear | Agent response |
+| :--- | :--- |
+| "I will break my website" | Every change is a revision with 1-tap Undo; the live site only changes on approval |
+| "AI will say something wrong about my products" | Claims guard, approval card, and the ⚫ Never rule in the Autonomy Ladder |
+| "My price will change by itself" | Price changes are 🔴 Merchant-only; no model or agent can touch money |
+| "Customers will cheat me, or I will cheat them by mistake" | Order Shield hints; merchant confirms every order; real payment references only |
+| "I do not understand English or computers" | Tamil first, voice first, zero jargon |
+| "It will cost too much" | Transparent rupee pricing and usage meter (§13) |
+| "I will need a developer again" | No code, theme or plugin surface exists; all maintenance is agent-owned |
+| "My data will be lost or sold" | Orders and customers stay in the merchant's own workspace; public pages show only public facts |
+| "It will stop working in the festival rush" | Static edge pages; ₹0 per visit; no AI call on a visit; failure falls back to the last-known-good release |
+
+### 2.11 Growth Stages (Same Store, No Rebuild)
+
+| Stage | Merchant Looks Like | What the Agent Adds |
+| :--- | :--- | :--- |
+| **Seed** | 1 person, 5–20 products, WhatsApp orders only | Store, WhatsApp order, UPI + COD, Tamil + English, festival kit |
+| **Steady** | 20–200 products, a few orders a day, a helper | Merchandiser autopilot, stock sync, Order Shield, daily summary |
+| **Growing** | 200–1,000 products, 2–3 staff, courier partner | Collections, filters, bulk enquiry path, staff roles, return handling |
+| **Multi-counter** | Shop + warehouse + online | Stock by location (commerce core), POS and storefront on one stock |
+| **Multi-branch** | 2–10 branches, owner plus managers | Workspace per branch, roles, one catalog with branch availability |
+| **Multi-domain** | Adds a second trade (e.g. sarees plus jewellery) | Second category on the same shared core via the Builder; no new platform |
 
 ### What the Merchant Never Sees
 

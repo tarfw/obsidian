@@ -4,25 +4,19 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   AppState,
-  Keyboard,
-  Modal,
   Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ActionInterfaceHost from '@/action-interfaces/ActionInterfaceHost';
 import { TarAvatar } from '@/components/TarAvatar';
 import { useWorkspace } from '@/components/WorkspaceProvider';
 import {
-  createOperationKey,
   HarnessRequestError,
-  harness,
   type HarnessAction,
   type HarnessInterfaceContract,
   type HarnessWorkspace,
@@ -117,13 +111,6 @@ type OpenAction = {
   title: string;
 };
 
-type AskSuggestion = {
-  action: string | null;
-  title: string | null;
-  confidence: number | null;
-  review: true;
-};
-
 interface FeedSection {
   key: string;
   title: string;
@@ -144,14 +131,8 @@ export default function NowScreen() {
   const [error, setError] = useState('');
 
   const [openAction, setOpenAction] = useState<OpenAction | null>(null);
-  const [askOpen, setAskOpen] = useState(false);
-  const [askDraft, setAskDraft] = useState('');
-  const [askSuggestion, setAskSuggestion] = useState<AskSuggestion | null>(null);
-  const [asking, setAsking] = useState(false);
-  const [askError, setAskError] = useState('');
 
   const activeRefresh = useRef<Promise<void> | null>(null);
-  const askInputRef = useRef<TextInput>(null);
   const lastRefresh = useRef(0);
   const lastWorkspaces = useRef(workspaces);
 
@@ -300,49 +281,6 @@ export default function NowScreen() {
     return result;
   }, [feed.next, feed.rows]);
 
-  const askTar = async () => {
-    const prompt = askDraft.trim();
-    if (!prompt || asking) return;
-    Keyboard.dismiss();
-    setAsking(true);
-    setAskError('');
-    setAskSuggestion(null);
-    try {
-      const suggestion = await harness.executeAction<AskSuggestion>(
-        current.slug,
-        'flow.suggest',
-        { prompt },
-        createOperationKey('flow.suggest'),
-      );
-      setAskSuggestion(suggestion);
-      setAskDraft('');
-    } catch (cause) {
-      setAskError(cause instanceof Error ? cause.message : 'Ask TAR could not respond. Try again.');
-    } finally {
-      setAsking(false);
-    }
-  };
-
-  const reviewSuggestion = async () => {
-    const suggestion = askSuggestion;
-    if (!suggestion?.action) return;
-    try {
-      const registry = await harness.workspaceRegistry(current.slug);
-      const action = registry.actions.find((candidate) => candidate.id === suggestion.action);
-      if (!action) throw new Error('This action is no longer available in this workspace.');
-      setAskOpen(false);
-      setOpenAction({
-        action,
-        interfaces: registry.interfaces,
-        scope: current.slug,
-        input: {},
-        title: suggestion.title || action.title,
-      });
-    } catch (cause) {
-      setAskError(cause instanceof Error ? cause.message : 'Could not open the suggested action.');
-    }
-  };
-
   return (
     <View style={[styles.page, { paddingTop: insets.top + 6 }]}>
       {/* Top Header Bar: Clean Left-Aligned Inbox Header */}
@@ -472,11 +410,7 @@ export default function NowScreen() {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Ask TAR"
-          onPress={() => {
-            setAskError('');
-            setAskSuggestion(null);
-            setAskOpen(true);
-          }}
+          onPress={() => router.push('/(home)/ask')}
           style={styles.askBar}
         >
           <View style={styles.askLead}>
@@ -486,82 +420,6 @@ export default function NowScreen() {
           <Ionicons name="arrow-forward" size={18} color={blue} />
         </Pressable>
       </View>
-
-
-      {/* Ask TAR Sheet Modal */}
-      <Modal
-        visible={askOpen}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setAskOpen(false)}
-        onShow={() => askInputRef.current?.focus()}
-      >
-        <KeyboardAvoidingView style={styles.overlay} behavior="height" automaticOffset>
-          <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom + 8, 24) }]}>
-            <View style={styles.sheetHead}>
-              <View style={styles.sheetTitleGroup}>
-                <TarAvatar size={28} />
-                <Text style={styles.sheetTitle}>Ask TAR</Text>
-              </View>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Close Ask TAR"
-                onPress={() => setAskOpen(false)}
-                style={styles.closeIcon}
-              >
-                <Ionicons name="close" size={22} color={muted} />
-              </Pressable>
-            </View>
-            <View style={styles.askComposer}>
-              <TextInput
-                ref={askInputRef}
-                accessibilityLabel="Ask TAR request"
-                multiline
-                value={askDraft}
-                onChangeText={setAskDraft}
-                placeholder="What do you want to do?"
-                placeholderTextColor={muted}
-                style={styles.askInput}
-              />
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Send request to TAR"
-                disabled={!askDraft.trim() || asking}
-                onPress={() => void askTar()}
-                style={[styles.send, (!askDraft.trim() || asking) && styles.sendDisabled]}
-              >
-                {asking ? (
-                  <ActivityIndicator color="#FFFFFF" size="small" />
-                ) : (
-                  <Ionicons name="arrow-up" size={20} color="#FFFFFF" />
-                )}
-              </Pressable>
-            </View>
-            {askError ? <Text style={styles.askError}>{askError}</Text> : null}
-            {askSuggestion ? (
-              <View style={styles.suggestion}>
-                <View style={styles.suggestionRow}>
-                  <TarAvatar size={20} />
-                  <Text style={styles.suggestionText}>
-                    {askSuggestion.action
-                      ? `Suggested: ${askSuggestion.title || 'Action'}`
-                      : 'No matching action. Try a more specific request.'}
-                  </Text>
-                </View>
-                {askSuggestion.action ? (
-                  <Pressable
-                    accessibilityRole="button"
-                    onPress={() => void reviewSuggestion()}
-                    style={styles.review}
-                  >
-                    <Text style={styles.reviewText}>Review action</Text>
-                  </Pressable>
-                ) : null}
-              </View>
-            ) : null}
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
 
       {/* Action Interface Host */}
       <ActionInterfaceHost
@@ -760,102 +618,5 @@ const styles = StyleSheet.create({
     color: muted,
     fontSize: 14,
     fontWeight: '500',
-  },
-  overlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0, 0, 0, 0.45)',
-  },
-  sheet: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 22,
-    borderTopRightRadius: 22,
-    padding: 20,
-    maxHeight: '78%',
-  },
-  sheetHead: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 14,
-  },
-  sheetTitleGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  sheetTitle: {
-    fontSize: 18,
-    color: ink,
-    fontWeight: '800',
-  },
-  closeIcon: {
-    width: 36,
-    height: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  askComposer: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#C9CED8',
-    borderRadius: 14,
-    backgroundColor: '#FFFFFF',
-  },
-  askInput: {
-    flex: 1,
-    minHeight: 48,
-    maxHeight: 120,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    color: ink,
-    fontSize: 15,
-    textAlignVertical: 'top',
-  },
-  send: {
-    width: 36,
-    height: 36,
-    margin: 6,
-    backgroundColor: blue,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sendDisabled: {
-    opacity: 0.4,
-  },
-  askError: {
-    color: '#B42318',
-    fontSize: 13,
-    marginTop: 10,
-  },
-  suggestion: {
-    marginTop: 14,
-    paddingTop: 12,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderColor: borderLine,
-  },
-  suggestionRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-  },
-  suggestionText: {
-    flex: 1,
-    color: ink,
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  review: {
-    minHeight: 40,
-    alignSelf: 'flex-start',
-    justifyContent: 'center',
-    marginTop: 8,
-  },
-  reviewText: {
-    color: blue,
-    fontSize: 14,
-    fontWeight: '700',
   },
 });

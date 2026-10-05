@@ -2,6 +2,7 @@ import type { Client, Transaction } from '@libsql/client/web';
 import { badRequest, conflict, notFound } from '../errors.ts';
 import { eventStatement, findReplay } from '../gateway/commit.ts';
 import type { AccessContext } from '../types.ts';
+import { detectProductVariants } from './variants.ts';
 
 type Data = Record<string, unknown>;
 type Row = { id: string; type: string; title: string; state: string; data: Data; version: number };
@@ -96,7 +97,7 @@ async function posting(db: Transaction, reference: string, lines: Data[], actor:
   return insert(db, 'posting', `Posting ${reference}`, 'posted', { reference, lines, debit, credit }, actor, at);
 }
 
-export async function executeCommerce(client: Client, context: AccessContext, action: string, input: Data, key: string, hash: string): Promise<Data> {
+export async function executeCommerce(client: Client, context: AccessContext, action: string, input: Data, key: string, hash: string, typesafeKey?: string): Promise<Data> {
   const db = await client.transaction('write');
   try {
     const replay = await findReplay(db, key, hash);
@@ -105,16 +106,159 @@ export async function executeCommerce(client: Client, context: AccessContext, ac
     let result: Data;
 
     if (action === 'catalog.item.save') {
-      const name = text(input.name); const sku = text(input.sku, 80); const id = text(input.id, 160);
+      const name = text(input.name);
+      const generatedSku = name ? name.toUpperCase().replace(/[^A-Z0-9]/g, '-').slice(0, 30) : '';
+      const sku = text(input.sku, 80) || generatedSku;
+      const id = text(input.id, 160);
       if (!name || !sku) throw badRequest('Item name and code are required.');
       const current = id ? await get(db, id, 'item') : null;
       const duplicate = await db.execute({ sql: "SELECT id FROM records WHERE type='item' AND json_extract(data,'$.sku')=? AND id!=? AND archived IS NULL", args: [sku, id] });
       if (duplicate.rows.length) throw conflict('Item code already belongs to another item.');
-      const unit = text(input.unit, 40) || 'each'; const tax = integer(input.tax ?? 0, 'Tax rate');
+      const unit = text(input.unit, 40) || 'each';
+      const tax = integer(input.tax ?? 0, 'Tax rate');
       if (tax > 10000) throw badRequest('Tax rate is invalid.');
       const state = status(input.status);
-      result = { item: current ? await revise(db, current, name, state, { ...current.data, sku, unit, tax }, at, integer(input.version, 'Version', 1))
-        : await insert(db, 'item', name, state, { sku, unit, tax }, actor, at) };
+
+      const category = text(input.category, 100);
+      const photoUrl = text(input.photoUrl, 500);
+      const price = input.price !== undefined && input.price !== '' ? integer(Number(input.price), 'Price') : undefined;
+      const mrp = input.mrp !== undefined && input.mrp !== '' ? integer(Number(input.mrp), 'MRP') : price;
+      const stockQty = input.stock !== undefined && input.stock !== '' ? integer(Number(input.stock), 'Initial stock') : undefined;
+
+      const itemData: Data = {
+        ...current?.data,
+        sku,
+        unit,
+        tax,
+        ...(category ? { category } : {}),
+        ...(photoUrl ? { photoUrl } : {}),
+        ...(price !== undefined ? { price } : {}),
+        ...(mrp !== undefined ? { mrp } : {}),
+      };
+
+      const savedItem = current
+        ? await revise(db, current, name, state, itemData, at, integer(input.version, 'Version', 1))
+        : await insert(db, 'item', name, state, itemData, actor, at);
+
+      const createdVariants: Data[] = [];
+      const createdPrices: Data[] = [];
+      const createdStocks: Data[] = [];
+
+      // 1. Process explicit variants if provided
+      if (Array.isArray(input.variants) && input.variants.length > 0) {
+        for (let i = 0; i < input.variants.length; i++) {
+          const varEntry = object(input.variants[i]);
+          const varOption = text(varEntry.option) || text(varEntry.name) || `Option ${i + 1}`;
+          const varName = text(varEntry.name) || `${name} (${varOption})`;
+          const varSku = text(varEntry.sku, 80) || `${sku}-${i + 1}`;
+          const varBarcode = text(varEntry.barcode, 80) || varSku;
+          const varPrice = varEntry.price !== undefined ? integer(Number(varEntry.price), 'Variant price') : (price ?? 0);
+          const varStock = varEntry.stock !== undefined ? integer(Number(varEntry.stock), 'Variant stock') : (stockQty ?? 0);
+          const varDim = text(varEntry.dimension) || 'option';
+
+          const varRecord = await insert(db, 'variant', varName, 'active', {
+            item: savedItem.id,
+            sku: varSku,
+            barcode: varBarcode,
+            attributes: { [varDim]: varOption },
+          }, actor, at);
+          createdVariants.push(varRecord);
+
+          if (varPrice > 0 || price !== undefined) {
+            const priceRecord = await insert(db, 'price', `${varName} price`, 'active', {
+              variant: varRecord.id,
+              amount: varPrice,
+              currency: 'INR',
+              channel: 'default',
+              starts: at,
+              ends: null,
+            }, actor, at);
+            createdPrices.push(priceRecord);
+          }
+
+          if (varStock > 0) {
+            const currentStock = await stock(db, varRecord.id, 'main', at, actor);
+            await setStock(db, currentStock, varStock, 0, at);
+            createdStocks.push({ variant: varRecord.id, onhand: varStock });
+          }
+        }
+      } else if (price !== undefined || stockQty !== undefined) {
+        // 2. Single item / default variant
+        const existingVar = await db.execute({ sql: "SELECT id FROM records WHERE type='variant' AND json_extract(data,'$.item')=? AND archived IS NULL LIMIT 1", args: [savedItem.id] });
+        if (!existingVar.rows[0]) {
+          const defaultVar = await insert(db, 'variant', `${name} Default`, 'active', {
+            item: savedItem.id,
+            sku,
+            barcode: sku,
+            attributes: { default: true },
+          }, actor, at);
+          createdVariants.push(defaultVar);
+
+          if (price !== undefined) {
+            const priceRecord = await insert(db, 'price', `${name} price`, 'active', {
+              variant: defaultVar.id,
+              amount: price,
+              currency: 'INR',
+              channel: 'default',
+              starts: at,
+              ends: null,
+            }, actor, at);
+            createdPrices.push(priceRecord);
+          }
+
+          if (stockQty !== undefined && stockQty > 0) {
+            const currentStock = await stock(db, defaultVar.id, 'main', at, actor);
+            await setStock(db, currentStock, stockQty, 0, at);
+            createdStocks.push({ variant: defaultVar.id, onhand: stockQty });
+          }
+        }
+      }
+
+      // 3. Sync atomically with pos.product so counter POS immediately indexes it
+      if (price !== undefined || stockQty !== undefined || category || photoUrl) {
+        const posPrice = price !== undefined ? price : 0;
+        const posMrp = mrp !== undefined ? mrp : posPrice;
+        const posStock = stockQty !== undefined ? stockQty : 0;
+        const posCategory = category || 'General';
+        const existingPos = await db.execute({
+          sql: "SELECT id, version FROM records WHERE type='pos.product' AND (json_extract(data,'$.item')=? OR json_extract(data,'$.sku')=?) AND archived IS NULL LIMIT 1",
+          args: [savedItem.id, sku],
+        });
+        const posData = {
+          item: savedItem.id,
+          title: name,
+          price: posPrice,
+          mrp: posMrp,
+          stock: posStock,
+          category: posCategory,
+          sku,
+          barcode: sku,
+          imageUrl: photoUrl || '',
+          tax,
+          unit,
+        };
+        if (existingPos.rows[0]) {
+          await db.execute({
+            sql: "UPDATE records SET title=?, data=?, version=version+1, updated=? WHERE id=?",
+            args: [name, JSON.stringify(posData), at, String(existingPos.rows[0].id)],
+          });
+        } else {
+          await insert(db, 'pos.product', name, 'active', posData, actor, at);
+        }
+      }
+
+      result = {
+        item: savedItem,
+        ...(createdVariants.length ? { variants: createdVariants } : {}),
+        ...(createdPrices.length ? { prices: createdPrices } : {}),
+        ...(createdStocks.length ? { stocks: createdStocks } : {}),
+      };
+    } else if (action === 'catalog.item.detect') {
+      const product = text(input.product);
+      const rawInput = text(input.input);
+      const trade = text(input.trade) || 'retail';
+      const detected = await detectProductVariants(typesafeKey, { product, input: rawInput, trade });
+      result = detected as unknown as Data;
     } else if (action === 'catalog.variant.save') {
       const item = await get(db, text(input.item, 160), 'item'); const name = text(input.name); const sku = text(input.sku, 80); const id = text(input.id, 160);
       if (item.state !== 'active') throw conflict('The item is archived.');

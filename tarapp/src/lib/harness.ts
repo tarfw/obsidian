@@ -40,6 +40,17 @@ export interface FlowMatchResult {
   model?: string;
   review: true;
 }
+export interface DetectedVariant {
+  name: string;
+  dimension: string;
+  option: string;
+  priceDelta?: number;
+}
+export interface VariantDetectionResult {
+  dimension: string;
+  variants: DetectedVariant[];
+  source: 'jev' | 'deterministic';
+}
 export interface TeamChatState {
   commands: { id: string; state: string; result: string | null; createdAt: number }[];
   connection: { provider: ChatProvider; name: string; joinUrl: string } | null;
@@ -126,13 +137,28 @@ async function request<T>(path: string, options: { method?: 'GET' | 'POST' | 'PU
 
 const registryCache = new Map<string, { actions: HarnessAction[]; interfaces: HarnessInterfaceContract[] }>();
 
-async function workspaceRegistry(slug: string, forceFresh = false) {
+const ITEM_CONTRACT: HarnessInterfaceContract = {
+  key: 'item',
+  version: 1,
+  title: 'Catalog item',
+  presentation: 'screen',
+  submitLabel: 'Save & Publish',
+};
+
+async function workspaceRegistry(slug: string, forceFresh = false): Promise<{ actions: HarnessAction[]; interfaces: HarnessInterfaceContract[] }> {
   if (!forceFresh && registryCache.has(slug)) {
     return registryCache.get(slug)!;
   }
   const result = await request<{ actions: HarnessAction[]; interfaces: HarnessInterfaceContract[] }>(workspacePath(slug, 'actions'));
-  registryCache.set(slug, result);
-  return result;
+  const actions = result.actions.map((act) =>
+    act.id === 'catalog.item.save' ? { ...act, interfaceKey: 'item' } : act
+  );
+  const interfaces = result.interfaces.some((it) => it.key === 'item')
+    ? result.interfaces
+    : [...result.interfaces, ITEM_CONTRACT];
+  const enhanced = { actions, interfaces };
+  registryCache.set(slug, enhanced);
+  return enhanced;
 }
 
 export function clearRegistryCache(slug?: string) {
@@ -146,7 +172,16 @@ export const harness = {
   posOverview: (slug: string) => request<{ settings: unknown | null }>(workspacePath(slug, 'pos/overview'), { missingRouteOk: true }),
   posProductContent: (slug: string, productId: string) => request<{ content: Record<string, unknown> }>(workspacePath(slug, `pos/products/${encodeURIComponent(productId)}/content`)),
   health: () => request<{ ok: boolean }>('/health'),
-  registry: () => request<{ actions: HarnessAction[]; interfaces: HarnessInterfaceContract[] }>('/v1/actions'),
+  registry: async (): Promise<{ actions: HarnessAction[]; interfaces: HarnessInterfaceContract[] }> => {
+    const result = await request<{ actions: HarnessAction[]; interfaces: HarnessInterfaceContract[] }>('/v1/actions');
+    const actions = result.actions.map((act) =>
+      act.id === 'catalog.item.save' ? { ...act, interfaceKey: 'item' } : act
+    );
+    const interfaces = result.interfaces.some((it) => it.key === 'item')
+      ? result.interfaces
+      : [...result.interfaces, ITEM_CONTRACT];
+    return { actions, interfaces };
+  },
   workspaceRegistry,
   workspaceTools: (slug: string) => request<HarnessTools>(workspacePath(slug, 'tools'), { missingRouteOk: true }),
   members: (slug: string) => request<{ members: HarnessMember[]; currentUserId: string }>(workspacePath(slug, 'members')),
@@ -155,7 +190,7 @@ export const harness = {
   beginChatLink: (slug: string, provider: ChatProvider, purpose: 'destination' | 'identity') => request<{ id: string; command: string; expiresAt: number }>(workspacePath(slug, 'team-chat/link'), { method: 'POST', body: { provider, purpose } }),
   confirmChatLink: (slug: string, id: string, joinUrl: string) => request(workspacePath(slug, 'team-chat/confirm'), { method: 'POST', body: { id, joinUrl } }),
   disconnectChat: (slug: string, destination: boolean) => request(workspacePath(slug, 'team-chat/disconnect'), { method: 'POST', body: { destination } }),
-  actions: () => request<{ actions: HarnessAction[]; interfaces: HarnessInterfaceContract[] }>('/v1/actions'),
+  actions: async () => harness.registry(),
   listWorkspaces: () => request<{ workspaces: HarnessWorkspace[] }>('/v1/workspaces'),
   holdContext: (scope: string, duration = 43_200_000, role?: string) => request<{ context: { mode: 'hold'; scope: string; role: string | null; expires: number } }>('/v1/context', { method: 'PUT', body: { mode: 'hold', scope, duration, role } }),
   resumeContext: () => request<{ context: { mode: 'auto'; scope: null; expires: null } }>('/v1/context', { method: 'PUT', body: { mode: 'auto' } }),
@@ -189,6 +224,8 @@ export const harness = {
   consents: (slug: string, id: string) => request<{ consents: Consent[] }>(workspacePath(slug, `records/${encodeURIComponent(id)}/consents`)),
   flows: (slug: string) => request<{ books: HarnessFlowBook[]; runs: HarnessFlowRun[] }>(workspacePath(slug, 'flows')),
   flowRun: (slug: string, id: string) => request<{ run: HarnessFlowRun }>(workspacePath(slug, `runs/${encodeURIComponent(id)}`)),
+  detectVariants: (slug: string, input: { product: string; input: string; trade?: string }) =>
+    request<VariantDetectionResult>(workspacePath(slug, 'actions/catalog.item.detect'), { method: 'POST', body: input, key: createOperationKey('catalog.item.detect') }),
   executeAction: <T extends Record<string, unknown> = Record<string, unknown>>(slug: string, actionId: string, input: Record<string, unknown>, operationKey: string) => request<T>(workspacePath(slug, `actions/${encodeURIComponent(actionId)}`), { method: 'POST', body: input, key: operationKey }),
   createRecord: (slug: string, input: { type: string; title: string; data?: Record<string, unknown> }) => request<{ record: HarnessRecord }>(workspacePath(slug, 'actions/record.create'), { method: 'POST', body: input, key: createOperationKey('record.create') }),
   createTask: (slug: string, title: string) => request<{ record: HarnessRecord }>(workspacePath(slug, 'actions/task.create'), { method: 'POST', body: { title }, key: createOperationKey('task.create') }),

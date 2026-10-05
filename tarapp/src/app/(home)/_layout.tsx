@@ -7,6 +7,7 @@ export default function HomeLayout() {
     <Stack screenOptions={{ contentStyle: { backgroundColor: '#FFFFFF' }, animation: 'slide_from_right' }}>
       <Stack.Screen name="now" options={{ headerShown: false }} />
       <Stack.Screen name="tools" options={{ headerShown: false }} />
+      <Stack.Screen name="ask" options={{ headerShown: false, animation: 'slide_from_bottom' }} />
       <Stack.Screen name="records" options={{ headerShown: false }} />
       <Stack.Screen name="routines" options={{ headerShown: false }} />
       <Stack.Screen name="open/[source]/[id]" options={{ headerShown: false }} />

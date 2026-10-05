@@ -117,6 +117,7 @@ export async function readWorkspaceTools(client: Client, access: AccessContext, 
     const action = findAction(tool.action);
     if (tool.module !== 'core' && !state.enabled[tool.module]) return false;
     if (tool.personal && access.workspace.mode !== 'personal') return false;
+    if (access.workspace.mode === 'personal' && ['members', 'telegram', 'whatsapp', 'inbox', 'chat'].includes(tool.id)) return false;
     if (tool.action === 'web.search' && !providers.search) return false;
     if (Boolean(action) && !interfaceCatalog.some((item) => item.key === action?.interfaceKey)) return false;
 

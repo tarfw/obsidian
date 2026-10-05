@@ -22,6 +22,7 @@ import {
   type HarnessWorkspace,
 } from '@/lib/harness';
 import type { ActionInterfaceProps } from './types';
+import ItemInterface from '@/item/ItemInterface';
 
 function initialValues(props: ActionInterfaceProps): Record<string, string> {
   return Object.fromEntries(
@@ -52,6 +53,9 @@ type SearchSource = { title: string; url: string; snippet: string; date: string 
 
 export default function ActionFormInterface(props: ActionInterfaceProps) {
   if (!props.visible) return null;
+  if (props.action.id === 'catalog.item.save' || props.action.interfaceKey === 'item') {
+    return <ItemInterface {...props} />;
+  }
   return <ActionForm {...props} />;
 }
 

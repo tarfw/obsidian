@@ -26,7 +26,11 @@ describe('workspace Tools eligibility', () => {
     const initial = await readWorkspaceTools(client, owner, { search: false });
     expect(initial.tools.map((tool) => tool.id)).toContain('human');
     expect(initial.tools.map((tool) => tool.id)).toContain('flow');
-    expect(initial.tools.map((tool) => tool.id)).toContain('chat');
+    expect(initial.tools.map((tool) => tool.id)).toContain('contact');
+    expect(initial.tools.map((tool) => tool.id)).not.toContain('chat');
+    expect(initial.tools.map((tool) => tool.id)).not.toContain('members');
+    expect(initial.tools.map((tool) => tool.id)).not.toContain('inbox');
+    expect(initial.tools.map((tool) => tool.id)).not.toContain('telegram');
     expect(initial.tools.map((tool) => tool.id)).not.toContain('pos');
     expect(initial.tools.map((tool) => tool.id)).not.toContain('register');
     expect(initial.tools.map((tool) => tool.id)).not.toContain('site');
@@ -44,9 +48,13 @@ describe('workspace Tools eligibility', () => {
 
   it('verifies 18 canonical tools catalog completeness and dual-track whatsapp model', async () => {
     const client = await workspace();
-    await Effect.runPromise(executeGateway(client, owner, { actionId: 'capability.save', idempotencyKey: 'enable-pos', input: { module: 'pos', enabled: true, baseVersion: 0 } }));
-    await Effect.runPromise(executeGateway(client, owner, { actionId: 'capability.save', idempotencyKey: 'enable-site', input: { module: 'site', enabled: true, baseVersion: 1 } }));
-    const result = await readWorkspaceTools(client, owner, { search: false });
+    const workContext: AccessContext = {
+      ...owner,
+      workspace: { id: 'work', name: 'Work Shop', slug: 'work', mode: 'work', databaseName: 'work', databaseHost: 'test', state: 'active' },
+    };
+    await Effect.runPromise(executeGateway(client, workContext, { actionId: 'capability.save', idempotencyKey: 'enable-pos', input: { module: 'pos', enabled: true, baseVersion: 0 } }));
+    await Effect.runPromise(executeGateway(client, workContext, { actionId: 'capability.save', idempotencyKey: 'enable-site', input: { module: 'site', enabled: true, baseVersion: 1 } }));
+    const result = await readWorkspaceTools(client, workContext, { search: false });
 
     const toolIds = result.tools.map((tool) => tool.id);
     const expected = ['pos', 'register', 'item', 'inventory', 'order', 'invoice', 'payment', 'expense', 'purchase', 'members', 'contact', 'human', 'flow', 'site', 'inbox', 'chat', 'whatsapp', 'telegram'];

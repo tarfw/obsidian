@@ -5,6 +5,7 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ActionInterfaceHost from '@/action-interfaces/ActionInterfaceHost';
+import { ITEM_INTERFACE_CONTRACT } from '@/action-interfaces/registry';
 import SiteScreen from '@/components/site';
 import WorkspaceTeam from '@/components/WorkspaceTeam';
 import { useWorkspace } from '@/components/WorkspaceProvider';
@@ -43,10 +44,7 @@ const WORKSPACE_INK_COLORS = [
 
 type WorkspaceBadge = { bg: string; color: string; initial: string };
 
-function getWorkspaceBadge(name: string, isPersonal?: boolean): WorkspaceBadge {
-  if (isPersonal) {
-    return { bg: '#EBF2FF', color: '#2B50A0', initial: (name || 'P').trim().charAt(0).toUpperCase() || 'P' };
-  }
+function getWorkspaceBadge(name: string): WorkspaceBadge {
   const initial = (name || 'W').trim().charAt(0).toUpperCase() || 'W';
   const seed = (name || 'w')
     .split('')
@@ -62,12 +60,19 @@ type OpenAction = { action: HarnessAction; interfaces: HarnessInterfaceContract[
 type FlowPicker = { scope: string; workspace: string; action: HarnessAction; interfaces: HarnessInterfaceContract[]; books: HarnessFlowBook[]; runs: HarnessFlowRun[] };
 
 function sanitizeTools(snapshot: HarnessTools): HarnessTools {
-  return snapshot;
+  return {
+    ...snapshot,
+    tools: snapshot.tools.filter((tool) => {
+      if (tool.id === 'inbox') return false;
+      if (tool.id === 'flow' || tool.kind === 'flow') return false;
+      return true;
+    }),
+  };
 }
 
 const toolSnapshotCache = new Map<string, HarnessTools>();
 const cacheKey = (workspace: HarnessWorkspace) => `${workspace.id}:${workspace.role}:${[...(workspace.roles?.length ? workspace.roles : [workspace.workRole || workspace.role])].sort().join(',')}`;
-const storedCacheKey = (userId: string, workspace: HarnessWorkspace) => `tar_tools_v5_${userId.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 36)}_${workspace.id.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 48)}`;
+const storedCacheKey = (userId: string, workspace: HarnessWorkspace) => `tar_tools_v8_${userId.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 36)}_${workspace.id.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 48)}`;
 const isToolsSnapshot = (value: unknown): value is HarnessTools => Boolean(value && typeof value === 'object'
   && Array.isArray((value as HarnessTools).tools) && Array.isArray((value as HarnessTools).modules)
   && typeof (value as HarnessTools).role === 'string' && Number.isFinite((value as HarnessTools).version));
@@ -82,14 +87,14 @@ export default function ToolsScreen() {
   const params = useLocalSearchParams<{ source?: string }>();
   const insets = useSafeAreaInsets();
   const { workspaces, current, createWorkspace } = useWorkspace();
-  const active = useMemo(() => workspaces.filter((workspace) => workspace.state === 'active')
+  const active = useMemo(() => workspaces.filter((workspace) => workspace.state === 'active' && workspace.mode !== 'personal')
     .sort((a, b) => Number(b.slug === current.slug) - Number(a.slug === current.slug)), [workspaces, current.slug]);
   const [sources, setSources] = useState<Record<string, HarnessTools>>({});
   const [workspaceFlows, setWorkspaceFlows] = useState<Record<string, { books: HarnessFlowBook[]; runs: HarnessFlowRun[] }>>({});
   const [loadedScopes, setLoadedScopes] = useState<Record<string, boolean>>({});
   const [failed, setFailed] = useState<string[]>([]);
   const [page, setPage] = useState<Page>('home');
-  const [selected, setSelected] = useState(params.source || 'all');
+  const [selected, setSelected] = useState(() => (params.source && params.source !== 'personal' ? params.source : 'all'));
   const [flowPicker, setFlowPicker] = useState<FlowPicker | null>(null);
   const [backFromFlow, setBackFromFlow] = useState<Page>('home');
   const [busy, setBusy] = useState('');
@@ -207,6 +212,28 @@ export default function ToolsScreen() {
       const available = sources[tool.scope] || (await readTools(workspace));
       const fresh = available.tools.find((item) => item.id === tool.id) || tool;
       const action = registry.actions.find((item) => item.id === fresh.action);
+
+      if (tool.id === 'item' || fresh.action === 'catalog.item.save') {
+        const itemAction: HarnessAction = action
+          ? { ...action, interfaceKey: 'item' }
+          : {
+              id: 'catalog.item.save',
+              version: 1,
+              title: fresh.title || 'Products',
+              description: 'Add/edit products, photos, variants, units, prices',
+              type: 'app',
+              interfaceKey: 'item',
+              fields: [],
+              output: ['item', 'variant', 'price', 'stock'],
+              roles: ['owner', 'admin'],
+              effects: ['record_create'],
+            };
+        const contracts = registry.interfaces.some((item) => item.key === 'item')
+          ? registry.interfaces
+          : [...registry.interfaces, ITEM_INTERFACE_CONTRACT];
+        setOpenAction({ action: itemAction, interfaces: contracts, scope: tool.scope, input: fresh.input || {}, title: fresh.title });
+        return;
+      }
 
       if (fresh && action && registry.interfaces.some((item) => item.key === action.interfaceKey)) {
         setOpenAction({ action, interfaces: registry.interfaces, scope: tool.scope, input: fresh.input || {}, title: fresh.title });
@@ -330,7 +357,7 @@ export default function ToolsScreen() {
     {page === 'home' ? <>
       <Pressable accessibilityRole="button" accessibilityLabel="Choose workspace for tools" onPress={() => setPage('workspaces')} style={styles.scopeRow}>
         <View style={styles.scopeCopy}>
-          <Text style={styles.scopeName}>{selected === 'all' ? 'All workspaces' : selectedWorkspace?.name || current.name}</Text>
+          <Text style={styles.scopeName}>{selected === 'all' ? (active.length > 1 ? 'All workspaces' : active[0]?.name || 'Workspaces') : selectedWorkspace?.name || active[0]?.name || 'Workspace'}</Text>
           {selected !== 'all' ? (
             <Text style={styles.scopeRole}>
               {sources[selected]?.role || selectedWorkspace?.workRole || selectedWorkspace?.role || 'Active workspace'}
@@ -343,13 +370,17 @@ export default function ToolsScreen() {
         {pending && !chosen.some((w) => sources[w.slug]) ? <ActivityIndicator color={blue} style={styles.loading} /> : <>
           {failed.length ? <Pressable accessibilityRole="button" onPress={() => void load()} style={styles.notice}><Text style={styles.noticeText}>Could not load {failed.join(', ')}. Retry</Text><Ionicons name="arrow-forward" size={17} color={blue} /></Pressable> : null}
           {workspaceSections.map((section) => {
-            const badge = getWorkspaceBadge(section.workspace.name, section.workspace.mode === 'personal');
+            const badge = getWorkspaceBadge(section.workspace.name);
             const showHeader = selected === 'all' || chosen.length > 1;
             const role = sources[section.workspace.slug]?.role || section.workspace.workRole || section.workspace.role;
             const flows = workspaceFlows[section.workspace.slug] || { books: [], runs: [] };
             const activeRuns = flows.runs.filter((run) => run.state !== 'completed');
             const books = flows.books;
-            const tools = sources[section.workspace.slug]?.tools || [];
+            const tools = (sources[section.workspace.slug]?.tools || []).filter((tool) => {
+              if (tool.id === 'inbox') return false;
+              if (tool.id === 'flow' || tool.kind === 'flow') return false;
+              return true;
+            });
 
             return (
               <View key={section.workspace.slug} style={styles.workspaceSection}>
@@ -362,7 +393,7 @@ export default function ToolsScreen() {
                       <Text style={styles.workspaceCardTitle} numberOfLines={1}>
                         {section.workspace.name}
                       </Text>
-                      {section.workspace.mode !== 'personal' && role ? (
+                      {role ? (
                         <Text style={styles.workspaceCardRole} numberOfLines={1}>
                           {role}
                         </Text>
@@ -444,7 +475,9 @@ export default function ToolsScreen() {
               </View>
             );
           })}
-          {!chosen.some((w) => (sources[w.slug]?.tools || []).length > 0) && !failed.length && !pending ? (
+          {active.length === 0 ? (
+            <Empty title="No business workspaces" detail="Join or create a work workspace to access commercial tools." />
+          ) : !chosen.some((w) => (sources[w.slug]?.tools || []).length > 0) && !failed.length && !pending ? (
             <Empty title="No tools available" detail="Try another workspace." />
           ) : null}
           {pending && chosen.some((w) => sources[w.slug]) ? (
@@ -457,30 +490,15 @@ export default function ToolsScreen() {
     {page === 'workspaces' ? <ScrollView style={styles.scroll} contentContainerStyle={[styles.content, { paddingBottom: bottom }]}>
       <Row icon="layers-outline" title="All workspaces" onPress={() => { chooseWorkspace('all'); setPage('home'); }} selected={selected === 'all'} />
 
-      {active.filter((w) => w.mode !== 'personal').length > 0 ? (
+      {active.length > 0 ? (
         <View style={styles.sectionBlock}>
-          <Text style={styles.sectionHeading}>WORK WORKSPACES</Text>
-          {active.filter((w) => w.mode !== 'personal').map((workspace) => (
+          <Text style={styles.sectionHeading}>WORKSPACES</Text>
+          {active.map((workspace) => (
             <Row
               key={workspace.slug}
               icon="business-outline"
               title={workspace.name}
               detail={sources[workspace.slug]?.role || workspace.workRole || workspace.role}
-              onPress={() => { chooseWorkspace(workspace.slug); setPage('home'); }}
-              selected={selected === workspace.slug}
-            />
-          ))}
-        </View>
-      ) : null}
-
-      {active.filter((w) => w.mode === 'personal').length > 0 ? (
-        <View style={styles.sectionBlock}>
-          <Text style={styles.sectionHeading}>PERSONAL</Text>
-          {active.filter((w) => w.mode === 'personal').map((workspace) => (
-            <Row
-              key={workspace.slug}
-              icon="person-outline"
-              title={workspace.name}
               onPress={() => { chooseWorkspace(workspace.slug); setPage('home'); }}
               selected={selected === workspace.slug}
             />

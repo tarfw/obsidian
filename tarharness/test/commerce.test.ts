@@ -101,4 +101,47 @@ describe('commerce core', { timeout: 60000 }, () => {
     await expect(run('refund.record', { payment: second.id, amount: 1000, reason: 'Return', provider: 'bank', reference: 'r-1' })).rejects.toThrow('already recorded');
     await expect(run('payment.record', { invoice: invoice.id, amount: 1, method: 'cash' })).rejects.toThrow('open invoice balance');
   });
+
+  it('creates product bundle with variants, price, stock, and pos.product sync atomically', async () => {
+    const { client, run } = await fixture();
+    const result = await run('catalog.item.save', {
+      name: 'Semparuthi Pattu Selai',
+      sku: 'SEMP-PATTU',
+      category: 'Kaithari Pattu Selaigal',
+      price: 820000,
+      mrp: 950000,
+      stock: 12,
+      tax: 500,
+      photoUrl: 'https://example.com/pattu.jpg',
+      variants: [
+        { name: 'Semparuthi Pattu Selai (4-Muzham)', option: '4-Muzham', dimension: 'length', price: 450000, stock: 5 },
+        { name: 'Semparuthi Pattu Selai (8-Muzham)', option: '8-Muzham', dimension: 'length', price: 820000, stock: 7 },
+      ],
+    });
+    const item = result.item as { id: string; title: string; data: { sku: string; category: string; price: number } };
+    expect(item.title).toBe('Semparuthi Pattu Selai');
+    expect(item.data.category).toBe('Kaithari Pattu Selaigal');
+    expect(item.data.price).toBe(820000);
+
+    // Verify variants created
+    const variants = await client.execute({ sql: "SELECT * FROM records WHERE type='variant' AND json_extract(data,'$.item')=?", args: [item.id] });
+    expect(variants.rows).toHaveLength(2);
+
+    // Verify pos.product sync
+    const pos = await client.execute({ sql: "SELECT * FROM records WHERE type='pos.product' AND (json_extract(data,'$.item')=? OR json_extract(data,'$.sku')=?)", args: [item.id, 'SEMP-PATTU'] });
+    expect(pos.rows).toHaveLength(1);
+    const posData = JSON.parse(String(pos.rows[0].data));
+    expect(posData.title).toBe('Semparuthi Pattu Selai');
+    expect(posData.price).toBe(820000);
+    expect(posData.stock).toBe(12);
+
+    // Verify variant detection
+    const detected = await run('catalog.item.detect', {
+      product: 'Semparuthi Pattu Selai',
+      input: '4-Muzham, 8-Muzham',
+      trade: 'textiles',
+    });
+    expect(detected.dimension).toBe('length');
+    expect(detected.variants).toHaveLength(2);
+  });
 });

@@ -27,7 +27,9 @@ import { resolveContext, routineFromRecord } from './space/context.ts';
 import { buildSpaceView, readInboxSource } from './space/view.ts';
 import { authorityKey, ensureNowSchema, projectNow, readNow, replaceSource, retractMissing, retractSource } from './inbox/now.ts';
 import { nextInTie } from './inbox/rank.ts';
-import { suggestCapabilities, suggestMember } from './brain/workspace-ai.ts';
+import { evaluateMemberAccess, suggestCapabilities, suggestMember, type MemberAccessResult, type ToolAccessEvaluation } from './brain/workspace-ai.ts';
+import { matchFlowSteps, type FlowMatchResult, type FlowStepMatch } from './brain/jev.ts';
+import { canonicalTools } from './registry/tools.ts';
 export { FlowWorkflow } from './flows/workflow.ts';
 
 type RuntimeEnv = Env & ChannelEnv & { readonly TURSO_PLATFORM_TOKEN?: string; readonly TINYFISH_API_KEY?: string; readonly TYPESAFE_API_KEY?: string; readonly GROQ_API_KEY?: string; readonly PEXELS_API_KEY?: string; readonly SITE_BASE_DOMAIN?: string; readonly SITE_WORKER_ORIGIN?: string; readonly SITE_MODEL?: string };
@@ -439,18 +441,240 @@ async function handle(request: Request, env: RuntimeEnv, ctx: ExecutionContext):
   if (!match) throw notFound('Route not found.');
   const slug = match[1]; const nested = match[2] || '';
   const { access: current } = await access(request, env, slug);
-  if (request.method === 'GET' && nested === 'members') return response({ members: await listMembers(env.CONTROL, current), currentUserId: current.identity.id });
+  if (request.method === 'GET' && nested === 'members') {
+    const roster = await listMembers(env.CONTROL, current);
+    const enriched = await withWorkspace(env, current, async (client) => {
+      try {
+        const partyRows = await client.execute("SELECT id, title, data FROM records WHERE type='party' AND archived IS NULL");
+        const partyMap = new Map<string, { brief?: string; access?: string[] }>();
+        for (const row of partyRows.rows) {
+          try {
+            const parsed = JSON.parse(String(row.data));
+            const brief = typeof parsed.brief === 'string' ? parsed.brief : undefined;
+            const access = Array.isArray(parsed.access) ? parsed.access.map(String) : undefined;
+            const entry = { brief, access };
+            if (typeof parsed.email === 'string') partyMap.set(parsed.email.toLowerCase(), entry);
+            if (typeof parsed.userId === 'string') partyMap.set(parsed.userId, entry);
+            if (typeof row.title === 'string' && row.title.includes('@')) partyMap.set(row.title.toLowerCase(), entry);
+            partyMap.set(String(row.id), entry);
+          } catch { /* ignore */ }
+        }
+        return roster.map((raw) => {
+          const item = raw as Record<string, unknown>;
+          const party = (item.id ? partyMap.get(String(item.id)) : undefined) || (typeof item.email === 'string' ? partyMap.get(item.email.toLowerCase()) : undefined);
+          return {
+            ...item,
+            ...(party?.brief ? { brief: party.brief } : {}),
+            ...(party?.access ? { access: party.access } : {}),
+          };
+        });
+      } catch {
+        return roster;
+      }
+    });
+    return response({ members: enriched, currentUserId: current.identity.id });
+  }
   if (request.method === 'POST' && nested === 'ai/member-suggest') {
     const body = await Effect.runPromise(parseJson(request));
     const duties = typeof body.duties === 'string' ? body.duties : '';
     return response(await suggestMember(env.TYPESAFE_API_KEY, duties));
   }
+  if (request.method === 'POST' && nested === 'ai/member-access') {
+    const body = await Effect.runPromise(parseJson(request));
+    const brief = typeof body.brief === 'string' ? body.brief : '';
+    let cachedResult: MemberAccessResult | null = null;
+    if (brief.trim()) {
+      try {
+        await withWorkspace(env, current, async (client) => {
+          const cached = await client.execute({
+            sql: "SELECT answers, model FROM assessments WHERE kind='access' AND evidence=? AND expires>? ORDER BY created DESC LIMIT 1",
+            args: [brief.trim(), Date.now()],
+          });
+          if (cached.rows.length > 0) {
+            const evals = JSON.parse(String(cached.rows[0].answers)) as ToolAccessEvaluation[];
+            const suggestedAccess = evals.filter((item) => item.on).map((item) => item.id);
+            cachedResult = {
+              brief: brief.trim(),
+              evaluations: evals,
+              suggestedAccess,
+              model: String(cached.rows[0].model),
+              review: true,
+            };
+          }
+        });
+      } catch { /* proceed */ }
+    }
+    if (cachedResult) return response(cachedResult);
+    const result = await evaluateMemberAccess(env.TYPESAFE_API_KEY, brief, canonicalTools);
+    ctx.waitUntil(withWorkspace(env, current, async (client) => {
+      try {
+        await client.execute({
+          sql: `INSERT INTO assessments(id, kind, evidence, questions, answers, model, expires, created)
+                VALUES(?, 'access', ?, ?, ?, ?, ?, ?)`,
+          args: [
+            crypto.randomUUID(),
+            brief.trim(),
+            JSON.stringify(canonicalTools.map((t) => ({ id: t.id, description: t.description }))),
+            JSON.stringify(result.evaluations),
+            result.model || 'heuristic',
+            Date.now() + 86400000,
+            Date.now(),
+          ],
+        });
+      } catch (err) {
+        console.error(JSON.stringify({ event: 'assessment.cache.failed', error: String(err) }));
+      }
+    }));
+    return response(result);
+  }
+  if (request.method === 'POST' && nested === 'ai/flow-match') {
+    const body = await Effect.runPromise(parseJson(request));
+    let lines: string[] = [];
+    if (Array.isArray(body.steps)) lines = body.steps.map(String);
+    else if (Array.isArray(body.lines)) lines = body.lines.map(String);
+    else if (typeof body.text === 'string') lines = body.text.split('\n');
+    lines = lines.map((l) => l.trim()).filter((l) => l.length > 0);
+    const evidenceKey = lines.join('\n');
+    let cachedFlowResult: FlowMatchResult | null = null;
+    if (lines.length > 0) {
+      try {
+        await withWorkspace(env, current, async (client) => {
+          const cached = await client.execute({
+            sql: "SELECT answers, model FROM assessments WHERE kind='flow' AND evidence=? AND expires>? ORDER BY created DESC LIMIT 1",
+            args: [evidenceKey, Date.now()],
+          });
+          if (cached.rows.length > 0) {
+            const steps = JSON.parse(String(cached.rows[0].answers)) as FlowStepMatch[];
+            cachedFlowResult = {
+              steps,
+              model: String(cached.rows[0].model),
+              review: true,
+            };
+          }
+        });
+      } catch { /* proceed */ }
+    }
+    if (cachedFlowResult) return response(cachedFlowResult);
+    const result = await matchFlowSteps(env.TYPESAFE_API_KEY, lines, canonicalTools);
+    ctx.waitUntil(withWorkspace(env, current, async (client) => {
+      try {
+        await client.execute({
+          sql: `INSERT INTO assessments(id, kind, evidence, questions, answers, model, expires, created)
+                VALUES(?, 'flow', ?, ?, ?, ?, ?, ?)`,
+          args: [
+            crypto.randomUUID(),
+            evidenceKey,
+            JSON.stringify(lines),
+            JSON.stringify(result.steps),
+            result.model || 'heuristic',
+            Date.now() + 86400000,
+            Date.now(),
+          ],
+        });
+      } catch (err) {
+        console.error(JSON.stringify({ event: 'assessment.cache.failed', error: String(err) }));
+      }
+    }));
+    return response(result);
+  }
   if (request.method === 'POST' && nested === 'members') {
-    return response({ invitation: await inviteMember(env.CONTROL, current, await Effect.runPromise(parseJson(request))) }, 201);
+    const body = await Effect.runPromise(parseJson(request));
+    const invitation = await inviteMember(env.CONTROL, current, body);
+    if (body.brief || (Array.isArray(body.access) && body.access.length > 0)) {
+      await withWorkspace(env, current, async (client) => {
+        try {
+          const email = String(body.email || '').trim().toLowerCase();
+          const accessArr = Array.isArray(body.access) ? body.access.map(String) : [];
+          const briefStr = typeof body.brief === 'string' ? body.brief : '';
+          const existing = await client.execute({
+            sql: "SELECT id FROM records WHERE type='party' AND (title=? OR json_extract(data, '$.email')=?) AND archived IS NULL LIMIT 1",
+            args: [email, email],
+          });
+          const stamp = Date.now();
+          if (existing.rows.length > 0) {
+            const partyId = String(existing.rows[0].id);
+            await client.execute({
+              sql: "UPDATE records SET data=?, version=version+1, updated=? WHERE id=?",
+              args: [
+                JSON.stringify({ kind: 'member', email, role: body.role || 'member', workrole: body.workRole || 'general', brief: briefStr, access: accessArr }),
+                stamp,
+                partyId,
+              ],
+            });
+          } else {
+            const partyId = 'party_' + crypto.randomUUID().replace(/-/g, '').slice(0, 16);
+            await client.execute({
+              sql: `INSERT INTO records(id, type, title, state, data, owner, assignee, due, version, created, updated)
+                    VALUES(?, 'party', ?, 'active', ?, ?, NULL, NULL, 1, ?, ?)`,
+              args: [
+                partyId,
+                email,
+                JSON.stringify({ kind: 'member', email, role: body.role || 'member', workrole: body.workRole || 'general', brief: briefStr, access: accessArr }),
+                current.identity.id,
+                stamp,
+                stamp,
+              ],
+            });
+          }
+        } catch (err) {
+          console.error(JSON.stringify({ event: 'party.save.failed', error: String(err) }));
+        }
+      });
+    }
+    return response({ invitation }, 201);
   }
   if (request.method === 'PUT' && nested.startsWith('members/')) {
     const user = decodeURIComponent(nested.slice(8));
-    const result = await updateMember(env.CONTROL, current, user, await Effect.runPromise(parseJson(request)));
+    const body = await Effect.runPromise(parseJson(request));
+    const result = await updateMember(env.CONTROL, current, user, body);
+    if (body.brief !== undefined || body.access !== undefined) {
+      await withWorkspace(env, current, async (client) => {
+        try {
+          const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
+          const partyRows = await client.execute({
+            sql: `SELECT id, data, version FROM records WHERE type='party' AND (
+              id=? OR owner=? OR json_extract(data, '$.userId')=?
+              ${email ? "OR lower(title)=? OR json_extract(data, '$.email')=?" : ''}
+            ) AND archived IS NULL LIMIT 1`,
+            args: email ? [user, user, user, email, email] : [user, user, user],
+          });
+          const accessArr = Array.isArray(body.access) ? body.access.map(String) : [];
+          const briefStr = typeof body.brief === 'string' ? body.brief : '';
+          const stamp = Date.now();
+          if (partyRows.rows.length > 0) {
+            const row = partyRows.rows[0];
+            const prevData = JSON.parse(String(row.data));
+            const nextData = {
+              ...prevData,
+              brief: briefStr,
+              access: accessArr,
+              workrole: body.workRole || prevData.workrole,
+              role: body.role || prevData.role,
+              ...(email ? { email } : {}),
+            };
+            await client.execute({
+              sql: "UPDATE records SET data=?, version=version+1, updated=? WHERE id=?",
+              args: [JSON.stringify(nextData), stamp, String(row.id)],
+            });
+          } else {
+            await client.execute({
+              sql: `INSERT INTO records(id, type, title, state, data, owner, assignee, due, version, created, updated)
+                    VALUES(?, 'party', ?, 'active', ?, ?, NULL, NULL, 1, ?, ?)`,
+              args: [
+                user,
+                email || user,
+                JSON.stringify({ kind: 'member', userId: user, email, role: body.role || 'member', workrole: body.workRole || 'general', brief: briefStr, access: accessArr }),
+                user,
+                stamp,
+                stamp,
+              ],
+            });
+          }
+        } catch (err) {
+          console.error(JSON.stringify({ event: 'party.update.failed', error: String(err) }));
+        }
+      });
+    }
     ctx.waitUntil(syncMemberInbox(env, current.workspace.id, user).catch((error) => console.error(JSON.stringify({ event: 'inbox.member.sync.failed', error: error instanceof Error ? error.message.slice(0, 300) : String(error).slice(0, 300) }))));
     return response(result);
   }

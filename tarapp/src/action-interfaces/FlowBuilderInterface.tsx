@@ -1,190 +1,673 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as Crypto from 'expo-crypto';
-import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Modal, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { createOperationKey, harness, type HarnessAction, type HarnessMember } from '@/lib/harness';
+import { createOperationKey, harness, type FlowStepMatch } from '@/lib/harness';
 import type { ActionInterfaceProps } from './types';
 
-type DraftStep = { id: string; auto: boolean; role: string; input: Record<string, string> };
+const READY_FLOWS = [
+  {
+    name: 'Closing the shop',
+    steps: [
+      'Count the cash drawer',
+      'Check the stock',
+      'Send the day report to owner',
+      'Lock the shop',
+    ],
+  },
+  {
+    name: 'Opening the shop',
+    steps: [
+      'Unlock the shop',
+      'Open the cash drawer',
+      'Check opening stock',
+      'Start the register',
+    ],
+  },
+  {
+    name: 'New order',
+    steps: [
+      'Order arrives',
+      'Accept the order',
+      'Prepare and pack',
+      'Hand over or deliver',
+      'Take payment',
+    ],
+  },
+  {
+    name: 'Daily stock check',
+    steps: [
+      'Count shelves stock',
+      'Record damaged or expired items',
+      'Update stock in app',
+      'Send low stock alert to owner',
+    ],
+  },
+];
 
-const bookActions = new Set(['record.create', 'contact.create', 'organization.create', 'task.create', 'site.generate', 'web.search', 'pos.register.count', 'pos.register.close']);
-const automaticActions = new Set(['record.create', 'contact.create', 'organization.create', 'task.create']);
-const specializedRoles = new Set(['chef', 'cook', 'kitchen', 'cashier', 'manager', 'server', 'floor', 'kds', 'courier', 'customer']);
-const editableField = (kind: string) => ['text', 'email', 'number', 'textarea'].includes(kind);
-const roleTitle = (role: string) => role === 'any' ? 'Any permitted member' : role === 'chef' || role === 'cook' || role === 'kitchen' ? 'Kitchen' : role.replace(/\b\w/g, (letter) => letter.toUpperCase());
+const bookActions = new Set([
+  'record.create',
+  'contact.create',
+  'organization.create',
+  'task.create',
+  'site.generate',
+  'web.search',
+  'pos.register.count',
+  'pos.register.close',
+]);
+const unattendedActions = new Set([
+  'record.create',
+  'contact.create',
+  'organization.create',
+  'task.create',
+]);
+
+type EditableFlowStep = FlowStepMatch & {
+  chosenKind?: 'human' | 'tool';
+  chosenToolId?: string | null;
+  chosenToolTitle?: string | null;
+};
 
 export default function FlowBuilderInterface(props: ActionInterfaceProps) {
   const insets = useSafeAreaInsets();
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [available, setAvailable] = useState<HarnessAction[]>([]);
-  const [workRoles, setWorkRoles] = useState<string[]>(['any']);
-  const [canSuggest, setCanSuggest] = useState(false);
-  const [selected, setSelected] = useState<DraftStep[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [screen, setScreen] = useState<'start' | 'check'>('start');
+  const [name, setName] = useState('Closing the shop');
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [linesText, setLinesText] = useState('');
+  const [steps, setSteps] = useState<EditableFlowStep[]>([]);
+  const [matching, setMatching] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [suggesting, setSuggesting] = useState(false);
-  const [reviewing, setReviewing] = useState(false);
-  const [flowId] = useState(() => `book.${Crypto.randomUUID().replace(/-/g, '')}`);
-  const attempt = useRef<{ body: string; key: string } | null>(null);
+  const [addingStep, setAddingStep] = useState(false);
+  const [newStepText, setNewStepText] = useState('');
+  const [flowId] = useState(
+    () => `book.${Crypto.randomUUID().replace(/[^a-z0-9]/g, '').slice(0, 32)}`,
+  );
 
-  useEffect(() => {
-    let active = true;
-    void Promise.all([harness.workspaceRegistry(props.scope), harness.members(props.scope).catch(() => ({ members: [] as HarnessMember[], currentUserId: '' })), harness.workspaceTools(props.scope).catch(() => null)]).then(([result, roster, tools]) => {
-      if (!active) return;
-      const posEnabled = tools?.modules.some((module) => module.id === 'pos' && module.enabled) === true;
-      setAvailable(result.actions.filter((action) => bookActions.has(action.id) && (posEnabled || !action.id.startsWith('pos.'))));
-      setCanSuggest(result.actions.some((action) => action.id === 'flow.suggest'));
-      const roles = new Set(['any']);
-      for (const member of roster.members) {
-        if (member.state !== 'active' || member.role !== 'member') continue;
-        for (const role of member.roles?.length ? member.roles : [member.workRole]) roles.add(role.trim().toLowerCase());
-      }
-      setWorkRoles([...roles]);
-    }).catch((cause) => {
-      if (active) Alert.alert('Could not load Actions', cause instanceof Error ? cause.message : 'Try again.');
-    }).finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
-  }, [props.scope]);
-
-  const add = (id: string) => {
-    const action = available.find((item) => item.id === id);
-    if (!action) return;
-    setSelected((current) => [...current, { id, auto: false, role: 'any', input: Object.fromEntries(action.fields.flatMap((field) => field.defaultValue === undefined ? [] : [[field.key, field.defaultValue]])) }]);
-  };
-  const update = (index: number, next: (step: DraftStep) => DraftStep) => {
-    setSelected((current) => current.map((step, at) => at === index ? next(step) : step));
-  };
-  const suggest = async () => {
-    const prompt = description.trim() || name.trim();
-    if (!prompt) { Alert.alert('Describe the Flow Book', 'Add a name or outcome first.'); return; }
-    setSuggesting(true);
-    try {
-      const result = await harness.executeAction<{ action: string | null }>(props.scope, 'flow.suggest', { prompt }, createOperationKey('flow.suggest'));
-      const action = available.find((item) => item.id === result.action);
-      if (!action) { Alert.alert('No clear first step', 'Choose an Action from the list.'); return; }
-      Alert.alert('Suggested first step', `${action.title}\n\nReview this suggestion before adding it.`, [
-        { text: 'Add step', onPress: () => add(action.id) },
-        { text: 'Cancel', style: 'cancel' },
-      ]);
-    } catch (cause) { Alert.alert('Could not get a suggestion', cause instanceof Error ? cause.message : 'Try again.'); }
-    finally { setSuggesting(false); }
-  };
-
-  const review = () => {
-    if (!name.trim() || !selected.length) { Alert.alert('Flow Book needs more information', 'Enter a name and choose at least one Action.'); return; }
-    for (const step of selected) {
-      if (!step.auto) continue;
-      const action = available.find((item) => item.id === step.id);
-      const missing = action?.fields.find((field) => field.required && !step.input[field.key]?.trim());
-      if (missing) { Alert.alert('Automatic step needs input', `Enter ${missing.label.toLowerCase()} for ${action?.title}.`); return; }
+  const matchAndProceed = async (flowName: string, lines: string[]) => {
+    if (!lines.length) {
+      Alert.alert('No steps', 'Enter at least one step for this flow.');
+      return;
     }
-    setReviewing(true);
+    setName(flowName);
+    setMatching(true);
+    try {
+      const result = await harness.matchFlowSteps(props.scope, lines);
+      setSteps(
+        result.steps.map((s) => ({
+          ...s,
+          chosenKind: s.kind,
+          chosenToolId: s.toolId,
+          chosenToolTitle: s.toolTitle,
+        })),
+      );
+      setScreen('check');
+    } catch {
+      // Fallback: convert all lines to 'human' (You do) steps
+      setSteps(
+        lines.map((line, index) => ({
+          line,
+          stepNumber: index + 1,
+          kind: 'human',
+          chosenKind: 'human',
+          toolId: null,
+          toolTitle: null,
+          confidence: 1.0,
+          asksFirst: false,
+        })),
+      );
+      setScreen('check');
+    } finally {
+      setMatching(false);
+    }
   };
 
-  const publish = async () => {
+  const chooseReadyFlow = (preset: (typeof READY_FLOWS)[number]) => {
+    setLinesText(preset.steps.join('\n'));
+    void matchAndProceed(preset.name, preset.steps);
+  };
+
+  const onNextFromStart = () => {
+    const lines = linesText
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean);
+    if (!lines.length) {
+      Alert.alert('Say your steps', 'Type at least one step, one per line.');
+      return;
+    }
+    const chosenName = name.trim() || lines[0].slice(0, 40) || 'New flow';
+    void matchAndProceed(chosenName, lines);
+  };
+
+  const saveAndUse = async () => {
     if (saving) return;
-    const actions = selected.map((step) => ({
-      id: step.id,
-      auto: step.auto,
-      role: step.auto ? '' : step.role,
-      input: step.auto ? Object.fromEntries(Object.entries(step.input).flatMap(([key, raw]) => {
-        const value = raw.trim();
-        if (!value) return [];
-        const field = available.find((item) => item.id === step.id)?.fields.find((item) => item.key === key);
-        return [[key, field?.kind === 'number' ? Number(value) : value]];
-      })) : {},
-    }));
-    const payload = { flowId, name: name.trim(), description: description.trim(), actions };
-    const body = JSON.stringify(payload);
-    if (attempt.current?.body !== body) attempt.current = { body, key: createOperationKey('flow.publish') };
+    if (!steps.length) {
+      Alert.alert('No steps', 'Add at least one step.');
+      return;
+    }
     setSaving(true);
     try {
-      const result = await harness.executeAction(props.scope, props.action.id, payload, attempt.current.key);
+      const actions = steps.map((step) => {
+        const isTool = (step.chosenKind || step.kind) === 'tool';
+        const toolId = step.chosenToolId !== undefined ? step.chosenToolId : step.toolId;
+        let actionId = 'task.create';
+        if (isTool && toolId) {
+          if (toolId === 'contact' || toolId === 'chat') actionId = 'contact.create';
+          else if (toolId === 'register') actionId = 'pos.register.count';
+          else if (toolId === 'site') actionId = 'site.generate';
+        }
+        if (!bookActions.has(actionId)) actionId = 'task.create';
+        const isAuto = isTool && !step.asksFirst && unattendedActions.has(actionId);
+        return {
+          id: actionId,
+          auto: isAuto,
+          role: isAuto ? '' : 'any',
+          input: {
+            title: step.line,
+            prompt: step.line,
+          },
+        };
+      });
+
+      const payload = {
+        flowId,
+        name: name.trim() || 'New flow',
+        description: `Flow with ${actions.length} steps`,
+        actions,
+      };
+
+      const result = await harness.executeAction(
+        props.scope,
+        props.action.id,
+        payload,
+        createOperationKey('flow.publish'),
+      );
       props.onSuccess(result);
-    } catch (cause) { Alert.alert('Could not publish Flow Book', cause instanceof Error ? cause.message : 'Review the steps and try again.'); }
-    finally { setSaving(false); }
+    } catch (cause) {
+      Alert.alert('Could not save flow', cause instanceof Error ? cause.message : 'Try again.');
+    } finally {
+      setSaving(false);
+    }
   };
 
-  return <Modal visible={props.visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={props.onClose}>
-    <View style={[styles.page, { paddingTop: insets.top }]}>
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.iconButton} onPress={reviewing ? () => setReviewing(false) : props.onClose} accessibilityRole="button" accessibilityLabel={reviewing ? 'Back to editor' : 'Close'}>
-          <Ionicons name={reviewing ? 'arrow-back' : 'close'} size={26} color="#172033" />
-        </TouchableOpacity>
-        <View style={styles.headerCopy}><Text style={styles.title}>{reviewing ? 'Review Flow Book' : 'Create Flow Book'}</Text><Text style={styles.subtitle}>{props.contextTitle || 'Choose Actions in the order they happen.'}</Text></View>
-        {!reviewing && <TouchableOpacity disabled={loading || saving} onPress={review} accessibilityRole="button"><Text style={styles.create}>Review</Text></TouchableOpacity>}
+  const removeStep = (index: number) => {
+    setSteps((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const selectAlternative = (index: number, toolId: string, toolTitle: string) => {
+    setSteps((prev) =>
+      prev.map((s, i) =>
+        i === index
+          ? {
+              ...s,
+              chosenKind: 'tool',
+              chosenToolId: toolId,
+              chosenToolTitle: toolTitle,
+              confidence: 1.0,
+            }
+          : s,
+      ),
+    );
+  };
+
+  const selectHuman = (index: number) => {
+    setSteps((prev) =>
+      prev.map((s, i) =>
+        i === index
+          ? {
+              ...s,
+              chosenKind: 'human',
+              confidence: 1.0,
+            }
+          : s,
+      ),
+    );
+  };
+
+  return (
+    <Modal
+      visible={props.visible}
+      animationType="slide"
+      presentationStyle="fullScreen"
+      onRequestClose={props.onClose}
+    >
+      <View style={[styles.page, { paddingTop: insets.top }]}>
+        {/* Header */}
+        <View style={styles.header}>
+          {screen === 'check' ? (
+            <Pressable
+              onPress={() => setScreen('start')}
+              style={styles.iconButton}
+              accessibilityRole="button"
+              accessibilityLabel="Back"
+            >
+              <Ionicons name="arrow-back" size={24} color="#172033" />
+            </Pressable>
+          ) : (
+            <Pressable
+              onPress={props.onClose}
+              style={styles.iconButton}
+              accessibilityRole="button"
+              accessibilityLabel="Close"
+            >
+              <Ionicons name="close" size={24} color="#172033" />
+            </Pressable>
+          )}
+
+          <View style={styles.headerCopy}>
+            {screen === 'check' && isRenaming ? (
+              <TextInput
+                value={name}
+                onChangeText={setName}
+                style={styles.renameInput}
+                autoFocus
+                onBlur={() => setIsRenaming(false)}
+              />
+            ) : (
+              <Text style={styles.title} numberOfLines={1}>
+                {screen === 'start' ? 'New flow' : name}
+              </Text>
+            )}
+            <Text style={styles.subtitle}>
+              {screen === 'start'
+                ? 'Start with a ready one or say your steps'
+                : 'Check, fix, and save flow'}
+            </Text>
+          </View>
+
+          {screen === 'check' && (
+            <Pressable
+              onPress={() => setIsRenaming((curr) => !curr)}
+              style={styles.renameButton}
+              accessibilityRole="button"
+            >
+              <Text style={styles.renameText}>{isRenaming ? 'Done' : 'Rename'}</Text>
+            </Pressable>
+          )}
+        </View>
+
+        {/* Screen 7a: Start */}
+        {screen === 'start' && (
+          <ScrollView
+            contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 28 }]}
+            keyboardShouldPersistTaps="handled"
+          >
+            <Text style={styles.sectionHeading}>START WITH A READY ONE</Text>
+            <View style={styles.readyGrid}>
+              {READY_FLOWS.map((preset) => (
+                <Pressable
+                  key={preset.name}
+                  onPress={() => chooseReadyFlow(preset)}
+                  disabled={matching}
+                  style={styles.readyCard}
+                  accessibilityRole="button"
+                >
+                  <Ionicons name="git-branch-outline" size={18} color="#3157A8" />
+                  <Text style={styles.readyCardTitle}>{preset.name}</Text>
+                </Pressable>
+              ))}
+            </View>
+
+            <View style={styles.divider} />
+
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.sectionHeading}>OR SAY YOUR STEPS, ONE PER LINE</Text>
+              <Ionicons name="mic-outline" size={18} color="#68758c" />
+            </View>
+
+            <TextInput
+              value={linesText}
+              onChangeText={setLinesText}
+              placeholder={'Count the cash\nCheck the stock\nSend the day report to owner'}
+              placeholderTextColor="#9ca3af"
+              multiline
+              numberOfLines={6}
+              style={styles.stepsTextArea}
+            />
+
+            <Pressable
+              disabled={matching}
+              onPress={onNextFromStart}
+              style={[styles.primaryButton, matching && styles.disabled]}
+              accessibilityRole="button"
+            >
+              {matching ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text style={styles.primaryButtonText}>Next ›</Text>
+              )}
+            </Pressable>
+          </ScrollView>
+        )}
+
+        {/* Screen 7b: Check and Save */}
+        {screen === 'check' && (
+          <ScrollView
+            contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 28 }]}
+            keyboardShouldPersistTaps="handled"
+          >
+            <View style={styles.stepsList}>
+              {steps.map((step, index) => {
+                const isHuman = (step.chosenKind || step.kind) === 'human';
+                const toolName =
+                  step.chosenToolTitle || step.toolTitle || step.chosenToolId || step.toolId || 'App tool';
+                const needsChoice = step.confidence < 0.80 && !step.chosenKind;
+
+                return (
+                  <View key={`${step.line}-${index}`} style={styles.stepCard}>
+                    <View style={styles.stepTopRow}>
+                      <View style={styles.stepNumberBadge}>
+                        <Text style={styles.stepNumberText}>{index + 1}</Text>
+                      </View>
+                      <Text style={styles.stepLineText}>{step.line}</Text>
+                      <Pressable
+                        onPress={() => removeStep(index)}
+                        style={styles.stepRemoveButton}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Remove step ${index + 1}`}
+                      >
+                        <Ionicons name="trash-outline" size={17} color="#9ca3af" />
+                      </Pressable>
+                    </View>
+
+                    {/* Matched kind badge or choice chips */}
+                    {needsChoice ? (
+                      <View style={styles.choiceSection}>
+                        <Text style={styles.choicePrompt}>Pick one:</Text>
+                        <View style={styles.choiceChipsRow}>
+                          {step.suggestions?.map((alt) => (
+                            <Pressable
+                              key={alt.toolId}
+                              onPress={() => selectAlternative(index, alt.toolId, alt.title)}
+                              style={styles.choiceChip}
+                            >
+                              <Text style={styles.choiceChipText}>{alt.title}</Text>
+                            </Pressable>
+                          ))}
+                          <Pressable
+                            onPress={() => selectHuman(index)}
+                            style={styles.choiceChip}
+                          >
+                            <Text style={styles.choiceChipText}>I’ll do it</Text>
+                          </Pressable>
+                        </View>
+                      </View>
+                    ) : (
+                      <View style={styles.kindRow}>
+                        <View
+                          style={[
+                            styles.kindBadge,
+                            isHuman ? styles.kindBadgeHuman : styles.kindBadgeTool,
+                          ]}
+                        >
+                          <Ionicons
+                            name={isHuman ? 'hand-left-outline' : 'construct-outline'}
+                            size={13}
+                            color={isHuman ? '#3157A8' : '#18865B'}
+                          />
+                          <Text
+                            style={[
+                              styles.kindBadgeText,
+                              isHuman ? styles.kindBadgeTextHuman : styles.kindBadgeTextTool,
+                            ]}
+                          >
+                            {isHuman ? 'You do' : `App: ${toolName}`}
+                          </Text>
+                        </View>
+
+                        {step.asksFirst ? (
+                          <View style={styles.safetyBadge}>
+                            <Ionicons name="alert-circle-outline" size={13} color="#A66D00" />
+                            <Text style={styles.safetyBadgeText}>Asks you first</Text>
+                          </View>
+                        ) : null}
+                      </View>
+                    )}
+                  </View>
+                );
+              })}
+            </View>
+
+            {/* Add Step row */}
+            {addingStep ? (
+              <View style={styles.addStepRow}>
+                <TextInput
+                  value={newStepText}
+                  onChangeText={setNewStepText}
+                  placeholder="e.g. Lock the shop"
+                  placeholderTextColor="#9ca3af"
+                  style={styles.addStepInput}
+                  autoFocus
+                />
+                <Pressable
+                  onPress={() => {
+                    if (newStepText.trim()) {
+                      setSteps((prev) => [
+                        ...prev,
+                        {
+                          line: newStepText.trim(),
+                          stepNumber: prev.length + 1,
+                          kind: 'human',
+                          chosenKind: 'human',
+                          toolId: null,
+                          toolTitle: null,
+                          confidence: 1.0,
+                          asksFirst: false,
+                        },
+                      ]);
+                      setNewStepText('');
+                      setAddingStep(false);
+                    }
+                  }}
+                  style={styles.addStepConfirm}
+                >
+                  <Text style={styles.addStepConfirmText}>Add</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => setAddingStep(false)}
+                  style={styles.addStepCancel}
+                >
+                  <Ionicons name="close" size={20} color="#68758c" />
+                </Pressable>
+              </View>
+            ) : (
+              <Pressable
+                onPress={() => setAddingStep(true)}
+                style={styles.addStepButton}
+                accessibilityRole="button"
+              >
+                <Ionicons name="add" size={18} color="#3157A8" />
+                <Text style={styles.addStepButtonText}>+ Add a step</Text>
+              </Pressable>
+            )}
+
+            <View style={styles.footerSpacing} />
+
+            <Pressable
+              disabled={saving}
+              onPress={() => void saveAndUse()}
+              style={[styles.primaryButton, saving && styles.disabled]}
+              accessibilityRole="button"
+            >
+              {saving ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text style={styles.primaryButtonText}>Save and use</Text>
+              )}
+            </Pressable>
+          </ScrollView>
+        )}
       </View>
-      {reviewing ? <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 28 }]}>
-        <Text style={styles.reviewTitle}>{name.trim()}</Text>
-        {!!description.trim() && <Text style={styles.actionDescription}>{description.trim()}</Text>}
-        {selected.map((step, index) => {
-          const action = available.find((item) => item.id === step.id);
-          return <View key={`${step.id}-${index}`} style={styles.reviewStep}>
-            <Text style={styles.actionTitle}>{index + 1}. {action?.title || step.id}</Text>
-            <Text style={styles.actionDescription}>{step.auto ? 'Runs automatically with the input below' : 'Waits for a person to complete it'}</Text>
-            <Text style={styles.reviewValue}>{step.auto ? 'Assigned to TAR' : `Assigned to ${roleTitle(step.role)}`}</Text>
-            {step.auto && Object.entries(step.input).filter(([, value]) => value.trim()).map(([key, value]) => <Text key={key} style={styles.reviewValue}>{action?.fields.find((field) => field.key === key)?.label || key}: {value.trim()}</Text>)}
-          </View>;
-        })}
-        <Text style={styles.actionDescription}>Publishing saves this version. Starting a run uses these reviewed steps and checks current workspace access again.</Text>
-        <TouchableOpacity disabled={saving} style={styles.button} onPress={() => void publish()} accessibilityRole="button">
-          {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Publish Flow Book</Text>}
-        </TouchableOpacity>
-      </ScrollView> : <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 28 }]} keyboardShouldPersistTaps="handled">
-        <Text style={styles.label}>FLOW BOOK NAME</Text>
-        <TextInput value={name} onChangeText={setName} placeholder="For example: Member onboarding" style={styles.input} />
-        <TextInput value={description} onChangeText={setDescription} placeholder="What outcome should this Flow Book produce?" multiline style={[styles.input, styles.description]} />
-        <Text style={styles.label}>ACTION ORDER</Text>
-        {selected.length ? selected.map((step, index) => {
-          const action = available.find((item) => item.id === step.id);
-          return <View key={`${step.id}-${index}`} style={styles.selectedStep}>
-            <View style={styles.sequenceRow}><Text style={styles.number}>{index + 1}</Text><Text style={styles.sequenceText}>{action?.title || step.id}</Text><TouchableOpacity onPress={() => setSelected((current) => current.filter((_, at) => at !== index))} accessibilityRole="button" accessibilityLabel={`Remove Action ${index + 1}`}><Ionicons name="close" size={19} color="#7b879a" /></TouchableOpacity></View>
-            {automaticActions.has(step.id) && <View style={styles.switchRow}><Text style={styles.actionDescription}>Run automatically</Text><Switch value={step.auto} onValueChange={(auto) => update(index, (current) => ({ ...current, auto }))} accessibilityLabel={`Run ${action?.title || step.id} automatically`} /></View>}
-            {!step.auto && <View style={styles.rolePicker}><Text style={styles.actionDescription}>Assigned role</Text><View style={styles.roleOptions}>{workRoles.filter((role) => role === 'any' || Boolean(action?.workRoles?.includes(role)) || (!specializedRoles.has(role) && Boolean(action?.workRoles?.includes('general')))).map((role) => <TouchableOpacity key={role} accessibilityRole="radio" accessibilityState={{ selected: step.role === role }} onPress={() => update(index, (current) => ({ ...current, role }))} style={[styles.roleOption, step.role === role && styles.roleOptionSelected]}><Text style={[styles.roleText, step.role === role && styles.roleTextSelected]}>{role === 'any' ? 'Any permitted' : roleTitle(role)}</Text></TouchableOpacity>)}</View></View>}
-            {step.auto && <View style={styles.fields}>{action?.fields.filter((field) => !field.hidden && editableField(field.kind)).map((field) => <View key={field.key} style={styles.field}><Text style={styles.fieldLabel}>{field.label}{field.required ? ' *' : ''}</Text><TextInput value={step.input[field.key] || ''} onChangeText={(value) => update(index, (current) => ({ ...current, input: { ...current.input, [field.key]: value } }))} placeholder={field.label} keyboardType={field.kind === 'email' ? 'email-address' : field.kind === 'number' ? 'numeric' : 'default'} autoCapitalize={field.kind === 'email' ? 'none' : 'sentences'} multiline={field.kind === 'textarea'} style={styles.input} /></View>)}</View>}
-          </View>;
-        }) : <Text style={styles.empty}>Tap Actions below to build the sequence.</Text>}
-        {canSuggest && <TouchableOpacity disabled={suggesting || saving} style={styles.suggest} onPress={() => void suggest()} accessibilityRole="button"><Ionicons name="sparkles-outline" size={17} color="#3157A8" />{suggesting ? <ActivityIndicator size="small" color="#3157A8" /> : <Text style={styles.suggestText}>Suggest a first step with Jev</Text>}</TouchableOpacity>}
-        <Text style={styles.label}>AVAILABLE ACTIONS</Text>
-        {loading ? <ActivityIndicator color="#172033" /> : available.map((action) => <TouchableOpacity key={action.id} style={styles.actionRow} onPress={() => add(action.id)} accessibilityRole="button"><View style={styles.actionCopy}><Text style={styles.actionTitle}>{action.title}</Text><Text style={styles.actionDescription}>{action.description}</Text></View><Ionicons name="add-circle-outline" size={23} color="#68758c" /></TouchableOpacity>)}
-      </ScrollView>}
-    </View>
-  </Modal>;
+    </Modal>
+  );
 }
 
 const styles = StyleSheet.create({
-  page: { flex: 1, backgroundColor: '#fff' },
-  header: { minHeight: 78, paddingHorizontal: 12, paddingBottom: 12, borderBottomWidth: 1, borderColor: '#e3e7ef', flexDirection: 'row', alignItems: 'center', gap: 8 },
+  page: { flex: 1, backgroundColor: '#FFFFFF' },
+  header: {
+    minHeight: 64,
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderColor: '#e3e7ef',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   iconButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   headerCopy: { flex: 1 },
-  title: { fontSize: 19, fontWeight: '800', color: '#172033' },
-  subtitle: { fontSize: 12, color: '#68758c', marginTop: 2 },
-  create: { fontSize: 15, fontWeight: '800', color: '#172033', paddingHorizontal: 10 },
-  content: { padding: 24, gap: 10 },
-  label: { fontSize: 11, fontWeight: '800', letterSpacing: 1, color: '#7b879a', marginTop: 20, marginBottom: 8 },
-  input: { minHeight: 52, borderWidth: 1, borderColor: '#e3e7ef', borderRadius: 12, paddingHorizontal: 14, fontSize: 16, color: '#172033', backgroundColor: '#f7f8fc' },
-  description: { height: 88, paddingTop: 14, textAlignVertical: 'top' },
-  selectedStep: { borderWidth: 1, borderColor: '#e3e7ef', borderRadius: 14, padding: 12, gap: 8 },
-  sequenceRow: { minHeight: 38, flexDirection: 'row', alignItems: 'center', gap: 12 },
-  number: { width: 22, fontSize: 12, fontWeight: '800', color: '#7b879a' },
-  sequenceText: { flex: 1, fontSize: 14, fontWeight: '700', color: '#172033' },
-  switchRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', minHeight: 44 },
-  rolePicker: { gap: 7, paddingTop: 4 }, roleOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 }, roleOption: { minHeight: 32, justifyContent: 'center', paddingHorizontal: 11, borderRadius: 16, backgroundColor: '#f3f5f8' }, roleOptionSelected: { backgroundColor: '#dce5ff' }, roleText: { fontSize: 12, fontWeight: '700', color: '#68758c' }, roleTextSelected: { color: '#173673' },
-  fields: { gap: 10 },
-  field: { gap: 5 },
-  fieldLabel: { fontSize: 13, fontWeight: '700', color: '#68758c' },
-  empty: { fontSize: 14, color: '#68758c', paddingVertical: 8 },
-  suggest: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1, borderColor: '#dce5ff', borderRadius: 12, backgroundColor: '#f3f6ff', marginTop: 14 },
-  suggestText: { fontSize: 13, fontWeight: '700', color: '#3157A8' },
-  actionRow: { minHeight: 70, flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderWidth: 1, borderColor: '#e3e7ef', borderRadius: 14 },
-  actionCopy: { flex: 1 },
-  actionTitle: { fontSize: 15, fontWeight: '800', color: '#172033' },
-  actionDescription: { fontSize: 12, lineHeight: 17, color: '#68758c' },
-  reviewTitle: { fontSize: 22, fontWeight: '800', color: '#172033' },
-  reviewStep: { paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: '#e3e7ef', gap: 4 },
-  reviewValue: { fontSize: 13, color: '#172033' },
-  button: { minHeight: 54, borderRadius: 18, backgroundColor: '#172033', alignItems: 'center', justifyContent: 'center', marginTop: 10 },
-  buttonText: { fontSize: 16, fontWeight: '800', color: '#fff' },
+  title: { fontSize: 18, fontWeight: '800', color: '#172033' },
+  subtitle: { fontSize: 12, color: '#68758c', marginTop: 1 },
+  renameButton: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12, backgroundColor: '#f3f5f8' },
+  renameText: { fontSize: 13, fontWeight: '700', color: '#3157A8' },
+  renameInput: { fontSize: 16, fontWeight: '800', color: '#172033', paddingVertical: 2 },
+  content: { padding: 20, gap: 14 },
+  sectionHeading: { fontSize: 11, fontWeight: '800', letterSpacing: 0.8, color: '#68758c' },
+  sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  readyGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 4 },
+  readyCard: {
+    width: '48%',
+    minHeight: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 14,
+    backgroundColor: '#F7F9FC',
+    borderWidth: 1,
+    borderColor: '#e3e7ef',
+  },
+  readyCardTitle: { flex: 1, fontSize: 13, fontWeight: '700', color: '#172033' },
+  divider: { height: 1, backgroundColor: '#e3e7ef', marginVertical: 6 },
+  stepsTextArea: {
+    minHeight: 120,
+    borderWidth: 1,
+    borderColor: '#e3e7ef',
+    borderRadius: 14,
+    padding: 14,
+    fontSize: 15,
+    color: '#172033',
+    backgroundColor: '#f7f8fc',
+    textAlignVertical: 'top',
+  },
+  primaryButton: {
+    minHeight: 52,
+    borderRadius: 16,
+    backgroundColor: '#172033',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 6,
+  },
+  primaryButtonText: { fontSize: 15, fontWeight: '800', color: '#FFFFFF' },
+  disabled: { opacity: 0.5 },
+  stepsList: { gap: 10 },
+  stepCard: {
+    padding: 14,
+    borderRadius: 14,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#e3e7ef',
+    gap: 8,
+  },
+  stepTopRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  stepNumberBadge: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#f3f5f8',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepNumberText: { fontSize: 12, fontWeight: '800', color: '#68758c' },
+  stepLineText: { flex: 1, fontSize: 15, fontWeight: '700', color: '#172033' },
+  stepRemoveButton: { padding: 4 },
+  kindRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  kindBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+  },
+  kindBadgeHuman: { backgroundColor: '#EBF2FF' },
+  kindBadgeTool: { backgroundColor: '#E8F7F0' },
+  kindBadgeText: { fontSize: 12, fontWeight: '700' },
+  kindBadgeTextHuman: { color: '#3157A8' },
+  kindBadgeTextTool: { color: '#18865B' },
+  safetyBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    backgroundColor: '#FFF7E6',
+  },
+  safetyBadgeText: { fontSize: 11, fontWeight: '700', color: '#A66D00' },
+  choiceSection: { gap: 6, marginTop: 2 },
+  choicePrompt: { fontSize: 12, fontWeight: '700', color: '#68758c' },
+  choiceChipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  choiceChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    backgroundColor: '#f3f5f8',
+    borderWidth: 1,
+    borderColor: '#e3e7ef',
+  },
+  choiceChipText: { fontSize: 12, fontWeight: '700', color: '#3157A8' },
+  addStepButton: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    backgroundColor: '#f7f8fc',
+    borderWidth: 1,
+    borderColor: '#e3e7ef',
+    borderStyle: 'dashed',
+  },
+  addStepButtonText: { fontSize: 13, fontWeight: '700', color: '#3157A8' },
+  addStepRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: 8,
+    borderRadius: 12,
+    backgroundColor: '#f7f8fc',
+    borderWidth: 1,
+    borderColor: '#e3e7ef',
+  },
+  addStepInput: {
+    flex: 1,
+    minHeight: 40,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: '#FFFFFF',
+    fontSize: 14,
+    color: '#172033',
+  },
+  addStepConfirm: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: '#3157A8',
+  },
+  addStepConfirmText: { fontSize: 12, fontWeight: '700', color: '#FFFFFF' },
+  addStepCancel: { padding: 6 },
+  footerSpacing: { height: 8 },
 });

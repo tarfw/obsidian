@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Image, Modal, ScrollView, Share, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Image, Linking, Modal, ScrollView, Share, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import type { ActionInterfaceProps } from '@/action-interfaces/types';
@@ -37,6 +37,7 @@ export default function PosInterface(props: ActionInterfaceProps) {
   const [cartOpen, setCartOpen] = useState(false);
   const [discount, setDiscount] = useState('0');
   const [customer, setCustomer] = useState<PosRecord | null>(null);
+  const [customerPhone, setCustomerPhone] = useState('');
   const [order, setOrder] = useState<PosRecord | null>(null);
   const [draftOrderId, setDraftOrderId] = useState(initialOrderId);
   const [draftSaving, setDraftSaving] = useState(false);
@@ -300,21 +301,34 @@ export default function PosInterface(props: ActionInterfaceProps) {
       draftRef.current = { id: saved.id, version: saved.version }; draftSignature.current = JSON.stringify({ items: cart.map((line) => [line.product.id, line.product.version, line.quantity]), discountBps, customerId: customer?.id || '' }); setDraftOrderId(saved.id);
     } });
   };
-  const checkout = (method: 'cash' | 'upi') => {
+  const checkout = (method: 'cash' | 'upi' | 'card') => {
     if (!cart.length) return;
     if (!overview?.register) {
       Alert.alert('Open register', 'Open the register before taking a payment.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Open register', onPress: registerForm }]);
       return;
     }
     if (!Number.isSafeInteger(discountBps) || discountBps < 0 || discountBps > 10000) { Alert.alert('Invalid discount', 'Enter a percentage from 0 to 100.'); return; }
-    setForm({ title: method === 'cash' ? 'Cash payment' : 'UPI payment', submit: method === 'cash' ? 'Confirm cash received' : 'Confirm UPI received',
+    setForm({
+      title: method === 'cash' ? 'Cash payment' : method === 'upi' ? 'UPI payment' : 'Card payment',
+      submit: method === 'cash' ? 'Confirm cash received' : method === 'upi' ? 'Confirm UPI received' : 'Confirm card received',
       fields: method === 'cash'
         ? [{ key: 'tendered', label: 'Cash received', numeric: true, value: String(totals.total / 100), hint: 'Amount due: ' + money(totals.total, currency) }]
-        : [{ key: 'reference', label: 'UPI transaction reference', hint: 'Check receipt in your UPI account before confirming. TAR records your confirmation; it does not verify the bank payment.' }],
+        : method === 'upi'
+        ? [{ key: 'reference', label: 'UPI transaction reference', hint: 'Check receipt in your UPI account before confirming. TAR records your confirmation; it does not verify the bank payment.' }]
+        : [{ key: 'reference', label: 'Card reference / Auth code', hint: 'Enter card transaction reference or approval code from card machine.' }],
       save: async (values) => {
-        const result = await execute('pos.checkout', { items: cart.map((line) => ({ productId: line.product.id, version: line.product.version, quantity: line.quantity })),
-          method, discountBps, expectedTotal: totals.total, tendered: method === 'cash' ? minorUnits(values.tendered) : totals.total,
-          reference: values.reference || '', received: method === 'upi', customerId: customer?.id, orderId: draftOrderId || undefined });
+        const result = await execute('pos.checkout', {
+          items: cart.map((line) => ({ productId: line.product.id, version: line.product.version, quantity: line.quantity })),
+          method,
+          discountBps,
+          expectedTotal: totals.total,
+          tendered: method === 'cash' ? minorUnits(values.tendered) : totals.total,
+          reference: values.reference || '',
+          received: method !== 'cash',
+          customerId: customer?.id,
+          customerPhone: customerPhone.trim() || undefined,
+          orderId: draftOrderId || undefined,
+        });
         setOrder(result.order as PosRecord); setCart([]); setCustomer(null); setDiscount('0'); setCartOpen(false); setDraftOrderId(''); draftRef.current = null; draftSignature.current = '';
         await refreshAfterSave();
       },
@@ -388,8 +402,24 @@ export default function PosInterface(props: ActionInterfaceProps) {
   };
 
   const cartView = <View style={[styles.cart, wide && styles.cartWide]}>
-    <View style={styles.panelHeading}><Text style={styles.heading}>Cart · {count}</Text><TouchableOpacity style={styles.touch} onPress={() => { setCart([]); setDiscount('0'); setCustomer(null); }}><Text style={styles.muted}>Clear</Text></TouchableOpacity></View>
-    <TouchableOpacity style={styles.customer} onPress={() => chooseSection('customers')}><Ionicons name="person-add-outline" size={18} color="#565b60" /><Text style={styles.body}>{customer?.title || 'Add customer'}</Text></TouchableOpacity>
+    <View style={styles.panelHeading}>
+      <Text style={styles.heading}>CART ({count} {count === 1 ? 'item' : 'items'})</Text>
+      <TouchableOpacity style={styles.touch} onPress={() => { setCart([]); setDiscount('0'); setCustomer(null); setCustomerPhone(''); }}>
+        <Text style={styles.clearCartText}>Clear</Text>
+      </TouchableOpacity>
+    </View>
+    <View style={styles.whatsappRow}>
+      <Ionicons name="logo-whatsapp" size={17} color="#25D366" />
+      <TextInput
+        accessibilityLabel="Customer WhatsApp"
+        style={styles.whatsappInput}
+        value={customerPhone}
+        onChangeText={setCustomerPhone}
+        placeholder="Customer WhatsApp (Optional)"
+        placeholderTextColor="#94A3B8"
+        keyboardType="phone-pad"
+      />
+    </View>
     <ScrollView style={styles.cartLines}>
       {cart.map((line) => {
         const unitPrice = Number(line.product.data.price);
@@ -422,11 +452,12 @@ export default function PosInterface(props: ActionInterfaceProps) {
       <Total label="Subtotal" value={money(totals.subtotal, currency)} />
       <Total label="Discount" value={'−' + money(totals.discount, currency)} />
       <Total label="Tax" value={money(totals.tax, currency)} />
-      <Total label="Total" value={money(totals.total, currency)} bold />
+      <Total label="TOTAL DUE" value={money(totals.total, currency)} bold />
+      <Text style={styles.paymentMethodLabel}>PAYMENT METHOD</Text>
       <View style={styles.payments}>
-        <Button title="Order details" disabled={!cart.length || busy || draftSaving} secondary onPress={saveForNow} />
-        <Button title={`Cash (${money(totals.total, currency)})`} disabled={!cart.length || busy || draftSaving} onPress={() => checkout('cash')} />
-        <Button title="UPI / QR" disabled={!cart.length || busy || draftSaving} onPress={() => checkout('upi')} />
+        <Button title="UPI QR" flex disabled={!cart.length || busy || draftSaving} onPress={() => checkout('upi')} />
+        <Button title={`Cash (${money(totals.total, currency)})`} flex disabled={!cart.length || busy || draftSaving} onPress={() => checkout('cash')} />
+        <Button title="Card" flex disabled={!cart.length || busy || draftSaving} secondary onPress={() => checkout('card')} />
       </View>
     </View>
   </View>;
@@ -436,7 +467,7 @@ export default function PosInterface(props: ActionInterfaceProps) {
       <StatusBar style="dark" />
       <View style={styles.header}>
         <TouchableOpacity accessibilityLabel="Back" style={styles.touch} onPress={back}><Ionicons name="chevron-back" size={24} color="#1C2430" /></TouchableOpacity>
-        <Text numberOfLines={1} style={styles.headerTitle}>Point of sale</Text>
+        <Text numberOfLines={1} style={styles.headerTitle}>{overview?.settings?.title || props.contextTitle || 'Point of sale'}</Text>
         <TouchableOpacity style={styles.drawerBadge} onPress={registerForm}>
           <Ionicons name={overview?.register ? 'cash' : 'lock-closed-outline'} size={14} color={overview?.register ? '#16A34A' : '#64748B'} />
           <Text style={[styles.drawerBadgeText, overview?.register ? styles.drawerBadgeActive : null]}>
@@ -447,7 +478,7 @@ export default function PosInterface(props: ActionInterfaceProps) {
 
       {error ? <View style={styles.error}><Text style={styles.errorText}>{error}</Text></View> : null}
       {pending && !form ? <View style={styles.recovery}><Text style={styles.body}>An operation needs confirmation.</Text><Button title={busy ? 'Checking…' : 'Resolve pending operation'} disabled={busy} onPress={() => void recover()} /></View> : null}
-      {!overview ? <View style={styles.center}><ActivityIndicator /></View> : !overview.settings ? <View style={styles.center}><Text style={styles.heading}>Set up your store</Text><Text style={styles.empty}>Name, currency and location. Then add your products.</Text>{overview.canManage ? <Button title="Set up POS" onPress={setup} /> : <Text style={styles.muted}>Ask a workspace admin to set up POS.</Text>}</View> : order ? <ScrollView contentContainerStyle={[styles.receipt, { paddingBottom: insets.bottom + 32 }]}>
+      {!overview ? <View style={styles.center}><ActivityIndicator size="small" color="#3157A8" /></View> : order ? <ScrollView contentContainerStyle={[styles.receipt, { paddingBottom: insets.bottom + 32 }]}>
         <Ionicons name={order.state === 'refunded' || order.state === 'cancelled' ? 'return-down-back-outline' : 'checkmark-circle'} size={38} color={order.state === 'cancelled' ? '#b42318' : '#008060'} />
         <Text style={styles.receiptTitle}>{order.state === 'open' ? 'Open order' : order.state === 'cancelled' ? 'Order cancelled' : order.state === 'refunded' ? 'Sale returned' : order.state === 'partially_refunded' ? 'Partially returned' : 'Payment recorded'}</Text>
         <Text style={styles.muted}>{order.id.slice(-8).toUpperCase()} · {new Date(order.createdAt).toLocaleString()}</Text>
@@ -548,7 +579,17 @@ export default function PosInterface(props: ActionInterfaceProps) {
   </Modal>;
 }
 function Total({ label, value, bold = false }: { label: string; value: string; bold?: boolean }) { return <View style={styles.totalRow}><Text style={bold ? styles.heading : styles.muted}>{label}</Text><Text style={bold ? styles.heading : styles.body}>{value}</Text></View>; }
-function Button({ title, onPress, disabled, secondary }: { title: string; onPress: () => void; disabled?: boolean; secondary?: boolean }) { return <TouchableOpacity disabled={disabled} onPress={onPress} style={[styles.button, secondary && styles.secondary, disabled && styles.disabled]}><Text style={[styles.buttonText, secondary && styles.secondaryText]}>{title}</Text></TouchableOpacity>; }
+function Button({ title, onPress, disabled, secondary, flex }: { title: string; onPress: () => void; disabled?: boolean; secondary?: boolean; flex?: boolean }) {
+  return (
+    <TouchableOpacity
+      disabled={disabled}
+      onPress={onPress}
+      style={[styles.button, flex && styles.buttonFlex, secondary && styles.secondary, disabled && styles.disabled]}
+    >
+      <Text style={[styles.buttonText, secondary && styles.secondaryText]}>{title}</Text>
+    </TouchableOpacity>
+  );
+}
 
 const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: '#FFFFFF' },
@@ -677,11 +718,41 @@ const styles = StyleSheet.create({
   totalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12, paddingVertical: 6 },
   discount: { width: 56, height: 32, borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 6, textAlign: 'right', paddingHorizontal: 6, fontSize: 13 },
   payments: { flexDirection: 'row', gap: 8, marginTop: 8 },
-  button: { backgroundColor: '#1C2430', minHeight: 46, paddingHorizontal: 18, borderRadius: 8, justifyContent: 'center', alignItems: 'center', marginVertical: 4, flex: 1 },
+  button: { backgroundColor: '#1C2430', minHeight: 46, paddingHorizontal: 18, borderRadius: 8, justifyContent: 'center', alignItems: 'center', marginVertical: 4 },
+  buttonFlex: { flex: 1 },
   buttonText: { fontSize: 14, fontWeight: '700', color: '#FFFFFF' },
   secondary: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#CBD5E1' },
   secondaryText: { color: '#1C2430' },
   disabled: { opacity: 0.4 },
+  clearCartText: { fontSize: 13, fontWeight: '600', color: '#DC2626' },
+  whatsappRow: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+    height: 40,
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+    borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    gap: 8,
+  },
+  whatsappInput: {
+    flex: 1,
+    fontSize: 13,
+    color: '#1C2430',
+    height: 40,
+    paddingVertical: 0,
+  },
+  paymentMethodLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#64748B',
+    marginTop: 12,
+    marginBottom: 2,
+    letterSpacing: 0.5,
+  },
   cartBar: {
     position: 'absolute',
     bottom: 12,

@@ -56,9 +56,14 @@ export async function readPos(db: DB, context: AccessContext, section: string, s
     const types = { products: 'pos.product', orders: 'pos.order', customers: 'pos.customer' };
     return { items: await list(db, types[section], search.slice(0, 100), offset), nextOffset: offset + 100 };
   }
+  let settings = await get(db, 'pos.settings', 'pos.settings');
+  if (!settings) {
+    const storeName = context.workspace.name || 'Store';
+    settings = await put(db, 'pos.settings', storeName, { currency: 'INR', timezone: 'Asia/Kolkata', location: '', receiptFooter: 'Thank you for shopping with us.' }, context.identity.id, 'pos.settings');
+  }
   const session = await register(db);
-  return { settings: await get(db, 'pos.settings', 'pos.settings'), register: session ? { ...session, expected: await balance(db, session) } : null,
-    summary: await posSummary(db), canManage: context.member.role === 'owner' || context.member.role === 'admin', paymentMethods: ['cash', 'upi'] };
+  return { settings, register: session ? { ...session, expected: await balance(db, session) } : null,
+    summary: await posSummary(db), canManage: context.member.role === 'owner' || context.member.role === 'admin', paymentMethods: ['cash', 'upi', 'card'] };
 }
 
 export async function readPosInbox(db: DB) {
@@ -112,8 +117,11 @@ async function mutate(db: Transaction, context: AccessContext, action: string, i
     }
     return { settings: await put(db, 'pos.settings', name, { currency, timezone, location: text(input.location), receiptFooter: text(input.receiptFooter) }, actor, 'pos.settings') };
   }
-  const settings = await get(db, 'pos.settings', 'pos.settings');
-  if (!settings) throw badRequest('Set up the store first.');
+  let settings = await get(db, 'pos.settings', 'pos.settings');
+  if (!settings) {
+    const storeName = context.workspace.name || 'Store';
+    settings = await put(db, 'pos.settings', storeName, { currency: 'INR', timezone: 'Asia/Kolkata', location: '', receiptFooter: 'Thank you for shopping with us.' }, actor, 'pos.settings');
+  }
   if (action === 'pos.product.save') {
     const title = text(input.title);
     if (!title) throw badRequest('Product name is required.');
@@ -323,12 +331,12 @@ async function mutate(db: Transaction, context: AccessContext, action: string, i
   }
   const businessDate = new Intl.DateTimeFormat('en-CA', { timeZone: String(settings.data.timezone), year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
   if (action === 'pos.checkout') {
-    if (input.method !== 'cash' && input.method !== 'upi') throw badRequest('Choose Cash or UPI.');
+    if (input.method !== 'cash' && input.method !== 'upi' && input.method !== 'card') throw badRequest('Choose Cash, UPI or Card.');
     const reference = text(input.reference);
-    if (input.method === 'upi') {
-      if (!reference || input.received !== true) throw badRequest('Confirm UPI receipt and enter its transaction reference.');
+    if (input.method === 'upi' || input.method === 'card') {
+      if (!reference || input.received !== true) throw badRequest(`Confirm ${input.method.toUpperCase()} receipt and enter its transaction reference.`);
       const duplicate = await db.execute({ sql: "SELECT id FROM records WHERE type='pos.payment' AND json_extract(data,'$.reference')=?", args: [reference] });
-      if (duplicate.rows.length) throw conflict('This UPI reference is already recorded.');
+      if (duplicate.rows.length) throw conflict(`This ${input.method.toUpperCase()} reference is already recorded.`);
     }
     const draftId = text(input.orderId);
     const draft = draftId ? await getOrder(db, draftId) : null;

@@ -68,7 +68,8 @@ Safety rule: Any step or tool touching **`money`** or **`customer`** **always as
 | **`flow`** (Checklist) | `flow` | Run or create repeatable shop routines (Opening, Closing, Handover) |
 | **`site`** (Online store) | `site` | Autopilot storefront, live catalog sync, and WhatsApp orders |
 | **`inbox`** (Team feed) | `channel` | Native zero-cost task feed for owner and staff (Mine, Available, Waiting) |
-| **`whatsapp`** (WhatsApp) | `channel` | Order confirmations, tracking & invoices to customer phone (₹0.15/msg) |
+| **`chat`** (WhatsApp Chat) | `tool` | Manual 1-tap chat on phone, pre-filled text or bill link via `wa.me` (₹0.00) |
+| **`whatsapp`** (WhatsApp API) | `channel` | Automated customer invoices, tracking & alerts via Meta Cloud API (Utility ₹0.115+GST) |
 | **`telegram`** (Team alerts) | `channel` | Free internal shop notifications, low-stock pings, and closing reports |
 
 ### Tool & Work Kinds Explained
@@ -238,12 +239,14 @@ Having an LLM guess or write dynamic JSON mapping between steps is fragile, slow
 
 ### Channel Rule: Customer vs Team (Cost Control)
 
-WhatsApp Meta Business API costs **~₹0.15 to ₹0.75 per message** in India. Burning rupees on internal team alerts bleeds small business margins.
+WhatsApp has two distinct paths:
+1. **`chat` (Manual WhatsApp)**: **₹0.00 cost**. Opens merchant's phone WhatsApp app via `wa.me` deep-link. Manual 1-on-1 customer or vendor communication.
+2. **`whatsapp` (Official Meta API)**: **Utility: ₹0.115 + GST / msg**; **Service: first 1,000 free / month**. Pre-approved transactional templates only (PDF bills, tracking).
 
 | Audience | Allowed Channels | Why |
 | :------- | :--------------- | :-- |
-| **Customers** | **WhatsApp**, SMS | High trust, high open rate; ₹0.15 pays for itself in order conversion |
-| **Team / Internal** | **`tarapp` Inbox** (default), **Telegram**, **Discord**, **Slack** | **₹0.00 cost**. Native Inbox keeps tasks organized by role. Telegram bots & Discord/Slack webhooks (Zerino/direct) provide free push notifications without per-message bills |
+| **Customers** | **`whatsapp`** (API), **`chat`** (Manual), SMS | High trust, high open rate; ₹0.115 pays for itself in order conversion |
+| **Team / Internal** | **`tarapp` Inbox** (default), **Telegram**, **Discord**, **Slack** | **₹0.00 cost**. Native Inbox keeps tasks organized by role. Telegram bots & Discord/Slack webhooks provide free push notifications without per-message bills |
 
 ---
 

@@ -1,6 +1,7 @@
 import { unavailable } from '../errors.ts';
-import { askSystemOne, choiceOf, type SystemOneFailure } from './systemone.ts';
+import { askSystemOne, choiceOf, type SystemOneFailure, type SystemOneQuestion } from './systemone.ts';
 import { findAction, type ActionDefinition } from '../registry/catalog.ts';
+import { canonicalTools, type ToolDefinition } from '../registry/tools.ts';
 
 const choices = [
   'record.create', 'contact.create', 'organization.create', 'task.create', 'routine.save',
@@ -190,6 +191,292 @@ export async function suggest(apiKey: string | undefined, request: string): Prom
     confidence: answer.confidence ?? (choice ? 0.8 : 0.2),
     probabilities: Object.fromEntries(Object.entries(answer.probabilities).filter(([key]) => key === 'none' || actions.some((action) => action.id === key))),
     model: outcome.value.model,
+    review: true,
+  };
+}
+
+export interface FlowStepMatch {
+  readonly line: string;
+  readonly stepNumber: number;
+  readonly kind: 'tool' | 'human';
+  readonly toolId: string | null;
+  readonly toolTitle: string | null;
+  readonly confidence: number;
+  readonly asksFirst: boolean;
+  readonly suggestions?: readonly { readonly toolId: string; readonly title: string; readonly score: number }[];
+}
+
+export interface FlowMatchResult {
+  readonly steps: FlowStepMatch[];
+  readonly model?: string;
+  readonly review: true;
+}
+
+function heuristicMatchLine(line: string, tools: readonly ToolDefinition[]): {
+  kind: 'tool' | 'human';
+  toolId: string | null;
+  toolTitle: string | null;
+  confidence: number;
+  asksFirst: boolean;
+  suggestions?: { toolId: string; title: string; score: number }[];
+} {
+  const text = line.toLowerCase().trim();
+
+  // Explicit physical/human tasks
+  if (/\b(count (the )?cash|count drawer|lock (the )?shop|lock shutter|pack|clean|call (the )?customer|hand over|deliver|prepare)\b/i.test(text)) {
+    return {
+      kind: 'human',
+      toolId: null,
+      toolTitle: null,
+      confidence: 0.90,
+      asksFirst: false,
+    };
+  }
+
+  // Telegram / reporting
+  if (/\b(send (the )?day report|day report|report to owner|telegram|team alert)\b/i.test(text)) {
+    const t = tools.find((item) => item.id === 'telegram') || tools.find((item) => item.id === 'inbox');
+    return {
+      kind: 'tool',
+      toolId: t ? t.id : 'telegram',
+      toolTitle: t ? t.title : 'Team alerts',
+      confidence: 0.90,
+      asksFirst: false,
+    };
+  }
+
+  // Stock / Inventory
+  if (/\b(check (the )?stock|count stock|stock levels?|adjust stock|inventory|godown)\b/i.test(text)) {
+    const t = tools.find((item) => item.id === 'inventory') || tools.find((item) => item.id === 'item');
+    return {
+      kind: 'tool',
+      toolId: t ? t.id : 'inventory',
+      toolTitle: t ? t.title : 'Stock',
+      confidence: 0.90,
+      asksFirst: false,
+    };
+  }
+
+  // Products / Item catalog
+  if (/\b(add product|edit product|catalog item|add variant|update price)\b/i.test(text)) {
+    const t = tools.find((item) => item.id === 'item');
+    return {
+      kind: 'tool',
+      toolId: t ? t.id : 'item',
+      toolTitle: t ? t.title : 'Products',
+      confidence: 0.88,
+      asksFirst: false,
+    };
+  }
+
+  // POS / Counter sale
+  if (/\b(pos|point of sale|counter sale|take payment|checkout)\b/i.test(text)) {
+    const t = tools.find((item) => item.id === 'pos');
+    return {
+      kind: 'tool',
+      toolId: t ? t.id : 'pos',
+      toolTitle: t ? t.title : 'Point of sale',
+      confidence: 0.92,
+      asksFirst: true, // money reach
+    };
+  }
+
+  // Register / Cash drawer
+  if (/\b(cash drawer|drawer|open shift|close shift|open register|close register)\b/i.test(text)) {
+    const t = tools.find((item) => item.id === 'register');
+    return {
+      kind: 'tool',
+      toolId: t ? t.id : 'register',
+      toolTitle: t ? t.title : 'Cash drawer',
+      confidence: 0.91,
+      asksFirst: true, // money reach
+    };
+  }
+
+  // Orders
+  if (/\b(take order|customer order|create order)\b/i.test(text)) {
+    const t = tools.find((item) => item.id === 'order');
+    return {
+      kind: 'tool',
+      toolId: t ? t.id : 'order',
+      toolTitle: t ? t.title : 'Orders',
+      confidence: 0.88,
+      asksFirst: true, // customer reach
+    };
+  }
+
+  // Billing / Invoice
+  if (/\b(bill|billing|invoice|tax invoice|gst bill)\b/i.test(text)) {
+    const t = tools.find((item) => item.id === 'invoice');
+    return {
+      kind: 'tool',
+      toolId: t ? t.id : 'invoice',
+      toolTitle: t ? t.title : 'Billing',
+      confidence: 0.88,
+      asksFirst: true, // money reach
+    };
+  }
+
+  // WhatsApp Chat
+  if (/\b(whatsapp chat|wa\.me|message customer|chat)\b/i.test(text)) {
+    const t = tools.find((item) => item.id === 'chat') || tools.find((item) => item.id === 'whatsapp');
+    return {
+      kind: 'tool',
+      toolId: t ? t.id : 'chat',
+      toolTitle: t ? t.title : 'WhatsApp Chat',
+      confidence: 0.86,
+      asksFirst: true, // customer reach
+    };
+  }
+
+  // Expenses
+  if (/\b(expense|petty cash|tea|spend)\b/i.test(text)) {
+    const t = tools.find((item) => item.id === 'expense');
+    return {
+      kind: 'tool',
+      toolId: t ? t.id : 'expense',
+      toolTitle: t ? t.title : 'Expenses',
+      confidence: 0.85,
+      asksFirst: true, // money reach
+    };
+  }
+
+  // Purchases
+  if (/\b(purchase|supplier|po|order supplies)\b/i.test(text)) {
+    const t = tools.find((item) => item.id === 'purchase');
+    return {
+      kind: 'tool',
+      toolId: t ? t.id : 'purchase',
+      toolTitle: t ? t.title : 'Purchases',
+      confidence: 0.85,
+      asksFirst: true, // money reach
+    };
+  }
+
+  // Default: Person does this by hand
+  return {
+    kind: 'human',
+    toolId: null,
+    toolTitle: null,
+    confidence: 0.70,
+    asksFirst: false,
+    suggestions: [
+      { toolId: 'human', title: "I'll do it", score: 0.70 },
+      { toolId: 'inbox', title: 'Team feed', score: 0.20 },
+    ],
+  };
+}
+
+export async function matchFlowSteps(
+  apiKey: string | undefined,
+  lines: readonly string[],
+  activeTools?: readonly ToolDefinition[],
+): Promise<FlowMatchResult> {
+  const tools = activeTools || canonicalTools;
+  const filteredLines = lines.map((l) => l.trim()).filter((l) => l.length > 0);
+  if (!filteredLines.length) {
+    return { steps: [], review: true };
+  }
+
+  let model: string | undefined;
+  const rawMatches = new Map<number, FlowStepMatch>();
+
+  if (apiKey) {
+    const criteria: Record<string, string> = {};
+    for (const tool of tools) {
+      criteria[tool.id] = `${tool.title}: ${tool.description}`;
+    }
+    criteria.person = 'A person does this by hand';
+    criteria.none = 'Nothing listed does this';
+
+    const questions: Record<string, SystemOneQuestion> = {};
+    filteredLines.forEach((line, index) => {
+      questions[`step_${index}`] = {
+        type: 'choice',
+        instructions: `Which of these does the following step line: "${line}"?`,
+        criteria,
+      };
+    });
+
+    const outcome = await askSystemOne(apiKey, {
+      timeout: 8_000,
+      state: { lines: filteredLines },
+      questions,
+    });
+
+    if (outcome.ok) {
+      model = outcome.value.model;
+      filteredLines.forEach((line, index) => {
+        const answer = choiceOf(outcome.value.answers[`step_${index}`]);
+        const topChoice = answer.choice;
+        const confidence = answer.confidence ?? (topChoice && answer.probabilities[topChoice] ? answer.probabilities[topChoice] : 0.85);
+
+        if (!topChoice || topChoice === 'person' || topChoice === 'none') {
+          rawMatches.set(index, {
+            line,
+            stepNumber: index + 1,
+            kind: 'human',
+            toolId: null,
+            toolTitle: null,
+            confidence: Number(confidence.toFixed(2)),
+            asksFirst: false,
+          });
+        } else {
+          const matchedTool = tools.find((t) => t.id === topChoice);
+          if (matchedTool && confidence >= 0.80) {
+            const asksFirst = matchedTool.reach === 'customer' || matchedTool.reach === 'money';
+            rawMatches.set(index, {
+              line,
+              stepNumber: index + 1,
+              kind: 'tool',
+              toolId: matchedTool.id,
+              toolTitle: matchedTool.title,
+              confidence: Number(confidence.toFixed(2)),
+              asksFirst,
+            });
+          } else {
+            const sortedProbs = Object.entries(answer.probabilities)
+              .filter(([k]) => k !== 'person' && k !== 'none')
+              .sort(([, a], [, b]) => b - a)
+              .slice(0, 2);
+
+            const suggestions = sortedProbs.map(([toolId, score]) => {
+              const t = tools.find((item) => item.id === toolId);
+              return { toolId, title: t?.title || toolId, score: Number(score.toFixed(2)) };
+            });
+            suggestions.push({ toolId: 'human', title: "I'll do it", score: 0.50 });
+
+            rawMatches.set(index, {
+              line,
+              stepNumber: index + 1,
+              kind: 'human',
+              toolId: null,
+              toolTitle: null,
+              confidence: Number(confidence.toFixed(2)),
+              asksFirst: false,
+              suggestions,
+            });
+          }
+        }
+      });
+    }
+  }
+
+  const steps: FlowStepMatch[] = filteredLines.map((line, index) => {
+    if (rawMatches.has(index)) {
+      return rawMatches.get(index)!;
+    }
+    const fallback = heuristicMatchLine(line, tools);
+    return {
+      line,
+      stepNumber: index + 1,
+      ...fallback,
+    };
+  });
+
+  return {
+    steps,
+    model,
     review: true,
   };
 }

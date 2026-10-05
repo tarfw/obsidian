@@ -7,51 +7,64 @@ import { findAction, interfaceCatalog } from './catalog.ts';
 export type Module = 'commerce' | 'site' | 'pos';
 export type CapabilityState = { enabled: Record<Module, boolean>; version: number };
 
-type ToolDefinition = {
-  id: string;
-  title: string;
-  description: string;
-  icon: string;
-  category: 'work' | 'create' | 'manage' | 'explore';
-  module: Module | 'core';
-  kind: 'action' | 'flows' | 'site';
-  action: string;
-  grant?: string;
-  input?: Record<string, unknown>;
-  personal?: boolean;
-};
+export type ToolKind = 'tool' | 'human' | 'channel' | 'flow' | 'site';
+export type ToolReach = 'none' | 'customer' | 'money' | 'data';
 
-const catalog: readonly ToolDefinition[] = [
-  // 1. Sell & POS
-  { id: 'pos', title: 'Point of sale', description: 'Quick counter sale & payment', icon: 'storefront-outline', category: 'work', module: 'commerce', kind: 'action', action: 'pos.open', input: { section: 'sell' } },
+export interface ToolDefinition {
+  readonly id: string;
+  readonly title: string;
+  readonly description: string;
+  readonly icon: string;
+  readonly kind: ToolKind;
+  readonly reach: ToolReach;
+  readonly module: Module | 'core';
+  readonly action: string;
+  readonly input?: Record<string, unknown>;
+  readonly category?: 'work' | 'create' | 'manage' | 'explore';
+  readonly personal?: boolean;
+  readonly grant?: string;
+}
 
-  // 2. Catalog & Inventory
-  { id: 'item', title: 'Add catalog item', description: 'Create a sellable item', icon: 'pricetag-outline', category: 'create', module: 'commerce', kind: 'action', action: 'catalog.item.save' },
-  { id: 'inventory', title: 'Adjust stock', description: 'Post a counted correction', icon: 'layers-outline', category: 'manage', module: 'commerce', kind: 'action', action: 'stock.adjust' },
-  { id: 'transfer', title: 'Transfer stock', description: 'Move inventory between locations', icon: 'swap-horizontal-outline', category: 'manage', module: 'commerce', kind: 'action', action: 'stock.transfer' },
-
-  // 3. Orders & Invoicing
-  { id: 'order', title: 'Create order', description: 'Price and reserve items', icon: 'cart-outline', category: 'create', module: 'commerce', kind: 'action', action: 'order.create' },
-  { id: 'invoice', title: 'Issue invoice', description: 'Bill a customer or order', icon: 'document-outline', category: 'create', module: 'commerce', kind: 'action', action: 'invoice.issue' },
-
-  // 4. Money & Purchasing
-  { id: 'payment', title: 'Record payment', description: 'Post money received', icon: 'card-outline', category: 'work', module: 'commerce', kind: 'action', action: 'payment.record' },
-  { id: 'refund', title: 'Record refund', description: 'Reverse a paid balance', icon: 'return-down-back-outline', category: 'work', module: 'commerce', kind: 'action', action: 'refund.record' },
-  { id: 'expense', title: 'Record expense', description: 'Record business expenditure', icon: 'wallet-outline', category: 'work', module: 'commerce', kind: 'action', action: 'expense.record' },
-  { id: 'purchase', title: 'Create purchase order', description: 'Order from a supplier', icon: 'bag-add-outline', category: 'create', module: 'commerce', kind: 'action', action: 'purchase.create' },
-  { id: 'quote', title: 'Request quote', description: 'Request quote from supplier', icon: 'chatbubbles-outline', category: 'create', module: 'commerce', kind: 'action', action: 'quote.request' },
-
-  // Core & Site
-  { id: 'task', title: 'Create task', description: 'Assign a concrete step', icon: 'checkbox-outline', category: 'create', module: 'core', kind: 'action', action: 'task.create' },
-  { id: 'person', title: 'Add person', description: 'Save contact details', icon: 'person-add-outline', category: 'create', module: 'core', kind: 'action', action: 'contact.create' },
-  { id: 'organization', title: 'Add organization', description: 'Save a business or team', icon: 'business-outline', category: 'create', module: 'core', kind: 'action', action: 'organization.create' },
-  { id: 'record', title: 'Create record', description: 'Add workspace information', icon: 'document-text-outline', category: 'create', module: 'core', kind: 'action', action: 'record.create' },
-  { id: 'routine', title: 'Add routine', description: 'Choose when a workspace becomes active', icon: 'time-outline', category: 'create', module: 'core', kind: 'action', action: 'routine.save', personal: true },
-  { id: 'flows', title: 'Flow Books', description: 'Start or continue a process', icon: 'git-branch-outline', category: 'work', module: 'core', kind: 'flows', action: 'flow.start' },
-  { id: 'flow', title: 'Create Flow Book', description: 'Build a repeatable process', icon: 'add-circle-outline', category: 'create', module: 'core', kind: 'action', action: 'flow.publish' },
-  { id: 'site', title: 'Site Studio', description: 'Edit and publish your site', icon: 'globe-outline', category: 'manage', module: 'site', kind: 'site', action: 'site.generate' },
-  { id: 'search', title: 'Search the web', description: 'Find current public sources', icon: 'search-outline', category: 'explore', module: 'core', kind: 'action', action: 'web.search', personal: true },
+export const canonicalTools: readonly ToolDefinition[] = [
+  // 1. pos (Point of sale)
+  { id: 'pos', title: 'Point of sale', description: 'Fast counter sales, scan barcode, instant receipt', icon: 'storefront-outline', kind: 'tool', reach: 'money', module: 'commerce', category: 'work', action: 'pos.open', input: { section: 'sell' } },
+  // 2. register (Cash drawer)
+  { id: 'register', title: 'Cash drawer', description: 'Open shift, log cash in/out, count physical cash', icon: 'cash-outline', kind: 'tool', reach: 'money', module: 'commerce', category: 'work', action: 'pos.register.open' },
+  // 3. item (Products)
+  { id: 'item', title: 'Products', description: 'Add/edit products, photos, variants, units, prices', icon: 'pricetag-outline', kind: 'tool', reach: 'data', module: 'commerce', category: 'create', action: 'catalog.item.save' },
+  // 4. inventory (Stock)
+  { id: 'inventory', title: 'Stock', description: 'Count stock, record damage/wastage, transfers', icon: 'layers-outline', kind: 'tool', reach: 'data', module: 'commerce', category: 'manage', action: 'stock.adjust' },
+  // 5. order (Orders)
+  { id: 'order', title: 'Orders', description: 'Take customer orders, reserve stock, track shipping', icon: 'cart-outline', kind: 'tool', reach: 'customer', module: 'commerce', category: 'create', action: 'order.create' },
+  // 6. invoice (Billing)
+  { id: 'invoice', title: 'Billing', description: 'Issue commercial bills or GST-ready invoices', icon: 'document-outline', kind: 'tool', reach: 'money', module: 'commerce', category: 'create', action: 'invoice.issue' },
+  // 7. payment (Payments)
+  { id: 'payment', title: 'Payments', description: 'Record Cash/UPI/Card received, issue refunds', icon: 'card-outline', kind: 'tool', reach: 'money', module: 'commerce', category: 'work', action: 'payment.record' },
+  // 8. expense (Expenses)
+  { id: 'expense', title: 'Expenses', description: 'Log daily shop expenses (tea, packaging, fuel)', icon: 'wallet-outline', kind: 'tool', reach: 'money', module: 'commerce', category: 'work', action: 'expense.record' },
+  // 9. purchase (Purchases)
+  { id: 'purchase', title: 'Purchases', description: 'Create supplier purchase orders, request quotes', icon: 'bag-add-outline', kind: 'tool', reach: 'money', module: 'commerce', category: 'create', action: 'purchase.create' },
+  // 10. members (Team)
+  { id: 'members', title: 'Team', description: 'Manage staff, roles, briefs, and tool permissions', icon: 'people-outline', kind: 'tool', reach: 'data', module: 'core', category: 'manage', action: 'contact.create' },
+  // 11. contact (Contacts)
+  { id: 'contact', title: 'Contacts', description: 'Save customer, supplier, vendor phone numbers', icon: 'person-add-outline', kind: 'tool', reach: 'customer', module: 'core', category: 'create', action: 'contact.create' },
+  // 12. human (You do)
+  { id: 'human', title: 'You do', description: 'Physical or manual work (pack, lock shop, call)', icon: 'hand-left-outline', kind: 'human', reach: 'none', module: 'core', category: 'work', action: 'task.create' },
+  // 13. flow (Checklist)
+  { id: 'flow', title: 'Checklist', description: 'Run or create repeatable routines (Open, Close)', icon: 'git-branch-outline', kind: 'flow', reach: 'none', module: 'core', category: 'work', action: 'flow.start' },
+  // 14. site (Online store)
+  { id: 'site', title: 'Online store', description: 'Autopilot storefront, live catalog sync, edge CDN', icon: 'globe-outline', kind: 'site', reach: 'customer', module: 'site', category: 'manage', action: 'site.generate' },
+  // 15. inbox (Team feed)
+  { id: 'inbox', title: 'Team feed', description: 'Native zero-cost task feed (Mine, Available, Wait)', icon: 'file-tray-full-outline', kind: 'channel', reach: 'none', module: 'core', category: 'work', action: 'task.complete' },
+  // 16. chat (WhatsApp Chat - Manual free)
+  { id: 'chat', title: 'WhatsApp Chat', description: 'Manual 1-on-1 chat on phone, pre-filled text (wa.me)', icon: 'chatbubbles-outline', kind: 'tool', reach: 'customer', module: 'core', category: 'work', action: 'contact.create' },
+  // 17. whatsapp (WhatsApp API - Official Meta Cloud API)
+  { id: 'whatsapp', title: 'WhatsApp API', description: 'Automated official Meta Cloud API bills & tracking', icon: 'logo-whatsapp', kind: 'channel', reach: 'customer', module: 'commerce', category: 'work', action: 'invoice.issue' },
+  // 18. telegram (Team alerts)
+  { id: 'telegram', title: 'Team alerts', description: 'Free internal notifications, low-stock, closing', icon: 'paper-plane-outline', kind: 'channel', reach: 'none', module: 'core', category: 'work', action: 'task.create' },
 ];
+
+export const catalog: readonly ToolDefinition[] = canonicalTools;
 
 const modules = [
   { id: 'commerce', title: 'Commerce', description: 'Sales, POS, catalog, inventory, register, invoices and payments' },
@@ -79,19 +92,48 @@ export async function readCapabilities(client: Client): Promise<CapabilityState>
 
 export async function readWorkspaceTools(client: Client, access: AccessContext, providers: { search: boolean }) {
   const state = await readCapabilities(client);
+
+  let memberAccess: string[] | null = access.member.access ? [...access.member.access] : null;
+  if (!memberAccess && access.member.userId) {
+    try {
+      const email = access.identity.email ? access.identity.email.trim().toLowerCase() : '';
+      const partyRow = await client.execute({
+        sql: `SELECT data FROM records WHERE type='party' AND (
+          id=? OR owner=? OR json_extract(data, '$.userId')=?
+          ${email ? "OR lower(title)=? OR json_extract(data, '$.email')=?" : ''}
+        ) AND archived IS NULL LIMIT 1`,
+        args: email ? [access.member.userId, access.member.userId, access.member.userId, email, email] : [access.member.userId, access.member.userId, access.member.userId],
+      });
+      if (partyRow.rows.length > 0) {
+        const parsed = JSON.parse(String(partyRow.rows[0].data));
+        if (Array.isArray(parsed.access)) {
+          memberAccess = parsed.access.map(String);
+        }
+      }
+    } catch { /* ignore */ }
+  }
+
   const tools = catalog.filter((tool) => {
     const action = findAction(tool.action);
-    return (tool.module === 'core' || state.enabled[tool.module])
-      && (!tool.personal || access.workspace.mode === 'personal')
-      && (tool.action !== 'web.search' || providers.search)
-      && canExecute(access.member, tool.action)
-      && (!tool.grant || canExecute(access.member, tool.grant))
-      && Boolean(action)
-      && interfaceCatalog.some((item) => item.key === action?.interfaceKey)
-      && (tool.kind !== 'action' || !action?.fields.some((field) => field.required && field.hidden && !['flowId', 'actions'].includes(field.key)));
+    if (tool.module !== 'core' && !state.enabled[tool.module]) return false;
+    if (tool.personal && access.workspace.mode !== 'personal') return false;
+    if (tool.action === 'web.search' && !providers.search) return false;
+    if (Boolean(action) && !interfaceCatalog.some((item) => item.key === action?.interfaceKey)) return false;
+
+    if (access.member.role === 'owner' || access.member.role === 'admin') return true;
+
+    // Explicit access whitelist takes priority if defined on member
+    if (memberAccess !== null) {
+      return memberAccess.includes(tool.id) || memberAccess.includes(tool.action);
+    }
+
+    return canExecute(access.member, tool.action) && (!tool.grant || canExecute(access.member, tool.grant));
   });
+
   return {
-    tools: tools.map(({ id, title, description, icon, category, module, kind, action, input }) => ({ id, title, description, icon, category, module, kind, action, input: input || {} })),
+    tools: tools.map(({ id, title, description, icon, kind, reach, module, action, input, category }) => ({
+      id, title, description, icon, kind, reach, module, action, category: category || 'work', input: input || {},
+    })),
     modules: modules.map((module) => ({ ...module, enabled: state.enabled[module.id] })),
     version: state.version,
     canManage: managesMembers(access.member),

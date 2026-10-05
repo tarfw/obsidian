@@ -51,10 +51,47 @@ export function canUseWorkRole(role: string, actionId: string): boolean {
   return Boolean(action?.roles.includes('member') && workRoleActions(workRole(role)).has(actionId));
 }
 
+const toolActionMap: Record<string, readonly string[]> = {
+  pos: [
+    'pos.open', 'pos.checkout', 'pos.customer.save', 'pos.order.save',
+    'pos.order.item.update', 'pos.order.cancel', 'pos.order.accept',
+    'pos.order.handoff', 'pos.order.reject',
+  ],
+  register: ['pos.register.open', 'pos.register.close', 'pos.register.count'],
+  item: ['catalog.item.save', 'catalog.variant.save', 'price.set'],
+  inventory: ['stock.adjust'],
+  order: [
+    'order.create', 'order.fulfill', 'order.cancel', 'pos.order.save',
+    'pos.order.item.update', 'pos.order.cancel', 'pos.order.accept',
+    'pos.order.handoff', 'pos.order.reject', 'pos.order.reach',
+    'pos.order.collect', 'pos.order.deliver',
+  ],
+  invoice: ['invoice.issue'],
+  payment: ['payment.record'],
+  expense: ['expense.record'],
+  purchase: ['purchase.create', 'purchase.receive', 'purchase.pay'],
+  members: ['contact.create'],
+  contact: ['contact.create'],
+  human: ['task.create', 'task.complete'],
+  flow: ['flow.start', 'flow.advance'],
+  site: ['site.generate', 'site.compile', 'site.publish', 'site.edit', 'site.scout', 'site.checks'],
+  inbox: ['task.complete'],
+  chat: ['contact.create'],
+  whatsapp: ['invoice.issue'],
+  telegram: ['task.create'],
+};
+
 export function canExecute(member: Member, actionId: string): boolean {
   const action = findAction(actionId);
   if (member.state !== 'active' || !action || !action.roles.includes(member.role)) return false;
   if (member.role !== 'member') return true;
+  if (member.access !== undefined) {
+    if (member.access.includes(actionId)) return true;
+    for (const toolId of member.access) {
+      if (toolActionMap[toolId]?.includes(actionId)) return true;
+    }
+    return false;
+  }
   return grantedRoles(member).some((role) => workRoleActions(role).has(actionId));
 }
 

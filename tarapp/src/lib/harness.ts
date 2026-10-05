@@ -7,7 +7,39 @@ export const HARNESS_URL = (process.env.EXPO_PUBLIC_TARHARNESS_URL || 'https://t
 export type HarnessRole = 'owner' | 'admin' | 'member' | 'guest';
 export type WorkRole = string;
 export type ChatProvider = 'slack' | 'discord' | 'google-chat';
-export interface HarnessMember { id: string; email: string; name: string | null; role: HarnessRole; workRole: WorkRole; roles?: WorkRole[]; state: 'active' | 'pending' | 'revoked'; }
+export interface HarnessMember { id: string; email: string; name: string | null; role: HarnessRole; workRole: WorkRole; roles?: WorkRole[]; brief?: string; access?: string[]; state: 'active' | 'pending' | 'revoked'; }
+export interface ToolAccessEvaluation {
+  id: string;
+  title: string;
+  description: string;
+  kind: 'tool' | 'human' | 'channel' | 'flow' | 'site';
+  reach: 'none' | 'customer' | 'money' | 'data';
+  probability: number;
+  on: boolean;
+  ask: boolean;
+}
+export interface MemberAccessResult {
+  brief: string;
+  evaluations: ToolAccessEvaluation[];
+  suggestedAccess: string[];
+  model?: string;
+  review: true;
+}
+export interface FlowStepMatch {
+  line: string;
+  stepNumber: number;
+  kind: 'tool' | 'human';
+  toolId: string | null;
+  toolTitle: string | null;
+  confidence: number;
+  asksFirst: boolean;
+  suggestions?: { toolId: string; title: string; score: number }[];
+}
+export interface FlowMatchResult {
+  steps: FlowStepMatch[];
+  model?: string;
+  review: true;
+}
 export interface TeamChatState {
   commands: { id: string; state: string; result: string | null; createdAt: number }[];
   connection: { provider: ChatProvider; name: string; joinUrl: string } | null;
@@ -27,7 +59,7 @@ export type HarnessFieldKind = 'text' | 'email' | 'number' | 'textarea' | 'recor
 export interface HarnessActionField { key: string; label: string; kind: HarnessFieldKind; required?: boolean; hidden?: boolean; defaultValue?: string; recordType?: string; }
 export interface HarnessAction { id: string; version: number; title: string; description: string; type: 'app' | 'agent' | 'human'; interfaceKey: string; fields: HarnessActionField[]; output: string[]; roles: HarnessRole[]; effects: string[]; workRoles?: string[]; }
 export interface HarnessInterfaceContract { key: string; version: number; title: string; presentation: 'sheet' | 'screen' | 'flow'; submitLabel: string; }
-export interface HarnessTool { id: string; title: string; description: string; icon: string; category: 'work' | 'create' | 'manage' | 'explore'; module: 'core' | 'pos' | 'commerce' | 'site'; kind: 'action' | 'flows' | 'site'; action: string; input: Record<string, unknown>; }
+export interface HarnessTool { id: string; title: string; description: string; icon: string; category?: 'work' | 'create' | 'manage' | 'explore'; module: 'core' | 'pos' | 'commerce' | 'site'; kind: 'tool' | 'human' | 'channel' | 'flow' | 'site' | 'action' | 'flows'; reach?: 'none' | 'customer' | 'money' | 'data'; action: string; input: Record<string, unknown>; }
 export interface HarnessTools { tools: HarnessTool[]; modules: { id: 'pos' | 'commerce' | 'site'; title: string; description: string; enabled: boolean }[]; version: number; canManage: boolean; role: string; }
 export interface HarnessSpaceContext {
   id: string; label: string; role: string; owner: string; confidence: number;
@@ -118,7 +150,7 @@ export const harness = {
   workspaceRegistry,
   workspaceTools: (slug: string) => request<HarnessTools>(workspacePath(slug, 'tools'), { missingRouteOk: true }),
   members: (slug: string) => request<{ members: HarnessMember[]; currentUserId: string }>(workspacePath(slug, 'members')),
-  updateMember: (slug: string, id: string, input: { role?: HarnessRole; workRole?: WorkRole; roles?: WorkRole[]; state?: 'revoked' }) => request(workspacePath(slug, `members/${encodeURIComponent(id)}`), { method: 'PUT', body: input }),
+  updateMember: (slug: string, id: string, input: { role?: HarnessRole; workRole?: WorkRole; roles?: WorkRole[]; brief?: string; access?: string[]; email?: string; state?: 'revoked' }) => request(workspacePath(slug, `members/${encodeURIComponent(id)}`), { method: 'PUT', body: input }),
   teamChat: (slug: string) => request<TeamChatState>(workspacePath(slug, 'team-chat')),
   beginChatLink: (slug: string, provider: ChatProvider, purpose: 'destination' | 'identity') => request<{ id: string; command: string; expiresAt: number }>(workspacePath(slug, 'team-chat/link'), { method: 'POST', body: { provider, purpose } }),
   confirmChatLink: (slug: string, id: string, joinUrl: string) => request(workspacePath(slug, 'team-chat/confirm'), { method: 'POST', body: { id, joinUrl } }),
@@ -147,7 +179,9 @@ export const harness = {
   createWorkspace: (name: string, slug: string) => request<{ workspace: HarnessWorkspace }>('/v1/workspaces', { method: 'POST', body: { name, slug }, key: createOperationKey(`workspace:${slug}`) }),
   suggestWorkspace: (brief: string) => request<{ capabilities: { pos: boolean; commerce: boolean; site: boolean }; confidence: Record<string, number>; model?: string; review: true }>('/v1/ai/workspace-suggest', { method: 'POST', body: { brief } }),
   suggestMember: (slug: string, duties: string) => request<{ role: HarnessRole; workRole: WorkRole; roles: WorkRole[]; suggestedActions: string[]; permissions: string[]; confidence: number | null; model?: string; review: true }>(workspacePath(slug, 'ai/member-suggest'), { method: 'POST', body: { duties } }),
-  inviteMember: (slug: string, email: string, role: Exclude<HarnessRole, 'owner'> = 'member', workRole: WorkRole = 'general', roles: WorkRole[] = [workRole]) => request<{ invitation: { email: string; role: Exclude<HarnessRole, 'owner'>; state: 'pending' } }>(workspacePath(slug, 'members'), { method: 'POST', body: { email, role, workRole, roles }, key: createOperationKey(`invite:${slug}:${email}`) }),
+  evaluateMemberAccess: (slug: string, brief: string) => request<MemberAccessResult>(workspacePath(slug, 'ai/member-access'), { method: 'POST', body: { brief } }),
+  matchFlowSteps: (slug: string, steps: string[]) => request<FlowMatchResult>(workspacePath(slug, 'ai/flow-match'), { method: 'POST', body: { steps } }),
+  inviteMember: (slug: string, email: string, role: Exclude<HarnessRole, 'owner'> = 'member', workRole: WorkRole = 'general', roles: WorkRole[] = [workRole], brief?: string, access?: string[]) => request<{ invitation: { email: string; role: Exclude<HarnessRole, 'owner'>; state: 'pending' } }>(workspacePath(slug, 'members'), { method: 'POST', body: { email, role, workRole, roles, ...(brief ? { brief } : {}), ...(access ? { access } : {}) }, key: createOperationKey(`invite:${slug}:${email}`) }),
     records: (slug: string, type?: string, offset = 0, search = '') => request<{ records: HarnessRecord[]; next: number | null }>(`${workspacePath(slug, 'records')}?${type ? `type=${encodeURIComponent(type)}&` : ''}q=${encodeURIComponent(search)}&offset=${offset}`),
     record: (slug: string, id: string) => request<{ record: HarnessRecord }>(workspacePath(slug, `records/${encodeURIComponent(id)}`)),
   contacts: (slug: string, search = '', offset = 0) => request<{ contacts: HarnessRecord[]; next: number | null }>(`${workspacePath(slug, 'contacts')}?q=${encodeURIComponent(search)}&offset=${offset}`),

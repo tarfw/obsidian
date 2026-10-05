@@ -27,13 +27,13 @@ Tools never pipe messy API payloads directly to each other. Every tool is a focu
 
 ---
 
-## 2. The 17 Tool Concept Screens & Data Flows
+## 2. The 18 Tool Concept Screens & Data Flows
 
 ```
- 1. pos        5. order      9. purchase    13. flow       17. telegram
- 2. register   6. invoice   10. members     14. site
+ 1. pos        5. order      9. purchase    13. flow       17. whatsapp
+ 2. register   6. invoice   10. members     14. site       18. telegram
  3. item       7. payment   11. contact     15. inbox
- 4. inventory  8. expense   12. human       16. whatsapp
+ 4. inventory  8. expense   12. human       16. chat
 ```
 
 * **Shop Brand:** **Aambal Neyvagam** (ஆம்பல் நெய்வகம் — Handloom & Apparel Atelier)
@@ -126,39 +126,93 @@ Count physical cash at shift end, log drawer drops, and balance daily cash with 
 
 ### 3. `item` · Catalog Item
 
-Add and update products, variants, photos, and prices in seconds directly from a smartphone.
-
 ```text
 +--------------------------------------------------+
-| Add Product                               [Cancel]|
+| Add Product · Aambal Neyvagam            [Cancel]|
 +--------------------------------------------------+
-| [ + Take Photo with Phone Camera ]               |
-| Photo: pattu_semparuthi_01.jpg (Auto-cropped)    |
+| +---------------+                                |
+| |  [+ PHOTO]    |  pattu_semparuthi_01.jpg        |
+| |               |  1200 x 1200 (Square 1:1)       |
+| |  (Auto-Crop)  |  Uploaded to Cloudflare R2      |
+| +---------------+                                |
 |                                                  |
-| Product Name:                                    |
-| [ Semparuthi Pattu Selai (Thirumana Adai)      ] |
-|                                                  |
+| Product: [ Semparuthi Pattu Selai              ] |
 | Category: [ Kaithari Pattu Selaigal          v ] |
+| Price: [ ₹8,200 ]          MRP: [ ₹9,500       ] |
+| Initial Stock: [ 12 ]      Tax: [ GST 5%       ] |
 |                                                  |
-| Selling Price:              MRP / Compare:       |
-| [ ₹8,200             ]      [ ₹9,500           ] |
-|                                                  |
-| Initial Stock: [ 12 ]       Tax Mode: [ GST 5% ] |
+| VARIANTS (1-Tap Detected via JEV):               |
+|  [✓] 4-Muzham (₹4,500)   [✓] 8-Muzham (₹8,200)   |
 |--------------------------------------------------|
-| [ Save Draft ]                    [ Save & Publish ]|
+| [ Save Draft ]                  [ Save & Publish ]|
 +--------------------------------------------------+
 ```
 
-* **Touch / Sensor Inputs:** Camera snap, product name, category picker, selling price, MRP, initial stock count, tap `Save & Publish`.
-* **Storage (`records` in Turso):**
-  * `type="item"`: `{name: "Semparuthi Pattu Selai", tax: 5, unit: "piece"}`
-  * `type="variant"`: `{item: id, sku: "PAT-SEM-01", barcode: "890123450001"}`
-  * `type="price"`: `{amount: 820000, currency: "INR", mrp: 950000}`
-  * `type="stock"`: `{onhand: 12, reserved: 0, location: "main"}`
-  * Photo uploaded to Cloudflare R2 $\rightarrow$ hash key stored as `type="artifact"`.
-* **Downstream Sync:**
-  * Immediately published to public `site` storefront (`aambal.tar.site`) without site rebuilds.
-  * Instantly searchable by name and barcode at counter checkout in `pos`.
+| Fact / Asset | Engine | Storage Target / Key | Downstream Destination |
+| :--- | :--- | :--- | :--- |
+| **Photo Binary** | Cloudflare R2 | `artifacts/products/{hash}.webp` | Edge CDN, Storefront gallery |
+| **Product Record** | Turso Database | `type="item"` (`name`, `category`, `specs`) | `pos` search, `site` catalog |
+| **Variant Records** | Turso Database | `type="variant"` (`sku`, `barcode`, `option`) | `pos` barcode scanner, stock ledger |
+| **Price & Stock** | Turso Database | `type="price"`, `type="stock"` (`onhand`) | Counter checkout, inventory audit |
+| **Published PDP** | Cloudflare R2 | `sites/aambal/products/{slug}/index.html` | $0/visitor public edge storefront |
+
+| Catalog Step | JEV (System One: ~100ms) | LLM (Text Generation) | Code (Deterministic) |
+| :--- | :--- | :--- | :--- |
+| **Category & Dimension** | `choice`: Detects category & variant dimension | None | Binds to system schema |
+| **Variant Generation** | `choice`: Identifies options from voice/text | None | Computes Cartesian rows, auto-generates barcodes |
+| **Pricing, GST & Stock** | None | 0% *(Never touches numbers)* | Exact math: ₹ in paise, 5% GST, stock count |
+| **Long Descriptions & SEO** | `score`: Validates vocabulary & tone | Drafts 5 bullets & 100-word story | Compiles Schema.org JSON-LD to R2 |
+| **Publishing to Edge** | None | None | Compiles static HTML PDP $\rightarrow$ R2 |
+
+| # | Dimension Key | Category | Supported Trades | Examples |
+| :-: | :--- | :--- | :--- | :--- |
+| **1** | **`size`** | Physical Space | Apparel, Footwear, Linens | `S / M / L`, `38 / 40`, `Shoe 8 / 9`, `King` |
+| **2** | **`length`** | Physical Dimension | Handlooms, Hardware, Cables | `4-Muzham`, `8-Muzham`, `6.2m`, `10m roll` |
+| **3** | **`weight`** | Mass / Volume | Groceries, Sweets, Gold, Meat | `250g`, `500g`, `1kg`, `25kg bag`, `1 Pavan` |
+| **4** | **`volume`** | Liquid Capacity | Oils, Beverages, Paints, Ghee | `100ml`, `500ml`, `1L`, `5L Can` |
+| **5** | **`color`** | Sensory Quality | Textiles, Paints, Decor, Crafts | `Sivappu (Red)`, `Neelam (Blue)`, `Temple Border` |
+| **6** | **`flavour`** | Sensory Quality | Bakeries, Ice Creams, Agarbatti | `Chocolate / Vanilla`, `Sandalwood scent` |
+| **7** | **`material`** | Material Grade | Jewellery, Furniture, Textiles | `Pure Silk vs Art Silk`, `Silver 92.5`, `Teak` |
+| **8** | **`portion`** | Food & Canteen | Restaurants, Mess, Biryani | `Quarter`, `Half`, `Full`, `Single cup`, `Flask` |
+| **9** | **`prep`** | Custom / Recipe | Home Food, Kitchens, Tailoring | `Eggless`, `No Sugar`, `With Lining (+₹150)` |
+| **10** | **`time`** | Duration / Service | Rentals, Gyms, Services, Classes | `1 Hour`, `1 Day rental`, `1 Month plan` |
+| **11** | **`tier`** | Turnaround / Level | Tailors, Repairs, Salons | `Standard (3 days) vs Express (1 day)`, `VIP` |
+| **12** | **`pack`** | Trade Packaging | FMCG, Kirana, Wholesale | `Single (1x)`, `Pack of 6`, `Box of 50` |
+
+```typescript
+const result = await client.systemOne({
+  state: { trade: workspace.trade, product: title, input: rawText },
+  questions: {
+    dimension: {
+      type: "choice",
+      instructions: "Which of the 12 universal variant dimensions does `input` specify for `product`?",
+      criteria: {
+        size: "Clothing, shoe size, or dimensions",
+        length: "Traditional textile length (Muzham) or wire",
+        weight: "Mass or grocery weight (grams, kg)",
+        volume: "Liquid volume (ml, L)",
+        color: "Color, shade, or pattern",
+        flavour: "Food flavor or aroma",
+        material: "Metal, fabric, or wood grade",
+        portion: "Meal serving (Half, Full, Cup)",
+        prep: "Dietary or tailoring option (Eggless, Lining)",
+        time: "Rental or service duration",
+        tier: "Speed or service level (Express 1-day)",
+        pack: "Pack count or wholesale bundle",
+        none: "Single fixed item with no options",
+      },
+    },
+  },
+});
+```
+
+```text
+[ Merchant Voice / Text ] ──► [ JEV: System One (~100ms) ] ──► [ Deterministic Code (0% AI) ]
+"Red & Blue, S & M"             Matches: [color, size]           • Computes: 2 x 2 = 4 variants
+                                                                 • Binds: Base price ₹8,200
+                                                                 • Generates: Barcodes 890...01-04
+                                                                 • Writes: Turso `records`
+```
 
 ---
 
@@ -579,19 +633,48 @@ Role-projected unified work surface. Cashiers, packers, and owners see only what
 
 ---
 
-### 16. `whatsapp` · Customer WhatsApp Channel
+### 16. `chat` · Manual WhatsApp Chat (Free · ₹0.00)
 
-Dispatches automated receipts, order status updates, and tracking links to customer WhatsApp numbers.
+Direct 1-tap WhatsApp deep-link (`wa.me`) that opens the merchant's local WhatsApp / WhatsApp Business app with pre-filled message text. Zero API cost, zero setup required.
 
 ```text
 +--------------------------------------------------+
-| Customer WhatsApp Gateway                [Log]   |
+| WhatsApp Chat (Manual · ₹0.00)           [Cancel]|
++--------------------------------------------------+
+| Recipient: Senthamizh (+91 94441 55667)          |
+| Source: POS Counter Sale #1042                   |
+| Cost: ₹0.00 (Opens on your phone)                |
+|                                                  |
+| PRE-FILLED MESSAGE PREVIEW:                      |
+| ┌──────────────────────────────────────────────┐ │
+| │ Vanakkam Senthamizh! 🙏                      │ │
+| │ Here is your bill from Aambal Neyvagam:      │ │
+| │ https://aambal.tar.site/order/1042           │ │
+| └──────────────────────────────────────────────┘ │
+|--------------------------------------------------|
+|                                [ Open WhatsApp ] |
++--------------------------------------------------+
+```
+
+* **Touch / Sensor Inputs:** 1-tap `[ Open WhatsApp ]` button launches device `wa.me/919444155667?text=...`.
+* **Cost:** **₹0.00**. No Meta API credentials, no template reviews, zero risk of surprise bills.
+* **Storage / Sync:** Pure local action; optionally logs contact communication in `records`.
+
+---
+
+### 17. `whatsapp` · Official Customer WhatsApp API (Cloud WABA)
+
+Dispatches automated receipts, order status updates, and tracking links to customer WhatsApp numbers via Meta Cloud API.
+
+```text
++--------------------------------------------------+
+| Official WhatsApp Gateway (Meta API)     [Log]   |
 +--------------------------------------------------+
 | Target: Senthamizh (+91 94441 55667)             |
-| Event: Order Dispatched                          |
-| Cost: ₹0.15 (Meta Cloud Business API)            |
+| Type: Utility Template (Pre-Approved)            |
+| Cost: ₹0.115 + GST (Service: 1k free/mo)         |
 |                                                  |
-| OUTGOING MESSAGE PREVIEW:                        |
+| OUTGOING TEMPLATE PREVIEW:                       |
 | ┌──────────────────────────────────────────────┐ │
 | │ Vanakkam Senthamizh! 🙏                      │ │
 | │ Your Aambal Neyvagam Order #1042 has shipped.│ │
@@ -603,15 +686,18 @@ Dispatches automated receipts, order status updates, and tracking links to custo
 +--------------------------------------------------+
 ```
 
-* **Touch / Sensor Inputs:** Automated event trigger from `pos` or `order`, optional manual template edit, tap `Send Now`.
+* **Touch / Sensor Inputs:** Automated event trigger from `pos` or `order`, tap `Send Now`.
+* **Cost Structure:**
+  * **Utility API:** ₹0.115 + GST per message (Business initiates invoice/shipping template).
+  * **Service API:** First 1,000 conversations free per month (Customer initiates contact).
 * **Storage (`records` in Turso):**
-  * `type="notification"`: `{channel: "whatsapp", recipient: "+919444155667", cost: 0.15, status: "sent"}`
+  * `type="notification"`: `{channel: "whatsapp", recipient: "+919444155667", cost: 0.115, status: "sent"}`
 * **Downstream Sync:**
-  * Meta Cloud API delivers WhatsApp message directly to Senthamizh's phone.
+  * Meta Cloud API delivers WhatsApp message directly to Senthamizh's phone from verified business handle.
 
 ---
 
-### 17. `telegram` · Team Telegram Channel
+### 18. `telegram` · Team Telegram Channel
 
 Zero-cost push alerts and closing shift summaries delivered to internal shop staff and owners.
 
@@ -656,7 +742,7 @@ In TAR, `inbox` is not an email client. It is the real-time operational cockpit 
 | **Stock** | Mathivathani | Incoming supplier PO deliveries, stock discrepancy audits | 1-Tap verify delivery / post count |
 | **Customer** | Senthamizh / Yazhini | *(External WhatsApp bills, delivery tracking links)* | 1-Tap view bill / track package |
 
-### 3.2 17-Tool Inbox Event & Action Matrix
+### 3.2 18-Tool Inbox Event & Action Matrix
 
 | Source Tool | Trigger Event | Assigned Recipient | Card Action (1-Tap) | Resulting Record Change in Turso |
 | :--- | :--- | :--- | :--- | :--- |
@@ -675,7 +761,8 @@ In TAR, `inbox` is not an email client. It is the real-time operational cockpit 
 | **`flow`** | Next routine step ready to execute | Assigned Member | `[ Open Step ]` | Advances `runs.current_step` |
 | **`site`** | AI storefront theme or SEO update ready | Kayalvizhi (Owner) | `[ Publish Live ]` | Deploys static HTML to R2 |
 | **`inbox`** | Universal self-clearing work queue hub | All Members | `[ 1-Tap Action ]` | Card vanishes across devices |
-| **`whatsapp`** | Inbound customer message needing human reply | Kayalvizhi / Staff | `[ Open Chat ]` | Opens 1-on-1 chat in WhatsApp |
+| **`chat`** | Inbound customer message needing human reply | Kayalvizhi / Staff | `[ Open Chat ]` | Opens 1-on-1 chat in WhatsApp (₹0) |
+| **`whatsapp`** | Automated receipt / order tracking dispatch | Kayalvizhi (Owner) | `[ Send API Bill ]` | Meta Cloud API dispatch (₹0.115) |
 | **`telegram`** | External mirror of critical inbox cards | Kayalvizhi (Owner) | `[ View in App ]` | Deep links into `tarapp` |
 
 ### 3.3 The 3-Step Card Lifecycle
@@ -692,7 +779,7 @@ In TAR, `inbox` is not an email client. It is the real-time operational cockpit 
 
 | Tool | Primary Turso Table | Record `type` | Key Canonical Stored Fields | Downstream Destination |
 | :--- | :--- | :--- | :--- | :--- |
-| **`pos`** | `records` | `order`, `invoice`, `payment` | `lines`, `totals`, `method`, `reference` | `stock` decrement, `whatsapp` customer bill, `register` shift |
+| **`pos`** | `records` | `order`, `invoice`, `payment` | `lines`, `totals`, `method`, `reference` | `stock` decrement, `whatsapp`/`chat` bill, `register` shift |
 | **`register`** | `records` | `shift`, `posting` | `float`, `expected`, `actual`, `variance` | `telegram` closing report, Kayalvizhi's `inbox` |
 | **`item`** | `records` | `item`, `variant`, `price`, `stock` | `name`, `sku`, `amount`, `mrp`, `onhand` | Public `aambal.tar.site` catalog, `pos` search |
 | **`inventory`** | `records` | `stock`, `audit` | `onhand`, `location`, `reason`, `actor` | `site` sold-out badge, `inbox` low-stock recommendation |
@@ -707,7 +794,8 @@ In TAR, `inbox` is not an email client. It is the real-time operational cockpit 
 | **`flow`** | `runs`, `definitions` | `flow`, `run` | `steps`, `current_step`, `run_state` | Triggers target tools, advances shop routine |
 | **`site`** | `records` | `site` | `theme`, `pages`, `tokens`, `revision` | Cloudflare R2 pre-rendered HTML, D1 CONTROL |
 | **`inbox`** | `records` | *(Live projection)* | Cross-workspace actionable work items | Renders "Now" work list for each staff role |
-| **`whatsapp`** | `records` | `notification` | `recipient`, `template`, `cost: 0.15` | Customer WhatsApp app (External) |
+| **`chat`** | `records` | `contact` | `recipient`, `phone`, `cost: 0.00` | Merchant's WhatsApp mobile app (Local) |
+| **`whatsapp`** | `records` | `notification` | `recipient`, `template`, `cost: 0.115` | Customer WhatsApp app (Meta Cloud API) |
 | **`telegram`** | `records` | `notification` | `bot_id`, `chat_id`, `message`, `cost: 0.00` | Team Telegram group (Internal) |
 
 ---

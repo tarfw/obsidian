@@ -61,8 +61,26 @@ export function executeGateway(client: Client, context: AccessContext, request: 
     try: async () => {
       if (!request.idempotencyKey || request.idempotencyKey.length > 200) throw badRequest('Idempotency-Key is required.');
       const registeredAction = findAction(request.actionId);
-      if (!registeredAction) throw notFound('Action is not registered.');
-      if (!canExecute(context.member, request.actionId)) throw forbidden();
+      let memberToCheck = context.member;
+      if (memberToCheck.role === 'member' && !memberToCheck.access && memberToCheck.userId) {
+        try {
+          const email = context.identity.email ? context.identity.email.trim().toLowerCase() : '';
+          const partyRow = await client.execute({
+            sql: `SELECT data FROM records WHERE type='party' AND (
+              id=? OR owner=? OR json_extract(data, '$.userId')=?
+              ${email ? "OR lower(title)=? OR json_extract(data, '$.email')=?" : ''}
+            ) AND archived IS NULL LIMIT 1`,
+            args: email ? [memberToCheck.userId, memberToCheck.userId, memberToCheck.userId, email, email] : [memberToCheck.userId, memberToCheck.userId, memberToCheck.userId],
+          });
+          if (partyRow.rows.length > 0) {
+            const parsed = JSON.parse(String(partyRow.rows[0].data));
+            if (Array.isArray(parsed.access)) {
+              memberToCheck = { ...memberToCheck, access: parsed.access.map(String), brief: typeof parsed.brief === 'string' ? parsed.brief : undefined };
+            }
+          }
+        } catch { /* ignore */ }
+      }
+      if (!registeredAction || !canExecute(memberToCheck, request.actionId)) throw forbidden();
       const module = moduleForAction(request.actionId);
       if (module && !(await readCapabilities(client)).enabled[module]) throw forbidden();
       for (const field of registeredAction.fields) {
@@ -103,7 +121,7 @@ export function executeGateway(client: Client, context: AccessContext, request: 
         return result;
       }
       if (request.actionId.startsWith('pos.')) return executePos(client, context, request.actionId, request.input, request.idempotencyKey, hash);
-      if (commerceActionIds.has(request.actionId)) return executeCommerce(client, context, request.actionId, request.input, request.idempotencyKey, hash);
+      if (commerceActionIds.has(request.actionId)) return executeCommerce(client, context, request.actionId, request.input, request.idempotencyKey, hash, services.typesafe);
       if (request.actionId === 'site.generate') return executeSiteGenerate(client, context, request.input, request.idempotencyKey, hash, services.typesafe, services.ai, services.publication, services.siteModel, services.groqApiKey, services.productContent, services.pexelsApiKey);
       if (request.actionId === 'site.edit') return executeSiteEdit(client, context, request.input, request.idempotencyKey, hash, services.siteReleases);
       if (request.actionId === 'site.ask') return executeSiteAsk(client, context, request.input, services.typesafe, services.publication, services.ai, services.siteModel, services.groqApiKey);

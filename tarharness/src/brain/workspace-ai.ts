@@ -1,4 +1,5 @@
-import { askSystemOne, choiceOf } from './systemone.ts';
+import { askSystemOne, choiceOf, noulOf, type SystemOneQuestion } from './systemone.ts';
+import { canonicalTools, type ToolDefinition } from '../registry/tools.ts';
 
 export interface WorkspaceCapabilitiesResult {
   readonly capabilities: {
@@ -252,6 +253,131 @@ export async function suggestMember(
     permissions: fallback.permissions,
     confidence: answer.confidence ?? 0.85,
     model: outcome.value.model,
+    review: true,
+  };
+}
+
+export interface ToolAccessEvaluation {
+  readonly id: string;
+  readonly title: string;
+  readonly description: string;
+  readonly kind: 'tool' | 'human' | 'channel' | 'flow' | 'site';
+  readonly reach: 'none' | 'customer' | 'money' | 'data';
+  readonly probability: number;
+  readonly on: boolean;
+  readonly ask: boolean;
+}
+
+export interface MemberAccessResult {
+  readonly brief: string;
+  readonly evaluations: ToolAccessEvaluation[];
+  readonly suggestedAccess: string[];
+  readonly model?: string;
+  readonly review: true;
+}
+
+const toolKeywords: Record<string, RegExp> = {
+  pos: /\b(pos|point of sale|counter sales?|counter|cashier|checkout|barcode|receipt|kadanai|sell|selling)\b/i,
+  register: /\b(register|cash drawer|drawer|cash in|cash out|count (physical )?cash|float|shift|closing drawer)\b/i,
+  item: /\b(products?|catalog|items?|variants?|prices?|photos?|units?|mrp)\b/i,
+  inventory: /\b(inventory|stock|count stock|damage|wastage|transfers?|godown|warehouse|audit)\b/i,
+  order: /\b(orders?|take orders?|reserve stock|shipping|courier|delivery|pack(ing)?|parcel)\b/i,
+  invoice: /\b(billing|bills?|invoice|invoices|gst|tax invoice)\b/i,
+  payment: /\b(payments?|upi|cash received|card|refunds?|settle|settlement)\b/i,
+  expense: /\b(expenses?|daily expenses?|petty cash|tea|kaapi|packaging|fuel|expenditure)\b/i,
+  purchase: /\b(purchases?|purchase orders?|po|suppliers?|vendors?|quotes?|buy supplies|procurement)\b/i,
+  members: /\b(members?|team|staff|roles?|briefs?|permissions?|invite|cashier and packer)\b/i,
+  contact: /\b(contacts?|customers?|phone numbers?|directory|suppliers? phone)\b/i,
+  human: /\b(you do|manual|physical|pack box|lock shop|lock shutter|call|chore|hand)\b/i,
+  flow: /\b(flow|flows?|routines?|checklist|closing( the shop)?|opening( the shop)?|handover)\b/i,
+  site: /\b(site|sites?|online store|storefront|website|landing|theme|catalog sync)\b/i,
+  inbox: /\b(inbox|team feed|task feed|now|work queue)\b/i,
+  chat: /\b(chat|whatsapp chat|wa\.me|message customer|manual chat)\b/i,
+  whatsapp: /\b(whatsapp api|cloud waba|official whatsapp|automated bills|pdf bill|meta api)\b/i,
+  telegram: /\b(telegram|telegram bot|team alerts|closing report|channel)\b/i,
+};
+
+function fallbackToolProbability(toolId: string, brief: string): number {
+  const matcher = toolKeywords[toolId];
+  if (matcher && matcher.test(brief)) {
+    if (toolId === 'pos') return 0.95;
+    if (toolId === 'register') return 0.93;
+    if (toolId === 'flow') return 0.91;
+    return 0.88;
+  }
+  return 0.10;
+}
+
+export async function evaluateMemberAccess(
+  apiKey: string | undefined,
+  brief: string,
+  activeTools?: readonly ToolDefinition[],
+): Promise<MemberAccessResult> {
+  const text = brief.trim().slice(0, 2000);
+  const tools = activeTools || canonicalTools;
+
+  let rawProbabilities: Record<string, number> = {};
+  let model: string | undefined;
+
+  if (apiKey && text) {
+    const questions: Record<string, SystemOneQuestion> = {};
+    for (const tool of tools) {
+      questions[tool.id] = {
+        type: 'noul',
+        instructions: `Does \`brief\` say this person needs ${tool.description}?`,
+      };
+    }
+    const outcome = await askSystemOne(apiKey, {
+      timeout: 8_000,
+      state: { brief: text },
+      questions,
+    });
+    if (outcome.ok) {
+      model = outcome.value.model;
+      for (const tool of tools) {
+        const answer = noulOf(outcome.value.answers[tool.id]);
+        rawProbabilities[tool.id] = answer.probability !== null ? answer.probability : fallbackToolProbability(tool.id, text);
+      }
+    } else {
+      for (const tool of tools) {
+        rawProbabilities[tool.id] = fallbackToolProbability(tool.id, text);
+      }
+    }
+  } else {
+    for (const tool of tools) {
+      rawProbabilities[tool.id] = fallbackToolProbability(tool.id, text);
+    }
+  }
+
+  const evaluations: ToolAccessEvaluation[] = tools.map((tool) => {
+    const prob = rawProbabilities[tool.id] ?? 0.10;
+    const isMoney = tool.reach === 'money';
+    // Rules kept in code:
+    // >= 0.80: Pre-ticked (on: true), UNLESS sensitive (reach: money) which is NEVER pre-ticked
+    // 0.20 - 0.80: Unticked ask me (ask: true)
+    // <= 0.20: Hidden under More (on: false, ask: false)
+    const on = !isMoney && prob >= 0.80;
+    const ask = isMoney ? prob >= 0.20 : (prob >= 0.20 && prob < 0.80);
+
+    return {
+      id: tool.id,
+      title: tool.title,
+      description: tool.description,
+      kind: tool.kind,
+      reach: tool.reach,
+      probability: Number(prob.toFixed(2)),
+      on,
+      ask,
+    };
+  });
+
+  const suggestedAccess = evaluations.filter((item) => item.on).map((item) => item.id);
+
+  return {
+    brief: text,
+    evaluations,
+    suggestedAccess,
+    model,
     review: true,
   };
 }

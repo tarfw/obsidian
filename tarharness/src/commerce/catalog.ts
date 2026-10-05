@@ -4,12 +4,21 @@ const managers = ['owner', 'admin'] as const;
 const operators = ['owner', 'admin', 'member'] as const;
 
 export const commerceActions = [
-  { id: 'catalog.item.save', version: 1, type: 'app', title: 'Save item', description: 'Create a sellable or purchasable catalog item.', interfaceKey: 'form', fields: [
+  { id: 'catalog.item.save', version: 1, type: 'app', title: 'Save item', description: 'Create a sellable or purchasable catalog item with pricing, stock and variants.', interfaceKey: 'item', fields: [
     { key: 'id', label: 'Item', kind: 'record', hidden: true }, { key: 'version', label: 'Version', kind: 'number', hidden: true },
-    { key: 'name', label: 'Item name', kind: 'text', required: true }, { key: 'sku', label: 'Item code', kind: 'text', required: true },
+    { key: 'name', label: 'Item name', kind: 'text', required: true }, { key: 'sku', label: 'Item code', kind: 'text' },
+    { key: 'category', label: 'Category', kind: 'text' }, { key: 'price', label: 'Price (paise)', kind: 'number' },
+    { key: 'mrp', label: 'MRP (paise)', kind: 'number' }, { key: 'stock', label: 'Initial stock', kind: 'number' },
     { key: 'unit', label: 'Base unit', kind: 'text', defaultValue: 'each' }, { key: 'tax', label: 'Tax basis points', kind: 'number', defaultValue: '0' },
-    { key: 'status', label: 'Status (active or archived)', kind: 'text', defaultValue: 'active' },
-  ], output: ['item'], roles: managers, effects: ['record_create'] },
+    { key: 'photoUrl', label: 'Photo URL', kind: 'text' },
+    { key: 'status', label: 'Status (active or draft or archived)', kind: 'text', defaultValue: 'active' },
+    { key: 'variants', label: 'Variants list', kind: 'action-list' },
+  ], output: ['item', 'variant', 'price', 'stock'], roles: managers, effects: ['record_create'] },
+  { id: 'catalog.item.detect', version: 1, type: 'app', title: 'Detect variants', description: 'Detect variant dimensions and options using Jev System One.', interfaceKey: 'form', fields: [
+    { key: 'product', label: 'Product name', kind: 'text', required: true },
+    { key: 'input', label: 'Variant description or voice text', kind: 'text', required: true },
+    { key: 'trade', label: 'Trade category', kind: 'text' },
+  ], output: ['variants', 'dimension'], roles: managers, effects: [] },
   { id: 'catalog.variant.save', version: 1, type: 'app', title: 'Save variant', description: 'Create a concrete stock keeping variant for an item.', interfaceKey: 'form', fields: [
     { key: 'id', label: 'Variant', kind: 'record', hidden: true }, { key: 'version', label: 'Version', kind: 'number', hidden: true },
     { key: 'item', label: 'Item ID', kind: 'record', required: true }, { key: 'name', label: 'Variant name', kind: 'text', required: true }, { key: 'sku', label: 'SKU', kind: 'text', required: true },

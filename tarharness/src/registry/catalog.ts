@@ -37,6 +37,7 @@ export interface InterfaceContract {
 
 export const interfaceCatalog = [
   { key: 'pos', version: 1, title: 'Point of sale', presentation: 'flow', submitLabel: 'Pay' },
+  { key: 'item', version: 1, title: 'Catalog item', presentation: 'screen', submitLabel: 'Save & Publish' },
   { key: 'form', version: 1, title: 'Form', presentation: 'screen', submitLabel: 'Save' },
   { key: 'confirmation', version: 1, title: 'Confirmation', presentation: 'sheet', submitLabel: 'Confirm' },
   { key: 'flow', version: 1, title: 'Flow', presentation: 'flow', submitLabel: 'Start' },

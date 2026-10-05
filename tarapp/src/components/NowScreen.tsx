@@ -461,11 +461,11 @@ export default function NowScreen() {
         <View style={styles.actionsBar}>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Open tools and actions"
+            accessibilityLabel="Open tools"
             onPress={() => router.push('/(home)/tools')}
             style={styles.actionsChip}
           >
-            <Text style={styles.actionsChipText}>Actions</Text>
+            <Text style={styles.actionsChipText}>Tools</Text>
           </Pressable>
         </View>
 

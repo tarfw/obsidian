@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { suggestCapabilities, suggestMember } from '../src/brain/workspace-ai.ts';
-import { suggest, fallbackAction } from '../src/brain/jev.ts';
+import { evaluateMemberAccess, suggestCapabilities, suggestMember } from '../src/brain/workspace-ai.ts';
+import { matchFlowSteps, suggest, fallbackAction } from '../src/brain/jev.ts';
 
 describe('Jev workspace & member AI suggestions', () => {
   it('suggests POS, Commerce, and Site for a restaurant brief', async () => {
@@ -130,5 +130,83 @@ describe('Jev workspace & member AI suggestions', () => {
 
     const searchRes = await suggest(undefined, 'Search online for coffee bean supplier');
     expect(searchRes.action).toBe('web.search');
+  });
+
+  it('evaluates member brief with Noul and enforces sensitive money tool safety in code', async () => {
+    const cashierResult = await evaluateMemberAccess(undefined, 'Handles counter sales and cash drawer');
+    expect(cashierResult.review).toBe(true);
+    expect(cashierResult.evaluations.length).toBe(18);
+
+    const posEval = cashierResult.evaluations.find((e) => e.id === 'pos')!;
+    const registerEval = cashierResult.evaluations.find((e) => e.id === 'register')!;
+    const purchaseEval = cashierResult.evaluations.find((e) => e.id === 'purchase')!;
+    const siteEval = cashierResult.evaluations.find((e) => e.id === 'site')!;
+
+    // High scores for pos and register
+    expect(posEval.probability).toBeGreaterThanOrEqual(0.80);
+    expect(registerEval.probability).toBeGreaterThanOrEqual(0.80);
+
+    // Low scores for purchase and site
+    expect(purchaseEval.probability).toBeLessThanOrEqual(0.20);
+    expect(siteEval.probability).toBeLessThanOrEqual(0.20);
+
+    // CRITICAL: Sensitive tools (reach: 'money') are NEVER auto pre-ticked
+    expect(posEval.reach).toBe('money');
+    expect(posEval.on).toBe(false);
+    expect(posEval.ask).toBe(true);
+
+    expect(registerEval.reach).toBe('money');
+    expect(registerEval.on).toBe(false);
+    expect(registerEval.ask).toBe(true);
+
+    // Non-sensitive data tools with high score ARE pre-ticked
+    const inventoryResult = await evaluateMemberAccess(undefined, 'Checks inventory stock counts and runs daily closing flow checklist');
+    const inventoryEval = inventoryResult.evaluations.find((e) => e.id === 'inventory')!;
+    const flowEval = inventoryResult.evaluations.find((e) => e.id === 'flow')!;
+
+    expect(inventoryEval.probability).toBeGreaterThanOrEqual(0.80);
+    expect(inventoryEval.reach).toBe('data');
+    expect(inventoryEval.on).toBe(true);
+    expect(inventoryEval.ask).toBe(false);
+
+    expect(flowEval.probability).toBeGreaterThanOrEqual(0.80);
+    expect(flowEval.reach).toBe('none');
+    expect(flowEval.on).toBe(true);
+    expect(flowEval.ask).toBe(false);
+
+    expect(inventoryResult.suggestedAccess).toContain('inventory');
+    expect(inventoryResult.suggestedAccess).toContain('flow');
+  });
+
+  it('matches multi-line flow steps via Choice and applies safety flags for money and customer reach', async () => {
+    const lines = [
+      'Count the cash',
+      'Check the stock',
+      'Send the day report to owner',
+      'Issue invoice to customer',
+    ];
+    const matchResult = await matchFlowSteps(undefined, lines);
+    expect(matchResult.review).toBe(true);
+    expect(matchResult.steps.length).toBe(4);
+
+    // 1. "Count the cash" -> human ("You do")
+    expect(matchResult.steps[0].kind).toBe('human');
+    expect(matchResult.steps[0].toolId).toBe(null);
+    expect(matchResult.steps[0].asksFirst).toBe(false);
+
+    // 2. "Check the stock" -> tool (inventory)
+    expect(matchResult.steps[1].kind).toBe('tool');
+    expect(matchResult.steps[1].toolId).toBe('inventory');
+    expect(matchResult.steps[1].asksFirst).toBe(false);
+
+    // 3. "Send the day report to owner" -> tool (telegram)
+    expect(matchResult.steps[2].kind).toBe('tool');
+    expect(matchResult.steps[2].toolId).toBe('telegram');
+    expect(matchResult.steps[2].asksFirst).toBe(false);
+
+    // 4. "Issue invoice to customer" -> tool (invoice, reach: 'money') -> asksFirst: true
+    expect(matchResult.steps[3].kind).toBe('tool');
+    expect(matchResult.steps[3].toolId).toBe('invoice');
+    expect(matchResult.steps[3].asksFirst).toBe(true);
   });
 });

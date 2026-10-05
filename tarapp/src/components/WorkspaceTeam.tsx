@@ -19,6 +19,7 @@ import {
   type HarnessMember,
   type HarnessRole,
   type TeamChatState,
+  type ToolAccessEvaluation,
   type WorkRole,
 } from '@/lib/harness';
 
@@ -31,12 +32,12 @@ const baseRoles: { label: string; role: Exclude<HarnessRole, 'owner'>; workRole:
 ];
 
 const dutyPresets = [
-  { label: 'Cashier', duties: 'Cashier: record sales, checkout and register totals' },
-  { label: 'Kitchen / Cook', duties: 'Kitchen chef: prepare food orders and handoff' },
-  { label: 'Manager', duties: 'Manager: manage catalog items, stock adjustments and prices' },
-  { label: 'Courier / Delivery', duties: 'Delivery driver: claim, collect and deliver orders' },
-  { label: 'Warehouse', duties: 'Warehouse: pick items, pack shipments and transfer stock' },
-  { label: 'Accountant', duties: 'Accounting: issue invoices, payments, expenses and bank reconciliation' },
+  { label: 'Cashier', workrole: 'cashier', brief: 'Handles counter sales, takes payments, and closes the cash drawer at night.' },
+  { label: 'Kitchen / Cook', workrole: 'chef', brief: 'Prepares food orders, tracks kitchen ingredients, and marks order handoff.' },
+  { label: 'Manager', workrole: 'manager', brief: 'Manages catalog items, stock adjustments, supplier purchases, and team members.' },
+  { label: 'Delivery', workrole: 'courier', brief: 'Claims orders, packs delivery parcels, and updates delivery tracking.' },
+  { label: 'Warehouse', workrole: 'warehouse', brief: 'Counts stock inventory, receives incoming supplier shipments, and records wastage.' },
+  { label: 'Accountant', workrole: 'accountant', brief: 'Issues GST invoices, logs expenses, tracks payments, and reviews closing register.' },
 ];
 
 const roleLabel = (member: HarnessMember) =>
@@ -69,20 +70,20 @@ export default function WorkspaceTeam({
   const [members, setMembers] = useState<HarnessMember[]>([]);
   const [self, setSelf] = useState('');
 
-  // 2-Step Member Onboarding state
-  const [memberStep, setMemberStep] = useState<1 | 2>(1);
+  // Member form state
   const [email, setEmail] = useState('');
-  const [duties, setDuties] = useState('');
+  const [workRole, setWorkRole] = useState('general');
+  const [brief, setBrief] = useState('');
   const [selectedRole, setSelectedRole] = useState(baseRoles[0]);
-  const [grantedRoles, setGrantedRoles] = useState<string[]>(['general']);
-  const [suggestedPermissions, setSuggestedPermissions] = useState<string[]>([]);
-  const [matching, setMatching] = useState(false);
+  const [selectedAccess, setSelectedAccess] = useState<string[]>([]);
+  const [evaluations, setEvaluations] = useState<ToolAccessEvaluation[]>([]);
+  const [showUnassigned, setShowUnassigned] = useState(false);
+  const [evaluating, setEvaluating] = useState(false);
 
   const [editing, setEditing] = useState<HarnessMember | null>(null);
   const [adding, setAdding] = useState(false);
   const [provider, setProvider] = useState<ChatProvider | null>(null);
   const [command, setCommand] = useState('');
-  const [invitation, setInvitation] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -197,7 +198,7 @@ export default function WorkspaceTeam({
   const remove = (member: HarnessMember) =>
     Alert.alert(
       'Remove member?',
-      `${member.email} will lose TAR access, including chat Actions. Their chat-platform membership is unchanged.`,
+      `${member.email} will lose TAR access, including chat tools. Their chat-platform membership is unchanged.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -208,80 +209,92 @@ export default function WorkspaceTeam({
       ],
     );
 
+  const evaluateBrief = async (briefText?: string) => {
+    const text = (briefText !== undefined ? briefText : brief).trim();
+    if (!text) return;
+    setEvaluating(true);
+    try {
+      const result = await harness.evaluateMemberAccess(scope, text);
+      setEvaluations(result.evaluations);
+      if (!editing || selectedAccess.length === 0) {
+        setSelectedAccess(result.suggestedAccess);
+      }
+    } catch (cause) {
+      Alert.alert('Evaluation notice', cause instanceof Error ? cause.message : 'Could not evaluate brief.');
+    } finally {
+      setEvaluating(false);
+    }
+  };
+
   const edit = (member: HarnessMember) => {
     setEditing(member);
     setEmail(member.email);
-    setAdding(true);
-    setMemberStep(1);
     setSelectedRole(baseRoles.find((r) => r.role === member.role) || baseRoles[0]);
-    const existingGrants = member.roles?.length ? member.roles : [member.workRole || 'general'];
-    setGrantedRoles(existingGrants);
-    setDuties(existingGrants.join(', '));
-  };
-
-  const reviewPermissions = async () => {
-    if (!editing && !email.trim()) {
-      setError('Enter a Google account email.');
-      return;
-    }
-    setError('');
-    setMatching(true);
-    try {
-      if (selectedRole.role === 'member') {
-        const suggestion = await harness.suggestMember(scope, duties || 'General work');
-        if (suggestion) {
-          const roles = suggestion.roles?.length ? suggestion.roles : [suggestion.workRole || 'general'];
-          setGrantedRoles(roles);
-          setSuggestedPermissions(suggestion.permissions || []);
-        }
-      } else {
-        setGrantedRoles(['general']);
-        setSuggestedPermissions([]);
-      }
-      setMemberStep(2);
-    } catch {
-      // Fallback: parse duties string
-      const parsed = duties
-        .split(',')
-        .map((s) => s.trim().toLowerCase())
-        .filter(Boolean);
-      const roles = parsed.length ? parsed : ['general'];
-      setGrantedRoles(roles);
-      setMemberStep(2);
-    } finally {
-      setMatching(false);
+    setWorkRole(member.workRole || 'general');
+    setBrief(member.brief || '');
+    setSelectedAccess(member.access ? [...member.access] : []);
+    setEvaluations([]);
+    setShowUnassigned(false);
+    setAdding(true);
+    if (member.brief) {
+      void evaluateBrief(member.brief);
     }
   };
 
-  const toggleGrant = (grant: string) => {
-    setGrantedRoles((curr) => {
-      if (curr.includes(grant)) {
-        const filtered = curr.filter((g) => g !== grant);
-        return filtered.length ? filtered : ['general'];
-      }
-      return [...curr.filter((g) => g !== 'general'), grant];
-    });
+  const toggleAccess = (id: string) => {
+    setSelectedAccess((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id],
+    );
   };
 
   const saveMember = () =>
     void run(async () => {
-      const grants =
-        selectedRole.role === 'member'
-          ? grantedRoles.map((v) => v.trim().toLowerCase()).filter(Boolean)
-          : ['general'];
-      if (!grants.length) grants.push('general');
-      const access = { role: selectedRole.role, workRole: grants[0], roles: grants };
-      if (editing) await harness.updateMember(scope, editing.id, access);
-      else await harness.inviteMember(scope, email.trim(), access.role, access.workRole, access.roles);
+      if (!editing && !email.trim()) {
+        throw new Error('Enter a Google account email.');
+      }
+      const role = selectedRole.role;
+      const wr = workRole.trim().toLowerCase() || 'general';
+      const rolesList = [wr];
+      const briefClean = brief.trim();
+      const accessList = [...selectedAccess];
+
+      if (editing) {
+        await harness.updateMember(scope, editing.id, {
+          role,
+          workRole: wr,
+          roles: rolesList,
+          brief: briefClean,
+          access: accessList,
+          email: editing.email,
+        });
+      } else {
+        await harness.inviteMember(
+          scope,
+          email.trim(),
+          role,
+          wr,
+          rolesList,
+          briefClean,
+          accessList,
+        );
+      }
 
       setEmail('');
-      setDuties('');
+      setBrief('');
+      setWorkRole('general');
+      setSelectedAccess([]);
+      setEvaluations([]);
       setEditing(null);
       setAdding(false);
-      setMemberStep(1);
-      setSelectedRole(baseRoles[0]);
-      setGrantedRoles(['general']);
+      setShowUnassigned(false);
     });
+
+  const suggested = evaluations.filter(
+    (e) => e.probability > 0.20 || selectedAccess.includes(e.id),
+  );
+  const unassigned = evaluations.filter(
+    (e) => e.probability <= 0.20 && !selectedAccess.includes(e.id),
+  );
 
   return (
     <Modal visible animationType="slide" onRequestClose={onClose}>
@@ -362,10 +375,12 @@ export default function WorkspaceTeam({
                           () => {
                             setEditing(null);
                             setEmail('');
-                            setDuties('');
+                            setBrief('');
+                            setWorkRole('general');
                             setSelectedRole(baseRoles[0]);
-                            setGrantedRoles(['general']);
-                            setMemberStep(1);
+                            setSelectedAccess([]);
+                            setEvaluations([]);
+                            setShowUnassigned(false);
                             setAdding(true);
                           },
                           false,
@@ -411,6 +426,7 @@ export default function WorkspaceTeam({
                             <Text numberOfLines={1} style={styles.memberMeta}>
                               {member.name ? `${member.email} · ` : ''}
                               {roleLabel(member)}
+                              {member.access?.length ? ` · ${member.access.length} tools` : ''}
                             </Text>
                           </View>
                           <View
@@ -427,10 +443,10 @@ export default function WorkspaceTeam({
                               style={[
                                 styles.stateText,
                                 member.state === 'active'
-                                  ? styles.stateActiveText
-                                  : member.state === 'pending'
-                                  ? styles.statePendingText
-                                  : styles.stateRevokedText,
+                                ? styles.stateActiveText
+                                : member.state === 'pending'
+                                ? styles.statePendingText
+                                : styles.stateRevokedText,
                               ]}
                             >
                               {member.state}
@@ -463,16 +479,16 @@ export default function WorkspaceTeam({
                     ) : null}
                   </View>
 
-                  {/* 2-Step Member Flow */}
+                  {/* Member Access & Brief Editor */}
                   {adding ? (
                     <View style={styles.form}>
                       <View style={styles.formHeading}>
                         <View>
                           <Text style={styles.sectionTitle}>
-                            {editing ? 'Edit member access' : 'Invite a member'}
+                            {editing ? `Member: ${editing.name || editing.email}` : 'Invite a member'}
                           </Text>
-                          <Text style={styles.stepIndicator}>
-                            Step {memberStep} of 2: {memberStep === 1 ? 'Describe duties' : 'Review grants with Jev'}
+                          <Text style={styles.formSub}>
+                            {editing ? 'Update role brief and access' : 'Enter email and role brief'}
                           </Text>
                         </View>
                         <Pressable
@@ -488,171 +504,222 @@ export default function WorkspaceTeam({
                         </Pressable>
                       </View>
 
-                      {memberStep === 1 ? (
-                        <>
-                          {!editing ? (
-                            <TextInput
-                              accessibilityLabel="Member Google email"
-                              placeholder="Google account email (e.g. ravi@example.com)"
-                              placeholderTextColor={palette.faint}
-                              autoCapitalize="none"
-                              keyboardType="email-address"
-                              value={email}
-                              onChangeText={setEmail}
-                              style={styles.input}
-                              autoFocus
-                            />
-                          ) : (
-                            <Text style={styles.formEmail}>{editing.email}</Text>
-                          )}
-
-                          <Text style={styles.fieldLabel}>Membership Tier</Text>
-                          <View style={styles.roleOptions}>
-                            {baseRoles
-                              .filter((item) => item.role !== 'admin' || chat.role === 'owner')
-                              .map((item) => (
-                                <Pressable
-                                  key={item.label}
-                                  accessibilityRole="radio"
-                                  accessibilityState={{
-                                    selected: selectedRole.label === item.label,
-                                  }}
-                                  disabled={busy}
-                                  onPress={() => setSelectedRole(item)}
-                                  style={[
-                                    styles.roleOption,
-                                    selectedRole.label === item.label &&
-                                      styles.roleOptionSelected,
-                                  ]}
-                                >
-                                  <Text
-                                    style={[
-                                      styles.roleText,
-                                      selectedRole.label === item.label &&
-                                        styles.roleTextSelected,
-                                    ]}
-                                  >
-                                    {item.label}
-                                  </Text>
-                                </Pressable>
-                              ))}
-                          </View>
-
-                          {selectedRole.role === 'member' ? (
-                            <>
-                              <Text style={styles.fieldLabel}>What can this person do?</Text>
-                              <TextInput
-                                accessibilityLabel="Duties description"
-                                placeholder="e.g. Cashier and manage products, or kitchen cook"
-                                placeholderTextColor={palette.faint}
-                                value={duties}
-                                onChangeText={setDuties}
-                                multiline
-                                numberOfLines={2}
-                                style={styles.textArea}
-                              />
-                              <View style={styles.presetChips}>
-                                {dutyPresets.map((preset) => (
-                                  <Pressable
-                                    key={preset.label}
-                                    onPress={() => setDuties(preset.duties)}
-                                    style={styles.presetChip}
-                                  >
-                                    <Text style={styles.presetChipText}>{preset.label}</Text>
-                                  </Pressable>
-                                ))}
-                              </View>
-                            </>
-                          ) : null}
-
-                          <Text style={styles.helper}>
-                            Access activates when they sign in with this Google account.
-                          </Text>
-
-                          <View style={styles.formFooter}>
-                            {button(
-                              'Cancel',
-                              () => {
-                                setAdding(false);
-                                setEditing(null);
-                              },
-                              false,
-                              'quiet',
-                            )}
-                            {button(
-                              matching ? 'Analyzing with Jev…' : 'Review permissions ›',
-                              () => void reviewPermissions(),
-                              matching || (!editing && !email.trim()),
-                              'primary',
-                            )}
-                          </View>
-                        </>
+                      {!editing ? (
+                        <TextInput
+                          accessibilityLabel="Member Google email"
+                          placeholder="Google account email (e.g. ravi@example.com)"
+                          placeholderTextColor={palette.faint}
+                          autoCapitalize="none"
+                          keyboardType="email-address"
+                          value={email}
+                          onChangeText={setEmail}
+                          style={styles.input}
+                          autoFocus
+                        />
                       ) : (
-                        /* Step 2: Jev Suggested Permissions & Grants */
-                        <>
-                          <View style={styles.step2Header}>
-                            <Text style={styles.step2Summary}>
-                              {name} · {email || editing?.email} · {selectedRole.label}
-                            </Text>
-                          </View>
+                        <Text style={styles.formEmail}>{editing.email}</Text>
+                      )}
 
-                          {selectedRole.role === 'member' ? (
-                            <>
-                              <Text style={styles.fieldLabel}>Suggested permissions by Jev:</Text>
-                              <View style={styles.grantList}>
-                                {suggestedPermissions.map((perm) => (
-                                  <View key={perm} style={styles.grantRow}>
-                                    <Ionicons name="checkmark-circle" size={18} color={palette.green} />
-                                    <Text style={styles.grantText}>{perm}</Text>
+                      <Text style={styles.fieldLabel}>Membership Tier</Text>
+                      <View style={styles.roleOptions}>
+                        {baseRoles
+                          .filter((item) => item.role !== 'admin' || chat.role === 'owner')
+                          .map((item) => (
+                            <Pressable
+                              key={item.label}
+                              accessibilityRole="radio"
+                              accessibilityState={{
+                                selected: selectedRole.label === item.label,
+                              }}
+                              disabled={busy}
+                              onPress={() => setSelectedRole(item)}
+                              style={[
+                                styles.roleOption,
+                                selectedRole.label === item.label &&
+                                  styles.roleOptionSelected,
+                              ]}
+                            >
+                              <Text
+                                style={[
+                                  styles.roleText,
+                                  selectedRole.label === item.label &&
+                                    styles.roleTextSelected,
+                                ]}
+                              >
+                                {item.label}
+                              </Text>
+                            </Pressable>
+                          ))}
+                      </View>
+
+                      <Text style={styles.fieldLabel}>Workrole</Text>
+                      <TextInput
+                        accessibilityLabel="Workrole identifier"
+                        placeholder="e.g. cashier, manager, chef"
+                        placeholderTextColor={palette.faint}
+                        autoCapitalize="none"
+                        value={workRole}
+                        onChangeText={setWorkRole}
+                        style={styles.input}
+                      />
+
+                      <Text style={styles.fieldLabel}>Role Brief</Text>
+                      <TextInput
+                        accessibilityLabel="Role Brief description"
+                        placeholder="Describe what this person does (e.g. Handles counter sales, takes payments, and closes cash drawer at night)"
+                        placeholderTextColor={palette.faint}
+                        value={brief}
+                        onChangeText={setBrief}
+                        multiline
+                        numberOfLines={3}
+                        style={styles.textArea}
+                      />
+
+                      <View style={styles.presetChips}>
+                        {dutyPresets.map((preset) => (
+                          <Pressable
+                            key={preset.label}
+                            onPress={() => {
+                              setWorkRole(preset.workrole);
+                              setBrief(preset.brief);
+                              void evaluateBrief(preset.brief);
+                            }}
+                            style={styles.presetChip}
+                          >
+                            <Text style={styles.presetChipText}>{preset.label}</Text>
+                          </Pressable>
+                        ))}
+                      </View>
+
+                      <View style={styles.reEvalRow}>
+                        <Pressable
+                          accessibilityRole="button"
+                          disabled={evaluating || !brief.trim()}
+                          onPress={() => void evaluateBrief()}
+                          style={[styles.reEvalButton, (!brief.trim() || evaluating) && styles.disabled]}
+                        >
+                          {evaluating ? (
+                            <ActivityIndicator size="small" color={palette.blue} />
+                          ) : (
+                            <Ionicons name="sparkles-outline" size={15} color={palette.blue} />
+                          )}
+                          <Text style={styles.reEvalText}>
+                            {evaluating ? 'Evaluating…' : 'Re-eval with Jev'}
+                          </Text>
+                        </Pressable>
+                      </View>
+
+                      {/* Suggested Access */}
+                      {evaluations.length > 0 ? (
+                        <View style={styles.accessSection}>
+                          <Text style={styles.fieldLabel}>SUGGESTED ACCESS (from workspace pool via Jev)</Text>
+                          {suggested.map((e) => {
+                            const isChecked = selectedAccess.includes(e.id);
+                            return (
+                              <Pressable
+                                key={e.id}
+                                accessibilityRole="checkbox"
+                                accessibilityState={{ checked: isChecked }}
+                                onPress={() => toggleAccess(e.id)}
+                                style={styles.accessRow}
+                              >
+                                <Ionicons
+                                  name={isChecked ? 'checkbox' : 'square-outline'}
+                                  size={22}
+                                  color={isChecked ? palette.blue : palette.muted}
+                                />
+                                <View style={styles.accessInfo}>
+                                  <View style={styles.accessTitleRow}>
+                                    <Text style={styles.accessTitle}>{e.title}</Text>
+                                    <Text style={styles.accessKindBadge}>{e.kind}</Text>
                                   </View>
-                                ))}
-                              </View>
+                                  {e.reach === 'money' ? (
+                                    <Text style={styles.moneyBadge}>money · owner confirm</Text>
+                                  ) : null}
+                                </View>
+                                <View style={styles.scoreContainer}>
+                                  <Text style={styles.scoreText}>{e.probability.toFixed(2)}</Text>
+                                  {e.ask ? <Text style={styles.askMeBadge}>ask me</Text> : null}
+                                </View>
+                              </Pressable>
+                            );
+                          })}
 
-                              <Text style={styles.fieldLabel}>Granted Work Roles:</Text>
-                              <View style={styles.rolePillsRow}>
-                                {['cashier', 'chef', 'manager', 'courier', 'warehouse', 'accountant', 'buyer', 'general'].map(
-                                  (r) => {
-                                    const active = grantedRoles.includes(r);
+                          {unassigned.length > 0 ? (
+                            <View style={styles.unassignedContainer}>
+                              <Pressable
+                                onPress={() => setShowUnassigned((curr) => !curr)}
+                                style={styles.unassignedToggle}
+                              >
+                                <Ionicons
+                                  name={showUnassigned ? 'chevron-down' : 'chevron-forward'}
+                                  size={16}
+                                  color={palette.blue}
+                                />
+                                <Text style={styles.unassignedToggleText}>
+                                  {showUnassigned
+                                    ? `Hide ${unassigned.length} unassigned tools & flows`
+                                    : `Show ${unassigned.length} unassigned workspace tools & flows`}
+                                </Text>
+                              </Pressable>
+                              {showUnassigned ? (
+                                <View style={styles.unassignedList}>
+                                  {unassigned.map((e) => {
+                                    const isChecked = selectedAccess.includes(e.id);
                                     return (
                                       <Pressable
-                                        key={r}
-                                        onPress={() => toggleGrant(r)}
-                                        style={[
-                                          styles.grantPill,
-                                          active && styles.grantPillActive,
-                                        ]}
+                                        key={e.id}
+                                        accessibilityRole="checkbox"
+                                        accessibilityState={{ checked: isChecked }}
+                                        onPress={() => toggleAccess(e.id)}
+                                        style={styles.accessRow}
                                       >
-                                        <Text
-                                          style={[
-                                            styles.grantPillText,
-                                            active && styles.grantPillTextActive,
-                                          ]}
-                                        >
-                                          {r}
-                                        </Text>
+                                        <Ionicons
+                                          name={isChecked ? 'checkbox' : 'square-outline'}
+                                          size={22}
+                                          color={isChecked ? palette.blue : palette.muted}
+                                        />
+                                        <View style={styles.accessInfo}>
+                                          <View style={styles.accessTitleRow}>
+                                            <Text style={styles.accessTitle}>{e.title}</Text>
+                                            <Text style={styles.accessKindBadge}>{e.kind}</Text>
+                                          </View>
+                                        </View>
+                                        <View style={styles.scoreContainer}>
+                                          <Text style={styles.scoreMuted}>{e.probability.toFixed(2)}</Text>
+                                          <Text style={styles.scoreOff}>off</Text>
+                                        </View>
                                       </Pressable>
                                     );
-                                  },
-                                )}
-                              </View>
-                            </>
-                          ) : (
-                            <Text style={styles.helper}>
-                              Full administrative access to manage workspace tools and members.
-                            </Text>
-                          )}
+                                  })}
+                                </View>
+                              ) : null}
+                            </View>
+                          ) : null}
+                        </View>
+                      ) : null}
 
-                          <View style={styles.formFooter}>
-                            {button('‹ Change duties', () => setMemberStep(1), false, 'quiet')}
-                            {button(
-                              editing ? 'Save changes' : 'Save and invite',
-                              saveMember,
-                              false,
-                              'primary',
-                            )}
-                          </View>
-                        </>
-                      )}
+                      <Text style={styles.helper}>
+                        Owner confirms access with Save. Jev suggestions never grant permissions on their own.
+                      </Text>
+
+                      <View style={styles.formFooter}>
+                        {button(
+                          'Discard',
+                          () => {
+                            setAdding(false);
+                            setEditing(null);
+                          },
+                          false,
+                          'quiet',
+                        )}
+                        {button(
+                          editing ? 'Save' : 'Save and invite',
+                          saveMember,
+                          !editing && !email.trim(),
+                          'primary',
+                        )}
+                      </View>
                     </View>
                   ) : null}
                 </>
@@ -752,147 +819,49 @@ export default function WorkspaceTeam({
                     </View>
                   ) : null}
                 </View>
-              ) : chat.canManage ? (
+              ) : (
                 <View style={styles.setup}>
-                  <Text style={styles.fieldLabel}>Choose a provider</Text>
+                  <Text style={styles.sectionTitle}>Choose a chat app</Text>
+                  <Text style={styles.muted}>
+                    Telegram is free and instant for internal team alerts.
+                  </Text>
                   <View style={styles.providerOptions}>
                     {chat.providers.map((item) => (
                       <Pressable
                         key={item.id}
                         accessibilityRole="radio"
                         accessibilityState={{ selected: selectedProviderId === item.id }}
-                        disabled={busy}
-                        onPress={() => {
-                          setProvider(item.id);
-                          setCommand('');
-                        }}
+                        onPress={() => setProvider(item.id)}
                         style={[
                           styles.providerOption,
-                          selectedProviderId === item.id &&
-                            styles.providerOptionSelected,
+                          selectedProviderId === item.id && styles.providerOptionSelected,
                         ]}
                       >
                         <Text
                           style={[
                             styles.providerText,
-                            selectedProviderId === item.id &&
-                              styles.providerTextSelected,
+                            selectedProviderId === item.id && styles.providerTextSelected,
                           ]}
                         >
                           {item.name}
                         </Text>
                         <Text style={styles.providerAvailability}>
-                          {item.configured ? 'Available' : 'Not configured'}
+                          {item.configured ? 'Ready' : 'Setup needed'}
                         </Text>
                       </Pressable>
                     ))}
                   </View>
-                  {selectedProvider?.configured ? (
-                    <>
-                      <Text style={styles.helper}>
-                        Add TAR to a channel or space, then verify the connection here.
+                  {command ? (
+                    <View style={styles.commandBox}>
+                      <Text style={styles.fieldLabel}>Run this link command in your channel:</Text>
+                      <Text selectable style={styles.commandText}>
+                        {command}
                       </Text>
-                      {selectedProvider.installUrl
-                        ? button(
-                            `Open ${selectedProvider.name} setup`,
-                            () => openUrl(selectedProvider.installUrl),
-                            false,
-                            'quiet',
-                          )
-                        : null}
-                      {button('Connect a team channel', () => begin('destination'), false, 'primary')}
-                    </>
-                  ) : (
-                    <Text style={styles.helper}>
-                      {selectedProvider?.name || 'This provider'} needs deployment configuration
-                      before it can connect.
-                    </Text>
-                  )}
-                </View>
-              ) : (
-                <View style={styles.accessNote}>
-                  <Ionicons name="lock-closed-outline" size={18} color={palette.muted} />
-                  <Text style={styles.muted}>
-                    The owner or a workspace admin can connect the workspace channel.
-                  </Text>
+                    </View>
+                  ) : null}
+                  {button('Connect chat', () => begin('destination'), !selectedProvider?.configured, 'primary')}
                 </View>
               )}
-
-              {command ? (
-                <View style={styles.commandBox}>
-                  <Text style={styles.fieldLabel}>
-                    Send this command to TAR in your channel
-                  </Text>
-                  <Text selectable style={styles.commandText}>
-                    {command}
-                  </Text>
-                  <Text style={styles.helper}>
-                    This link expires after 10 minutes. Follow your provider’s command format.
-                  </Text>
-                </View>
-              ) : null}
-              {chat.requests
-                .filter((item) => item.provider === selectedProviderId)
-                .map((item) => (
-                  <View key={item.id} style={styles.request}>
-                    {item.candidate ? (
-                      <>
-                        <Text style={styles.fieldLabel}>
-                          Confirm {item.candidate.userName || item.candidate.userId}
-                        </Text>
-                        <Text style={styles.helper}>
-                          Found in {item.candidate.channelName || item.candidate.channelId}.
-                          Confirm only if this is the intended account or channel.
-                        </Text>
-                        {item.purpose === 'destination' ? (
-                          <TextInput
-                            accessibilityLabel="Team invitation link"
-                            placeholder="Invitation link (optional)"
-                            placeholderTextColor={palette.faint}
-                            autoCapitalize="none"
-                            value={invitation}
-                            onChangeText={setInvitation}
-                            style={styles.input}
-                          />
-                        ) : null}
-                        {button(
-                          'Confirm connection',
-                          () =>
-                            void run(async () => {
-                              await harness.confirmChatLink(scope, item.id, invitation);
-                              setCommand('');
-                              setInvitation('');
-                            }),
-                          false,
-                          'primary',
-                        )}
-                      </>
-                    ) : (
-                      <Text style={styles.muted}>
-                        Waiting for your command. Refresh after sending it to TAR in the channel.
-                      </Text>
-                    )}
-                  </View>
-                ))}
-              {chat.commands.length > 0 ? (
-                <View style={styles.activity}>
-                  <Text style={styles.fieldLabel}>Recent requests</Text>
-                  {chat.commands.map((item) => (
-                    <View key={item.id} style={styles.activityRow}>
-                      <View style={styles.activityCopy}>
-                        <Text style={styles.activityState}>{item.state}</Text>
-                        <Text numberOfLines={2} style={styles.muted}>
-                          {item.result || 'Waiting to process'} ·{' '}
-                          {new Date(item.createdAt).toLocaleString()}
-                        </Text>
-                      </View>
-                    </View>
-                  ))}
-                </View>
-              ) : null}
-              <View style={styles.refreshRow}>
-                {button('Refresh status', () => void run(reload))}
-              </View>
             </>
           ) : null}
         </ScrollView>
@@ -950,7 +919,7 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: 18, paddingTop: 16, gap: 14 },
   sectionHeader: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   sectionTitle: { color: palette.ink, fontSize: 16, fontWeight: '800' },
-  stepIndicator: { fontSize: 12, fontWeight: '600', color: palette.blue, marginTop: 2 },
+  formSub: { color: palette.muted, fontSize: 12, marginTop: 2 },
   muted: { color: palette.muted, fontSize: 13, lineHeight: 18 },
   loading: { minHeight: 88, alignItems: 'center', justifyContent: 'center', gap: 8 },
   button: { minHeight: 42, paddingHorizontal: 18, borderRadius: 21, alignItems: 'center', justifyContent: 'center' },
@@ -987,7 +956,7 @@ const styles = StyleSheet.create({
   formEmail: { color: palette.ink, fontSize: 15, fontWeight: '700' },
   fieldLabel: { color: palette.ink, fontSize: 13, fontWeight: '700', marginTop: 4 },
   input: { minHeight: 48, paddingHorizontal: 14, borderRadius: 14, color: palette.ink, fontSize: 14, backgroundColor: '#FFFFFF' },
-  textArea: { minHeight: 64, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 14, color: palette.ink, fontSize: 14, backgroundColor: '#FFFFFF', textAlignVertical: 'top' },
+  textArea: { minHeight: 72, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 14, color: palette.ink, fontSize: 14, backgroundColor: '#FFFFFF', textAlignVertical: 'top' },
   presetChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 },
   presetChip: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: palette.line },
   presetChipText: { fontSize: 11, fontWeight: '600', color: palette.muted },
@@ -999,16 +968,25 @@ const styles = StyleSheet.create({
   helper: { color: palette.muted, fontSize: 12, lineHeight: 17 },
   formFooter: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8, marginTop: 4 },
   accessNote: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 14, borderRadius: 16, backgroundColor: palette.container },
-  step2Header: { backgroundColor: '#FFFFFF', padding: 12, borderRadius: 14, borderWidth: 1, borderColor: palette.line },
-  step2Summary: { fontSize: 13, fontWeight: '700', color: palette.ink },
-  grantList: { gap: 6, backgroundColor: '#FFFFFF', padding: 12, borderRadius: 14, borderWidth: 1, borderColor: palette.line },
-  grantRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  grantText: { fontSize: 13, color: palette.ink, fontWeight: '600' },
-  rolePillsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  grantPill: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 14, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: palette.line },
-  grantPillActive: { backgroundColor: palette.selectedWash, borderColor: palette.blue },
-  grantPillText: { fontSize: 12, fontWeight: '700', color: palette.muted },
-  grantPillTextActive: { color: palette.selected },
+  reEvalRow: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 4 },
+  reEvalButton: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 14, backgroundColor: palette.container },
+  reEvalText: { fontSize: 12, fontWeight: '700', color: palette.blue },
+  accessSection: { marginTop: 10, gap: 6 },
+  accessRow: { minHeight: 46, flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, paddingHorizontal: 10, backgroundColor: '#FFFFFF', borderRadius: 12, borderWidth: 1, borderColor: palette.line },
+  accessInfo: { flex: 1, gap: 2 },
+  accessTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  accessTitle: { fontSize: 14, fontWeight: '700', color: palette.ink },
+  accessKindBadge: { fontSize: 10, fontWeight: '600', color: palette.muted, textTransform: 'uppercase', backgroundColor: palette.wash, paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4 },
+  moneyBadge: { fontSize: 10, fontWeight: '700', color: palette.amber },
+  scoreContainer: { alignItems: 'flex-end', gap: 2 },
+  scoreText: { fontSize: 13, fontWeight: '800', color: palette.ink },
+  scoreMuted: { fontSize: 12, color: palette.muted },
+  scoreOff: { fontSize: 10, fontWeight: '700', color: palette.muted },
+  askMeBadge: { fontSize: 10, fontWeight: '800', color: palette.amber, backgroundColor: palette.amberWash, paddingHorizontal: 6, paddingVertical: 1, borderRadius: 6 },
+  unassignedContainer: { marginTop: 8 },
+  unassignedToggle: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 6 },
+  unassignedToggleText: { fontSize: 12, fontWeight: '700', color: palette.blue },
+  unassignedList: { gap: 6, marginTop: 6 },
   connection: { padding: 16, gap: 12, borderRadius: 24, backgroundColor: '#FFFFFF', borderWidth: StyleSheet.hairlineWidth, borderColor: palette.line },
   connectionTop: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 10 },
   providerMark: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.selectedWash },
@@ -1028,12 +1006,6 @@ const styles = StyleSheet.create({
   providerAvailability: { color: palette.muted, fontSize: 11 },
   commandBox: { padding: 16, gap: 9, borderRadius: 24, backgroundColor: palette.container },
   commandText: { color: palette.ink, fontFamily: 'monospace', fontSize: 13, lineHeight: 19, padding: 12, borderRadius: 14, backgroundColor: '#FFFFFF' },
-  request: { padding: 16, gap: 10, borderRadius: 24, backgroundColor: '#FFFFFF', borderWidth: StyleSheet.hairlineWidth, borderColor: palette.line },
-  activity: { gap: 6, paddingTop: 4 },
-  activityRow: { minHeight: 52, justifyContent: 'center', paddingVertical: 8, borderTopWidth: StyleSheet.hairlineWidth, borderColor: palette.line },
-  activityCopy: { gap: 3 },
-  activityState: { color: palette.ink, fontSize: 13, fontWeight: '700', textTransform: 'capitalize' },
-  refreshRow: { alignItems: 'flex-start' },
   error: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12, borderRadius: 16, backgroundColor: palette.redWash },
   errorText: { flex: 1, color: palette.red, fontSize: 13, lineHeight: 18 },
   empty: { gap: 12, paddingVertical: 20 },

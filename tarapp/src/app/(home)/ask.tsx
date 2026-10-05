@@ -23,6 +23,7 @@ import {
   type HarnessAction,
   type HarnessInterfaceContract,
 } from '@/lib/harness';
+import { setAgentName, useAgentName } from '@/lib/agent';
 
 const ink = '#1B1C20';
 const muted = '#626671';
@@ -41,15 +42,37 @@ interface ChatMessage {
   };
 }
 
+function extractAgentName(text: string): string | null {
+  const t = text.trim();
+  const m1 = t.match(/\b(?:call|name)\s+(?:you|u)\s+([a-zA-Z0-9_\-']+)/i);
+  if (m1) return m1[1];
+  const m2 = t.match(/\byour\s+name\s+is\s+([a-zA-Z0-9_\-']+)/i);
+  if (m2) return m2[1];
+  const m3 = t.match(/\b(?:want\s+to|can\s+i|let's|lets)\s+call\s+you\s+([a-zA-Z0-9_\-']+)/i);
+  if (m3) return m3[1];
+  const m4 = t.match(/\brename\s+(?:you|assistant|agent)?\s*(?:to)?\s+([a-zA-Z0-9_\-']+)/i);
+  if (m4) return m4[1];
+  const m5 = t.match(/\bset\s+(?:agent|assistant)\s+name\s+to\s+([a-zA-Z0-9_\-']+)/i);
+  if (m5) return m5[1];
+  return null;
+}
+
+function formatAgentName(name: string): string {
+  const clean = name.replace(/[^a-zA-Z0-9]/g, '');
+  if (!clean) return 'TAR';
+  return clean.charAt(0).toUpperCase() + clean.slice(1);
+}
+
 const STARTER_PROMPTS = [
+  { icon: 'sparkles-outline', text: 'Call you Jarvis' },
+  { icon: 'help-circle-outline', text: 'Who are you?' },
   { icon: 'chatbubbles-outline', text: 'Draft customer message' },
   { icon: 'wallet-outline', text: 'Log shop cash expense' },
-  { icon: 'stats-chart-outline', text: 'Check today’s sales' },
-  { icon: 'checkbox-outline', text: 'Start a store checklist' },
 ];
 
 export default function AskScreen() {
   const router = useRouter();
+  const agentName = useAgentName();
   const insets = useSafeAreaInsets();
   const { workspaces, current } = useWorkspace();
 
@@ -92,6 +115,80 @@ export default function AskScreen() {
     setMessages((prev) => [...prev, userMsg]);
     setThinking(true);
 
+    // 1. Direct conversational agent naming
+    const detectedName = extractAgentName(textToSend);
+    if (detectedName) {
+      const cleanName = formatAgentName(detectedName);
+      try {
+        await setAgentName(cleanName);
+        const targetSlug = personalWorkspace?.slug || current.slug;
+        try {
+          await harness.executeAction(
+            targetSlug,
+            'agent.save',
+            { name: cleanName },
+            createOperationKey('agent.save')
+          );
+        } catch {
+          // Persisted cleanly in local cache
+        }
+        const tId = `t-${++msgCounter.current}`;
+        const tarMsg: ChatMessage = {
+          id: tId,
+          sender: 'tar',
+          text: `Got it! I’m ${cleanName} now. I've updated my profile across your workspace. What shall we tackle next?`,
+        };
+        setMessages((prev) => [...prev, tarMsg]);
+        setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+      } finally {
+        setThinking(false);
+      }
+      return;
+    }
+
+    // 2. Identity query
+    if (/\b(?:who are you|what is your name|what's your name|what can i call you|who r u)\b/i.test(textToSend)) {
+      const tId = `t-${++msgCounter.current}`;
+      const tarMsg: ChatMessage = {
+        id: tId,
+        sender: 'tar',
+        text: `I'm ${agentName}, your personal agent. You can ask me to draft messages, plan routines, or rename me anytime by saying "Call you <name>".`,
+      };
+      setMessages((prev) => [...prev, tarMsg]);
+      setThinking(false);
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+      return;
+    }
+
+    // 3. Rename prompt request without name specified
+    if (/\b(?:rename\s+(?:you|agent|assistant)|change\s+your\s+name|give\s+you\s+a\s+name)\b/i.test(textToSend)) {
+      const tId = `t-${++msgCounter.current}`;
+      const tarMsg: ChatMessage = {
+        id: tId,
+        sender: 'tar',
+        text: `Sure! What would you like to call me? Just say "Call you <name>" and I'll update my name immediately.`,
+      };
+      setMessages((prev) => [...prev, tarMsg]);
+      setThinking(false);
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+      return;
+    }
+
+    // 4. Conversational greetings
+    if (/^(hi|hello|hey|vanakkam|good\s+(morning|afternoon|evening))\b/i.test(textToSend) && textToSend.split(' ').length <= 4) {
+      const tId = `t-${++msgCounter.current}`;
+      const tarMsg: ChatMessage = {
+        id: tId,
+        sender: 'tar',
+        text: `Hello! I'm ${agentName}. How can I assist you today?`,
+      };
+      setMessages((prev) => [...prev, tarMsg]);
+      setThinking(false);
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+      return;
+    }
+
+    // 5. Operational / Flow suggestions via Jev
     try {
       const targetSlug = personalWorkspace?.slug || current.slug;
       const response = await harness.executeAction<{
@@ -108,7 +205,9 @@ export default function AskScreen() {
       let replyText = 'Here is what I found for your request:';
       if (!response.action) {
         replyText =
-          'I noted that. You can ask me to draft messages, plan tasks, log expenses, or open any store tool.';
+          `I noted that. You can ask me to draft messages, plan tasks, log expenses, or rename me by saying "Call you <name>".`;
+      } else if (response.action === 'agent.save') {
+        replyText = `What would you like my new name to be? Just say "Call you <name>" and I'll remember it.`;
       } else if (response.title) {
         replyText = `I recommend starting the "${response.title}" action.`;
       }
@@ -128,13 +227,13 @@ export default function AskScreen() {
       const errorMsg: ChatMessage = {
         id: errId,
         sender: 'tar',
-        text: cause instanceof Error ? cause.message : 'TAR could not process that request right now.',
+        text: cause instanceof Error ? cause.message : `${agentName} could not process that request right now.`,
       };
       setMessages((prev) => [...prev, errorMsg]);
     } finally {
       setThinking(false);
     }
-  }, [current.slug, input, personalWorkspace, thinking]);
+  }, [agentName, current.slug, input, personalWorkspace, thinking]);
 
   // Run suggested action
   const runSuggestedAction = useCallback(async (suggestion: { action: string | null; title: string | null }) => {
@@ -165,13 +264,13 @@ export default function AskScreen() {
         <View style={styles.headerTitleGroup}>
           <TarAvatar size={32} />
           <View>
-            <Text style={styles.headerTitle}>Ask TAR</Text>
+            <Text style={styles.headerTitle}>Ask {agentName}</Text>
             <Text style={styles.headerSubtitle}>Personal Agent AI</Text>
           </View>
         </View>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Close Ask TAR"
+          accessibilityLabel={`Close Ask ${agentName}`}
           onPress={() => router.back()}
           style={styles.closeBtn}
         >
@@ -200,7 +299,7 @@ export default function AskScreen() {
               </View>
               <Text style={styles.heroTitle}>How can I help?</Text>
               <Text style={styles.heroSubtitle}>
-                Ask questions, plan routines, draft messages, or manage shop tasks.
+                I'm {agentName}, your personal agent. Ask questions, plan routines, or rename me anytime (e.g. "Call you Jarvis").
               </Text>
 
               {/* Starter chips */}

@@ -50,6 +50,11 @@ export interface VariantDetectionResult {
   dimension: string;
   variants: DetectedVariant[];
   source: 'jev' | 'deterministic';
+  category?: string;
+  unit?: string;
+  tax?: number;
+  title?: string;
+  sku?: string;
 }
 export interface TeamChatState {
   commands: { id: string; state: string; result: string | null; createdAt: number }[];
@@ -71,7 +76,7 @@ export interface HarnessActionField { key: string; label: string; kind: HarnessF
 export interface HarnessAction { id: string; version: number; title: string; description: string; type: 'app' | 'agent' | 'human'; interfaceKey: string; fields: HarnessActionField[]; output: string[]; roles: HarnessRole[]; effects: string[]; workRoles?: string[]; }
 export interface HarnessInterfaceContract { key: string; version: number; title: string; presentation: 'sheet' | 'screen' | 'flow'; submitLabel: string; }
 export interface HarnessTool { id: string; title: string; description: string; icon: string; category?: 'work' | 'create' | 'manage' | 'explore'; module: 'core' | 'pos' | 'commerce' | 'site'; kind: 'tool' | 'human' | 'channel' | 'flow' | 'site' | 'action' | 'flows'; reach?: 'none' | 'customer' | 'money' | 'data'; action: string; input: Record<string, unknown>; }
-export interface HarnessTools { tools: HarnessTool[]; modules: { id: 'pos' | 'commerce' | 'site'; title: string; description: string; enabled: boolean }[]; version: number; canManage: boolean; role: string; }
+export interface HarnessTools { tools: HarnessTool[]; modules: { id: 'pos' | 'commerce' | 'site'; title: string; description: string; enabled: boolean }[]; version: number; canManage: boolean; role: string; taste?: string[]; trade?: string | null; }
 export interface HarnessSpaceContext {
   id: string; label: string; role: string; owner: string; confidence: number;
   source: 'default' | 'routine' | 'override'; held: boolean;
@@ -212,8 +217,8 @@ export const harness = {
   },
   nowDetail: (slug: string, id: string) => request<{ row: NowRow; record: HarnessRecord; workspace: HarnessWorkspace }>(workspacePath(slug, `now/${encodeURIComponent(id)}`)),
   createWorkspace: (name: string, slug: string) => request<{ workspace: HarnessWorkspace }>('/v1/workspaces', { method: 'POST', body: { name, slug }, key: createOperationKey(`workspace:${slug}`) }),
-  suggestWorkspace: (brief: string) => request<{ capabilities: { pos: boolean; commerce: boolean; site: boolean }; confidence: Record<string, number>; model?: string; review: true }>('/v1/ai/workspace-suggest', { method: 'POST', body: { brief } }),
-  suggestMember: (slug: string, duties: string) => request<{ role: HarnessRole; workRole: WorkRole; roles: WorkRole[]; suggestedActions: string[]; permissions: string[]; confidence: number | null; model?: string; review: true }>(workspacePath(slug, 'ai/member-suggest'), { method: 'POST', body: { duties } }),
+  suggestWorkspace: (brief: string) => request<{ capabilities: { pos: boolean; commerce: boolean; site: boolean; register?: boolean; team?: boolean }; trade?: { id: string; title: string; confidence: number }; tools?: string[]; confidence: Record<string, number>; model?: string; review: true }>('/v1/ai/workspace-suggest', { method: 'POST', body: { brief } }),
+  suggestMember: (slug: string, duties: string) => request<{ role: HarnessRole; workRole: WorkRole; roles: WorkRole[]; tools?: string[]; suggestedActions: string[]; permissions: string[]; confidence: number | null; model?: string; review: true }>(workspacePath(slug, 'ai/member-suggest'), { method: 'POST', body: { duties } }),
   evaluateMemberAccess: (slug: string, brief: string) => request<MemberAccessResult>(workspacePath(slug, 'ai/member-access'), { method: 'POST', body: { brief } }),
   matchFlowSteps: (slug: string, steps: string[]) => request<FlowMatchResult>(workspacePath(slug, 'ai/flow-match'), { method: 'POST', body: { steps } }),
   inviteMember: (slug: string, email: string, role: Exclude<HarnessRole, 'owner'> = 'member', workRole: WorkRole = 'general', roles: WorkRole[] = [workRole], brief?: string, access?: string[]) => request<{ invitation: { email: string; role: Exclude<HarnessRole, 'owner'>; state: 'pending' } }>(workspacePath(slug, 'members'), { method: 'POST', body: { email, role, workRole, roles, ...(brief ? { brief } : {}), ...(access ? { access } : {}) }, key: createOperationKey(`invite:${slug}:${email}`) }),
@@ -224,7 +229,7 @@ export const harness = {
   consents: (slug: string, id: string) => request<{ consents: Consent[] }>(workspacePath(slug, `records/${encodeURIComponent(id)}/consents`)),
   flows: (slug: string) => request<{ books: HarnessFlowBook[]; runs: HarnessFlowRun[] }>(workspacePath(slug, 'flows')),
   flowRun: (slug: string, id: string) => request<{ run: HarnessFlowRun }>(workspacePath(slug, `runs/${encodeURIComponent(id)}`)),
-  detectVariants: (slug: string, input: { product: string; input: string; trade?: string }) =>
+  detectVariants: (slug: string, input: { product: string; input?: string; taste?: string; trade?: string }) =>
     request<VariantDetectionResult>(workspacePath(slug, 'actions/catalog.item.detect'), { method: 'POST', body: input, key: createOperationKey('catalog.item.detect') }),
   executeAction: <T extends Record<string, unknown> = Record<string, unknown>>(slug: string, actionId: string, input: Record<string, unknown>, operationKey: string) => request<T>(workspacePath(slug, `actions/${encodeURIComponent(actionId)}`), { method: 'POST', body: input, key: operationKey }),
   createRecord: (slug: string, input: { type: string; title: string; data?: Record<string, unknown> }) => request<{ record: HarnessRecord }>(workspacePath(slug, 'actions/record.create'), { method: 'POST', body: input, key: createOperationKey('record.create') }),

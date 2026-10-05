@@ -58,6 +58,15 @@ export const actionCatalog = [
     output: ['enabled', 'version'], roles: ['owner', 'admin'], effects: ['record_update'],
   },
   {
+    id: 'taste.save', version: 1, type: 'app', title: 'Save taste',
+    description: 'Save operational taste profile and classified trade.', interfaceKey: 'form',
+    fields: [
+      { key: 'taste', label: 'Taste', kind: 'text' },
+      { key: 'trade', label: 'Trade', kind: 'text' },
+    ],
+    output: ['saved'], roles: ['owner', 'admin'], effects: ['record_update'],
+  },
+  {
     id: 'record.create', version: 1, type: 'app', title: 'Create record',
     description: 'Add information to this workspace.', interfaceKey: 'form',
     fields: [
@@ -90,6 +99,14 @@ export const actionCatalog = [
       { key: 'baseVersion', label: 'Version', kind: 'number', required: true, hidden: true },
     ],
     output: ['id'], roles: ['owner'], effects: ['routine_remove'],
+  },
+  {
+    id: 'agent.save', version: 1, type: 'app', title: 'Name personal agent',
+    description: 'Set custom name for your personal agent.', interfaceKey: 'form',
+    fields: [
+      { key: 'name', label: 'Agent name', kind: 'text', required: true },
+    ],
+    output: ['name', 'record'], roles: ['owner', 'admin', 'member'], effects: ['record_update'],
   },
   {
     id: 'contact.create', version: 1, type: 'app', title: 'Add person',

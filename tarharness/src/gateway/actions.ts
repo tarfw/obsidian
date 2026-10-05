@@ -114,6 +114,27 @@ export function executeGateway(client: Client, context: AccessContext, request: 
         if (committed[0]?.rowsAffected !== 1 || committed[1]?.rowsAffected !== 1) throw conflict('Tools changed. Refresh and try again.');
         return result;
       }
+      if (request.actionId === 'taste.save') {
+        const rawTaste = request.input.taste;
+        const tasteList = Array.isArray(rawTaste) ? rawTaste.map(String) : typeof rawTaste === 'string' ? rawTaste.split(/\r?\n/).map((s) => s.trim()).filter(Boolean) : [];
+        const tradeVal = typeof request.input.trade === 'string' ? request.input.trade : typeof request.input.trade === 'object' && request.input.trade !== null ? String((request.input.trade as { title?: unknown }).title || '') : '';
+        const payload = { taste: tasteList, trade: tradeVal };
+        const result = { saved: true, taste: tasteList, trade: tradeVal };
+        await client.batch([
+          {
+            sql: `INSERT INTO records (id, type, title, state, data, owner, assignee, due, version, created, updated)
+                  VALUES ('taste', 'taste', 'Workspace Taste', 'active', ?, ?, NULL, NULL, 1, ?, ?)
+                  ON CONFLICT(id) DO UPDATE SET data=excluded.data, version=records.version+1, updated=excluded.updated`,
+            args: [json(payload), context.identity.id, at, at],
+          },
+          {
+            sql: `INSERT INTO events (id,kind,run_id,record_id,action_id,state,actor_id,input_hash,idempotency_key,data,created_at,updated_at)
+                  SELECT ?, 'action', NULL, 'taste', ?, 'accepted', ?, ?, ?, ?, ?, ? WHERE changes()=1`,
+            args: [`evt_${crypto.randomUUID()}`, request.actionId, context.identity.id, hash, request.idempotencyKey, json({ result }), at, at],
+          },
+        ], 'write');
+        return result;
+      }
       if (request.actionId === 'pos.product.content.save') return saveProductContent(client, services.productContent, context, request.input, { key: request.idempotencyKey, hash });
       if (request.actionId === 'pos.product.draft') {
         const result = await draftProduct(services.ai, request.input);
@@ -231,6 +252,41 @@ export function executeGateway(client: Client, context: AccessContext, request: 
         ], 'write');
         if (committed[0]?.rowsAffected !== 1 || committed[1]?.rowsAffected !== 1) throw conflict('Routine changed. Reload Space and try again.');
         return result;
+      }
+
+      if (request.actionId === 'agent.save') {
+        const name = text(request.input.name, 40).trim();
+        if (!name) throw badRequest('Agent name is required.');
+        const found = await query<Record<string, unknown>>(client, {
+          sql: "SELECT id, version FROM records WHERE type='agent' AND owner=? AND archived IS NULL LIMIT 1",
+          args: [context.identity.id],
+        }).pipe(Effect.runPromise);
+        const existing = found[0];
+        const record: RecordItem = {
+          id: existing ? String(existing.id) : `rec_${crypto.randomUUID()}`,
+          type: 'agent',
+          title: name,
+          state: 'active',
+          data: { name },
+          owner: context.identity.id,
+          assignee: null,
+          version: existing ? Number(existing.version) + 1 : 1,
+          createdAt: at,
+          updatedAt: at,
+        };
+        if (existing) {
+          const committed = await client.batch([
+            { sql: "UPDATE records SET title=?, data=?, version=version+1, updated=? WHERE id=?", args: [name, json(record.data), at, record.id] },
+            eventStatement({ action: request.actionId, actor: context.identity.id, recordId: record.id, key: request.idempotencyKey, hash, result: { name, record } }),
+          ], 'write');
+          if (committed[0]?.rowsAffected !== 1) throw conflict('Agent record could not be updated.');
+        } else {
+          await client.batch([
+            { sql: "INSERT INTO records (id,type,title,state,data,owner,assignee,due,version,created,updated) VALUES (?,?,?,?,?,?,?,?,1,?,?)", args: [record.id, record.type, record.title, record.state, json(record.data), record.owner, null, null, at, at] },
+            eventStatement({ action: request.actionId, actor: context.identity.id, recordId: record.id, key: request.idempotencyKey, hash, result: { name, record } }),
+          ], 'write');
+        }
+        return { name, record };
       }
 
       if (request.actionId === 'record.create' || request.actionId === 'task.create' || request.actionId === 'contact.create' || request.actionId === 'organization.create') {

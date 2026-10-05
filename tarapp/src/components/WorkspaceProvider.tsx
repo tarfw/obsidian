@@ -12,6 +12,7 @@ interface WorkspaceValue {
   workspaces: HarnessWorkspace[];
   selectWorkspace: (slug: string) => void;
   createWorkspace: () => void;
+  viewWorkspace: (workspace: HarnessWorkspace) => void;
 }
 
 const WorkspaceContext = createContext<WorkspaceValue | null>(null);
@@ -30,6 +31,7 @@ export function WorkspaceProvider({ children }: React.PropsWithChildren) {
   const [loading, setLoading] = useState(true);
   const [loaded, setLoaded] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [viewing, setViewing] = useState<HarnessWorkspace | null>(null);
   const [error, setError] = useState('');
 
   const reload = useCallback(async (preferredSlug?: string) => {
@@ -74,7 +76,14 @@ export function WorkspaceProvider({ children }: React.PropsWithChildren) {
       const workspace = workspaces.find((item) => item.slug === slug);
       if (workspace) setCurrent(workspace);
     },
-    createWorkspace: () => setCreating(true),
+    createWorkspace: () => {
+      setViewing(null);
+      setCreating(true);
+    },
+    viewWorkspace: (workspace) => {
+      setViewing(workspace);
+      setCreating(false);
+    },
   }) : null, [current, workspaces]);
 
   if (loading && !value) return <View style={styles.center}><ActivityIndicator size="large" color={tokens.color.accent} /></View>;
@@ -85,7 +94,19 @@ export function WorkspaceProvider({ children }: React.PropsWithChildren) {
 
   return <WorkspaceContext.Provider value={value}>
     {children}
-    <CreateWorkspace visible={creating} canClose existingSlugs={workspaces.map((workspace) => workspace.slug)} onClose={() => setCreating(false)} onSuccess={async (slug) => { setCreating(false); await reload(slug); openRecords(slug); }} />
+    <CreateWorkspace
+      visible={creating || Boolean(viewing)}
+      workspace={viewing}
+      canClose
+      existingSlugs={workspaces.map((workspace) => workspace.slug)}
+      onClose={() => { setCreating(false); setViewing(null); }}
+      onSuccess={async (slug) => {
+        setCreating(false);
+        setViewing(null);
+        await reload(slug);
+        openRecords(slug);
+      }}
+    />
   </WorkspaceContext.Provider>;
 }
 

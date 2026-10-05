@@ -25,6 +25,7 @@ import {
 } from '@/lib/harness';
 import { cachedNow, refreshNow } from '@/lib/now-sync';
 import { takeNowReload } from '@/lib/now-navigation';
+import { useAgentName } from '@/lib/agent';
 
 const ink = '#1B1C20';
 const muted = '#626671';
@@ -121,6 +122,7 @@ interface FeedSection {
 
 export default function NowScreen() {
   const router = useRouter();
+  const agentName = useAgentName();
   const insets = useSafeAreaInsets();
   const { workspaces, current } = useWorkspace();
   const personalId = workspaces.find((workspace) => workspace.mode === 'personal')?.id || current.id;
@@ -409,13 +411,13 @@ export default function NowScreen() {
 
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Ask TAR"
+          accessibilityLabel={`Ask ${agentName}`}
           onPress={() => router.push('/(home)/ask')}
           style={styles.askBar}
         >
           <View style={styles.askLead}>
             <TarAvatar size={24} />
-            <Text style={styles.askText}>Ask TAR…</Text>
+            <Text style={styles.askText}>Ask {agentName}…</Text>
           </View>
           <Ionicons name="arrow-forward" size={18} color={blue} />
         </Pressable>

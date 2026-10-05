@@ -128,25 +128,44 @@ Count physical cash at shift end, log drawer drops, and balance daily cash with 
 
 ```text
 +--------------------------------------------------+
-| Add Product · Aambal Neyvagam            [Cancel]|
+| [←] Add Product                          Publish |
 +--------------------------------------------------+
-| +---------------+                                |
-| |  [+ PHOTO]    |  pattu_semparuthi_01.jpg        |
-| |               |  1200 x 1200 (Square 1:1)       |
-| |  (Auto-Crop)  |  Uploaded to Cloudflare R2      |
-| +---------------+                                |
-|                                                  |
-| Product: [ Semparuthi Pattu Selai              ] |
-| Category: [ Kaithari Pattu Selaigal          v ] |
-| Price: [ ₹8,200 ]          MRP: [ ₹9,500       ] |
-| Initial Stock: [ 12 ]      Tax: [ GST 5%       ] |
-|                                                  |
-| VARIANTS (1-Tap Detected via JEV):               |
-|  [✓] 4-Muzham (₹4,500)   [✓] 8-Muzham (₹8,200)   |
+|  Photo                            [+ Add Photo]  |
 |--------------------------------------------------|
-| [ Save Draft ]                  [ Save & Publish ]|
+|  Name *                       Saree or Shirt     |
+|--------------------------------------------------|
+|  Price (₹) *                  ₹ 8,200            |
+|--------------------------------------------------|
+|  Stock *                      [-] [ 1 ] [+]      |
+|--------------------------------------------------|
+|  Taste                        Pure silk...    >  |
+|--------------------------------------------------|
+|  Category                     Traditional Silk   |
+|--------------------------------------------------|
+|  Tax                          GST 5%             |
+|--------------------------------------------------|
+|  Unit                         piece              |
+|--------------------------------------------------|
+|  Code                         SKU-SAREE-01       |
+|--------------------------------------------------|
+|  Options                      [ 4-M ]  [ 8-M ]   |
 +--------------------------------------------------+
 ```
+
+* **Human Inputs (Physical Facts & Taste Only):**
+  1. 📸 **Photo:** Snapped with phone camera or selected from gallery.
+  2. 📝 **Product Name:** Typed or voice-dictated name.
+  3. 💰 **Price:** Cash rupee price (e.g., ₹8,200). AI never touches money.
+  4. 📦 **Stock:** Units on counter shelf (defaults to 1).
+  5. 🧵 **Taste (Detached Drawer >70% Height):** Flat list blocks of text with inline input & microphone. Fully universal across all trades with zero hardcoded tags. Tapping opens an expansive 76% height overlay drawer without displacing the underlying flat list.
+* **Autonomous AI & Deterministic Code Responsibilities (Flat List):**
+  * **Top Bar Publish:** 1-tap `Publish` button in top navigation bar; back icon `[←]` at start. Zero AI slop icons or decorations.
+  * **Category:** Jev classifies into catalog taxonomy in ~100ms.
+  * **Tax:** Defaulted deterministically by store profile (GST 5%).
+  * **Unit:** Standardized unit of sale (e.g., piece, meter, kg).
+  * **Code / SKU:** Unique SKU generated deterministically.
+  * **Detected Options:** Universal dimensions extracted via Jev from taste and rendered as clean tags.
+  * **Tamil Multilingual Edge & WhatsApp:** AI Translator handles Tamil transcription and edge PDP compilation in the background. The merchant UI remains 100% clean English.
 
 | Fact / Asset | Engine | Storage Target / Key | Downstream Destination |
 | :--- | :--- | :--- | :--- |

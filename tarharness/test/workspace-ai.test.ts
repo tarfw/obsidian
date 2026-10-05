@@ -209,4 +209,52 @@ describe('Jev workspace & member AI suggestions', () => {
     expect(matchResult.steps[3].toolId).toBe('invoice');
     expect(matchResult.steps[3].asksFirst).toBe(true);
   });
+
+  it('correctly classifies Kitchen / Cook and denies POS when duties include "No access to sale"', async () => {
+    const kitchenPrompt = 'Prepares food orders and tracks kitchen ingredients. Marks kitchen order handoff. No access to sale';
+    const memberRes = await suggestMember(undefined, kitchenPrompt);
+    expect(memberRes.workRole).toBe('chef');
+    expect(memberRes.roles).toContain('chef');
+    expect(memberRes.roles).not.toContain('cashier');
+
+    const accessRes = await evaluateMemberAccess(undefined, kitchenPrompt);
+    const posEval = accessRes.evaluations.find((e) => e.id === 'pos')!;
+    expect(posEval.probability).toBeLessThanOrEqual(0.10);
+    expect(posEval.on).toBe(false);
+    expect(posEval.ask).toBe(false);
+    expect(accessRes.suggestedAccess).not.toContain('pos');
+    expect(memberRes.tools).toContain('order');
+    expect(memberRes.tools).toContain('inventory');
+    expect(memberRes.tools).not.toContain('pos');
+  });
+
+  it('correctly classifies Delivery and assigns Orders for delivery taste blocks', async () => {
+    const deliveryPrompt = 'Claims customer orders and packs delivery parcels. Updates delivery status and customer dropoff';
+    const memberRes = await suggestMember(undefined, deliveryPrompt);
+    expect(memberRes.workRole).toBe('courier');
+    expect(memberRes.roles).toContain('courier');
+    expect(memberRes.tools).toContain('order');
+    expect(memberRes.tools).not.toContain('pos');
+    expect(memberRes.tools).not.toContain('register');
+    expect(memberRes.tools).not.toContain('flow');
+    expect(memberRes.tools).not.toContain('inbox');
+  });
+
+  it('correctly classifies apparel/textile tailor/weaver into operations and assigns order and inventory', async () => {
+    const atelierPrompt = 'Weaves silk sarees on handloom and tracks yarn raw material stock. Hands over finished sarees for packing';
+    const memberRes = await suggestMember(undefined, atelierPrompt);
+    expect(memberRes.workRole).toBe('chef');
+    expect(memberRes.tools).toContain('order');
+    expect(memberRes.tools).toContain('inventory');
+    expect(memberRes.tools).not.toContain('pos');
+  });
+
+  it('correctly classifies retail boutique sales into cashier and assigns pos, register and payment', async () => {
+    const salesPrompt = 'Sells sarees at counter, accepts cash and UPI payments, reconciles drawer at night';
+    const memberRes = await suggestMember(undefined, salesPrompt);
+    expect(memberRes.workRole).toBe('cashier');
+    expect(memberRes.tools).toContain('pos');
+    expect(memberRes.tools).toContain('register');
+    expect(memberRes.tools).toContain('payment');
+  });
 });

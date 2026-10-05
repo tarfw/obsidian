@@ -34,6 +34,11 @@ export interface VariantDetectionResult {
   dimension: DimensionKey;
   variants: DetectedVariant[];
   source: 'jev' | 'deterministic';
+  category?: string;
+  unit?: string;
+  tax?: number;
+  title?: string;
+  sku?: string;
 }
 
 export const UNIVERSAL_DIMENSIONS: Record<DimensionKey, { category: string; description: string; examples: string[] }> = {
@@ -51,6 +56,26 @@ export const UNIVERSAL_DIMENSIONS: Record<DimensionKey, { category: string; desc
   pack: { category: 'Trade Packaging', description: 'Pack count or wholesale bundle', examples: ['1x Single', 'Pack of 3', 'Pack of 6', 'Box of 12', 'Box of 50'] },
   none: { category: 'Fixed', description: 'Single fixed item with no options', examples: [] },
 };
+
+export function inferDeterministicDepartment(text: string, trade = 'retail'): { category: string; unit: string; tax: number } {
+  const lower = text.toLowerCase();
+  if (/\b(silk|pattu|saree|sari|dhoti|veshti|handloom|cotton|angavastram|zari|pallu|weaver)\b/.test(lower)) {
+    return { category: 'Traditional Silk & Handlooms', unit: 'piece', tax: 500 };
+  }
+  if (/\b(shirt|pant|tshirt|trouser|kurta|dress|salwar|apparel|jeans|cloth)\b/.test(lower)) {
+    return { category: 'Apparel & Readymade', unit: 'piece', tax: 500 };
+  }
+  if (/\b(sweet|halwa|laddu|mysore pak|snack|mixture|bakery|cake|biscuit|tea|coffee|kaapi|grocery|rice|dal|oil|ghee|masala|spice)\b/.test(lower)) {
+    return { category: 'Sweets & Provisions', unit: 'kg', tax: 500 };
+  }
+  if (/\b(brass|vilakku|lamp|idol|statue|handicraft|pottery|craft)\b/.test(lower)) {
+    return { category: 'Handicrafts & Decor', unit: 'piece', tax: 1200 };
+  }
+  if (trade === 'pos' || trade === 'textile' || trade === 'handloom') {
+    return { category: 'Traditional Silk & Handlooms', unit: 'piece', tax: 500 };
+  }
+  return { category: 'General Merchandise', unit: 'piece', tax: 500 };
+}
 
 /**
  * Deterministic fallback regex matching for fast, offline or zero-API detection.
@@ -114,18 +139,22 @@ export function extractDeterministicVariants(text: string, baseTitle = ''): { di
 }
 
 /**
- * Detect variants for a product using Jev System One with deterministic fallback.
+ * Detect variants, category, and commerce traits using Jev System One with deterministic fallback.
  */
 export async function detectProductVariants(
   apiKey: string | undefined,
-  params: { product: string; input: string; trade?: string },
+  params: { product: string; input?: string; taste?: string; trade?: string },
 ): Promise<VariantDetectionResult> {
-  const { product, input, trade = 'retail' } = params;
+  const { product, trade = 'retail' } = params;
+  const input = (params.taste || params.input || '').trim();
   const deterministic = extractDeterministicVariants(input, product);
+  const deptFallback = inferDeterministicDepartment(`${product} ${input}`, trade);
+  const baseName = (product.trim() || input.trim().split(/[,;]/)[0] || 'Item').trim();
+  const skuFallback = `SKU-${baseName.toUpperCase().replace(/[^A-Z0-9]/g, '-').slice(0, 10)}`;
 
   if (!apiKey || !input.trim()) {
     const variants: DetectedVariant[] = deterministic.options.map((opt) => ({
-      name: `${product} (${opt})`,
+      name: `${baseName} (${opt})`,
       dimension: deterministic.dimension,
       option: opt,
     }));
@@ -133,6 +162,11 @@ export async function detectProductVariants(
       dimension: deterministic.dimension,
       variants,
       source: 'deterministic',
+      category: deptFallback.category,
+      unit: deptFallback.unit,
+      tax: deptFallback.tax,
+      title: baseName,
+      sku: skuFallback,
     };
   }
 
@@ -150,6 +184,27 @@ export async function detectProductVariants(
           instructions: 'Which of the 12 universal variant dimensions does `input` specify for `product`?',
           criteria,
         },
+        category: {
+          type: 'choice',
+          instructions: 'Which retail trade department best categorizes `product` and `input`?',
+          criteria: {
+            textiles: 'Traditional silk, handlooms, sarees, dhotis, fabrics',
+            apparel: 'Modern readymade clothing, shirts, dresses',
+            food: 'Sweets, savouries, bakery, groceries, provisions, spices',
+            crafts: 'Brass, pooja items, handicrafts, home decor',
+            general: 'General store merchandise',
+          },
+        },
+        unit: {
+          type: 'choice',
+          instructions: 'What is the standard trade inventory unit for `product`?',
+          criteria: {
+            piece: 'Finished individual piece or garment count',
+            meter: 'Cut length of fabric or wire',
+            kg: 'Weight mass for food, provisions, or bulk items',
+            pack: 'Packaged bundle or box count',
+          },
+        },
       },
       timeout: 3000,
     });
@@ -161,8 +216,21 @@ export async function detectProductVariants(
         ? deterministic.options
         : (UNIVERSAL_DIMENSIONS[validDimension]?.examples.slice(0, 2) || []);
 
+      const chosenCategoryKey = String(outcome.value.answers.category?.choice || '');
+      const categoryMap: Record<string, { name: string; tax: number }> = {
+        textiles: { name: 'Traditional Silk & Handlooms', tax: 500 },
+        apparel: { name: 'Apparel & Readymade', tax: 500 },
+        food: { name: 'Sweets & Provisions', tax: 500 },
+        crafts: { name: 'Handicrafts & Decor', tax: 1200 },
+        general: { name: 'General Merchandise', tax: 500 },
+      };
+      const catResolved = categoryMap[chosenCategoryKey] || deptFallback;
+
+      const chosenUnit = String(outcome.value.answers.unit?.choice || deptFallback.unit);
+      const validUnit = ['piece', 'meter', 'kg', 'pack'].includes(chosenUnit) ? chosenUnit : deptFallback.unit;
+
       const variants: DetectedVariant[] = options.map((opt) => ({
-        name: `${product} (${opt})`,
+        name: `${baseName} (${opt})`,
         dimension: validDimension,
         option: opt,
       }));
@@ -171,6 +239,11 @@ export async function detectProductVariants(
         dimension: validDimension,
         variants,
         source: 'jev',
+        category: catResolved.name,
+        unit: validUnit,
+        tax: catResolved.tax,
+        title: baseName,
+        sku: skuFallback,
       };
     }
   } catch {
@@ -178,7 +251,7 @@ export async function detectProductVariants(
   }
 
   const variants: DetectedVariant[] = deterministic.options.map((opt) => ({
-    name: `${product} (${opt})`,
+    name: `${baseName} (${opt})`,
     dimension: deterministic.dimension,
     option: opt,
   }));
@@ -187,5 +260,10 @@ export async function detectProductVariants(
     dimension: deterministic.dimension,
     variants,
     source: 'deterministic',
+    category: deptFallback.category,
+    unit: deptFallback.unit,
+    tax: deptFallback.tax,
+    title: baseName,
+    sku: skuFallback,
   };
 }

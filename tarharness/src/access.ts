@@ -25,6 +25,7 @@ const domainWorkActions = [
 const generalWorkActions = new Set([
   'record.create', 'record.update', 'contact.create', 'organization.create', 'relationship.create', 'relationship.end',
   'consent.record', 'task.create', 'task.complete', 'flow.start', 'flow.advance', 'web.search', 'pos.order.handoff',
+  'agent.save',
   ...domainWorkActions,
 ]);
 const managerActions = new Set([

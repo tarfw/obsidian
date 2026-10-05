@@ -5,12 +5,14 @@ import { canonicalTools, type ToolDefinition } from '../registry/tools.ts';
 
 const choices = [
   'record.create', 'contact.create', 'organization.create', 'task.create', 'routine.save',
+  'agent.save',
   'catalog.item.save', 'catalog.variant.save', 'price.set', 'stock.adjust',
   'purchase.create', 'order.create', 'invoice.issue', 'payment.record', 'refund.record',
   'pos.open', 'flow.publish', 'site.generate', 'web.search',
 ] as const;
 
 const actionCriteriaDescriptions: Record<string, string> = {
+  'agent.save': 'Name or rename the personal AI agent assistant (e.g., "call you Jarvis", "rename to Maya", "your name is Alfred").',
   'routine.save': 'Schedule when a workspace, shift, or role becomes active automatically (e.g., routines, work hours, shifts, recurring schedules, morning/evening shifts, auto workspace switching).',
   'task.create': 'Create a personal or team to-do task, reminder, action item, or follow-up item.',
   'contact.create': 'Add a person, customer, contact, or individual with email and phone details.',
@@ -34,6 +36,11 @@ const actionCriteriaDescriptions: Record<string, string> = {
 export function fallbackAction(request: string): string | null {
   const text = request.toLowerCase().trim();
   if (!text) return null;
+
+  // Personal agent naming
+  if (/\b(call you|name you|your name is|rename (you|assistant|agent)|call the agent|set agent name|set assistant name|name the assistant|name the agent)\b/i.test(text)) {
+    return 'agent.save';
+  }
 
   // Space & Routine scheduling
   if (/\b(routine|routines|schedule|schedules|scheduling|shift|shifts|work hours|working hours|switch workspace|auto switch|morning shift|evening shift|night shift|weekdays|weekends|daily schedule|calendar routine|space routine|auto schedule|set hours)\b/i.test(text)) {

@@ -86,7 +86,7 @@ export default function ToolsScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ source?: string }>();
   const insets = useSafeAreaInsets();
-  const { workspaces, current, createWorkspace } = useWorkspace();
+  const { workspaces, current, createWorkspace, viewWorkspace } = useWorkspace();
   const active = useMemo(() => workspaces.filter((workspace) => workspace.state === 'active' && workspace.mode !== 'personal')
     .sort((a, b) => Number(b.slug === current.slug) - Number(a.slug === current.slug)), [workspaces, current.slug]);
   const [sources, setSources] = useState<Record<string, HarnessTools>>({});
@@ -468,7 +468,7 @@ export default function ToolsScreen() {
                     onPress={() => void createNewFlow(section.workspace.slug)}
                     style={styles.newFlowRow}
                   >
-                    <Ionicons name="add" size={20} color={blue} />
+                    <Ionicons name="add" size={20} color={blue} style={styles.rowIcon} />
                     <Text style={styles.newFlowText}>New flow</Text>
                   </Pressable>
                 </View>
@@ -488,33 +488,27 @@ export default function ToolsScreen() {
     </> : null}
 
     {page === 'workspaces' ? <ScrollView style={styles.scroll} contentContainerStyle={[styles.content, { paddingBottom: bottom }]}>
-      <Row icon="layers-outline" title="All workspaces" onPress={() => { chooseWorkspace('all'); setPage('home'); }} selected={selected === 'all'} />
-
-      {active.length > 0 ? (
-        <View style={styles.sectionBlock}>
-          <Text style={styles.sectionHeading}>WORKSPACES</Text>
-          {active.map((workspace) => (
-            <Row
-              key={workspace.slug}
-              icon="business-outline"
-              title={workspace.name}
-              detail={sources[workspace.slug]?.role || workspace.workRole || workspace.role}
-              onPress={() => { chooseWorkspace(workspace.slug); setPage('home'); }}
-              selected={selected === workspace.slug}
-            />
-          ))}
-        </View>
-      ) : null}
+      <Row large title="All workspaces" onPress={() => { chooseWorkspace('all'); setPage('home'); }} selected={selected === 'all'} />
+      {active.map((workspace) => (
+        <Row
+          key={workspace.slug}
+          large
+          thumbnail={getWorkspaceBadge(workspace.name)}
+          onThumbnailPress={() => viewWorkspace(workspace)}
+          title={workspace.name}
+          onPress={() => { chooseWorkspace(workspace.slug); setPage('home'); }}
+          selected={selected === workspace.slug}
+        />
+      ))}
 
       <Pressable
         accessibilityRole="button"
         onPress={() => {
           createWorkspace();
-          setPage('home');
         }}
-        style={styles.newFlowRow}
+        style={[styles.newFlowRow, styles.newFlowRowLarge]}
       >
-        <Ionicons name="add" size={20} color={blue} />
+        <Ionicons name="add" size={20} color={blue} style={styles.rowIcon} />
         <Text style={styles.newFlowText}>Create new workspace</Text>
       </Pressable>
     </ScrollView> : null}
@@ -539,8 +533,11 @@ export default function ToolsScreen() {
   </View>;
 }
 
-function Row({ icon, title, detail, busy, selected, arrow, badge, onPress }: {
-  icon: keyof typeof Ionicons.glyphMap;
+function Row({ icon, thumbnail, onThumbnailPress, large, title, detail, busy, selected, arrow, badge, onPress }: {
+  icon?: keyof typeof Ionicons.glyphMap;
+  thumbnail?: WorkspaceBadge;
+  onThumbnailPress?: () => void;
+  large?: boolean;
   title: string;
   detail?: string;
   busy?: boolean;
@@ -549,15 +546,55 @@ function Row({ icon, title, detail, busy, selected, arrow, badge, onPress }: {
   badge?: string | number;
   onPress: () => void;
 }) {
-  return <Pressable accessibilityRole="button" accessibilityState={selected === undefined ? undefined : { selected }} disabled={busy} onPress={onPress} style={[styles.row, !detail && styles.compactRow]}>
-    <Ionicons name={icon} size={20} color={muted} style={styles.rowIcon} />
-    <View style={styles.rowCopy}>
-      <Text style={styles.rowTitle}>{title}</Text>
-      {detail ? <Text style={styles.rowDetail} numberOfLines={1}>{detail}</Text> : null}
-    </View>
-    {badge !== undefined ? <View style={styles.badge}><Text style={styles.badgeText}>{badge}</Text></View> : null}
-    {busy ? <ActivityIndicator size="small" color={blue} /> : selected === undefined ? (arrow ? <Ionicons name="chevron-forward" size={17} color="#A8B0BE" /> : null) : selected ? <Ionicons name="checkmark" size={18} color={blue} /> : null}
-  </Pressable>;
+  if (onThumbnailPress && thumbnail) {
+    return (
+      <View style={[styles.row, !detail && styles.compactRow, large && styles.largeRow]}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="View workspace details"
+          hitSlop={8}
+          onPress={onThumbnailPress}
+          style={[styles.workspaceThumbnail, large && styles.workspaceThumbnailLarge, { backgroundColor: thumbnail.bg }]}
+        >
+          <Text style={[styles.workspaceInitial, large && styles.workspaceInitialLarge, { color: thumbnail.color }]}>
+            {thumbnail.initial}
+          </Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={selected === undefined ? undefined : { selected }}
+          disabled={busy}
+          onPress={onPress}
+          style={styles.rowMainPressable}
+        >
+          <View style={styles.rowCopy}>
+            <Text style={styles.rowTitle}>{title}</Text>
+            {detail ? <Text style={styles.rowDetail} numberOfLines={1}>{detail}</Text> : null}
+          </View>
+          {badge !== undefined ? <View style={styles.badge}><Text style={styles.badgeText}>{badge}</Text></View> : null}
+          {busy ? <ActivityIndicator size="small" color={blue} /> : selected === undefined ? (arrow ? <Ionicons name="chevron-forward" size={17} color="#A8B0BE" /> : null) : selected ? <Ionicons name="checkmark" size={large ? 24 : 18} color={blue} /> : null}
+        </Pressable>
+      </View>
+    );
+  }
+
+  return (
+    <Pressable accessibilityRole="button" accessibilityState={selected === undefined ? undefined : { selected }} disabled={busy} onPress={onPress} style={[styles.row, !detail && styles.compactRow, large && styles.largeRow]}>
+      {thumbnail ? (
+        <View style={[styles.workspaceThumbnail, large && styles.workspaceThumbnailLarge, { backgroundColor: thumbnail.bg }]}>
+          <Text style={[styles.workspaceInitial, large && styles.workspaceInitialLarge, { color: thumbnail.color }]}>{thumbnail.initial}</Text>
+        </View>
+      ) : icon ? (
+        <Ionicons name={icon} size={20} color={muted} style={styles.rowIcon} />
+      ) : null}
+      <View style={styles.rowCopy}>
+        <Text style={styles.rowTitle}>{title}</Text>
+        {detail ? <Text style={styles.rowDetail} numberOfLines={1}>{detail}</Text> : null}
+      </View>
+      {badge !== undefined ? <View style={styles.badge}><Text style={styles.badgeText}>{badge}</Text></View> : null}
+      {busy ? <ActivityIndicator size="small" color={blue} /> : selected === undefined ? (arrow ? <Ionicons name="chevron-forward" size={17} color="#A8B0BE" /> : null) : selected ? <Ionicons name="checkmark" size={large ? 24 : 18} color={blue} /> : null}
+    </Pressable>
+  );
 }
 
 function Empty({ title, detail }: { title: string; detail: string }) {
@@ -588,7 +625,9 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   workspaceThumbnail: { width: 34, height: 34, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  workspaceThumbnailLarge: { width: 48, height: 48, borderRadius: 12 },
   workspaceInitial: { fontSize: 15, fontWeight: '800', textAlign: 'center' },
+  workspaceInitialLarge: { fontSize: 20 },
   workspaceCardCopy: { flex: 1, justifyContent: 'center' },
   workspaceCardTitle: { fontSize: 16, fontWeight: '800', color: ink, letterSpacing: -0.2 },
   workspaceCardRole: { color: muted, fontSize: 12, lineHeight: 16, marginTop: 2, textTransform: 'capitalize' },
@@ -598,11 +637,14 @@ const styles = StyleSheet.create({
   activeRunCopy: { flex: 1, gap: 2 },
   activeRunTitle: { color: ink, fontSize: 15, fontWeight: '700' },
   activeRunStep: { color: blue, fontSize: 12, fontWeight: '600' },
-  newFlowRow: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 24, paddingVertical: 12, backgroundColor: '#FFFFFF', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: line },
-  newFlowText: { color: blue, fontSize: 15, fontWeight: '700' },
+  newFlowRow: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 24, paddingVertical: 12, backgroundColor: '#FFFFFF', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: line },
+  newFlowRowLarge: { minHeight: 72 },
+  newFlowText: { color: blue, fontSize: 15, fontWeight: '600' },
   emptyNote: { color: muted, fontSize: 13, marginHorizontal: 24, marginVertical: 8 },
   row: { minHeight: 58, flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 10, paddingHorizontal: 24, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: line, backgroundColor: '#FFFFFF' },
   compactRow: { minHeight: 48, paddingVertical: 11 },
+  largeRow: { minHeight: 72, paddingVertical: 12 },
+  rowMainPressable: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 14 },
   rowIcon: { width: 24 },
   rowCopy: { flex: 1 },
   rowTitle: { color: ink, fontSize: 15, fontWeight: '600', lineHeight: 20 },

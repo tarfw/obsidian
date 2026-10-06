@@ -1,35 +1,48 @@
 # Autonomous "Site" Agent
 
-| Property | Value | Architectural Contract |
-| :--- | :--- | :--- |
-| **Goal** | `Autonomous "Site" Agent` | Zero-touch build, edge-served storefront ([workspace.md](file:///c:/tarfwk/tar/workspace.md)). |
-| **Principle** | `Autonomous-First, Review-and-Confirm` | AI runs 95%; merchant confirms orders and high-value offers; manual edits optional. |
-| **Merchant Job**| `📷 Photo · ✅ Confirm · 📦 Ship` | 3 physical jobs only; zero coding, zero design, zero SEO setup. |
-| **Agent Job** | `Design · Content · SEO · Feeds · Fixes` | Background agents autonomously operate 95% of store on Jev ([SKILL.md](file:///c:/tarfwk/tar/.agents/skills/typesafe-ai/SKILL.md)). |
-| **Triage** | `Personal Inbox (Now Feed)` | Action items arrive in **Now**; row tap opens details to confirm ([inbox.md](file:///c:/tarfwk/tar/inbox.md)). |
-| **Storefront** | `Web Launch in Browser` | No in-app browser engine in `tarapp`; opens native browser ([merchants.md](file:///c:/tarfwk/tar/merchants.md)). |
-| **Serving** | `Cloudflare Edge (R2 + D1)` | Pre-rendered static HTML; zero AI calls on visits; **₹0 / visit**. |
+| Property | Value |
+| :--- | :--- |
+| **Goal** | Zero-touch, edge-served storefront for any workspace ([workspace.md](file:///c:/tarfwk/tar/workspace.md)). |
+| **Principle** | Agent runs ~95%. Merchant does 3 jobs: 📷 Photo · ✅ Confirm · 📦 Ship. |
+| **Steering** | Taste bullets only. Add one to steer, delete it to undo. |
+| **Triage** | Personal **Now** feed ([inbox.md](file:///c:/tarfwk/tar/inbox.md)); row tap opens detail. |
+| **Storefront** | Opens in the native browser. `tarapp` embeds no web engine ([merchants.md](file:///c:/tarfwk/tar/merchants.md)). |
+| **Serving** | Pre-rendered static HTML on the Edge. No AI on visits. |
 
 ---
 
-## 1. Inbox & Workspace Flow: Zero-Review Auto-Launch
+## 1. Model
 
-As established in [`merchants.md`](file:///c:/tarfwk/tar/merchants.md), small merchants do not have time or design skill to "review" website layouts. Day 0 store creation is **100% autonomous and publishes live immediately**.
+$$\text{Facts (records)} + \text{Taste (bullets)} \xrightarrow{\text{1 Jev fan-out}} \text{Blueprint} \xrightarrow{\text{code}} \text{static page on Edge}$$
+
+| Layer | Owner | Holds |
+| :--- | :--- | :--- |
+| **Facts** | Records (code) | Products, prices, stock, contact, proofs, policies. Models never touch money. |
+| **Taste** | Merchant (voice or text) | Plain bullets about style, focus and vibe. |
+| **Blueprint** | Jev (typed judgments) | `kind` · section order · 3 design tokens. |
+| **Page** | Code | Compiles Blueprint + Facts into HTML. Real copy only. |
+
+Jev re-runs only when the hash of (Taste + Facts) changes. Otherwise nothing runs.
+
+---
+
+## 2. Lifecycle
+
+| Step | Surface | What happens |
+| :--- | :--- | :--- |
+| **1. Add workspace** | `workspace.add` | Name, Taste, photos. About 30 seconds. |
+| **2. Auto-publish** | Gateway | Publish gate passes, then the store goes live with no review. |
+| **3. Daily triage** | `space.now` | Orders and 1-tap questions. Tap a row to see details. |
+| **4. Steer (rare)** | `site` tool | Edit Taste bullets. Jev updates the Blueprint. Undo available. |
+
+**Publish gate (code):** a contact method plus at least one product or service. Otherwise a "coming soon + WhatsApp" page is shown.
+
+---
+
+## 3. App Screens
 
 ```text
-┌────────────────────────────────────────────────────────────────────────────────────────┐
-│ WORKSPACE LIFECYCLE                                                                    │
-├──────────────────────────────┬──────────────────────────────┬──────────────────────────┤
-│ 1. ADD WORKSPACE (Day 0)     │ 2. IMMEDIATE AUTO-PUBLISH    │ 3. DAILY TRIAGE IN NOW   │
-│ Name + Brief + Photos        │ Jev builds & deploys to Edge │ Orders & smart questions │
-│ 30 seconds setup             │ Store is Live instantly      │ 30-second tap to confirm │
-└──────────────────────────────┴──────────────────────────────┴──────────────────────────┘
-```
-
-### The Now Screen & Detail Flow (Refined from `inbox.md`)
-
-```text
-NOW SCREEN (`space.now` Daily Surface)  DETAIL SCREEN (Opened on Row Tap)
+NOW SCREEN (`space.now`)                DETAIL (opened on row tap)
 ┌──────────────────────────────────────┐┌──────────────────────────────────────┐
 │ NOW                    Find > Tools >││ ‹ Back to Now           Order Review │
 │ Murugan Silks / Owner / Salem        ││                                      │
@@ -39,13 +52,13 @@ NOW SCREEN (`space.now` Daily Surface)  DETAIL SCREEN (Opened on Row Tap)
 │ [A] Ship Order #17           DUE 2h >││ • Address: Door 4, Gandhi Rd (Valid) │
 │     Chennai · Courier pickup         ││ • COD Risk: Low                      │
 │ [?] Deepavali 10% Offer     PROPOSAL>││                                      │
-│     Activate festive kit banner      ││ [ ✅ Confirm Order ]  [ Print Slip ] │
+│     Activate festive kit banner      ││ [ Confirm Order ]    [ Print Slip ]  │
 │ Ask TAR...                          >││                                      │
 └──────────────────────────────────────┘└──────────────────────────────────────┘
 ```
 
 ```text
-SITE TOOL IN WORKSPACE (Device Surface)   DETACHED TASTE DRAWER (>70% Overlay)
+SITE TOOL (workspace)                     TASTE DRAWER (>70% overlay)
 ┌──────────────────────────────────────┐┌──────────────────────────────────────┐
 │ ‹ Tools      Online Store     [Live] ││ Taste                         [Done] │
 ├──────────────────────────────────────┤├──────────────────────────────────────┤
@@ -59,7 +72,7 @@ SITE TOOL IN WORKSPACE (Device Surface)   DETACHED TASTE DRAWER (>70% Overlay)
 │ • Lead with Deepavali bridal sarees  ││                                      │
 │ • WhatsApp quick order on all cards  ││                                      │
 ├──────────────────────────────────────┤│                                      │
-│ ACTIVE SECTIONS        (Jev Decided) ││                                      │
+│ SECTIONS               (Jev Decided) ││                                      │
 │ 1. Header    • Photo & shop intro    ││                                      │
 │ 2. Spotlight • Deepavali banner      ││                                      │
 │ 3. Catalog   • 28 silk sarees        ││                                      │
@@ -68,179 +81,128 @@ SITE TOOL IN WORKSPACE (Device Surface)   DETACHED TASTE DRAWER (>70% Overlay)
 └──────────────────────────────────────┘└──────────────────────────────────────┘
 ```
 
-| Lifecycle Step | Surface | Interaction | Background Action (95% Autonomous) |
-| :--- | :--- | :--- | :--- |
-| **1. Setup** | `workspace.add` | Name, brief, photo upload | Jev fan-out resolves taste; builds AST in <120ms. |
-| **2. Auto-Publish**| Gateway | Immediate edge freeze | Deploys static HTML to Cloudflare Edge in <5ms. |
-| **3. Triage** | `space.now` | Tap row opens Detail Screen | Fetches verified order lines, risk hints, or proposals. |
-| **4. Direct** | `site.tool` | Tap `[ Open Browser ↗ ]` or Taste | Native browser launch; edit Taste bullets in drawer to steer store. |
+The app list and the web page show the same sections in the same order.
 
 ---
 
-## 2. Taste & Lead Intent: Natural Section Stack (Genesis)
+## 4. Blueprint (what Jev decides)
 
-```text
-STOREFRONT WEB ANATOMY (Public Web Page Rendered in Browser)
-┌────────────────────────────────────────────────────────────────────────┐
-│ 1. HEADER          Shop Name, Tagline & High-Res Brand Photo           │
-├────────────────────────────────────────────────────────────────────────┤
-│ 2. LEAD / SPOTLIGHT Jev resolves what leads the customer experience:   │
-│   • products   ──► Direct product grid (default for retail goods)      │
-│   • spotlight  ──► Seasonal festival banner / deal (peak buying rush)  │
-│   • categories ──► Multi-department cards (e.g. Sarees vs Dhotis)      │
-│   • craft      ──► Artisan story & weaving heritage (bespoke luxury)   │
-├────────────────────────────────────────────────────────────────────────┤
-│ 3. CATALOG         Flat Grid (≤15 items) · Filter Pills (16–60 items)  │
-├────────────────────────────────────────────────────────────────────────┤
-│ 4. TRUST           UPI/COD Badges & Customer Reviews (Only if real)    │
-├────────────────────────────────────────────────────────────────────────┤
-│ 5. CONTACT         Physical Address, Shop Hours & 1-Tap WhatsApp Button│
-└────────────────────────────────────────────────────────────────────────┘
-```
+### Business kind (one Choice)
 
-| # | Genesis Decision | Primitive | Allowed Scope | Fallback Floor |
-| :-: | :--- | :---: | :--- | :--- |
-| **1** | **Pages: Goods** | `Noul` | $p > 0.65 \implies$ `/shop`, `/cart`, `/product/[id]` | `true` if products exist |
-| | **Pages: Services** | `Noul` | $p > 0.65 \implies$ `/services`, `/book` | `false` |
-| **2** | **Lead Intent** | `Choice` | `products` (buy), `spotlight` (festival), `categories`, `craft` | `products` |
-| **3** | **Product Layout** | Code Rule | $\le 15$ items $\implies$ **Flat grid** · $16–60$ items $\implies$ **Filter pills** | Derived by item count |
-| **4** | **Typography** | `Choice` | `serif` (classic display), `sans` (clean), `grotesk` (bold) | `sans` |
-| | **Tone** | `Choice` | `canvas` (light), `surface` (tinted), `ink` (dark) | `canvas` |
-| | **Density** | `Score` | `[1: Compact, 2: Balanced, 3: Airy]` | `2` (Balanced) |
-| | **Radius** | `Choice` | `sharp` (0px), `soft` (6px), `round` (16px) | `soft` |
-| **5** | **Content Slots** | LLM + `Noul` | Slots: Title (12w), Description (60w). Claims verified vs facts. | Facts only; drop unbacked |
-
----
-
-## 3. The 3 Merchant Jobs vs. Agent Automation
-
-| Merchant Job | Human Effort (30 sec) | Autonomous Agent Work (95%) |
+| `kind` | Examples | Sets |
 | :--- | :--- | :--- |
-| **📷 1. Add Product** | Snap photo + speak price (*"₹1400"*) | Image crop, WebP compression, alt tag, copy slots, catalog sync. |
-| **✅ 2. Confirm Order** | Tap row ➔ review details ➔ Confirm | Address validation, COD risk check, stock reservation, WhatsApp update. |
-| **📦 3. Ship Parcel** | Tap `[ Print Slip ]` + hand to courier | Generates printable label, updates carrier tracking, notifies buyer. |
+| `goods` | Sarees, jewellery, grocery, hardware | Catalog, cart, product pages |
+| `food` | Home kitchen, bakery, sweets | Menu with portions, same-day or pickup only |
+| `services` | Tailor, salon, clinic, rental | Services list, enquiry or booking CTA |
+| `wholesale` | Bulk trade | Retail price plus "Bulk enquiry" WhatsApp action |
+
+### Section kinds (closed set)
+
+| Section | Rule | Jev decides |
+| :--- | :--- | :--- |
+| `header` | Always. Code floor. | Photo style: `split` or `fullbleed`. |
+| `notice` | Closed today, delivery delayed. 1-tap, no Jev. | None. |
+| `spotlight` | Festival or offer. | `Noul`: is a festival or offer relevant now? |
+| `catalog` / `menu` / `services` | Chosen by `kind`. | None. Code picks the layout by item count: ≤15 flat grid · 16–60 filter pills · >60 category rails. |
+| `story` | Craft, heritage or owner. | `Noul`: do Taste or Facts support it? |
+| `trust` | Needs uploaded proof (certificate, verified quotes, COD, shop address). | `Noul`, asked only if code finds proof. Never inferred. |
+| `contact` | Always. Code floor. | Primary CTA: WhatsApp, call or map. |
+
+Order: Jev picks the first section after `header` (`spotlight`, `catalog` or `story`). Code fixes the rest.
+
+### Design tokens
+
+| Token | Primitive | Values | Default |
+| :--- | :---: | :--- | :--- |
+| `typography` | Choice | `serif` · `sans` · `grotesk` | `sans` |
+| `tone` | Choice | `canvas` · `surface` · `ink` | `canvas` |
+| `density` | Score | `1 compact` · `2 balanced` · `3 airy` | `2` |
+
+There are no templates. Jev picks tokens and which sections exist. Content always comes from Facts.
 
 ---
 
-## 4. Autonomy Ladder & Intelligent Inbox Questions
+## 5. Taste → Blueprint (one call)
 
-The autonomy levels define risk boundaries:
-* `[AUTO]`: Zero commercial risk; executes silently without disturbing the merchant.
-* `[CONFIRM]`: Requires merchant confirmation via a 1-tap question card in the Now feed.
-* `[MERCHANT ONLY]`: Sensitive financial or destructive actions; triggered exclusively by the owner.
-
-| Level | Scope / Actions | Route | Execution Flow |
-| :--- | :--- | :--- | :--- |
-| **[AUTO]** | Stockouts, WebP, contrast audit, SEO sitemap. | Background Agent | Executes silently; zero taps needed. |
-| **[CONFIRM]** | Festival banners, copy updates, catalog re-orders. | Personal Now feed | Intelligent 1-tap question card in Now. |
-| **[MERCHANT ONLY]** | Price edits, refunds, cancellations, delete items. | Owner initiated | Models never touch money; code enforces tap. |
-
-### Intelligent Inbox Questions (No Syntax, Zero Over-Engineering)
-
-Instead of expecting the merchant to type syntax or commands, Jev proactively surfaces **bounded 1-tap questions** in `space.now`:
-
-```text
-SMART QUESTION 1: MISSING CONTACT INFO
-┌────────────────────────────────────────────────────────┐
-│ [?] Add shop phone number for customer WhatsApp orders?│
-│     [ + Add 9876543210 ]            [ Skip for Now ]   │
-└────────────────────────────────────────────────────────┘
-
-SMART QUESTION 2: UPCOMING FESTIVAL SPIKE
-┌────────────────────────────────────────────────────────┐
-│ [?] Deepavali is in 14 days. Activate 10% banner kit?  │
-│     [ Activate Banner ]             [ Skip ]           │
-└────────────────────────────────────────────────────────┘
-
-SMART QUESTION 3: LOW STOCK PROTECTION
-┌────────────────────────────────────────────────────────┐
-│ [?] Crimson Saree has 1 left. Auto-hide when sold out? │
-│     [ Auto-Hide at 0 ]              [ Keep Showing ]   │
-└────────────────────────────────────────────────────────┘
-```
-
----
-
-## 5. Taste-Driven Styling & Reversible Tweaks (Rare / Optional Layer)
-
-Style changes are **100% managed through Taste bullets alone**. There is no separate ephemeral chat bar. When an owner speaks or adds a style bullet in the Taste drawer (e.g. *"Dark luxury tone with gold festive accent"*), Jev evaluates the active bullets in **<70ms for ₹0.10** and code flips design tokens on Edge.
-
-To undo or change style (e.g. when festival season ends), the merchant simply taps **`[x]`** to delete that bullet in the drawer. The store deterministically reverts back in <5ms with zero residual prompt drift.
-
-```text
-TASTE BULLET ADDED/REMOVED ──► JEV EVALUATION (<70ms) ──► TOKEN/BLUEPRINT UPDATE ──► ATOMIC EDGE FLIP
-• "Lead with Deepavali bridal sarees spotlight"  ➔ flips lead intent to `spotlight`
-• Tap [x] to remove bullet                       ➔ deterministically reverts back to `products`
-```
-
-### Clean Taste-to-Token Schema (Input & Output)
+Every question runs in parallel over the same state. Code applies the answers.
 
 ```json
-// Jev Request (Input Payload from Active Taste Bullets)
+// Request
 {
   "state": {
-    "trade": "Handloom & Apparel Atelier",
-    "taste": [
-      "Pure silk sarees direct from Salem weavers",
-      "Dark luxury tone with gold festive accent",
-      "Lead with Deepavali bridal sarees spotlight"
-    ]
+    "trade": "Handloom & Apparel",
+    "taste": ["Pure silk sarees direct from Salem", "Dark luxury tone with gold accent", "Lead with Deepavali bridal sarees"],
+    "facts": { "items": 28, "proofs": ["handloom mark"], "season": "Deepavali in 14 days" }
   },
   "questions": {
-    "lead": {
-      "type": "choice",
-      "instructions": "Which lead intent does taste request?",
-      "criteria": { "spotlight": "Festival deal banner", "products": "Direct product grid", "categories": "Department cards", "craft": "Artisan heritage story" }
-    },
-    "tone": {
-      "type": "choice",
-      "instructions": "What surface tone is requested?",
-      "criteria": { "ink": "Dark charcoal background", "canvas": "Light background", "surface": "Warm cream" }
-    },
-    "typography": {
-      "type": "choice",
-      "instructions": "Heading typography style?",
-      "criteria": { "serif": "Classic display serif", "sans": "Clean modern sans", "grotesk": "Bold geometric" }
-    },
-    "density": {
-      "type": "score",
-      "instructions": "Spacing density?",
-      "criteria": ["1: Compact", "2: Balanced", "3: Airy"]
-    }
+    "kind":       { "type": "choice", "instructions": "What does this business mainly do?", "criteria": { "goods": "Sells physical goods", "food": "Sells prepared food", "services": "Sells time or skill", "wholesale": "Sells in bulk" } },
+    "spotlight":  { "type": "noul",   "instructions": "Do taste or season call for a festival or offer section now?" },
+    "story":      { "type": "noul",   "instructions": "Do taste or facts call for a craft or owner story?" },
+    "trust":      { "type": "noul",   "instructions": "Is the listed proof strong enough to show a trust section?" },
+    "lead":       { "type": "choice", "instructions": "What should lead the page after the header?", "criteria": { "spotlight": "Festival or offer", "catalog": "Products first", "story": "Craft story" } },
+    "typography": { "type": "choice", "instructions": "Which heading style fits the taste?", "criteria": { "serif": "Classic display", "sans": "Clean modern", "grotesk": "Bold geometric" } },
+    "tone":       { "type": "choice", "instructions": "Which surface tone fits the taste?", "criteria": { "ink": "Dark", "canvas": "Light", "surface": "Warm tinted" } },
+    "density":    { "type": "score",  "instructions": "How airy should spacing be?", "criteria": ["1: Compact", "2: Balanced", "3: Airy"] }
   }
 }
 ```
 
 ```json
-// Jev Response (Output Payload)
+// Response
 {
   "answers": {
-    "lead":       { "choice": "spotlight", "confidence": 0.98 },
-    "tone":       { "choice": "ink",       "confidence": 0.99 },
+    "kind":       { "choice": "goods",     "confidence": 0.99 },
+    "spotlight":  { "probability": 0.93 },
+    "story":      { "probability": 0.31 },
+    "trust":      { "probability": 0.88 },
+    "lead":       { "choice": "spotlight", "confidence": 0.97 },
     "typography": { "choice": "serif",     "confidence": 0.96 },
+    "tone":       { "choice": "ink",       "confidence": 0.99 },
     "density":    { "score": 2,            "confidence": 0.94 }
   }
 }
 ```
 
-```text
-CODE APPLICATION (<5ms):
-lead === "spotlight" ➔ inserts Deepavali banner above catalog
-tone === "ink"       ➔ flips background to dark charcoal with gold accents
-```
+| Rule | Behaviour |
+| :--- | :--- |
+| Thresholds | A `Noul` above 0.65 includes the section. Tune on real data. |
+| Low confidence | Keep the previous value or the default. Never ask the merchant. |
+| Conflicting bullets | The latest bullet wins, applied by code. |
+| Undo | Every Blueprint change is a revision. Deleting a bullet reverts it. A 1-tap Undo is also available. |
+| Verification | A `Noul` checks each copy claim against Facts. Unbacked claims are dropped. |
 
 ---
 
-## 6. Verified Token Economics & Monthly Cost Ledger
+## 6. Autonomy
 
-Calculated on actual token consumption (Jev System One: ~500 input tokens $\approx$ $0.001 USD = **₹0.10 INR**; LLM slot drafter: ~200 tokens $\approx$ $0.0004 USD = **₹0.04 INR**):
+| Level | Examples | Route |
+| :--- | :--- | :--- |
+| **[AUTO]** | Image compression, alt text, SEO and sitemap, policies from facts, track page, WhatsApp share card, sold-out hiding. | Silent. |
+| **[CONFIRM]** | Festival banner, new copy, low-stock rule, missing phone. | 1-tap card in Now. |
+| **[MERCHANT ONLY]** | Prices, refunds, cancellations, deleting items. | Owner taps. Models never touch money. |
 
-| Lifecycle Event | Inference Operations | Latency | Unit Cost | Active Monthly Total (30 Products) |
-| :--- | :--- | :--- | :--- | :--- |
-| **Store Genesis (Day 0)** | 1 Jev fan-out (₹0.10) + 1 copy draft (₹0.04) | <120ms | ₹0.14 | **₹0.14** (one-time setup) |
-| **Product Intake** | 1 Jev intake (₹0.10) + 1 copy slot (₹0.04) + 1 claims check (₹0.10) | <100ms | ₹0.24 / item | **₹7.20** (30 new items/mo) |
-| **Daily Merchandising** | 1 Jev scoring batch (cached if state unchanged) | <70ms | ₹0.10 / run | **₹3.00** / month |
-| **Smart Inbox Questions**| 2–4 proactive festival/stock checks | <70ms | ₹0.10 / check| **₹0.40** / month |
-| **Taste Tweaks (Rare)**| ~5 optional voice/text Taste bullet edits | <70ms | ₹0.10 / edit | **₹0.50** / month |
-| **Customer Visits & Orders**| Cloudflare Edge Cache + Turso DB checkout | ~5ms | **₹0.00** | **₹0.00 forever** (Zero AI on visits) |
-| **Total Monthly Store AI** | Strictly bounded inference ledger | — | — | **₹11.24 / month** (≈ ₹10 – ₹15 / mo) |
+| Smart question (Now) | Buttons |
+| :--- | :--- |
+| Add shop phone for WhatsApp orders? | `Add 98xxxxxx` · `Skip` |
+| Deepavali in 14 days. Activate 10% banner kit? | `Activate` · `Skip` |
+| Crimson Saree has 1 left. Auto-hide at 0? | `Auto-hide` · `Keep` |
+
+---
+
+## 7. Code-Owned Floors (Jev never decides)
+
+| Area | Rule |
+| :--- | :--- |
+| Money | Integer minor units. Price changes are merchant-only. Offers stay under MRP and above the margin floor. |
+| Delivery | Perishables are same-day or pickup only. Pincode checker. Fee matrix. |
+| Trust | Certificates, quotes and badges render only from uploaded proof. |
+| Page | Under 150 KB, lazy WebP, no heavy animation, bundled Tamil font. |
+| Language | Written in English. Translation is a separate downstream LLM step. |
+
+---
+
+## 8. Cost (estimates, measure before committing)
+
+- Jev fan-out: about ₹0.10 per run, on Day 0 and on each Taste or Fact change (cached otherwise).
+- Copy drafts: about ₹0.04 each. Claim checks: about ₹0.10 each.
+- A 30-product month: about ₹10–15 in total. Visits cost ₹0.

@@ -123,7 +123,7 @@ export interface CategorySpec {
 }
 
 /**
- * Registered category archetypes (siteai.md §4). A category is catalog data: it
+ * Registered category archetypes. A category is catalog data: it
  * sets the default flow, the floor theme and the commerce-gate priors, and the
  * `category` judgment may only choose among these ids.
  */

@@ -3,7 +3,7 @@
 Cloudflare Worker for TAR’s identity, workspace isolation, Action Gateway,
 commerce kernel, adaptive Space, per-user Inbox projection for Now, durable Flow Books, sites and
 channel ingress. The current product goal is [space.md](../space.md), with
-[commerce.md](../commerce.md) and [siteai.md](../siteai.md) as linked contracts.
+[commerce.md](../commerce.md) as a linked contract.
 
 ## Local checks
 

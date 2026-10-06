@@ -11,7 +11,7 @@ export { editorialLight, editorialLookbook, editorialChalk, streetwearDark, mini
 export const DEFAULT_DESIGN: Design = editorialLight;
 
 /**
- * Registered theme catalog (siteai.md §5).
+ * Registered theme catalog.
  * Adding a theme is catalog data: adding one needs no engine change.
  */
 export const THEMES: Record<string, Design> = {

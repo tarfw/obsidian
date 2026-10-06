@@ -95,7 +95,7 @@ const style = (density: Density, tone?: Tone): StyleSet => ({
 const DENSITY_WORDS: readonly Density[] = ['airy', 'balanced', 'compact'];
 
 /**
- * Deterministic floor for a resolved category (siteai.md §4, §5): the archetype
+ * Deterministic floor for a resolved category: the archetype
  * supplies the flow, the theme supplies density and columns, and the gates supply
  * the commerce priors. A rejected look is never re-offered. No model, no brand
  * string matching - the category and its theme tokens decide everything.
@@ -532,7 +532,7 @@ function block(purpose: string, at: string, input: BuildInput, paths: string[], 
 const enquiryLabel = (email?: string): string => email ? 'Email us' : 'Get in touch';
 
 /**
- * Gate-driven journeys (siteai.md §4). Each is declared for the Gateway but stays
+ * Gate-driven journeys. Each is declared for the Gateway but stays
  * disabled until workspace policy enables it, so a public form never posts before
  * the endpoint exists. Product -> order, service -> booking, neither -> enquiry.
  */

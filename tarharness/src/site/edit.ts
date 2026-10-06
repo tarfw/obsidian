@@ -333,7 +333,7 @@ export async function executeSiteAsk(
   const normalize = (s: string) => s.toLowerCase().replace(/&/g, 'and').replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
   const normalizedCommand = normalize(command);
 
-  // Global theme handling (siteai.md §5, §7)
+  // Global theme handling
   const isDarkTheme = /(?:darker|dark|night|black)\s*(?:theme|mode|look|canvas|palette)|(?:theme|mode|look|canvas|palette)\s*(?:darker|dark|night|black)|^(?:darker|dark|night|black)(?:\s*theme|\s*mode)?$/i.test(command.trim());
   const isLightTheme = /(?:light(?:er)?|clean|minimal|white)\s*(?:theme|mode|look|canvas|palette)|(?:theme|mode|look|canvas|palette)\s*(?:light(?:er)?|clean|minimal|white)|^(?:light(?:er)?|clean|minimal|white)(?:\s*theme|\s*mode)?$/i.test(command.trim());
   const isChalkTheme = /(?:chalk)\s*(?:theme|mode|look|canvas|palette)|(?:theme|mode|look|canvas|palette)\s*(?:chalk)|^chalk(?:\s*theme)?$/i.test(command.trim());
@@ -413,7 +413,7 @@ export async function executeSiteAsk(
     }
   }
 
-  // Deterministic purpose fallbacks when target is not directly mentioned (siteai.md §1, §7)
+  // Deterministic purpose fallbacks when target is not directly mentioned
   if (!target) {
     if (/(?:photo|image|picture|col|column|grid|list\s*view)/.test(lower)) {
       target = doc.pages[0]?.sections.find((s) => s.purpose === 'collection' || s.purpose === 'split' || s.purpose === 'introduction')?.id || doc.pages[0]?.sections[0]?.id || null;

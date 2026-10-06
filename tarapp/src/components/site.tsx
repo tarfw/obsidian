@@ -39,7 +39,7 @@ export interface ToastInfo {
 const siteSnapshotCache = new Map<string, SiteSnapshot>();
 const siteStorageKey = (slug: string) => `tar_site_snap_${slug}`;
 
-/** Contextual quick action prompts tailored to the focused visual target (siteai.md §7). */
+/** Contextual quick action prompts tailored to the focused visual target. */
 function getContextPrompts(purpose?: string | null): string[] {
   if (!purpose || purpose === 'all') {
     return ['Darker Theme', 'Run Festive Sale', 'Photo Bigger', 'Add Location', 'Light Theme'];

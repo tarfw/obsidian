@@ -1,7 +1,7 @@
 /**
  * TAR Site document - the typed, versioned source of truth for a site.
  *
- * The document contract lives in siteai.md. Fields and identifiers use one
+ * The document contract is this module. Fields and identifiers use one
  * lowercase semantic word; structure supplies qualification.
  */
 

@@ -370,9 +370,9 @@ describe('site generation and editing', () => {
     }));
     const siteId = String(generated.siteId);
     const site = generated.site as SiteDocument;
-    // No model key and no bound records: the category falls to the deterministic floor (siteai.md §4).
+    // No model key and no bound records: the category falls to the deterministic floor.
     expect(site.category).toBe('none');
-    // An explicit owner theme is honoured and drives the compiled tokens (siteai.md §5).
+    // An explicit owner theme is honoured and drives the compiled tokens.
     expect(site.design.theme).toBe('editorial-lookbook');
     expect(site.design.color.canvas).toBe('#ffffff');
     expect(site.design.color.ink).toBe('#000000');

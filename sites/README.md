@@ -1,6 +1,6 @@
 # Shared Sites Worker
 
-The site contract is the [Site AI](../siteai.md) document. The initial public address is
+The initial public address is
 `https://tar-sites.tar-54d.workers.dev/<workspace>/`, using the workspace's unique
 reserved slug. No purchased domain, wildcard
 DNS or customer certificate is needed. The account subdomain comes from the
@@ -32,7 +32,7 @@ Review migration effects and test results before running the remote migration or
 deploying. The standalone Sites Worker can be deployed independently after its
 serving and D1/R2 integration tests pass; the main harness deployment requires
 the full release gates. Deployment does not complete the planned editor; delivery
-and acceptance are tracked in section 11 of the [Site AI contract](../siteai.md).
+and acceptance remain open.
 
 Generate a draft, compile it, review every candidate page, then confirm Publish.
 Verify the returned HTTPS URL, navigation, catalog, canonical metadata and

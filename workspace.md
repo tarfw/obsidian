@@ -5,7 +5,7 @@
 | 1. Describe | Workspace name, work and optional site brief       | No call for exact values                           | Create empty Records + owner membership                           |
 | 2. Select   | Registered tool/capability groups                  | Choice per optional group: include / skip / unsure | Propose groups, including Site; resolve dependencies              |
 | 3. Save     | Owner reviews selection                            | Unclear fit asks; manual selection works           | Save enabled capabilities + default role bundles                  |
-| 4. Site     | Site selected; reuse brief + approved facts/assets | siteai.md create fan-out (6) + design pass (5)    | Builder validates/saves private preview; ask only missing details |
+| 4. Site     | Site selected; reuse brief + approved facts/assets | Site create fan-out (6) + design pass (5)         | Builder validates/saves private preview; ask only missing details |
 | 5. Publish  | Owner reviews checked Site candidate               | No AI needed for an exact Publish command          | Explicit Publish in the same setup journey                        |
 | Status      | Target setup flow                                  | Options come from the registry                     | Workspace/member setup continues while Site is pending            |
 
@@ -74,7 +74,7 @@ Proposed IDs only; build and register before Jev can select them. Financial/tax 
 | Registry   | Actions declare delegation, required reads/writes, record scope and launcher dependencies.                                                 |
 | Access     | Source checks membership, capabilities, grants, scope and state on reads/commits. Unknown roles deny.                                      |
 | Projection | Code derives Tools without AI. Now includes authorized work across workspaces; Space changes focus only.                                   |
-| Site       | One setup brief; optional Site uses approved public facts/assets. Private preview + explicit Publish follow siteai.md; visits need no AI. |
+| Site       | One setup brief; optional Site uses approved public facts/assets. Private preview + explicit Publish; visits need no AI.                  |
 | AI         | Choice has confidence; Noul has yes-probability. Batch independent judgments; clarify uncertainty.                                         |
 | Freshness  | Cache by identity/access, source/registry versions, context/request, question/model and relevant time. Source remains authoritative.       |
 | Business   | Reuse Commerce, Flows, idempotency and audit. Distinct approval/execution steps need distinct registered Actions.                          |
@@ -84,7 +84,7 @@ Proposed IDs only; build and register before Jev can select them. Financial/tax 
 | Reference         | Source                                                                                                                                                                                                           |
 | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Registry snapshot | 68 Actions; [Tools](tarharness/src/registry/tools.ts), [Actions](tarharness/src/registry/catalog.ts), [POS](tarharness/src/pos/catalog.ts), [Commerce](tarharness/src/commerce/catalog.ts)                       |
-| Product contracts | [Space](space.md), [Inbox](inbox.md), [Commerce](commerce.md), [Site AI](siteai.md)                                                                                                                            |
+| Product contracts | [Space](space.md), [Inbox](inbox.md), [Commerce](commerce.md)                                                                                                                                                    |
 | Jev guidance      | [Choice](https://docs.typesafe.ai/primitives/choice), [Noul](https://docs.typesafe.ai/primitives/noul), [Confidence](https://docs.typesafe.ai/confidence), [Batching](https://docs.typesafe.ai/patterns/fan-out) |
 
 ## 3. End-to-end flow
@@ -121,7 +121,7 @@ Proposed IDs only; build and register before Jev can select them. Financial/tax 
                     v                                           v
 +--------------------------------------+    +--------------------------------------+
 | JEV ROLE / ACTION PROPOSAL           |    | BUILD SITE                           |
-| Choice: role bundle + none           |    | siteai.md create + design pass       |
+| Choice: role bundle + none           |    | Site create + design pass            |
 | Noul: eligible registered Actions    |    | LLM proposes; Jev ranks              |
 +--------------------------------------+    +--------------------------------------+
                     |                                           |

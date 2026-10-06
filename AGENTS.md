@@ -7,8 +7,8 @@ planning or implementing AI judgments for this project. Read the relevant live
 documentation as the skill requires. Keep deterministic business rules in code;
 using the skill does not require adding TypeSafe calls to every workflow.
 
-Use `space.md` as the current product goal. `commerce.md` and `siteai.md` are
-linked contracts for the work Space presents.
+Use `space.md` as the current product goal. `commerce.md` is a linked
+contract for the work Space presents.
 
 For new tables, columns and internal identifiers, use one semantic word in
 lowercase. Do not use spaces, underscores, hyphens or joined multiword names.

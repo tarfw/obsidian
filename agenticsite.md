@@ -1,844 +1,246 @@
-# Autonomous Store Agent — Jev-Based Complete Blueprint (v1 Launch)
+# Autonomous "Site" Agent
 
-> **Core Principle:** Autonomous-First, Approval-Based. AI does 95% of the work; the merchant approves with one tap. Manual editing is optional, never required.
-> Jev decides, LLM writes, code assembles and guards money, edge serves for ₹0/visit.
-
-> **Merchant's only job:** 📷 add products (photo) · ✅ confirm orders · 📦 ship.
-> Everything else — design, content, SEO, translations, offers, agentic channels, maintenance — is done by AI agents.
-
----
-
-## 1. System Overview
-
-```
-┌──────────────┐   ┌───────────┐   ┌───────────┐   ┌────────────┐   ┌───────────┐   ┌───────────┐
-│ Merchant     │──►│  Agents   │──►│    Jev    │──►│    LLM     │──►│  Worker   │──►│ Edge (R2) │
-│ photo / fact │   │ (plan)    │   │ (decide)  │   │ (write)    │   │ (assemble)│   │ (serve)   │
-└──────────────┘   └───────────┘   └───────────┘   └────────────┘   └───────────┘   └───────────┘
-   3 jobs only       code-owned       1 batched        slots only       validated       ₹0 / visit
-                     workflow         call/signal      TA + EN          AST + audits
-                                          │
-                                          ▼
-                              ┌─────────────────────────┐
-                              │  MERCHANT APPROVAL TAP  │  one card, one tap, undo anytime
-                              └─────────────────────────┘
-```
-
-### Autonomy Contract
-
-| Invariant | Rule |
-| :--- | :--- |
-| **Zero design questions** | Agent decides theme, layout, sections, language. Asking the merchant to design is a failure mode |
-| **Zero developer** | No code, no theme editor, no plugin, no SEO tool, no translator needed — ever |
-| **Approval-based** | Agent proposes, merchant approves with 1 tap; safe changes auto-apply (see Autonomy Ladder) |
-| **Money stays in code** | Prices, stock, tax, orders, payments are never decided by Jev or LLM |
-| **Zero visit cost** | Public visits run 0 model calls; edge serves compiled pages |
-| **Bounded AI** | At most 1 batched Jev call per signal; never chain, never loop, never re-ask |
-| **Always reversible** | Every change is an immutable revision; 1-tap Undo restores it |
-| **Always publish-ready** | Without any AI key, a deterministic category floor still yields a valid store |
-
----
-
-## 2. Merchant Reality (Tamil Nadu & India SMB)
-
-### 2.1 Who the Merchant Is
-
-| Reality | Implication for the agent |
-| :--- | :--- |
-| Owner runs the shop alone ( example: saree shop, bakery, jewellery, electronics, boutique, ) | One-person ops: **no admin panels**, only cards and taps |
-| Family-run: spouse, son or daughter helps part-time, often with a different phone | Multiple helpers under one owner; roles (owner, packer, cashier) with the same 1-tap cards, no logins to remember (OTP only) |
-| Already sells offline for years; reputation is local and personal | Store must carry the **shop's real identity** (name, street, photos, owner story); never a generic "online store" look |
-| Customers know the owner by name and call or WhatsApp directly | Owner's name, face, phone and WhatsApp prominent on Home, PDP and Contact |
-| Wide range of trades: textiles, jewellery, groceries, sweets and snacks, bakery, electronics, mobiles, hardware, stationery, pharmacy, crafts, furniture, plants, gifts, home appliances, handloom | Category floor covers these archetypes; Builder never asks "which template" |
-| Education varies from school-level to graduate; English is a second language | Zero jargon anywhere: "Add product", "Confirm order", "Ship", never "SKU", "variant", "fulfilment" |
-| Not a "tech person"; afraid of breaking something | Every action reversible; **Undo** always visible; no destructive action without a plain-language confirm |
-| Mid-size merchants have 2–20 staff, several counters and sometimes branches | Same store scales to multiple categories, locations, staff roles without redesign |
-| Many merchants sell from home, a stall or a market shop with no shopfront | Store works without a street address (area + pincode + phone is enough) |
-| Women-run micro-businesses (home bakers, tailoring, handicrafts, self-help groups) are a large segment | Voice-first onboarding, WhatsApp-first orders, no "business registration" demands up front |
-| Wholesale and retail are sold by the same merchant (bulk price vs single piece) | Price records support quantity tiers later; v1 shows retail and a "Bulk enquiry" WhatsApp path |
-| No design or SEO knowledge | Agent owns look, copy, SEO, sitemap, schema, speed |
-
-### 2.2 Device, Network and Language
-
-| Reality | Implication for the agent |
-| :--- | :--- |
-| Phone is the only computer | Mobile-first merchant app; store is built and managed from the phone |
-| Mid-range or low-end Android, often 2–4 GB RAM, cracked screens | Merchant app and storefront stay light; no heavy animation on low-end devices (motion floor) |
-| Patchy mobile data, 4G drops in shops and villages | Store pages stay small, aggressive edge cache, images auto-resized, offline-tolerant merchant draft queue |
-| Prepaid data packs; customers avoid heavy sites | Lazy-loaded images, small hero, no auto-play video unless Jev picks `video` and the connection is good |
-| Speaks Tamil / Tanglish, types little | Voice and photo are primary inputs; Tamil + English are first-class |
-| Types Tamil words in English letters ("konjam", "periya", "sema") | Director understands Tanglish; transcripts are never "corrected" before Jev sees them |
-| Tamil keyboard is slow on phones; autocorrect mangles Tamil | Always offer a 🎤 mic; text input is secondary; show the heard text for 1-tap fix |
-| Regional accents and mixed Tamil-English sentences inside one voice note | Voice ASR must be code-mixed; quality tested on the Tamil/Tanglish set (§14) before launch |
-| Customers search in Tamil script, Tanglish and English | Search matches all three; product pages carry TA + EN names |
-| Tamil text renders badly with wrong fonts | Tamil-capable font stack in every theme; glyph fallback verified (§11) |
-| Other Indian languages come later (Telugu, Kannada, Malayalam, Hindi) | Language is a slot (`ta`, `en`, later more); layout never depends on language |
-| Dates, numbers and money are written the Indian way (₹ 1,25,000; DD/MM/YYYY) | Code formats all numbers and dates; LLM never writes a price or a date |
-| Shared phones: one phone, several people, often no email | OTP on mobile number only; no password and no email required |
-
-### 2.3 Customers of the Merchant
-
-| Reality | Implication for the agent |
-| :--- | :--- |
-| Customers live on WhatsApp | WhatsApp order, share and float-button on every page; WhatsApp is a **channel**, not an add-on |
-| Customers ask "price enna?", "stock irukka?" before anything else | Concierge answers price and stock from the catalog instantly; merchant only sees real exceptions |
-| Many customers still call the shop to confirm before paying | Call button and WhatsApp on every page; checkout never blocks a "call me" path |
-| Customers expect to see more photos and videos before buying | Gallery with several photos per product; owner can send a photo set in one go |
-| Customers expect bargaining and "best price" | Offers are approved by the merchant; the store never lowers a price by itself |
-| Repeat customers are neighbours, relatives, community and temple circles | Share cards for WhatsApp groups; order link per product; "Order again" shortcut |
-| Gift buyers order for relatives in another town, with a different delivery address | Separate "send to" address at checkout; gift note field |
-| NRI customers order for family in Tamil Nadu | Display currency stays ₹; international payment is out of scope for v1; WhatsApp enquiry path remains |
-| Customers compare with Amazon, Flipkart, Meesho and local competitors | Trust strip: real owner, real address, return window, COD; fast and clean pages |
-| Elderly and first-time online buyers | Larger tap targets (≥ 44px), clear Tamil text, 1-screen checkout, big "Call" button |
-| Customers hesitate to enter card details on unknown sites | UPI and COD are default; cards only through a verified payment adapter |
-| Customers expect an order confirmation on WhatsApp within minutes | Order creation triggers a confirmation message; merchant confirms with 1 tap |
-
-### 2.4 Payments and Money
-
-| Reality | Implication for the agent |
-| :--- | :--- |
-| Pay by UPI and COD. trust of online payment gateway and cards is low | UPI + COD journeys, COD confirmation, clear return and delivery promises |
-| UPI is the daily habit (PhonePe, Google Pay, Paytm, BHIM) | UPI deep link and QR on checkout; payment reference recorded against the order |
-| Merchant already has a UPI QR on the counter | Onboarding stores the UPI ID only; no payment-gateway account needed to start |
-| COD is expected and often the majority of orders | COD journey with address confirmation; Order Shield gives a risk hint, never auto-cancels |
-| Returned COD parcels (return-to-origin) cost real money | `vague` and `risk` hints on COD orders; advance token or UPI nudge as a merchant option |
-| Customers pay part now, part later (advance for custom or bridal items) | Partial payment recorded against the invoice; the commerce core already supports partial |
-| Cash lands in the shop, not in a bank, and is reconciled by memory | Daily cash / UPI / COD summary card; invoices and payments recorded exactly (integer minor units) |
-| Merchant fears payment-gateway fees and settlement delays | v1 does not require a gateway; the adapter stays optional and disabled until verified |
-| GST-registered and unregistered merchants both exist | Tax is a merchant fact: invoices show GST only when enabled; never guessed |
-| Prices are quoted in round numbers and often include tax | Price record stores tax mode (inclusive or exclusive); display rules in code |
-| Festival discounts are percentage or "flat ₹X off", often with a free gift | Offer types come from a code-supplied menu bounded by margin rules; Jev only chooses among them |
-| Credit sales ("kadan") to known customers are normal | Outside v1 checkout; invoice and receivable records exist in the commerce kernel for later |
-
-### 2.5 Logistics and Delivery
-
-| Reality | Implication for the agent |
-| :--- | :--- |
-| Delivery is by India Post, courier partners, local delivery boys or customer pickup | Fulfilment methods are a merchant fact: `pickup`, `local`, `courier`, `post`; only enabled ones are shown |
-| Merchant packs and ships himself or through a courier pickup | One "Ship" card per order with label and tracking field; no shipping dashboard |
-| Serviceable pincodes are limited or vary by courier | Delivery checker uses the merchant's own pincode list; unknown pincode → WhatsApp enquiry |
-| Local same-day delivery within the town is a big advantage | Local delivery area list; "Today" badge only when the merchant enables it |
-| Shipping charge varies by weight, distance and product | Shipping rules are code-owned tables; LLM never states a delivery time or charge |
-| Delivery time promises are often wrong and cause disputes | Delivery text comes from merchant facts only; claims guard blocks invented promises (§7.5) |
-| Customers want live status without calling the owner | `/track` page and WhatsApp status message from the order record |
-| Fragile and perishable goods (sweets, cake, flowers, pickles) need special handling | `perishable` Noul at intake → delivery window, same-day only, no courier option |
-| Returns and exchanges for clothing, mobiles and appliances are frequent | Return window is a merchant fact; Returns policy generated from it, never invented |
-| Heavy or bulky items (furniture, appliances) | Delivery by local transport; "Delivery quote on WhatsApp" path |
-| Rural pincodes have slow courier service | Merchant fact: allowed pincodes; the checker tells the truth |
-| Packing and label printing happen from a phone | Printable label / slip as an artifact from the order record |
-
-### 2.6 Compliance and Trust
-
-| Reality | Implication for the agent |
-| :--- | :--- |
-| Small merchants fear legal and tax paperwork | Policies, invoice wording and terms generated from facts and 1-tap approved; no legal jargon shown |
-| Policy pages (shipping, returns, privacy, terms, contact) are required for trust | Created Day 0 from merchant facts; Guardian blocks Publish if missing |
-| Product claims (pure silk, handloom, organic, branded, warranty) cause fraud complaints | Claims registry: every claim needs a merchant fact (§7.5); unsupported claims are dropped before approval |
-| Reviews and testimonials can be faked by AI | `proof` section shows **only real, merchant-approved** customer quotes; never generated |
-| Authenticity marks (handloom mark, silk mark, certifications) are valuable | Shown only when the merchant attaches proof; never inferred |
-| Brand names and logos are legally sensitive | Store never claims "authorised dealer" or uses third-party logos without a merchant fact |
-| Customers' phone and address are sensitive | Public pages never expose customer data; orders live in the workspace database |
-| Fake or scam stores damage trust in the whole segment | Verified owner phone (OTP), real address facts, visible owner contact on every page |
-| Consumer complaints go to the owner by WhatsApp or call | Contact is first-class; Concierge triage routes complaints to the merchant card immediately |
-| Fixed-price rules for some goods (medicines, books, packaged food MRP) | MRP is a record field; offers can never push price above MRP; code-enforced |
-| Food sellers need food-licence style declarations | Optional merchant fact shown in the footer only when provided |
-
-### 2.7 Seasonality and Local Calendar
-
-| Reality | Implication for the agent |
-| :--- | :--- |
-| Local festivals drive sales (Pongal, Tamil New Year, Aadi, Deepavali) | Festival agent prepares offers and banners ahead of time |
-| Other major sales moments: Navaratri and Golu, Karthigai Deepam, Vinayagar Chaturthi, Ayudha Pooja, Akshaya Tritiya, Valentine's, Christmas, Ramzan and Eid, school reopening | Calendar is data (not code): festival, date window, product-type affinity, tone; Marketer reads it |
-| Muhurtham and wedding seasons produce bulk textile and jewellery demand | Bridal and wedding sections can be proposed 30–45 days earlier from the calendar |
-| Agricultural seasons shape rural spend (harvest months) | Calendar entry per region; merchant may disable any festival |
-| Many festivals follow lunar dates that change every year | Dates are maintained as data with a yearly refresh; Marketer never computes them with a model |
-| Sales spike 1–2 weeks before a festival, then collapse | Proposals start ~14 days ahead; auto-expire the day after; banner and offer retire automatically |
-| Stock runs out fast during peak and is hard to restock | Stock badges and auto-hide at 0; "Low stock" proposal card before peak |
-| Merchants forget to remove old offers | Guardian removes expired offers and banners automatically (🟢 auto) |
-| Rain, strikes or local events change daily sales | Optional merchant "Closed today" or "Delayed delivery" 1-tap banner |
-
-### 2.8 Money, Margins and Cost Fear
-
-| Reality | Implication for the agent |
-| :--- | :--- |
-| Tight margins, fear of tech bills | Cost per store per month in rupees, not dollars (see §13) |
-| Merchants distrust subscriptions with surprise charges | Plain price per month and a visible usage meter; no hidden per-order AI fees |
-| Pay-per-use fits low-volume months | Credits model (§13); a quiet month costs almost nothing |
-| Free options exist (WhatsApp Business, Instagram) | Show value: orders, repeat customers, hours saved; never feature-gate the basics |
-| Merchants rarely have an IT budget or a developer | The product replaces the developer; no "agency" or "setup fee" step |
-| Rupee-based thinking: ₹ per month, ₹ per order | Pricing, receipts and reports always in ₹ with Indian number grouping |
-| Time is the scarcest resource (shop open 10–12 hours a day) | Everything fits inside a 30-second gap: one card, one tap |
-
-### 2.9 What the Merchant Wants (Jobs to Be Done)
-
-| Reality | Implication for the agent |
-| :--- | :--- |
-| Wants customers to find the shop online without learning marketing | Channel agent publishes sitemap, structured data and feeds automatically (§12) |
-| Wants to show new stock to regular customers instantly | New product → 1-tap approve → WhatsApp share card |
-| Wants to stop answering the same price and stock questions all day | Concierge answers from the catalog; merchant sees only exceptions |
-| Wants orders written down correctly, not lost in chat history | Orders become records with an Inbox card; no manual notebooks |
-| Wants to know "what sold today" in one glance | Daily summary card: orders, revenue, cash, UPI, COD, low stock |
-| Wants help during festivals, not tools | Marketer proposes the whole festival kit; merchant taps once |
-| Wants to look professional next to big sellers | Design floor is Shopify-grade by default; no ugly "free template" feel |
-| Wants things done in Tamil, in the same words they use | Director and Concierge understand Tamil and Tanglish; replies are drafted in the customer's language |
-| Wants control without complexity | Approval cards are the only control surface; edits are optional |
-
-### 2.10 What Scares the Merchant (Fear Map)
-
-| Fear | Agent response |
-| :--- | :--- |
-| "I will break my website" | Every change is a revision with 1-tap Undo; the live site only changes on approval |
-| "AI will say something wrong about my products" | Claims guard, approval card, and the ⚫ Never rule in the Autonomy Ladder |
-| "My price will change by itself" | Price changes are 🔴 Merchant-only; no model or agent can touch money |
-| "Customers will cheat me, or I will cheat them by mistake" | Order Shield hints; merchant confirms every order; real payment references only |
-| "I do not understand English or computers" | Tamil first, voice first, zero jargon |
-| "It will cost too much" | Transparent rupee pricing and usage meter (§13) |
-| "I will need a developer again" | No code, theme or plugin surface exists; all maintenance is agent-owned |
-| "My data will be lost or sold" | Orders and customers stay in the merchant's own workspace; public pages show only public facts |
-| "It will stop working in the festival rush" | Static edge pages; ₹0 per visit; no AI call on a visit; failure falls back to the last-known-good release |
-
-### 2.11 Growth Stages (Same Store, No Rebuild)
-
-| Stage | Merchant Looks Like | What the Agent Adds |
+| Property | Value | Architectural Contract |
 | :--- | :--- | :--- |
-| **Seed** | 1 person, 5–20 products, WhatsApp orders only | Store, WhatsApp order, UPI + COD, Tamil + English, festival kit |
-| **Steady** | 20–200 products, a few orders a day, a helper | Merchandiser autopilot, stock sync, Order Shield, daily summary |
-| **Growing** | 200–1,000 products, 2–3 staff, courier partner | Collections, filters, bulk enquiry path, staff roles, return handling |
-| **Multi-counter** | Shop + warehouse + online | Stock by location (commerce core), POS and storefront on one stock |
-| **Multi-branch** | 2–10 branches, owner plus managers | Workspace per branch, roles, one catalog with branch availability |
-| **Multi-domain** | Adds a second trade (e.g. sarees plus jewellery) | Second category on the same shared core via the Builder; no new platform |
-
-### What the Merchant Never Sees
-
-```
-themes · templates · sections · variants · CSS · SEO tags · alt text · sitemap · schema ·
-translations · contrast checks · image resizing · cache · deployment · plugins · updates
-```
+| **Goal** | `Autonomous "Site" Agent` | Zero-touch build, edge-served storefront ([workspace.md](file:///c:/tarfwk/tar/workspace.md)). |
+| **Principle** | `Autonomous-First, Review-and-Confirm` | AI runs 95%; merchant confirms orders and high-value offers; manual edits optional. |
+| **Merchant Job**| `📷 Photo · ✅ Confirm · 📦 Ship` | 3 physical jobs only; zero coding, zero design, zero SEO setup. |
+| **Agent Job** | `Design · Content · SEO · Feeds · Fixes` | Background agents autonomously operate 95% of store on Jev ([SKILL.md](file:///c:/tarfwk/tar/.agents/skills/typesafe-ai/SKILL.md)). |
+| **Triage** | `Personal Inbox (Now Feed)` | Action items arrive in **Now**; row tap opens details to confirm ([inbox.md](file:///c:/tarfwk/tar/inbox.md)). |
+| **Storefront** | `Web Launch in Browser` | No in-app browser engine in `tarapp`; opens native browser ([merchants.md](file:///c:/tarfwk/tar/merchants.md)). |
+| **Serving** | `Cloudflare Edge (R2 + D1)` | Pre-rendered static HTML; zero AI calls on visits; **₹0 / visit**. |
 
 ---
 
-## 3. Agent Roster & Autonomy Ladder
+## 1. Inbox & Workspace Flow: Zero-Review Auto-Launch
 
-### The AI Agents (all code-orchestrated; Jev/LLM are tools, not free-running loops)
+As established in [`merchants.md`](file:///c:/tarfwk/tar/merchants.md), small merchants do not have time or design skill to "review" website layouts. Day 0 store creation is **100% autonomous and publishes live immediately**.
 
-| Agent | Job | Uses | Trigger |
+```text
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│ WORKSPACE LIFECYCLE                                                                    │
+├──────────────────────────────┬──────────────────────────────┬──────────────────────────┤
+│ 1. ADD WORKSPACE (Day 0)     │ 2. IMMEDIATE AUTO-PUBLISH    │ 3. DAILY TRIAGE IN NOW   │
+│ Name + Brief + Photos        │ Jev builds & deploys to Edge │ Orders & smart questions │
+│ 30 seconds setup             │ Store is Live instantly      │ 30-second tap to confirm │
+└──────────────────────────────┴──────────────────────────────┴──────────────────────────┘
+```
+
+### The Now Screen & Detail Flow (Refined from `inbox.md`)
+
+```text
+NOW SCREEN (`space.now` Daily Surface)  DETAIL SCREEN (Opened on Row Tap)
+┌──────────────────────────────────────┐┌──────────────────────────────────────┐
+│ NOW                    Find > Tools >││ ‹ Back to Now           Order Review │
+│ Murugan Silks / Owner / Salem        ││                                      │
+│--------------------------------------││ Order #18 · COD ₹2,400               │
+│ [A] Confirm Order #18        DUE 15m>││ • Customer: Anitha (Salem)           │
+│     Salem · COD ₹2,400 · 2 sarees    ││ • Items: 2x Kanchi Cotton Sarees     │
+│ [A] Ship Order #17           DUE 2h >││ • Address: Door 4, Gandhi Rd (Valid) │
+│     Chennai · Courier pickup         ││ • COD Risk: Low                      │
+│ [?] Deepavali 10% Offer     PROPOSAL>││                                      │
+│     Activate festive kit banner      ││ [ ✅ Confirm Order ]  [ Print Slip ] │
+│ Ask TAR...                          >││                                      │
+└──────────────────────────────────────┘└──────────────────────────────────────┘
+```
+
+```text
+SITE TOOL IN WORKSPACE (Device Surface)   DETACHED TASTE DRAWER (>70% Overlay)
+┌──────────────────────────────────────┐┌──────────────────────────────────────┐
+│ ‹ Tools      Online Store     [Live] ││ Taste                         [Done] │
+├──────────────────────────────────────┤├──────────────────────────────────────┤
+│ STORE LINK                           ││ [ Describe style or vibe... ]  [ + ] │
+│ tamilnadu.shop/murugan-silks         │├──────────────────────────────────────┤
+│ [ Open in Browser ↗ ]                ││ • Pure silk sarees from Salem    [x] │
+├──────────────────────────────────────┤│ • Dark luxury tone with gold     [x] │
+│ TASTE                (Tap to edit ›) ││ • Lead with Deepavali collection [x] │
+│ • Pure silk sarees direct from Salem ││ • WhatsApp order on all cards    [x] │
+│ • Dark luxury tone with gold accent  ││                                      │
+│ • Lead with Deepavali bridal sarees  ││                                      │
+│ • WhatsApp quick order on all cards  ││                                      │
+├──────────────────────────────────────┤│                                      │
+│ ACTIVE SECTIONS        (Jev Decided) ││                                      │
+│ 1. Header    • Photo & shop intro    ││                                      │
+│ 2. Spotlight • Deepavali banner      ││                                      │
+│ 3. Catalog   • 28 silk sarees        ││                                      │
+│ 4. Trust     • Handloom mark & COD   ││                                      │
+│ 5. Contact   • WhatsApp order button ││ [ Speak style bullet with mic...  ]  │
+└──────────────────────────────────────┘└──────────────────────────────────────┘
+```
+
+| Lifecycle Step | Surface | Interaction | Background Action (95% Autonomous) |
 | :--- | :--- | :--- | :--- |
-| **Builder** | Business facts → complete store (category, theme, pages, sections) | Code + Jev | Onboarding |
-| **Merchandiser** | Arranges rails, best sellers, featured, hides out-of-stock | Code + Jev (composite score) | Daily + stock/sales signal |
-| **Writer** | Product titles, descriptions, story, FAQ, SEO meta in slots | LLM + Jev claims check | New product / edit |
-| **Translator** | Tamil ↔ English parity for every visible string | LLM + Jev meaning check | Any text change |
-| **Marketer** | Festival banners, offers, WhatsApp status text, share cards | Code calendar + Jev + LLM | Festival calendar |
-| **Guardian** | Contrast, speed, broken links, price/stock drift, policy pages | Pure code (+ Jev for copy) | Every release + nightly |
-| **Channel** | Syncs to WhatsApp catalog, Google feed, agent-readable endpoints | Code | Publish |
-| **Concierge** | Triage customer WhatsApp / enquiries, draft replies | Jev (intent) + LLM draft | Inbound message |
-| **Director** | Turns merchant voice / text fragments into surgical edits | 3-lane router | Merchant command |
-
-### Autonomy Ladder (risk decides who acts)
-
-| Level | Examples | Who decides | Jev gate |
-| :--- | :--- | :--- | :--- |
-| 🟢 **Auto-apply** | Hide sold-out item, resize/compress image, fix contrast, sitemap, alt text, broken link, stock badge | Agent | Code rule only |
-| 🟡 **One-tap approve** | New store publish, festival banner, new product copy, price-neutral section reorder, Tamil text, discount badge | Agent proposes → merchant taps | Confidence ≥ policy, otherwise defer |
-| 🔴 **Merchant-only** | Price changes, refunds, cancelling orders, taking payments live, deleting products | Merchant | Jev never decides; code asks |
-| ⚫ **Never** | Inventing claims, reviews, certifications, discounts, delivery promises | Nobody | Blocked by claims registry |
-
-### Approval Inbox (the merchant's only management surface)
-
-```
-┌────────────────────────────────────────────┐
-│ KANCHI SILKS · Today                       │
-│ ✅ Store live · 24 products · TA + EN      │
-├────────────────────────────────────────────┤
-│ DO NOW                                     │
-│  ● Confirm 3 new orders                  › │
-│  ● Ship 2 packed orders                  › │
-├────────────────────────────────────────────┤
-│ AGENT PROPOSALS (1 tap)                    │
-│  🪔 Deepavali banner + 10% badge           │
-│     [ Approve ] [ Change ] [ Skip ]        │
-│  📝 Tamil text for "Silk Saree Red"        │
-│     [ Approve ] [ Skip ]                   │
-│  📦 Low stock: Blue Saree (2 left)         │
-│     [ Hide when 0 ] [ Ignore ]             │
-├────────────────────────────────────────────┤
-│  📷 Add product      🎤 Tell your agent... │
-└────────────────────────────────────────────┘
-```
-
-Every card shows **before / after preview** and a one-line reason.
+| **1. Setup** | `workspace.add` | Name, brief, photo upload | Jev fan-out resolves taste; builds AST in <120ms. |
+| **2. Auto-Publish**| Gateway | Immediate edge freeze | Deploys static HTML to Cloudflare Edge in <5ms. |
+| **3. Triage** | `space.now` | Tap row opens Detail Screen | Fetches verified order lines, risk hints, or proposals. |
+| **4. Direct** | `site.tool` | Tap `[ Open Browser ↗ ]` or Taste | Native browser launch; edit Taste bullets in drawer to steer store. |
 
 ---
 
-## 4. Merchant Journey: Day 0 → Day 365
+## 2. Taste & Lead Intent: Natural Section Stack (Genesis)
 
+```text
+STOREFRONT WEB ANATOMY (Public Web Page Rendered in Browser)
+┌────────────────────────────────────────────────────────────────────────┐
+│ 1. HEADER          Shop Name, Tagline & High-Res Brand Photo           │
+├────────────────────────────────────────────────────────────────────────┤
+│ 2. LEAD / SPOTLIGHT Jev resolves what leads the customer experience:   │
+│   • products   ──► Direct product grid (default for retail goods)      │
+│   • spotlight  ──► Seasonal festival banner / deal (peak buying rush)  │
+│   • categories ──► Multi-department cards (e.g. Sarees vs Dhotis)      │
+│   • craft      ──► Artisan story & weaving heritage (bespoke luxury)   │
+├────────────────────────────────────────────────────────────────────────┤
+│ 3. CATALOG         Flat Grid (≤15 items) · Filter Pills (16–60 items)  │
+├────────────────────────────────────────────────────────────────────────┤
+│ 4. TRUST           UPI/COD Badges & Customer Reviews (Only if real)    │
+├────────────────────────────────────────────────────────────────────────┤
+│ 5. CONTACT         Physical Address, Shop Hours & 1-Tap WhatsApp Button│
+└────────────────────────────────────────────────────────────────────────┘
 ```
-DAY 0 · 5 MINUTES
- phone OTP → business name + 1-line "what I sell" (voice or text) → WhatsApp / UPI / pincode → 3–10 photos
-      │
-      ▼
- Builder: 1 batched Jev call → category, theme, pages, sections, language → live PREVIEW
-      │
-      ▼
- Merchant taps [ Publish ] ──► tamilnadu.shop/kanchi-silks live in < 5 s (custom domain optional)
 
-DAY 1..365 · AUTOPILOT
- new photo ──► Writer + Translator ──► product page card ──► 1 tap
- stock hits 0 ──► auto-hide + badge ──► nothing to do
- festival in 14 days ──► Marketer proposal ──► 1 tap
- order arrives ──► Inbox card ──► Confirm ──► Ship
- any time ──► 🎤 "banner konjam periya aakku" ──► Director patch ──► Undo available
-```
-
-### Onboarding: Only These Questions Are Ever Asked
-
-| Question | Why Code/AI cannot guess |
-| :--- | :--- |
-| Business name | Identity |
-| What do you sell? (one line, voice OK) | Source of category, tone, language |
-| WhatsApp number, UPI ID, pincode / address | Legal and payment facts |
-| Photos (3–10, then one at a time) | Source of products |
-
-Never asked: theme, colors, fonts, layout, sections, SEO, language, domain.
+| # | Genesis Decision | Primitive | Allowed Scope | Fallback Floor |
+| :-: | :--- | :---: | :--- | :--- |
+| **1** | **Pages: Goods** | `Noul` | $p > 0.65 \implies$ `/shop`, `/cart`, `/product/[id]` | `true` if products exist |
+| | **Pages: Services** | `Noul` | $p > 0.65 \implies$ `/services`, `/book` | `false` |
+| **2** | **Lead Intent** | `Choice` | `products` (buy), `spotlight` (festival), `categories`, `craft` | `products` |
+| **3** | **Product Layout** | Code Rule | $\le 15$ items $\implies$ **Flat grid** · $16–60$ items $\implies$ **Filter pills** | Derived by item count |
+| **4** | **Typography** | `Choice` | `serif` (classic display), `sans` (clean), `grotesk` (bold) | `sans` |
+| | **Tone** | `Choice` | `canvas` (light), `surface` (tinted), `ink` (dark) | `canvas` |
+| | **Density** | `Score` | `[1: Compact, 2: Balanced, 3: Airy]` | `2` (Balanced) |
+| | **Radius** | `Choice` | `sharp` (0px), `soft` (6px), `round` (16px) | `soft` |
+| **5** | **Content Slots** | LLM + `Noul` | Slots: Title (12w), Description (60w). Claims verified vs facts. | Facts only; drop unbacked |
 
 ---
 
-## 5. Pages Plan (Generated Automatically)
+## 3. The 3 Merchant Jobs vs. Agent Automation
 
-All pages exist from Day 0 as deterministic templates; AI chooses variants and fills copy.
-
-| Page | Route | Purpose | Auto Sections (Jev picks presence) |
-| :--- | :--- | :--- | :--- |
-| **Home** | `/` | First impression, trust, entry to catalog | Announcement, Nav, Hero, Trust strip, Category tiles, Featured, Offer banner, Story, Proof, FAQ teaser, Footer |
-| **Shop** | `/shop` | All products with filters | Nav, Filters, Product grid, Footer |
-| **Collection** | `/collection/[slug]` | One category or festival | Hero, Grid, Related, Footer |
-| **Product (PDP)** | `/product/[slug]` | Convert a visitor | Gallery, Price, Variants, Stock badge, Quick Order (WhatsApp), Sizing, Delivery check, Details, Reviews, Related, Sticky Add-to-cart |
-| **Search** | `/search` | Find by name, Tamil or English | Search box, results grid |
-| **Cart** | drawer / `/cart` | Review, apply offer | Lines, totals, COD/UPI choice |
-| **Checkout** | `/checkout` | Order by UPI / COD / WhatsApp | Address, Pincode serviceability, Payment, Confirm |
-| **Order Success** | `/order/[id]` | Reassurance, next step | Summary, WhatsApp share, Track |
-| **Order Tracking** | `/track` | Status without phone call | Order id lookup, timeline |
-| **Offers / Festival** | `/offers`, `/festival/[slug]` | Seasonal landing | Hero, Countdown, Offer grid |
-| **About / Story** | `/about` | Trust and brand | Story, Photos, Proof |
-| **Contact** | `/contact` | Reach the owner | WhatsApp, Call, Map, Hours |
-| **FAQ** | `/faq` | Remove objections | Accordion (questions from catalog and policy facts) |
-| **Policies** | `/shipping`, `/returns`, `/privacy`, `/terms` | Trust and compliance | Generated from merchant facts only, never invented |
-| **404 / Empty** | `/*` | Never a dead end | Search + best sellers |
-| **Language Switch** | every page | Tamil ↔ English | Pre-rendered per language, no runtime AI |
-
----
-
-## 6. Component Library (Hand-Built Moat)
-
-> **Zero Hallucination Guarantee:** Every variant is hand-built, tested, accessible and SEO-optimized. Jev only selects from these strict presets.
-
-| Section Type | Variants | Tunable Props |
+| Merchant Job | Human Effort (30 sec) | Autonomous Agent Work (95%) |
 | :--- | :--- | :--- |
-| **Announcement Bar** | `static`, `ticker`, `countdown` | `text`, `tone` |
-| **Nav** | `sticky`, `transparent`, `solid` | `search`, `language` |
-| **Hero** | `split-left`, `split-right`, `centered`, `minimal-text`, `video`, `fullbleed` | `image`, `textAlign`, `ctaStyle` |
-| **Trust Strip** | `icons`, `badges`, `numbers` | `items` (UPI, COD, returns, delivery, authentic) |
-| **Category Tiles** | `circles`, `cards`, `tabs` | `columns` |
-| **Product Grid** | `masonry`, `uniform-3`, `uniform-4`, `featured-row`, `carousel` | `columns`, `gap`, `quickAdd` |
-| **Offer Banner** | `strip`, `split`, `countdown` | `tone`, `badge` |
-| **Testimonials** | `carousel`, `grid`, `single-quote` | `count`, `style` |
-| **Lookbook** | `full-bleed`, `collage`, `slider` | `imageCount` |
-| **Story / About** | `text-only`, `image-left`, `image-right`, `founder` | — |
-| **FAQ** | `accordion`, `two-column` | `count` |
-| **PDP** | `gallery-left`, `gallery-top`, `sticky-buy` | `zoom`, `sizing`, `delivery` |
-| **Contact** | `whatsapp-first`, `map-split` | `hours` |
-| **WhatsApp Float** | `bubble`, `bar` | `message` |
-| **Footer** | `minimal`, `multi-column`, `newsletter` | `links`, `social` |
-| **Cart / Checkout** | `drawer`, `single-page`, `multi-step` | `cod`, `upi` |
-
-Language-ready: every slot carries `ta` and `en`; layout never changes with language, only text and font stack.
+| **📷 1. Add Product** | Snap photo + speak price (*"₹1400"*) | Image crop, WebP compression, alt tag, copy slots, catalog sync. |
+| **✅ 2. Confirm Order** | Tap row ➔ review details ➔ Confirm | Address validation, COD risk check, stock reservation, WhatsApp update. |
+| **📦 3. Ship Parcel** | Tap `[ Print Slip ]` + hand to courier | Generates printable label, updates carrier tracking, notifies buyer. |
 
 ---
 
-## 7. Jev Decision Layer
+## 4. Autonomy Ladder & Intelligent Inbox Questions
 
-### 7.1 How Jev Works (read before building)
+The autonomy levels define risk boundaries:
+* `[AUTO]`: Zero commercial risk; executes silently without disturbing the merchant.
+* `[CONFIRM]`: Requires merchant confirmation via a 1-tap question card in the Now feed.
+* `[MERCHANT ONLY]`: Sensitive financial or destructive actions; triggered exclusively by the owner.
 
-Verified against the live TypeSafe docs (`how-to-build-with-system-one`, `confidence`, `primitives/*`):
+| Level | Scope / Actions | Route | Execution Flow |
+| :--- | :--- | :--- | :--- |
+| **[AUTO]** | Stockouts, WebP, contrast audit, SEO sitemap. | Background Agent | Executes silently; zero taps needed. |
+| **[CONFIRM]** | Festival banners, copy updates, catalog re-orders. | Personal Now feed | Intelligent 1-tap question card in Now. |
+| **[MERCHANT ONLY]** | Price edits, refunds, cancellations, delete items. | Owner initiated | Models never touch money; code enforces tap. |
 
-| Fact | What it means for this plan |
-| :--- | :--- |
-| System One is **not an agent**; code owns control flow | Agents above are code workflows; Jev answers narrow questions inside them |
-| Jev returns **typed answers**, never prose | Cannot write copy or invent IDs; copy is the LLM's job |
-| Questions run **in parallel**, cannot see each other | Ask many independent questions in **one** request (speculative fan-out) |
-| Question IDs are **not sent** to the model | Put the full meaning in `instructions` / `criteria`; ids are only for code |
-| **Choice** → picks one option, has `probabilities` + `confidence` | Variants, themes, intents, targets |
-| **Noul** → probability of yes (`noul`), **no** separate confidence | Presence toggles and verifications; treat near 0.5 as "unsure", not "medium" |
-| **Score** → position on ordered levels (max 10), `score` + `confidence` | Tuning (warmth, density, boldness). Normalize each by `levels − 1` before combining |
-| Confidence ≈ distribution concentration, not workflow correctness | Thresholds scale with **risk**, tested on our own Tamil/Tanglish data |
-| Choose from **code-supplied menus**; the model can't pick an omitted value | Always include a no-match option when nothing may fit |
+### Intelligent Inbox Questions (No Syntax, Zero Over-Engineering)
 
-Question shape (API form used in snippets below):
+Instead of expecting the merchant to type syntax or commands, Jev proactively surfaces **bounded 1-tap questions** in `space.now`:
 
-```typescript
-{ type: "choice", instructions: "…", criteria: { optionA: "meaning", optionB: "meaning" } }
-{ type: "noul",   instructions: "Does `facts.x` … ?" }
-{ type: "score",  instructions: "How … ?", criteria: ["level 0 situation", "level 1 situation", "level 2 situation"] }
+```text
+SMART QUESTION 1: MISSING CONTACT INFO
+┌────────────────────────────────────────────────────────┐
+│ [?] Add shop phone number for customer WhatsApp orders?│
+│     [ + Add 9876543210 ]            [ Skip for Now ]   │
+└────────────────────────────────────────────────────────┘
+
+SMART QUESTION 2: UPCOMING FESTIVAL SPIKE
+┌────────────────────────────────────────────────────────┐
+│ [?] Deepavali is in 14 days. Activate 10% banner kit?  │
+│     [ Activate Banner ]             [ Skip ]           │
+└────────────────────────────────────────────────────────┘
+
+SMART QUESTION 3: LOW STOCK PROTECTION
+┌────────────────────────────────────────────────────────┐
+│ [?] Crimson Saree has 1 left. Auto-hide when sold out? │
+│     [ Auto-Hide at 0 ]              [ Keep Showing ]   │
+└────────────────────────────────────────────────────────┘
 ```
 
-### 7.2 Complete Judgment Catalog
+---
 
-| Agent | Judgment | Primitive | Options / Scope | Runs at |
-| :--- | :--- | :---: | :--- | :--- |
-| **Builder** | `category` | Choice | Registered store archetypes + `none` | Onboarding |
-| | `hero`, `grid`, `nav`, `footer`, `checkout` | Choice | Component variants (§6) | Onboarding |
-| | `palette` | Choice | Registered themes | Onboarding |
-| | `warmth`, `density`, `weight`, `radius` | Score | Design tuning | Onboarding |
-| | `proof`, `lookbook`, `video`, `newsletter`, `blog`, `story` | Noul | Section presence | Onboarding |
-| | `sizing`, `delivery`, `cod`, `chat`, `festival` | Noul | Commerce / local feature presence | Onboarding |
-| | `language` | Choice | `tamil`, `english`, `both` | Onboarding |
-| **Intake** | `section` | Choice | Merchant's own category list + `new` | New product |
-| | `sizing`, `perishable`, `giftable`, `variants` | Noul | Product traits that change page layout | New product |
-| | `tier` | Score | Budget → premium (relative to own catalog) | New product |
-| **Writer / Translator** | `supported` (per claim) | Noul | Claim backed by registered facts | Before approval card |
-| | `meaning` (per string) | Noul | Tamil/English meaning preserved | Before approval card |
-| | `register` | Choice | `formal`, `friendly`, `colloquial` | Translate |
-| **Merchandiser** | `fit` (per product) | Score | Fit to season / festival / theme | Daily + signal |
-| | `pair` (per product pair) | Noul | Sensible cross-sell | New product |
-| **Marketer** | `offer` | Choice | Code-supplied offer types from margin rules | Festival window |
-| **Director** | `lane`, `target`, `property` | Choice | Code / Jev / LLM lane, section, property | Merchant command |
-| | 8-dimension redesign | Choice / Score / Noul | See §10 | Merchant command |
-| **Concierge** | `intent` | Choice | `status`, `price`, `stock`, `complaint`, `other` | Inbound message |
-| | `urgent` | Noul | Needs merchant now | Inbound message |
-| **Order Shield** | `vague` | Noul | Address incomplete or unreachable | New COD order |
-| | `risk` | Score | Low → high return-to-origin risk (hint only) | New COD order |
+## 5. Taste-Driven Styling & Reversible Tweaks (Rare / Optional Layer)
 
-### 7.3 Store Genesis — One Batched Call, Whole Store
+Style changes are **100% managed through Taste bullets alone**. There is no separate ephemeral chat bar. When an owner speaks or adds a style bullet in the Taste drawer (e.g. *"Dark luxury tone with gold festive accent"*), Jev evaluates the active bullets in **<70ms for ₹0.10** and code flips design tokens on Edge.
 
-```typescript
-// 1 request. ~25 independent questions run in parallel. Code consumes only applicable answers.
-const response = await client.systemOne({
-  state: {
-    business: {
-      name: "Kanchi Silks",
-      brief: "kanchipuram pattu sarees, wedding and festival wear, small family shop in Kanchipuram",
-      language_hint: "Tanglish, owner prefers Tamil",
+To undo or change style (e.g. when festival season ends), the merchant simply taps **`[x]`** to delete that bullet in the drawer. The store deterministically reverts back in <5ms with zero residual prompt drift.
+
+```text
+TASTE BULLET ADDED/REMOVED ──► JEV EVALUATION (<70ms) ──► TOKEN/BLUEPRINT UPDATE ──► ATOMIC EDGE FLIP
+• "Lead with Deepavali bridal sarees spotlight"  ➔ flips lead intent to `spotlight`
+• Tap [x] to remove bullet                       ➔ deterministically reverts back to `products`
+```
+
+### Clean Taste-to-Token Schema (Input & Output)
+
+```json
+// Jev Request (Input Payload from Active Taste Bullets)
+{
+  "state": {
+    "trade": "Handloom & Apparel Atelier",
+    "taste": [
+      "Pure silk sarees direct from Salem weavers",
+      "Dark luxury tone with gold festive accent",
+      "Lead with Deepavali bridal sarees spotlight"
+    ]
+  },
+  "questions": {
+    "lead": {
+      "type": "choice",
+      "instructions": "Which lead intent does taste request?",
+      "criteria": { "spotlight": "Festival deal banner", "products": "Direct product grid", "categories": "Department cards", "craft": "Artisan heritage story" }
     },
-    catalog: {
-      product_count: 18,
-      price_range_inr: [1800, 18500],
-      titles: ["Red Pattu Saree", "Green Kanchi Saree", "Maroon Bridal Saree"],
+    "tone": {
+      "type": "choice",
+      "instructions": "What surface tone is requested?",
+      "criteria": { "ink": "Dark charcoal background", "canvas": "Light background", "surface": "Warm cream" }
     },
-    registered: {
-      themes: ["editorial-lookbook", "editorial-light", "editorial-chalk", "streetwear-dark", "minimal-clean"],
+    "typography": {
+      "type": "choice",
+      "instructions": "Heading typography style?",
+      "criteria": { "serif": "Classic display serif", "sans": "Clean modern sans", "grotesk": "Bold geometric" }
     },
-  },
-  questions: {
-    // ── CHOICE: structure, always from code-supplied menus ──
-    category: {
-      type: "choice",
-      instructions: { question: "Which store archetype fits `business.brief`?", focus: "Judge what the shop sells, not how it wants to look." },
-      criteria: {
-        retail: { what: "Physical goods shipped to customers", not_for: "Bookings or service work", examples: ["sarees", "phone shop", "bakery packs"] },
-        food: { what: "Food and drink with menu and hours", not_for: "Packaged goods shipped nationwide", examples: ["restaurant", "tiffin service"] },
-        care: { what: "Personal appointments", not_for: "Selling goods", examples: ["salon", "clinic"] },
-        none: { what: "Nothing fits clearly", not_for: "", examples: [] },
-      },
-    },
-    palette: {
-      type: "choice",
-      instructions: "Which registered theme best suits `business.brief` and the customer it implies?",
-      criteria: {
-        "editorial-lookbook": "Fashion, apparel, sarees, jewellery, luxury boutique",
-        "editorial-light": "Advisory, books, real estate, classic premium",
-        "editorial-chalk": "Cafes, bakeries, artisan food, craft",
-        "streetwear-dark": "Events, music, youth, streetwear",
-        "minimal-clean": "Clinics, electronics, software, general utility",
-      },
-    },
-    hero: { type: "choice", instructions: "Which hero fits a shop with `catalog.product_count` products?", criteria: { fullbleed: "Few strong photos, premium feel", "split-left": "Offer text beside one product", centered: "Brand-led, simple", none: "Many products, go straight to the grid" } },
-    grid: { type: "choice", instructions: "Which product grid layout fits `catalog.price_range_inr` and photo style?", criteria: { "uniform-3": "Balanced catalogue", "uniform-4": "Many cheap items", "featured-row": "A few hero products", masonry: "Mixed photo shapes" } },
-    // …nav, footer, checkout are the same pattern
-
-    // ── SCORE: continuous tuning, always normalized in code ──
-    warmth: { type: "score", instructions: "How warm and earthy should the palette feel for `business.brief`?", criteria: ["cool and neutral", "slightly warm", "very warm, festive, traditional"] },
-    density: { type: "score", instructions: "How dense should the layout be for `catalog.product_count` products?", criteria: ["airy, few products", "balanced", "compact, many products"] },
-    weight: { type: "score", instructions: "How bold should headings be for this brand voice?", criteria: ["light, elegant", "medium", "bold, loud"] },
-
-    // ── NOUL: presence toggles; the probability IS the answer ──
-    proof: { type: "noul", instructions: "Would a shop like `business.brief` benefit from a customer proof section?" },
-    lookbook: { type: "noul", instructions: "Do the `catalog.titles` suggest a visual lookbook section helps sell them?" },
-    sizing: { type: "noul", instructions: "Do the `catalog.titles` need a size or fit guide?" },
-    delivery: { type: "noul", instructions: "Does a physical-goods shop like `business.brief` benefit from a delivery pincode checker?" },
-    cod: { type: "noul", instructions: "Is cash on delivery likely to be expected by customers of `business.brief` in India?" },
-    festival: { type: "noul", instructions: "Do sales of `business.brief` rise around Tamil festivals?" },
-
-    language: { type: "choice", instructions: "Which language should the storefront lead with?", criteria: { tamil: "Local Tamil-speaking customers first", english: "Mixed or urban customers first", both: "Show a Tamil / English switch" } },
-  },
-});
-
-// Code: for each answer, confidence ≥ 0.5 → use; otherwise category default floor (see §11).
-// Noul < 0.35 → off, > 0.65 → on, between → code default for the category.
+    "density": {
+      "type": "score",
+      "instructions": "Spacing density?",
+      "criteria": ["1: Compact", "2: Balanced", "3: Airy"]
+    }
+  }
+}
 ```
 
-### 7.4 Product Intake — Photo Becomes a Product Page
-
-```
-photo ──► vision model (code-side): caption + attributes (colour, fabric, shape)  [draft only]
-      ──► code: image quality gate (resolution, blur, duplicate, crop)             [deterministic]
-      ──► Jev (1 batch): section, sizing, perishable, giftable, variants, tier     [judgment]
-      ──► Writer (LLM): TA + EN title/description in slots                         [prose]
-      ──► Jev: supported / meaning checks                                          [verification]
-      ──► Approval card (1 tap)                                                    [merchant]
-```
-
-> Jev reads text, not pixels. A vision model turns the photo into a caption; Jev judges the caption plus merchant facts.
-
-```typescript
-const intake = await client.systemOne({
-  state: {
-    product: { caption: "red silk saree with gold zari border", price_inr: 8200, merchant_note: "pure pattu, wedding" },
-    catalog: { sections: ["Bridal", "Festival", "Daily Wear"], price_median_inr: 6500 },
-  },
-  questions: {
-    section: { type: "choice", instructions: "Which catalogue section should `product` go to?", criteria: { Bridal: "Wedding and heavy occasion wear", Festival: "Festive wear", "Daily Wear": "Light everyday wear", new: "None of the existing sections fits" } },
-    sizing: { type: "noul", instructions: "Does `product` need a size or fit guide?" },
-    giftable: { type: "noul", instructions: "Is `product` commonly bought as a gift?" },
-    tier: { type: "score", instructions: "How premium is `product.price_inr` compared with `catalog.price_median_inr`?", criteria: ["well below typical", "typical", "clearly premium"] },
-  },
-});
+```json
+// Jev Response (Output Payload)
+{
+  "answers": {
+    "lead":       { "choice": "spotlight", "confidence": 0.98 },
+    "tone":       { "choice": "ink",       "confidence": 0.99 },
+    "typography": { "choice": "serif",     "confidence": 0.96 },
+    "density":    { "score": 2,            "confidence": 0.94 }
+  }
+}
 ```
 
-### 7.5 Claims Guard — The Hallucination Firewall
-
-The Writer may only assert **registered facts**. Code splits each draft sentence into claims and asks one Noul per claim (questions built in code, as the docs recommend).
-
-```typescript
-// Facts come from merchant input only: "pure pattu", "handwoven", "ships in 3 days", etc.
-const guard = await client.systemOne({
-  state: {
-    facts: ["pure pattu silk", "handwoven in Kanchipuram", "ships in 3 working days", "COD available"],
-    draft: ["Pure Mulberry silk", "Handwoven in Kanchipuram", "Free 24-hour delivery"],
-  },
-  questions: {
-    claim0: { type: "noul", instructions: "Is `draft[0]` fully supported by something in `facts`?" },
-    claim1: { type: "noul", instructions: "Is `draft[1]` fully supported by something in `facts`?" },
-    claim2: { type: "noul", instructions: "Is `draft[2]` fully supported by something in `facts`?" },
-  },
-});
-// Code: noul ≥ 0.85 keep; 0.35–0.85 drop claim and flag; < 0.35 drop claim.
-// "Pure Mulberry silk" (specific) and "Free 24-hour delivery" are removed before the merchant ever sees the card.
+```text
+CODE APPLICATION (<5ms):
+lead === "spotlight" ➔ inserts Deepavali banner above catalog
+tone === "ink"       ➔ flips background to dark charcoal with gold accents
 ```
 
-### 7.6 Translation Parity — Tamil and English Always Match
+---
 
-```typescript
-const parity = await client.systemOne({
-  state: { english: "Handwoven pattu saree with gold zari border", tamil: "தங்க ஜரி பார்டருடன் கைத்தறி பட்டு புடவை" },
-  questions: {
-    meaning: { type: "noul", instructions: "Does `tamil` mean the same thing as `english`, with nothing added or missing?" },
-    register: { type: "choice", instructions: "Which register is `tamil` written in?", criteria: { formal: "Literary or formal Tamil", friendly: "Polite everyday Tamil", colloquial: "Spoken slang" } },
-  },
-});
-// Code: meaning < 0.8 → regenerate once → else English shows, Tamil queued for merchant review.
-// Prices, numbers, units never go through translation: code formats them (₹ and Indian grouping).
-```
+## 6. Verified Token Economics & Monthly Cost Ledger
 
-### 7.7 Autopilot Merchandising — Composite Scoring
+Calculated on actual token consumption (Jev System One: ~500 input tokens $\approx$ $0.001 USD = **₹0.10 INR**; LLM slot drafter: ~200 tokens $\approx$ $0.0004 USD = **₹0.04 INR**):
 
-Raw judgments are stored once; weights change without rerunning Jev (composite-scoring pattern).
-
-```typescript
-// One Score question per product, same state, same levels so scores are comparable.
-const fit = await client.systemOne({
-  state: { season: { festival: "Deepavali", days_away: 14, region: "Tamil Nadu" }, product: { title: "Maroon Bridal Saree", section: "Bridal" } },
-  questions: {
-    fit: { type: "score", instructions: "How well does `product` fit buying demand for `season.festival`?", criteria: ["unlikely to sell in this season", "possible", "strong seasonal fit"] },
-    giftable: { type: "noul", instructions: "Would customers buy `product` as a `season.festival` gift?" },
-  },
-});
-// Code: rank = 0.5 * (fit.score / 2) + 0.2 * giftable.noul + 0.2 * stockHealth + 0.1 * margin   ← money and stock stay code
-// Top N fill "Featured". Out-of-stock never ranks. Result → 🟡 one-tap proposal.
-```
-
-### 7.8 Order Shield and Inbox Concierge
-
-```typescript
-const order = await client.systemOne({
-  state: { order: { payment: "COD", address: "Near temple, Kanchi", phone_verified: false }, rules: { needs: ["door no", "street", "pincode"] } },
-  questions: {
-    vague: { type: "noul", instructions: "Is `order.address` missing information required by `rules.needs`?" },
-    risk: { type: "score", instructions: "How likely is a COD order with `order.address` and `order.phone_verified` to be refused at delivery?", criteria: ["very unlikely", "some risk", "high risk"] },
-  },
-});
-// Code: hint on the order card ("Call to confirm address"); never auto-cancels. Merchant confirms.
-
-const inbound = await client.systemOne({
-  state: { message: "அண்ணா என் ஆர்டர் எப்ப வரும்?" },
-  questions: {
-    intent: { type: "choice", instructions: "What does the customer want in `message`?", criteria: { status: "Where is my order", price: "Price or discount", stock: "Availability", complaint: "Problem with a delivered order", other: "None of these" } },
-    urgent: { type: "noul", instructions: "Does `message` express anger, a complaint, or a deadline that needs the owner now?" },
-  },
-});
-// status → code answers from the order record. price/stock → code answers from catalog. complaint/urgent → merchant card.
-// other → LLM drafts, merchant approves with 1 tap.
-```
-
-### 7.9 Confidence Policy — Thresholds Scale With Risk
-
-| Answer type | Value consumed | Act automatically | Ask merchant (1 tap) | Do not act |
+| Lifecycle Event | Inference Operations | Latency | Unit Cost | Active Monthly Total (30 Products) |
 | :--- | :--- | :--- | :--- | :--- |
-| **Choice** (variant, theme) | `confidence` | ≥ 0.5 (harmless preference, recoverable) | < 0.5 → pick category default | — |
-| **Choice** (intent, lane) | `confidence` | ≥ 0.8 | 0.5–0.8 | < 0.5 → ask |
-| **Noul** (section on/off) | `noul` | ≥ 0.65 on · ≤ 0.35 off | 0.35–0.65 → category default | — |
-| **Noul** (claims, meaning) | `noul` | ≥ 0.85 keep | 0.35–0.85 → drop and flag | < 0.35 → drop |
-| **Score** (tuning) | `score ÷ (levels−1)` | `confidence` ≥ 0.4 | Below → category default | — |
-| **Anything touching money** | — | **never** | Merchant | Code only |
-
-```typescript
-// Noul has no confidence field; use distance from 0.5 only if one gate must handle both types.
-const noulConfidence = (p: number) => Math.abs(2 * p - 1);
-```
-
-> Thresholds above are **starting values**. Calibrate on our own Tamil/Tanglish test sets (§14) by plotting confidence against accuracy, as the docs advise.
-
----
-
-## 8. LLM Copy Layer (Prose Only, Slots Only)
-
-```
-Jev decides what sections exist  →  LLM fills only declared slots  →  Jev claims + meaning check  →  Merchant 1 tap
-```
-
-| Slot | Limit | Languages | Rule |
-| :--- | :--- | :--- | :--- |
-| Hero headline / subtext | 6 / 18 words | TA + EN | Uses registered brand facts only |
-| Product title / description | 12 / 60 words | TA + EN | Uses caption + merchant note + claims registry |
-| About / story | 120 words | TA + EN | From onboarding line + merchant facts; founder lines only if given |
-| FAQ answers | 40 words | TA + EN | Generated from policy facts, never invented |
-| SEO title / meta | 60 / 155 chars | TA + EN | Includes product, city, category |
-| Festival banner | 10 words | TA + EN | Uses approved offer values only |
-
-LLM output is escaped into typed slots; raw HTML is never accepted. If copy fails validation, deterministic fallbacks apply (`Welcome to {storeName}`).
-
----
-
-## 9. Assembly Engine and Full Request Lifecycle
-
-```
-BUILD (Day 0)
-  validate facts → 1 Jev batch → LLM copy (TA + EN) → claims + meaning checks
-  → assemble AST (pages, sections, tokens) → WCAG + touch + speed audit
-  → PREVIEW draft (rev 1) → merchant taps Publish → freeze → atomic edge release
-
-SIGNAL (Day 1..365)
-  stock / price / photo / festival / order event
-  → agent selects workflow → at most 1 Jev batch (+ LLM only if prose changed)
-  → validated AST patch → rev N+1 → 🟢 auto-apply or 🟡 approval card
-
-SERVE (every visit)
-  GET /:store/*
-    ├── cache HIT  → pre-rendered HTML    (~5ms, ₹0)
-    └── cache MISS → release bucket → compile → cache   (~30ms, ₹0)
-
-LIVE FACTS
-  price and stock come from the commerce core at request time (binding), never baked into prose.
-  Checkout re-checks price and stock at the Gateway before commit.
-```
-
----
-
-## 10. Director — Framer-Grade Section Redesign with Jev (360° Dimension Engine)
-
-> **Optional layer.** The merchant never needs it. When they say "make it darker" or "banner periya aakku", the Director routes it to the cheapest correct lane.
-
-### 3-Lane Router
-
-```
-merchant fragment (voice → text)
-   ├── exact literal ("change headline to Pongal Sale") ──► pure code patch     0 ms     ₹0
-   ├── ambiguous style / target ("konjam dark-aa aakku") ──► 1 batched Jev       <70 ms   ₹0.10
-   └── creative rewrite ("write a better story")        ──► 1 LLM + claims guard ~1.2 s   ₹1.50
-        ▼
-   validated AST patch → rev N+1 → instant preview → [ Undo ]
-```
-
-```
-┌───────────────────────────┐     ┌────────────────────────────────────────────────────────┐     ┌────────────────────────────┐
-│   Director Fragment       │ ──► │                  Jev Decision Engine                   │ ──► │    Surgical AST Patch      │
-│ "hero ah konjam dark,     │     │  • Target: "hero"                                      │     │  • Layout: Bento 3-up      │
-│  periya font, festive"    │     │  • Layout: "bento"            • Motion: "gentle"       │     │  • Typography: Display Ser.│
-│                           │     │  • Typography: "serif"        • Blur: 16px frosted     │     │  • Physics: cubic-bezier   │
-│                           │     │  • Radius: 16px               • Glow: ambient highlight│     │  • CSS Tokens: Injected    │
-└───────────────────────────┘     └────────────────────────────────────────────────────────┘     └────────────────────────────┘
-                                                   1 parallel call · <70ms · ₹0.10                    <5ms instant preview
-```
-
-### The 8 Redesign Dimensions Controlled by Jev
-
-| # | Dimension | Jev Primitive | Tunable Scope / Choices | Output & Visual Effect |
-| :-: | :--- | :--- | :--- | :--- |
-| **1** | **Target & Purpose** | `Choice` | `hero`, `shop`, `proof`, `story`, `footer`, `global` | Directs surgery to the exact section node |
-| **2** | **Layout & Geometry** | `Choice` | `bento`, `split`, `island`, `masonry`, `fullbleed` | Rearranges structural grid and card hierarchy |
-| **3** | **Typography & Scale** | `Choice` + `Score` | Display Serif, Modern Sans, Heavy Grotesque · Scale | Proportional font scale, letter-spacing, line-height |
-| **4** | **Color & Surfaces** | `Choice` + `Score` | `canvas`, `surface`, `ink`, `accent` · Warmth, Saturation | Background tones, contrast inversion, palette temperature |
-| **5** | **Glass, Borders & Depth** | `Score` x 3 | Border hairline, Glass blur, Elevation shadow | Frosted cards, edge glows, layered depth |
-| **6** | **Media & Aspect Ratio** | `Choice` + `Score` | `16:9`, `4:5`, `1:1`, `21:9` · Hover zoom | Image framing, parallax, hover scale |
-| **7** | **Motion & Spring Physics** | `Choice` + `Score` | `snappy`, `gentle`, `cinematic`, `none` · Entrance reveal | `cubic-bezier` curves, staggered cascade |
-| **8** | **Feature Toggles** | `Noul` x N | Badges, Quick-add, Rating stars, Stock tags | Toggles sub-elements without rewriting DOM |
-
-### Complete 360° Parallel Redesign Query
-
-```typescript
-// Single parallel call evaluating all 8 aesthetic dimensions. Merchant fragment may be Tamil, English or Tanglish.
-const redesign = await client.systemOne({
-  state: {
-    command: "shop section ah konjam dark-aa, periya font, glowing border, festive feel",
-    sections: ["hero", "shop", "proof", "story", "footer"],
-    tokens: activeDocument.design,
-  },
-  questions: {
-    target: {
-      type: "choice",
-      instructions: "Which section does `command` ask to change? Use `global` when it clearly means the whole site.",
-      criteria: { hero: "Top banner", shop: "Product grid area", proof: "Reviews", story: "About text", footer: "Bottom area", global: "Whole site" },
-    },
-    layout: { type: "choice", instructions: "Which layout archetype best fits `command`?", criteria: { bento: "Featured card plus stacked cards", grid: "Uniform columns", split: "Pinned visual beside scroll", island: "Floating cards over canvas", keep: "Command does not ask for a layout change" } },
-    voice: { type: "choice", instructions: "Which type personality does `command` ask for?", criteria: { serif: "Elegant, editorial", sans: "Modern, neutral", grotesque: "Heavy, loud", keep: "No type request" } },
-    scale: { type: "score", instructions: "How large should headings become according to `command`?", criteria: ["restrained", "balanced", "massive display"] },
-    tone: { type: "choice", instructions: "Which surface tone does `command` ask for?", criteria: { canvas: "Light", surface: "Tinted", ink: "Dark", accent: "Vivid brand colour", keep: "No colour request" } },
-    border: { type: "score", instructions: "How pronounced should border highlights be in `command`?", criteria: ["none", "hairline", "luminous glow"] },
-    glass: { type: "score", instructions: "How much frosted backdrop blur does `command` imply?", criteria: ["none", "subtle", "deep"] },
-    radius: { type: "score", instructions: "How rounded should corners be according to `command`?", criteria: ["sharp", "modern", "pill"] },
-    shadow: { type: "score", instructions: "How much elevation shadow does `command` imply?", criteria: ["flat", "crisp", "deep floating"] },
-    motion: { type: "choice", instructions: "Which motion profile does `command` imply?", criteria: { snappy: "Fast, playful", gentle: "Smooth", cinematic: "Slow, luxurious", none: "Static or not mentioned" } },
-    badge: { type: "noul", instructions: "Does `command` ask for sale or category badges on cards?" },
-    quickadd: { type: "noul", instructions: "Does `command` ask for 1-tap quick add on cards?" },
-    ratings: { type: "noul", instructions: "Does `command` ask for star ratings on cards?" },
-    zoom: { type: "noul", instructions: "Does `command` ask for image zoom on hover?" },
-  },
-});
-// Code applies only properties whose answer is not `keep` and whose confidence passes §7.9.
-// Surgical isolation: prices, stock, navigation and bindings are never touched.
-```
-
-### Comparison: Redesigning Everything via Jev vs. LLM Code Generation
-
-| Metric | Raw LLM Code Rewrite | Complete Jev Dimension Engine |
-| :--- | :--- | :--- |
-| **Aesthetic Quality** | Hit or miss; unpredictable CSS | **Guaranteed craftsmanship from tested components** |
-| **Broken Layout Risk** | High (div mismatch, missing tags) | **0% (validated AST mutations)** |
-| **Turnaround Time** | 4,000ms – 8,000ms | **<70ms round-trip** |
-| **Cost per Redesign** | ₹10.00 – ₹25.00 | **₹0.10** |
-| **Reversibility** | Hard to diff / undo | **Instant 1-tap Undo (immutable rev N+1)** |
-| **Commerce Safety** | May drop live pricing or cart bindings | **100% isolated: DB bindings and prices untouched** |
-
----
-
-## 11. Safety & Guardrails
-
-| Guardrail Rule | Implementation Strategy |
-| :--- | :--- |
-| **Low Confidence** | Per-question thresholds (§7.9); fall back to category default floor |
-| **Hallucinated Claims** | Claims registry: every claim needs a supporting merchant fact (§7.5) |
-| **Translation Drift** | `meaning` Noul gate; numbers, prices, units formatted by code |
-| **Score Out of Bounds** | Normalize by `levels − 1`, clamp to safe CSS/token boundaries |
-| **Copy Injection** | Populate typed slots only; never inject raw unescaped HTML |
-| **Variant Whitelist** | Jev criteria map strictly to registered component keys |
-| **WCAG Contrast Floor** | Every colour pair ≥ 4.5:1; failure steps to the companion shade automatically |
-| **Mobile Floor** | Body ≥ 16px, touch targets ≥ 44px, readable on low-end Android |
-| **Draft vs Live** | Edits go to draft (rev N+1); Publish freezes and flips atomically |
-| **Undo Everything** | Immutable revisions; Undo restores any earlier state |
-| **Jev Outage** | Serve last-known-good release; queue background retry; deterministic floor builds new stores |
-| **Money Isolation** | Prices, stock, tax, orders only change through registered commerce Actions |
-| **Approval Fatigue** | Max 3 proposal cards per day; Guardian fixes silently when risk is zero |
-
----
-
-## 12. Agentic Channels (Discovery Without Effort)
-
-| Channel | What the Channel agent publishes | Source of truth |
-| :--- | :--- | :--- |
-| **Google Search** | Clean URLs, sitemap, `Product` structured data, TA + EN `hreflang` | Catalog bindings |
-| **WhatsApp** | Share cards, catalog sync, order link, status text | Catalog + offers |
-| **Shopping Feeds** | Product feed (title, price, stock, image) | Catalog |
-| **AI Shoppers** | `llms.txt` + machine-readable product endpoint | Catalog + policies |
-| **Social** | Auto-generated image + caption proposal | Approved products |
-
-Merchant effect: one toggle at onboarding ("List my products everywhere"), then nothing.
-
----
-
-## 13. Cost Economics (Max Average · 1 USD = ₹100)
-
-| Event | Jev System One | LLM Copy | Worker & Edge | Total Cost (INR) | Credits |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **Complete Store Creation** | 1 batched call | 1 full draft call (TA + EN) | Deterministic compile | **`₹0.40`–`₹0.70`** | 4–7 cr |
-| **New Product (photo → page)** | 1 batched call + claims/meaning | short copy TA + EN | Deterministic patch | **`₹0.25`–`₹0.40`** | 2.5–4 cr |
-| **Director Edit (Jev lane)** | 1 batched call | *(none)* | Deterministic patch | **`₹0.10`** | 1 cr |
-| **Festival Proposal** | 1 batched call | 1 short banner copy | Deterministic patch | **`₹0.20`** | 2 cr |
-| **Daily Merchandising** | 1 batched call | *(none)* | Deterministic patch | **`₹0.10`** | 1 cr |
-| **Inbound Message** | 1 batched call | 1 reply draft (only if `other`) | — | **`₹0.10`–`₹0.25`** | 1–2.5 cr |
-| **Public Page Visit** | — | — | Edge Cache | **`₹0.00`** | 0 cr |
-
-| Store Profile | Monthly Activity | Estimated Monthly AI Cost |
-| :--- | :--- | :--- |
-| **Starter shop** | 20 new products, 30 daily merchandising runs, 3 festivals, 10 edits | **≈ ₹12–₹18** |
-| **Busy shop** | 60 new products, daily runs, 100 messages, 30 edits | **≈ ₹45–₹70** |
-
-> Estimates built from the existing rate basis (Jev ≈ ₹0.10 per batch; LLM copy ≈ ₹0.30 per full draft). **Measure real token budgets and latency** before pricing plans. Zero visit cost holds at any traffic.
->
-> **Comparison:** raw LLM full-site generation costs ≈ ₹25.00 per generation with hallucination risk; Jev + LLM-slot copy is **~35–60× cheaper** and deterministic.
-
----
-
-## 14. Jev Readiness Checklist (What to Prepare)
-
-| # | Prepare | Why |
-| :-: | :--- | :--- |
-| **1** | **Question bank** in one file per agent (Genesis, Intake, Claims, Parity, Merchandising, Director, Concierge, Shield) | Single place for instructions and criteria; versioned |
-| **2** | **Structured `state`** (named JSON fields, never one long string) | Docs: questions reference backticked paths like `` `business.brief` `` |
-| **3** | **Contrastive criteria objects** (`what`, `not_for`, `examples`) for easily confused options | Reduces ambiguity between similar variants and intents |
-| **4** | **Concrete Score levels** that stand alone | Scores are only as good as their level descriptions |
-| **5** | **Tamil / Tanglish test set** (≥ 50 cases per question group, incl. voice transcripts) | Verify Jev quality in Tamil; if weak, translate to English first (LLM) then judge |
-| **6** | **Threshold calibration** (plot confidence vs. accuracy per question) | §7.9 numbers are starting points, not truth |
-| **7** | **Fallback floors** per category | Zero-AI path must still pass every audit |
-| **8** | **Budget meter** (requests, tokens, latency per store, per month) | Prove ₹ cost before launch pricing |
-| **9** | **Server-side key only** | Jev API key never ships to the browser |
-| **10** | **Question coverage rule** | Choice must include `keep` / `none` / `new` when "nothing fits" is possible; Jev cannot pick omitted values |
-
----
-
-## 15. Build Roadmap (v1 Launch)
-
-| Step | Component | Scope / Effort |
-| :---: | :--- | :--- |
-| **1** | Component Library (30–100 sections and variants, Tamil-ready fonts) | 4–8 weeks *(moat)* |
-| **2** | Page templates (§5) + deterministic category floors | 1–2 weeks |
-| **3** | Jev Question Bank + AST Mapper + Confidence Policy (§7) | 1–2 weeks |
-| **4** | Writer + Translator pipeline with Claims and Parity guards | 1 week |
-| **5** | Approval Inbox + Merchant app + Publish / Undo | 1–2 weeks |
-| **6** | Product Intake (photo → page) + Merchandiser autopilot | 1 week |
-| **7** | Marketer (festival calendar) + Channel agent (§12) | 1 week |
-| **8** | Director (3-lane router + 8-dimension engine) | 1 week |
-| **9** | Concierge + Order Shield | 1 week |
-| **10** | Commerce Core integration (Cart, Checkout, UPI / COD, Orders) | Ongoing *(Core Foundation)* |
-| **11** | Tamil / Tanglish evaluation and threshold calibration | Continuous before launch |
-
----
-
-## 16. Platform Comparison Matrix
-
-| Dimension | Shopify | Raw LLM Generation | This Architecture (Jev + Agents) |
-| :--- | :---: | :---: | :---: |
-| **Merchant Effort** | ⚠️ Pick theme, edit sections, install apps | ⚠️ Prompt and fix repeatedly | ✅ **Photo, confirm, ship** |
-| **Developer Needed** | ⚠️ Often (theme / apps / SEO) | ❌ Frequently | ✅ **Never** |
-| **Structure Quality** | ✅ Reliable | ⚠️ Variable | ✅ **Deterministic & Reliable** |
-| **Copy Quality** | Merchant writes | ✅ Rich but risky | ✅ **Rich, verified against facts** |
-| **Tamil + English** | ⚠️ Plugins / manual | ⚠️ Inconsistent | ✅ **Built-in, meaning-checked** |
-| **Maintenance** | Manual | None (breaks) | ✅ **Autopilot + Guardian** |
-| **Festivals / Offers** | Manual | Not modelled | ✅ **Marketer proposes ahead** |
-| **India Fit (UPI / COD / WhatsApp)** | ⚠️ Apps required | ❌ | ✅ **Core journeys** |
-| **Generation Cost** | — | ❌ High | ✅ **Lowest** |
-| **Output Safety** | ✅ Safe | ❌ Unpredictable | ✅ **Strict Whitelist + Claims guard** |
-| **Design Uniqueness** | ❌ Low / Generic | ✅ High | ✅ **Medium – High** |
-| **Commerce Infra** | ✅ Built-in | ❌ Build from scratch | 🔨 Built with Core Code |
-| **Vendor Dependency** | None | Low | ⚠️ *Jev API Dependency (deterministic floor mitigates)* |
-
----
-
-> **Summary:** The merchant adds a photo, confirms an order, ships a parcel. Agents decide with Jev, write with LLM slots, verify every claim, assemble from tested components, and the edge serves it free forever — Shopify-grade commerce, zero developer, built for Tamil Nadu first.
+| **Store Genesis (Day 0)** | 1 Jev fan-out (₹0.10) + 1 copy draft (₹0.04) | <120ms | ₹0.14 | **₹0.14** (one-time setup) |
+| **Product Intake** | 1 Jev intake (₹0.10) + 1 copy slot (₹0.04) + 1 claims check (₹0.10) | <100ms | ₹0.24 / item | **₹7.20** (30 new items/mo) |
+| **Daily Merchandising** | 1 Jev scoring batch (cached if state unchanged) | <70ms | ₹0.10 / run | **₹3.00** / month |
+| **Smart Inbox Questions**| 2–4 proactive festival/stock checks | <70ms | ₹0.10 / check| **₹0.40** / month |
+| **Taste Tweaks (Rare)**| ~5 optional voice/text Taste bullet edits | <70ms | ₹0.10 / edit | **₹0.50** / month |
+| **Customer Visits & Orders**| Cloudflare Edge Cache + Turso DB checkout | ~5ms | **₹0.00** | **₹0.00 forever** (Zero AI on visits) |
+| **Total Monthly Store AI** | Strictly bounded inference ledger | — | — | **₹11.24 / month** (≈ ₹10 – ₹15 / mo) |

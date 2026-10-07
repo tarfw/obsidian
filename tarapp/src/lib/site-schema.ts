@@ -47,9 +47,38 @@ export interface Node { id: string; kind: string; props: Record<string, unknown>
 export interface Section { id: string; purpose: string; layout: { kind: string; columns?: number; gap?: string; align?: string; width?: string }; style?: StyleSet; nodes: Node[]; bindings?: Record<string, unknown>[] }
 export interface Page { id: string; path: string; title: string; meta?: { description?: string }; sections: Section[] }
 export interface Journey { id: string; title: string; kind: string; target: string; enabled: boolean; fields: { key: string; label: string; kind: string; required?: boolean }[] }
+export type BusinessKind = 'goods' | 'food' | 'services' | 'wholesale';
+export type SectionKind = 'header' | 'notice' | 'spotlight' | 'catalog' | 'menu' | 'services' | 'story' | 'trust' | 'contact';
+export type LeadSection = 'spotlight' | 'catalog' | 'story';
+export type TypographyToken = 'serif' | 'sans' | 'grotesk';
+export type ToneToken = 'canvas' | 'surface' | 'ink';
+export type DensityToken = 1 | 2 | 3;
+export type CatalogLayout = 'flat' | 'pills' | 'rails';
+export type HeaderStyle = 'split' | 'fullbleed';
+
+export interface SectionSummary {
+  kind: SectionKind;
+  label: string;
+  detail: string;
+}
+
+export interface Blueprint {
+  kind: BusinessKind;
+  typography: TypographyToken;
+  tone: ToneToken;
+  density: DensityToken;
+  lead: LeadSection;
+  sections: SectionKind[];
+  headerStyle: HeaderStyle;
+  catalogLayout: CatalogLayout;
+  gate: boolean;
+  hash: string;
+  revision: number;
+}
+
 export interface PersonaWhen { channel?: string; device?: string; returning?: boolean }
 export interface Persona { id: string; when: PersonaWhen; priority: number; hide?: string[]; order?: string[]; tone?: Record<string, string> }
-export interface Taste { accepted?: string[]; rejected?: string[]; voice?: string }
+export interface Taste { accepted?: string[]; rejected?: string[]; bullets?: string[]; voice?: string }
 export interface ReleaseFile { path: string; mime: string; bytes: number; hash: string; key: string }
 export interface ReleaseManifest {
   id: string; siteId: string; version: number; generation: number; created: number; hash: string;
@@ -74,6 +103,7 @@ export interface SiteDocument {
   policy: { publicEnquiry?: boolean; publicOrdering?: boolean; allowedCurrencies?: string[]; turnstile?: string };
   personas?: Persona[];
   taste?: Taste;
+  blueprint?: Blueprint;
   claims?: Claim[];
   currentRelease?: string | null;
   releases?: ReleaseManifest[];

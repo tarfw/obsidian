@@ -87,7 +87,7 @@ describe('site prose and claims', () => {
     expect(result.composed).toBe(true);
     expect(heroLine(site)).toBe('A wood fired pizza shop in the heart of the city.');
     // Code keeps prices and layout out of model reach, so the structure stays the builder's.
-    expect(site.pages[0].sections.map((section) => section.id)).toEqual(['navigation', 'hero', 'story', 'action', 'footer']);
+    expect(site.pages[0].sections.map((section) => section.id)).toEqual(['hero', 'story', 'contact']);
     // Without a judgment key an asserted claim stays unresolved rather than trusted.
     expect(site.claims?.[0].text).toContain('Wood fired every day');
     expect(site.claims?.[0].verdict).toBe('unsupported');

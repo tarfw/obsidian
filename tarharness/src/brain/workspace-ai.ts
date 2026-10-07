@@ -259,7 +259,7 @@ export function stripNegations(text: string): { cleanText: string; deniedTools: 
   return { cleanText, deniedTools };
 }
 
-function fallbackMember(duties: string): { role: 'member' | 'admin'; workRole: string; roles: string[]; suggestedActions: string[]; permissions: string[] } {
+function fallbackMember(duties: string): { role: 'member' | 'admin'; workRole: string; roles: string[]; tools: string[]; suggestedActions: string[]; permissions: string[] } {
   const { cleanText, deniedTools } = stripNegations(duties);
 
   const roles: string[] = [];

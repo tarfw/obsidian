@@ -250,6 +250,7 @@ export type PersonaRule = Pick<Persona, 'id' | 'when' | 'priority'>;
 export interface Taste {
   readonly accepted?: readonly string[];
   readonly rejected?: readonly string[];
+  readonly bullets?: readonly string[];
   readonly voice?: string;
 }
 

@@ -12,7 +12,7 @@ import type { Client } from '@libsql/client/web';
 import { badRequest, conflict, notFound, unavailable } from '../errors.ts';
 import type { AccessContext } from '../types.ts';
 import { ALIGN_VALUES, PAD_VALUES, SIZE_VALUES, WIDTH_VALUES, type Node, type Persona, type Section, type SectionLayoutSpec, type SiteDocument, type Style } from './document.ts';
-import { COLOR_KEYS, TONE_STYLE, exportDesign, parseDesign, THEMES } from './design.ts';
+import { COLOR_KEYS, TONE_STYLE, exportDesign, parseDesign, TONE_COLORS } from './design.ts';
 import { applyPatch, diffSummary, type DiffEntry, type PatchOperation } from './patch.ts';
 import { interpret, type EditQuestion, type JudgmentCache } from './judgment.ts';
 import { DEFAULT_BUDGET, GROQ_DEFAULT_MODEL, ModelRunner, SITE_MODEL_FALLBACKS, draftCopy } from './model.ts';
@@ -333,13 +333,11 @@ export async function executeSiteAsk(
   const normalize = (s: string) => s.toLowerCase().replace(/&/g, 'and').replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
   const normalizedCommand = normalize(command);
 
-  // Global theme handling
-  const isDarkTheme = /(?:darker|dark|night|black)\s*(?:theme|mode|look|canvas|palette)|(?:theme|mode|look|canvas|palette)\s*(?:darker|dark|night|black)|^(?:darker|dark|night|black)(?:\s*theme|\s*mode)?$/i.test(command.trim());
-  const isLightTheme = /(?:light(?:er)?|clean|minimal|white)\s*(?:theme|mode|look|canvas|palette)|(?:theme|mode|look|canvas|palette)\s*(?:light(?:er)?|clean|minimal|white)|^(?:light(?:er)?|clean|minimal|white)(?:\s*theme|\s*mode)?$/i.test(command.trim());
-  const isChalkTheme = /(?:chalk)\s*(?:theme|mode|look|canvas|palette)|(?:theme|mode|look|canvas|palette)\s*(?:chalk)|^chalk(?:\s*theme)?$/i.test(command.trim());
-  const isLookbookTheme = /(?:lookbook)\s*(?:theme|mode|look|canvas|palette)|(?:theme|mode|look|canvas|palette)\s*(?:lookbook)|^lookbook(?:\s*theme)?$/i.test(command.trim());
-  const isStreetwearTheme = /(?:streetwear)\s*(?:theme|mode|look|canvas|palette)|(?:theme|mode|look|canvas|palette)\s*(?:streetwear)|^streetwear(?:\s*theme)?$/i.test(command.trim());
-  const isEditorialTheme = /(?:editorial)\s*(?:theme|mode|look|canvas|palette)|(?:theme|mode|look|canvas|palette)\s*(?:editorial)|^editorial(?:\s*theme)?$/i.test(command.trim());
+  // Global tone handling
+  const isPureTheme = !/(?:column|grid|image|text|font|header|hero|section|breathing|align|padding|margin|pad|spacing)/i.test(lower);
+  const isDarkTone = isPureTheme && /(?:darker|dark|night|black|ink|streetwear)\s*(?:theme|mode|look|canvas|palette|tone)|(?:theme|mode|look|canvas|palette|tone)\s*(?:darker|dark|night|black|ink|streetwear)|^(?:darker|dark|night|black|ink|streetwear)(?:\s*theme|\s*mode|\s*tone)?$/i.test(command.trim());
+  const isSurfaceTone = isPureTheme && /(?:surface|muted|mist|soft|subtle|chalk)\s*(?:theme|mode|look|canvas|palette|tone)|(?:theme|mode|look|canvas|palette|tone)\s*(?:surface|muted|mist|soft|subtle|chalk)|^(?:surface|muted|mist|soft|subtle|chalk)(?:\s*theme|\s*mode|\s*tone)?$/i.test(command.trim());
+  const isCanvasTone = isPureTheme && /(?:light(?:er)?|clean|minimal|white|canvas|editorial|lookbook)\s*(?:theme|mode|look|canvas|palette|tone)|(?:theme|mode|look|canvas|palette|tone)\s*(?:light(?:er)?|clean|minimal|white|canvas|editorial|lookbook)|^(?:light(?:er)?|clean|minimal|white|canvas|editorial|lookbook)(?:\s*theme|\s*mode|\s*tone)?$/i.test(command.trim());
 
   const requested = text(input.target, 120);
   let target: string | null = null;
@@ -347,26 +345,21 @@ export async function executeSiteAsk(
     if (targetKindOf(doc, requested)) target = requested;
   }
 
-  if ((!target || requested === 'all') && (isDarkTheme || isLightTheme || isChalkTheme || isLookbookTheme || isStreetwearTheme || isEditorialTheme)) {
-    const themeName = isDarkTheme || isStreetwearTheme ? 'streetwear-dark'
-      : isChalkTheme ? 'editorial-chalk'
-      : isLookbookTheme ? 'editorial-lookbook'
-      : isEditorialTheme ? 'editorial-light'
-      : 'minimal-clean';
-    const chosenTheme = THEMES[themeName] || THEMES['minimal-clean'];
-    const themeColor = chosenTheme.color;
+  if ((!target || requested === 'all') && (isDarkTone || isSurfaceTone || isCanvasTone)) {
+    const tone: 'canvas' | 'surface' | 'ink' = isDarkTone ? 'ink' : isSurfaceTone ? 'surface' : 'canvas';
+    const themeColor = TONE_COLORS[tone];
     const operations: PatchOperation[] = [
       { op: 'set_token', token: 'token:color.canvas', value: themeColor.canvas },
       { op: 'set_token', token: 'token:color.surface', value: themeColor.surface },
       { op: 'set_token', token: 'token:color.ink', value: themeColor.ink },
       { op: 'set_token', token: 'token:color.border', value: themeColor.border },
-      { op: 'set_token', token: 'token:color.accent', value: themeColor.accent },
+      { op: 'set_token', token: 'token:color.accent', value: lower.includes('editorial') ? '#4d49fc' : themeColor.accent },
       { op: 'set_token', token: 'token:color.accentink', value: themeColor.accentink },
       { op: 'set_token', token: 'token:color.muted', value: themeColor.muted },
       { op: 'set_token', token: 'token:color.success', value: themeColor.success },
       { op: 'set_token', token: 'token:color.danger', value: themeColor.danger },
     ];
-    const summary = `Applied ${themeName} palette`;
+    const summary = `Applied ${tone} tone`;
     const result: AskResult = {
       siteId: current.id,
       base: doc.revision,
@@ -375,7 +368,7 @@ export async function executeSiteAsk(
       operations,
       summary,
       questions: [],
-      choices: { theme: themeName },
+      choices: { tone },
     };
     return { ...result };
   }
@@ -384,6 +377,7 @@ export async function executeSiteAsk(
     collection: ['collection', 'product', 'products', 'grid', 'product grid', 'catalog', 'items', 'offer', 'shop', 'trending', 'new and trending', 'new & trending', 'what we offer', 'photo bigger', 'bigger photo', 'larger photo', 'photo size', 'image size', 'bigger image', 'larger image'],
     recommendations: ['recommendations', 'recommended', 'you will love', "you'll love", 'suggested', 'more pieces'],
     introduction: ['hero', 'banner', 'intro', 'introduction', 'top', 'header'],
+    header: ['hero', 'banner', 'intro', 'introduction', 'top', 'header'],
     split: ['split', 'editorial', 'two images', 'media break', 'two-up'],
     categories: ['categories', 'category', 'tabs', 'filter', 'shop by category'],
     promo: ['promo', 'promotion', 'cta band', 'call to action', 'strip', 'run festive sale', 'festive sale', 'sale', 'festive'],
@@ -413,12 +407,17 @@ export async function executeSiteAsk(
     }
   }
 
+  if (!target && typesafe) {
+    const judged = await interpret(typesafe, cache, { command, targets: candidates(doc), questions: [] });
+    if (judged.target) { target = judged.target; }
+  }
+
   // Deterministic purpose fallbacks when target is not directly mentioned
   if (!target) {
     if (/(?:photo|image|picture|col|column|grid|list\s*view)/.test(lower)) {
-      target = doc.pages[0]?.sections.find((s) => s.purpose === 'collection' || s.purpose === 'split' || s.purpose === 'introduction')?.id || doc.pages[0]?.sections[0]?.id || null;
+      target = doc.pages[0]?.sections.find((s) => s.purpose === 'collection' || s.purpose === 'catalog' || s.purpose === 'split' || s.purpose === 'header' || s.purpose === 'introduction')?.id || doc.pages[0]?.sections[0]?.id || null;
     } else if (/(?:festive|sale|discount|promo|special\s*offer)/.test(lower)) {
-      target = doc.pages[0]?.sections.find((s) => s.purpose === 'promo' || s.purpose === 'introduction')?.id || doc.pages[0]?.sections[0]?.id || null;
+      target = doc.pages[0]?.sections.find((s) => s.purpose === 'promo' || s.purpose === 'spotlight' || s.purpose === 'header' || s.purpose === 'introduction')?.id || doc.pages[0]?.sections[0]?.id || null;
     } else if (/(?:location|address|hours|opening\s*hours|contact)/.test(lower)) {
       target = doc.pages[0]?.sections.find((s) => s.purpose === 'contact' || s.purpose === 'hours')?.id || doc.pages[0]?.sections[0]?.id || null;
     }
@@ -428,11 +427,6 @@ export async function executeSiteAsk(
   const operations: PatchOperation[] = [];
   const choices: Record<string, string> = {};
   let targetKind: 'section' | 'node' | null = target ? targetKindOf(doc, target) : null;
-
-  if (!target && typesafe) {
-    const judged = await interpret(typesafe, cache, { command, targets: candidates(doc), questions: [] });
-    if (judged.target) { target = judged.target; targetKind = 'section'; }
-  }
 
   if (target && targetKind) {
     const lane = exact(doc, command, target);

@@ -7,7 +7,7 @@ import { findAction, type ActionId } from '../registry/catalog.ts';
 import { executePos } from '../pos/store.ts';
 import { draftProduct, saveProductContent } from '../pos/content.ts';
 import { canExecute, canReadRecord, canRunFlowStep } from '../access.ts';
-import { executeSiteGenerate, executeSiteScout, executeSiteCompile, executeSitePublish, executeSiteRollback, executeSiteRefresh, executeSiteUnpublish, executeSiteChecks, executeSiteReleases } from '../site/store.ts';
+import { executeSiteGenerate, executeSiteScout, executeSiteCompile, executeSitePublish, executeSiteRollback, executeSiteRefresh, executeSiteUnpublish, executeSiteChecks, executeSiteReleases, executeSiteTasteAdd, executeSiteTasteRemove, executeSiteNoticeSet, executeSiteSectionsSet } from '../site/store.ts';
 import { executeSiteAsk, executeSiteDesignImport, executeSiteEdit, executeSiteUndo } from '../site/edit.ts';
 import { executeSiteAssetGenerate, executeSiteAssetUpload, executeSiteAssets } from '../site/asset.ts';
 import { searchWeb } from '../web/search.ts';
@@ -159,6 +159,10 @@ export function executeGateway(client: Client, context: AccessContext, request: 
       if (request.actionId === 'site.rollback') return executeSiteRollback(client, context, request.input, request.idempotencyKey, hash, services.publication, services.siteDomain, services.siteReleases, services.productContent);
       if (request.actionId === 'site.refresh') return executeSiteRefresh(client, services.siteReleases, context, request.input, request.idempotencyKey, hash, services.publication, services.siteDomain, services.productContent);
       if (request.actionId === 'site.unpublish') return executeSiteUnpublish(client, context, request.input, request.idempotencyKey, hash, services.publication);
+      if (request.actionId === 'site.taste.add') return executeSiteTasteAdd(client, context, request.input, request.idempotencyKey, hash, services.typesafe, services.publication);
+      if (request.actionId === 'site.taste.remove') return executeSiteTasteRemove(client, context, request.input, request.idempotencyKey, hash, services.typesafe, services.publication);
+      if (request.actionId === 'site.notice.set') return executeSiteNoticeSet(client, context, request.input, request.idempotencyKey, hash);
+      if (request.actionId === 'site.sections.set') return executeSiteSectionsSet(client, context, request.input, request.idempotencyKey, hash);
       if (request.actionId === 'web.search') {
         const claimed = await claimTurn(client, request.idempotencyKey, hash);
         if (claimed.result) return claimed.result;

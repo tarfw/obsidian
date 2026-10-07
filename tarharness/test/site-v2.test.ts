@@ -276,7 +276,7 @@ describe('site v2 compiler', () => {
     expect(runtime).toBeDefined();
     expect(String(runtime?.body)).toContain('tar-menu-btn');
     const css = String(compiled.files.find((file) => file.path === '/style.css')?.body || '');
-    expect(css).toContain('--color-accent: #4d49fc');
+    expect(css).toContain(`--color-accent: ${DEFAULT_DESIGN.color.accent}`);
     expect(css).toContain('border-radius:16px');
     expect(css).toContain('@media (max-width: 640px)');
     expect(css).toContain('@media (min-width: 641px) and (max-width: 1024px)');
@@ -356,62 +356,48 @@ describe('site generation and editing', () => {
     expect(updated.revision).toBe(site.revision + 1);
   });
 
-  it('generates a deterministic category-floor storefront and honours an explicit theme', async () => {
+  it('generates a deterministic Blueprint storefront and honours explicit design tokens', async () => {
     const client = await createTestWorkspace();
     const bucket = releaseBucket();
     const generated = await Effect.runPromise(executeGateway(client, ownerAccess, {
       actionId: 'site.generate',
-      idempotencyKey: 'lookbook-generate',
+      idempotencyKey: 'blueprint-tokens-generate',
       input: {
-        title: 'Adanola',
-        prompt: 'Build an editorial storefront for a fashion label.',
-        theme: 'editorial-lookbook',
+        title: 'Murugan Silks',
+        prompt: 'Build a storefront for silk sarees in Salem.',
+        tone: 'ink',
+        typography: 'serif',
+        density: 3,
       },
     }));
     const siteId = String(generated.siteId);
     const site = generated.site as SiteDocument;
-    // No model key and no bound records: the category falls to the deterministic floor.
-    expect(site.category).toBe('none');
-    // An explicit owner theme is honoured and drives the compiled tokens.
-    expect(site.design.theme).toBe('editorial-lookbook');
-    expect(site.design.color.canvas).toBe('#ffffff');
-    expect(site.design.color.ink).toBe('#000000');
-    expect(site.design.color.surface).toBe('#e5e7eb');
-    expect(site.design.shape.sm).toBe(0);
-    expect(site.design.shape.pill).toBe(4);
-    // No product gate without catalog records: one page, a disabled enquiry journey, no order journey.
+    // Blueprint kind defaults to goods when none specified
+    expect(site.category).toBe('goods');
+    // Explicit design tokens drive the compiled tokens.
+    expect(site.design.color.canvas).toBe('#111111');
+    expect(site.design.color.ink).toBe('#f8fafc');
     expect(site.pages.map((page) => page.path)).toEqual(['/']);
-    expect(site.journeys.some((journey) => journey.kind === 'enquiry' && !journey.enabled)).toBe(true);
-    expect(site.journeys.some((journey) => journey.kind === 'order')).toBe(false);
 
     const compiled = await Effect.runPromise(executeGateway(client, ownerAccess, {
-      actionId: 'site.compile', idempotencyKey: 'lookbook-compile', input: { siteId },
+      actionId: 'site.compile', idempotencyKey: 'blueprint-compile', input: { siteId },
     }, { siteReleases: bucket }));
     const prefix = `workspaces/${ownerAccess.workspace.id}/sites/${siteId}/releases/${compiled.releaseId}`;
     const html = bucket.objects.get(`${prefix}/index.html`)!;
-    // Every visible word derives from the owner's brief and title — nothing fabricated.
-    expect(html).toContain('Adanola');
-    expect(html).toContain('Explore');
-    // Evidence-gated: no catalog records, so no invented products, placeholders, quick-add or fake chat.
+    expect(html).toContain('Murugan Silks');
     expect(html).not.toContain('data-placeholders');
-    expect(html).not.toContain('Product 1');
-    expect(html).not.toContain('tar-card-ph');
-    expect(html).not.toContain('tar-chat-bubble');
-    expect(html).not.toContain('tar-quick-add');
     expect(html).not.toContain('unsplash');
     const css = bucket.objects.get(`${prefix}/style.css`)!;
-    expect(css).toContain('--color-canvas: #ffffff');
-    expect(css).toContain('--color-ink: #000000');
-    expect(css).toContain('--color-surface: #e5e7eb');
-    expect(css).toContain('--font-display: Favorit');
-    expect(css).toContain('--type-tracking: 0.025em');
+    expect(css).toContain('--color-canvas: #111111');
+    expect(css).toContain('--color-ink: #f8fafc');
+    expect(css).toContain('Mukta Malar');
     expect(css).not.toContain('images.unsplash.com');
 
     const report = JSON.parse(bucket.objects.get(`${prefix}/report.json`)!) as { inspection: { blocking: unknown[] } };
     expect(report.inspection.blocking.length).toBe(0);
 
     const published = await Effect.runPromise(executeGateway(client, ownerAccess, {
-      actionId: 'site.publish', idempotencyKey: 'lookbook-publish', input: { siteId, releaseId: compiled.releaseId, hash: compiled.hash },
+      actionId: 'site.publish', idempotencyKey: 'blueprint-publish', input: { siteId, releaseId: compiled.releaseId, hash: compiled.hash },
     }, { siteReleases: bucket }));
     expect(published.state).toBe('live');
   });

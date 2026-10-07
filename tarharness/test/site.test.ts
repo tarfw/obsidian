@@ -188,8 +188,8 @@ describe('TAR Site lifecycle', () => {
       actionId: 'site.refresh', idempotencyKey: 'site-refresh-1', input: { siteId },
     }, { siteReleases: bucket }));
     expect(refreshed.refreshed).toBe(true);
-    // The home product rail and the /shop catalog both bind catalog.public, so the one record resolves twice.
-    expect(refreshed.itemCount).toBe(2);
+    // Single-page storefront binds catalog.public on the home page.
+    expect(refreshed.itemCount).toBe(1);
 
     const site = await storedSite(client, siteId);
     expect(site.releases).toHaveLength(2);
@@ -358,7 +358,7 @@ describe('TAR Site lifecycle', () => {
     // while a bare variant with only a wholesale price stays private.
     const generated = await generate(client, 'autobind-generate', { title: 'Bakery', prompt: 'A wood fired bakery' });
     const site = generated.site as SiteDocument;
-    expect(site.pages.map((page) => page.path)).toContain('/shop');
+    expect(site.pages.map((page) => page.path)).toEqual(['/']);
     const bucket = releaseBucket();
     const reviewed = await candidate(client, bucket, String(generated.siteId), 'autobind-compile');
     const page = bucket.objects.get(`workspaces/${ownerAccess.workspace.id}/sites/${generated.siteId}/releases/${reviewed.releaseId}/index.html`);

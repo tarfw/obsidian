@@ -441,6 +441,41 @@ async function handle(request: Request, env: RuntimeEnv, ctx: ExecutionContext):
   if (!match) throw notFound('Route not found.');
   const slug = match[1]; const nested = match[2] || '';
   const { access: current } = await access(request, env, slug);
+  if (request.method === 'DELETE' && !nested) {
+    if (current.member.role !== 'owner' || current.workspace.mode === 'personal') {
+      throw forbidden();
+    }
+    await withWorkspace(env, current, async (client) => {
+      try {
+        await client.batch([
+          { sql: 'DELETE FROM records' },
+          { sql: 'DELETE FROM events' },
+          { sql: 'DELETE FROM definitions' },
+          { sql: 'DELETE FROM runs' },
+        ], 'write');
+      } catch { /* proceed */ }
+    });
+    await env.CONTROL.batch([
+      env.CONTROL.prepare('DELETE FROM sites WHERE workspace=?').bind(current.workspace.id),
+      env.CONTROL.prepare('DELETE FROM channel_commands WHERE workspace_id=?').bind(current.workspace.id),
+      env.CONTROL.prepare('DELETE FROM channel_identities WHERE workspace_id=?').bind(current.workspace.id),
+      env.CONTROL.prepare('DELETE FROM channel_link_requests WHERE workspace_id=?').bind(current.workspace.id),
+      env.CONTROL.prepare('DELETE FROM workspace_invites WHERE workspace_id=?').bind(current.workspace.id),
+      env.CONTROL.prepare('DELETE FROM members WHERE workspace_id=?').bind(current.workspace.id),
+      env.CONTROL.prepare('DELETE FROM workspaces WHERE id=?').bind(current.workspace.id),
+    ]);
+    try {
+      if (env.SITE_RELEASES) {
+        const listed = await env.SITE_RELEASES.list({ prefix: `workspaces/${current.workspace.id}/` });
+        if (listed.objects.length) await env.SITE_RELEASES.delete(listed.objects.map((o) => o.key));
+      }
+      if (env.PRODUCT_CONTENT) {
+        const listed = await env.PRODUCT_CONTENT.list({ prefix: `workspaces/${current.workspace.id}/` });
+        if (listed.objects.length) await env.PRODUCT_CONTENT.delete(listed.objects.map((o) => o.key));
+      }
+    } catch { /* proceed */ }
+    return response({ deleted: true, workspaceId: current.workspace.id });
+  }
   if (request.method === 'GET' && nested === 'members') {
     const roster = await listMembers(env.CONTROL, current);
     const enriched = await withWorkspace(env, current, async (client) => {
@@ -733,8 +768,39 @@ async function handle(request: Request, env: RuntimeEnv, ctx: ExecutionContext):
       if (current.member.role === 'guest') throw forbidden();
       return response(await readPos(client, current, nested.slice(4), url.searchParams.get('q') || '', offset));
     }
+    if (request.method === 'DELETE' && nested === 'site') {
+      if (current.member.role === 'guest') throw forbidden();
+      await client.batch([
+        { sql: "DELETE FROM records WHERE type='site'" },
+      ], 'write');
+      await env.CONTROL.prepare("DELETE FROM sites WHERE workspace=?").bind(current.workspace.id).run();
+      try {
+        if (env.SITE_RELEASES) {
+          const listed = await env.SITE_RELEASES.list({ prefix: `workspaces/${current.workspace.id}/` });
+          if (listed.objects.length) await env.SITE_RELEASES.delete(listed.objects.map((o) => o.key));
+        }
+      } catch { /* proceed */ }
+      const initialDoc = defaultSite(current.workspace.name, `${current.workspace.name} — official online store, products and services.`);
+      const siteId = `site_${crypto.randomUUID()}`;
+      const at = Date.now();
+      await client.batch([
+        { sql: "INSERT INTO records(id,type,title,state,data,owner,version,created,updated) VALUES(?,'site',?,'draft',?,?,1,?,?)", args: [siteId, current.workspace.name, JSON.stringify(initialDoc), current.identity.id, at, at] },
+      ], 'write');
+      return response({ reset: true, siteId, site: initialDoc });
+    }
     if (request.method === 'GET' && nested === 'site') {
       let siteRows = await Effect.runPromise(query<Record<string, unknown>>(client, { sql: "SELECT * FROM records WHERE type='site' AND archived IS NULL ORDER BY updated DESC LIMIT 1" }));
+      if (siteRows.length) {
+        const candidate = object(typeof siteRows[0].data === 'string' ? JSON.parse(String(siteRows[0].data)) : siteRows[0].data);
+        const legacyPurposes = new Set(['chrome', 'introduction', 'categories', 'collection', 'recommendations', 'press', 'action']);
+        const hasLegacy = !candidate.blueprint || (Array.isArray(candidate.pages) && candidate.pages.some((p: any) => Array.isArray(p.sections) && p.sections.some((s: any) => legacyPurposes.has(String(s.purpose)))));
+        if (hasLegacy) {
+          await client.batch([
+            { sql: "DELETE FROM records WHERE type='site'" },
+          ], 'write');
+          siteRows = [];
+        }
+      }
       if (!siteRows.length) {
         const initialDoc = defaultSite(current.workspace.name, `${current.workspace.name} — official online store, products and services.`);
         const siteId = `site_${crypto.randomUUID()}`;

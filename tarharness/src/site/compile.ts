@@ -151,7 +151,7 @@ function compileCss(design: Design, collector: CssCollector): string {
     }
   });
   return `
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Lora:ital,wght@0,400;0,600;1,400&family=Mukta+Malar:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,600;0,700;1,400&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap');
 
 :root {
   --color-canvas: ${design.color.canvas};
@@ -215,8 +215,10 @@ h3.tar-title { font-size: var(--type-body); font-weight: ${Math.min(900, design.
 .tar-btn:active { transform: scale(0.985); }
 .tar-btn-primary { background: var(--color-accent); color: var(--color-accentink); }
 .tar-btn-secondary { background: transparent; color: var(--color-ink); border-color: var(--color-border); }
-.tar-btn-outline { background: #ffffff; color: #000000; border: 1px solid #000000; text-transform: uppercase; font-size: 12px; font-weight: 500; letter-spacing: 0.05em; padding: 10px 24px; border-radius: 4px; }
-.tar-btn-outline:hover { background: #000000; color: #ffffff; }
+.tar-btn-outline { background: transparent; color: var(--color-ink); border: 1px solid var(--color-ink); font-size: 13px; font-weight: 600; padding: 8px 20px; border-radius: var(--radius-pill); }
+.tar-btn-outline:hover { background: var(--color-ink); color: var(--color-canvas); }
+.tar-btn-whatsapp, .tar-btn.tar-btn-whatsapp { background: #25D366; color: #ffffff; font-size: 13px; font-weight: 600; padding: 8px 18px; border-radius: var(--radius-pill); text-decoration: none; border: none; display: inline-flex; align-items: center; gap: 6px; }
+.tar-btn-whatsapp:hover, .tar-btn.tar-btn-whatsapp:hover { opacity: 0.9; }
 .tar-link { text-decoration: underline; text-underline-offset: 3px; }
 .tar-divider { border: 0; border-top: 1px solid var(--color-border); }
 .tar-spacer { height: var(--space-section); }
@@ -227,316 +229,52 @@ h3.tar-title { font-size: var(--type-body); font-weight: ${Math.min(900, design.
 .tar-item[hidden] { display: none; }
 .tar-empty { color: var(--color-muted); font-style: italic; }
 
-/* Announcement Bar */
-.tar-announcement {
-  background: #000000;
-  color: #ffffff;
-  font-family: var(--font-body);
-  font-size: 9px;
-  font-weight: 500;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+/* Notice Banner */
+.tar-notice {
+  background: var(--color-surface);
+  color: var(--color-ink);
+  border-bottom: 1px solid var(--color-border);
+  padding: 10px 16px;
   text-align: center;
-  padding: 6px 16px;
+  font-size: 13px;
+  font-weight: 600;
   width: 100%;
+  position: sticky;
+  top: 0;
+  z-index: 45;
 }
 
+/* Header & Navigation */
 .tar-nav { position: sticky; top: 0; z-index: 50; background: var(--color-canvas); border-bottom: 1px solid var(--color-border); width: 100%; }
 .tar-nav-inner { display: flex; align-items: center; justify-content: space-between; gap: ${space(4)}; min-height: 56px; padding: 0 clamp(16px, 4vw, 48px); max-width: var(--layout-content); margin: 0 auto; }
-.tar-brand { font-family: var(--font-display); font-size: 22px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; text-decoration: none; color: var(--color-ink); }
-.tar-navlinks { display: flex; gap: 20px; list-style: none; flex-wrap: wrap; text-transform: uppercase; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; margin: 0; padding: 0; }
+.tar-brand { font-family: var(--font-display); font-size: 22px; font-weight: 800; letter-spacing: 0.02em; text-decoration: none; color: var(--color-ink); }
+.tar-navlinks { display: flex; gap: 20px; list-style: none; flex-wrap: wrap; font-size: 13px; font-weight: 600; margin: 0; padding: 0; }
 .tar-navlinks a { text-decoration: none; color: var(--color-ink); transition: opacity 0.15s ease; }
-.tar-navlinks a:hover { opacity: 0.6; }
-.tar-nav-actions { display: flex; align-items: center; gap: 18px; }
-.tar-nav-icon { display: inline-flex; align-items: center; cursor: pointer; color: var(--color-ink); position: relative; }
-.tar-bag-count { position: absolute; top: -4px; right: -8px; background: #000000; color: #ffffff; font-size: 9px; font-weight: 700; border-radius: 9999px; width: 14px; height: 14px; display: flex; align-items: center; justify-content: center; }
+.tar-navlinks a:hover { opacity: 0.7; }
 .tar-menu-btn { display: none; background: none; border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: ${space(1)} ${space(2)}; font-size: 1.1rem; cursor: pointer; }
 
-/* Product Grid and Card */
+/* Collection Grid and Cards */
 .tar-collection-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; width: 100%; }
-.tar-collection-title { font-size: 20px; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; margin: 0; color: var(--color-ink); }
-.tar-product-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 20px; width: 100%; }
+.tar-collection-title { font-size: 22px; font-weight: 700; margin: 0; color: var(--color-ink); }
+.tar-product-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr)); gap: 20px; width: 100%; }
 .tar-collection-card { width: 100%; display: block; }
-.tar-product-card { background: var(--color-canvas); border: none; border-radius: 0; padding: 0; gap: 8px; position: relative; display: flex; flex-direction: column; width: 100%; }
-.tar-card-media { position: relative; overflow: hidden; width: 100%; aspect-ratio: 3 / 4; background: #f3f4f6; border-radius: var(--radius-sm); }
-.tar-card-media img, .tar-card-media .tar-card-img { width: 100%; height: 100%; object-fit: cover; border-radius: var(--radius-sm); display: block; transition: opacity var(--motion) var(--ease), transform 0.3s ease; }
-.tar-product-card:hover .tar-card-img { transform: scale(1.02); }
-.tar-card-media .tar-card-img-alt { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity var(--motion) var(--ease), transform 0.3s ease; border-radius: var(--radius-sm); }
-.tar-product-card:hover .tar-card-img-alt { opacity: 1; transform: scale(1.02); }
-.tar-card-badge { position: absolute; top: 10px; left: 10px; background: #000000; color: #ffffff; font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; padding: 4px 8px; border-radius: var(--radius-sm); z-index: 3; line-height: 1; }
-.tar-card-wishlist { position: absolute; top: 10px; right: 10px; background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(4px); border: none; border-radius: 50%; cursor: pointer; color: var(--color-ink); width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; z-index: 3; transition: background 0.15s ease, transform 0.15s ease; }
-.tar-card-wishlist:hover { background: #ffffff; transform: scale(1.08); }
-.tar-card-wishlist svg { width: 15px; height: 15px; stroke: #000000; fill: none; stroke-width: 1.6; transition: fill 0.15s ease; }
-.tar-card-wishlist:hover svg { fill: #000000; }
-.tar-card-sizes { position: absolute; bottom: 0; left: 0; right: 0; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(6px); display: flex; align-items: center; justify-content: center; gap: 4px; padding: 8px 6px; transform: translateY(100%); transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1); z-index: 4; }
-.tar-product-card:hover .tar-card-sizes { transform: translateY(0); }
-.tar-size-btn { background: #ffffff; border: 1px solid #e5e7eb; border-radius: 2px; color: #000000; font-family: var(--font-body); font-size: 11px; font-weight: 600; padding: 5px 8px; cursor: pointer; transition: all 0.15s ease; flex: 1; text-align: center; }
-.tar-size-btn:hover { background: #000000; color: #ffffff; border-color: #000000; }
-.tar-swatches { display: flex; gap: 6px; padding: 6px 0 2px; align-items: center; }
-.tar-swatch { width: 14px; height: 14px; border-radius: 50%; display: inline-block; cursor: pointer; border: 1px solid rgba(0,0,0,0.15); transition: transform 0.15s ease; }
-.tar-swatch:hover { transform: scale(1.15); }
-.tar-swatch[data-active] { outline: 1.5px solid #000000; outline-offset: 1.5px; }
-.tar-card-colours { font-size: 11px; color: var(--color-muted); font-weight: 500; }
-.tar-card-meta { display: flex; flex-direction: column; gap: 4px; width: 100%; }
-.tar-product-title { font-size: 13px; font-weight: 500; color: var(--color-ink); line-height: 1.4; font-family: var(--font-body); letter-spacing: -0.01em; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis; }
-.tar-card-footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 2px; width: 100%; }
-.tar-card-footer .tar-price { font-size: 13px; font-weight: 600; color: var(--color-ink); font-family: var(--font-body); white-space: nowrap; }
-.tar-quick-add { background: var(--color-ink); color: var(--color-canvas); font-size: 11px; font-weight: 600; padding: 5px 12px; border: none; border-radius: var(--radius-sm); cursor: pointer; transition: opacity 0.15s ease, transform 0.15s ease; white-space: nowrap; }
-.tar-quick-add:hover { opacity: 0.85; transform: scale(1.02); }
+.tar-product-card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 12px; gap: 12px; position: relative; display: flex; flex-direction: column; width: 100%; }
+.tar-card-media { position: relative; overflow: hidden; width: 100%; aspect-ratio: 4 / 3; background: #f3f4f6; border-radius: var(--radius-sm); }
+.tar-card-media img, .tar-card-media .tar-card-img { width: 100%; height: 100%; object-fit: cover; border-radius: var(--radius-sm); display: block; }
+.tar-card-badge { position: absolute; top: 8px; left: 8px; background: var(--color-accent); color: var(--color-accentink); font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: var(--radius-sm); z-index: 2; line-height: 1.2; }
+.tar-card-badge-wrap { margin-bottom: 4px; }
+.tar-card-meta { display: flex; flex-direction: column; gap: 6px; width: 100%; flex: 1; }
+.tar-product-title { font-size: 15px; font-weight: 600; color: var(--color-ink); line-height: 1.35; font-family: var(--font-body); }
+.tar-card-desc { font-size: 13px; color: var(--color-muted); line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.tar-card-footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: auto; padding-top: 8px; width: 100%; }
+.tar-card-footer .tar-price { font-size: 15px; font-weight: 700; color: var(--color-accent); white-space: nowrap; }
 
-/* Lookbook Full-Width Hero */
-.tar-lookbook-hero {
-  position: relative;
-  width: 100%;
-  min-height: 75vh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  background: #111111;
-  color: #ffffff;
-  text-align: center;
-  overflow: hidden;
-  padding: 100px 24px;
-}
-.tar-lookbook-hero .tar-hero-bg {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  opacity: 0.85;
-}
-.tar-lookbook-hero .tar-hero-overlay {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.45) 100%);
-}
-.tar-lookbook-hero .tar-wrap {
-  position: relative;
-  z-index: 2;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-  text-align: center;
-  max-width: 840px;
-}
-.tar-lookbook-hero h1, .tar-lookbook-hero .tar-title {
-  font-family: var(--font-display);
-  font-size: clamp(2rem, 4vw, 36px);
-  font-weight: 400;
-  letter-spacing: 0.02em;
-  color: #ffffff;
-  margin: 0;
-}
-.tar-lookbook-hero p {
-  font-size: 14px;
-  font-weight: 400;
-  letter-spacing: 0.02em;
-  color: rgba(255,255,255,0.92);
-  max-width: 560px;
-  margin: 0;
-}
-.tar-lookbook-hero .tar-btn, .tar-lookbook-hero .tar-btn-outline {
-  background: transparent;
-  color: #ffffff;
-  border: 1px solid #ffffff;
-  font-family: var(--font-body);
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: 0.06em;
-  padding: 10px 32px;
-  border-radius: 4px;
-  text-transform: uppercase;
-  text-decoration: none;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  margin-top: 8px;
-}
-.tar-lookbook-hero .tar-btn:hover, .tar-lookbook-hero .tar-btn-outline:hover {
-  background: #ffffff;
-  color: #000000;
-}
-
-/* Lookbook Editorial Mid-Hero Banner */
-.tar-lookbook-midhero {
-  position: relative;
-  width: 100%;
-  min-height: 480px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  background: #2b211b;
-  color: #ffffff;
-  text-align: center;
-  padding: 100px 24px;
-  overflow: hidden;
-}
-.tar-lookbook-midhero .tar-midhero-bg {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  opacity: 0.85;
-}
-.tar-lookbook-midhero .tar-hero-overlay {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0.5) 100%);
-}
-.tar-lookbook-midhero .tar-wrap {
-  position: relative;
-  z-index: 2;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-  text-align: center;
-  max-width: 680px;
-}
-.tar-lookbook-midhero h2, .tar-lookbook-midhero .tar-title {
-  font-family: var(--font-display);
-  font-size: clamp(1.8rem, 3.5vw, 32px);
-  font-weight: 400;
-  letter-spacing: 0.02em;
-  color: #ffffff;
-  margin: 0;
-}
-.tar-lookbook-midhero p, .tar-lookbook-midhero .tar-prose {
-  font-size: 14px;
-  font-weight: 400;
-  letter-spacing: 0.015em;
-  color: rgba(255,255,255,0.92);
-  margin: 0;
-  max-width: 520px;
-}
-.tar-lookbook-midhero .tar-btn, .tar-lookbook-midhero .tar-btn-outline {
-  background: transparent;
-  color: #ffffff;
-  border: 1px solid #ffffff;
-  font-family: var(--font-body);
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: 0.05em;
-  padding: 10px 32px;
-  border-radius: 4px;
-  text-transform: uppercase;
-  text-decoration: none;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  margin-top: 8px;
-}
-.tar-lookbook-midhero .tar-btn:hover, .tar-lookbook-midhero .tar-btn-outline:hover {
-  background: #ffffff;
-  color: #000000;
-}
-
-/* Lookbook Action Ribbon */
-.tar-lookbook-action {
-  background: #000000;
-  color: #ffffff;
-  padding: 64px 24px;
-  text-align: center;
-  width: 100%;
-}
-.tar-lookbook-action .tar-wrap {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 20px;
-}
-.tar-lookbook-action h2 {
-  font-family: var(--font-display);
-  font-size: clamp(1.4rem, 2.5vw, 24px);
-  font-weight: 500;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: #ffffff;
-}
-.tar-lookbook-action .tar-btn-outline {
-  background: #ffffff;
-  color: #000000;
-  border: 1px solid #ffffff;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  padding: 10px 32px;
-  border-radius: 4px;
-  text-transform: uppercase;
-}
-.tar-lookbook-action .tar-btn-outline:hover {
-  background: transparent;
-  color: #ffffff;
-}
-
-/* Press Strip */
-.tar-press-strip {
-  padding: 48px 0;
-  border-top: 1px solid #e5e7eb;
-  border-bottom: 1px solid #e5e7eb;
-  background: #ffffff;
-  text-align: center;
-  width: 100%;
-}
-.tar-press-title {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: #6b7280;
-  margin-bottom: 24px;
-}
-.tar-press-logos {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: clamp(24px, 5vw, 64px);
-  flex-wrap: wrap;
-}
-.tar-press-logo {
-  font-size: 18px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: #111827;
-  opacity: 0.65;
-  transition: opacity 0.2s ease;
-}
-.tar-press-logo:hover { opacity: 1; }
-.tar-press-vogue { font-family: 'Didot', 'Bodoni MT', 'Cinzel', 'Georgia', serif; font-weight: 700; letter-spacing: 0.18em; font-size: 20px; }
-.tar-press-elle { font-family: 'Didot', 'Bodoni MT', 'Cinzel', 'Georgia', serif; font-weight: 900; letter-spacing: 0.22em; font-size: 22px; }
-.tar-press-grazia { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-weight: 800; letter-spacing: 0.2em; font-size: 17px; }
-.tar-press-harpers { font-family: 'Didot', 'Bodoni MT', 'Cinzel', 'Georgia', serif; font-weight: 600; letter-spacing: 0.15em; font-size: 16px; }
-.tar-press-dazed { font-family: Impact, "Arial Black", sans-serif; font-weight: 900; letter-spacing: 0.15em; font-size: 19px; }
-.tar-press-gq { font-family: 'Didot', 'Bodoni MT', 'Cinzel', 'Georgia', serif; font-weight: 800; letter-spacing: 0.12em; font-size: 22px; }
-
-/* Multi-Column Footer */
-.tar-footer { border-top: 1px solid #e5e5e5; background: #ffffff; margin-top: auto; }
-.tar-footer-inner { display: flex; justify-content: space-between; flex-wrap: wrap; gap: ${space(3)}; padding: ${space(8)} 0; font-size: 0.9rem; color: var(--color-muted); }
-.tar-footer-grid { display: grid; grid-template-columns: 1.2fr 2.8fr; gap: 48px; padding: 64px 0 48px; border-bottom: 1px solid #e5e5e5; }
-.tar-footer-newsletter-title { font-size: 13px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 8px; color: #000000; }
-.tar-footer-newsletter-text { font-size: 12px; color: #6b7280; margin-bottom: 16px; line-height: 1.5; }
-.tar-footer-form { display: flex; max-width: 360px; margin-bottom: 10px; }
-.tar-footer-input { flex: 1; padding: 10px 14px; border: 1px solid #000000; border-right: none; font-size: 12px; outline: none; border-radius: 0; background: #ffffff; color: #000000; }
-.tar-footer-submit { background: #000000; color: #ffffff; border: 1px solid #000000; padding: 10px 20px; font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; border-radius: 0; transition: background 0.15s ease; }
-.tar-footer-submit:hover { background: #333333; }
-.tar-footer-disclaimer { font-size: 10px; color: #9ca3af; line-height: 1.4; margin-bottom: 24px; max-width: 360px; }
-.tar-footer-wordmark { font-family: var(--font-heading); font-size: 28px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: #000000; }
-.tar-footer-nav { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; }
-.tar-footer-col { display: flex; flex-direction: column; gap: 12px; }
-.tar-footer-title { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #000000; }
-.tar-footer-links { list-style: none; display: flex; flex-direction: column; gap: 8px; font-size: 12px; color: #6b7280; margin: 0; padding: 0; }
-.tar-footer-links a { text-decoration: none; color: inherit; transition: color 0.15s ease; }
-.tar-footer-links a:hover { color: #000000; text-decoration: underline; }
-.tar-footer-bottom { display: flex; align-items: center; justify-content: space-between; padding: 28px 0; font-size: 11px; color: #6b7280; flex-wrap: wrap; gap: 16px; }
-.tar-footer-payments { display: flex; gap: 10px; color: #6b7280; font-size: 11px; font-weight: 500; }
-.tar-footer-country { display: flex; align-items: center; gap: 8px; }
+/* Semantic Footer */
+.tar-footer { border-top: 1px solid var(--color-border); background: var(--color-surface); margin-top: auto; }
+.tar-footer-inner { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: ${space(3)}; padding: ${space(6)} 0; font-size: 0.875rem; color: var(--color-muted); }
+.tar-footer-links { list-style: none; display: flex; gap: 16px; margin: 0; padding: 0; }
+.tar-footer-links a { text-decoration: none; color: inherit; }
+.tar-footer-links a:hover { color: var(--color-ink); text-decoration: underline; }
 
 .tar-tabs [role="tablist"] { display: flex; gap: ${space(2)}; border-bottom: 1px solid var(--color-border); flex-wrap: wrap; }
 .tar-tabs [role="tab"] { background: none; border: 0; padding: ${space(2)} ${space(3)}; font: inherit; cursor: pointer; border-bottom: 2px solid transparent; }
@@ -567,19 +305,12 @@ ${blocks.join('\n')}
   .tar-menu[data-ready] .tar-navlinks { display: none; }
   .tar-menu[data-ready][data-open] .tar-navlinks { display: flex; flex-direction: column; padding: ${space(3)} 0; }
   .tar-menu-btn { display: inline-block; }
-  .tar-section { padding: 48px 0; }
-  .tar-grid, .tar-product-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 12px !important; }
-  .tar-footer-grid { grid-template-columns: 1fr; gap: 32px; padding: 40px 0 32px; }
-  .tar-footer-nav { grid-template-columns: repeat(2, 1fr); gap: 24px; }
-  .tar-press-logos { gap: 20px; }
-  .tar-press-logo { font-size: 14px; }
-  .tar-lookbook-hero { min-height: 60vh; padding: 60px 16px; margin-bottom: 24px; }
-  .tar-lookbook-midhero { min-height: 380px; padding: 60px 16px; margin: 24px 0; }
+  .tar-section { padding: 36px 0; }
+  .tar-grid, .tar-product-grid { grid-template-columns: repeat(auto-fill, minmax(min(220px, 100%), 1fr)) !important; gap: 12px !important; }
+  .tar-footer-inner { flex-direction: column; align-items: flex-start; gap: 12px; }
 }
 @media (min-width: 769px) and (max-width: 1024px) {
-  .tar-grid, .tar-product-grid { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; gap: 16px !important; }
-  .tar-footer-grid { grid-template-columns: 1fr 2fr; }
-  .tar-footer-nav { grid-template-columns: repeat(4, 1fr); }
+  .tar-grid, .tar-product-grid { grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr)) !important; gap: 16px !important; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
@@ -755,12 +486,10 @@ function renderNode(node: Node, context: RenderContext): string {
     case 'grid': return `<div id="${id}" class="tar-grid${style}">${renderChildren(node, context)}</div>`;
     case 'card': return `<div id="${id}" class="tar-card${style}">${renderChildren(node, context)}</div>`;
     case 'collection': {
-      const isLookbook = context.doc.design.theme === 'editorial-lookbook' || context.doc.category === 'retail';
-      const items = Array.isArray(merged.items) ? merged.items as (ResolvedItem & { swatches?: string[]; image2?: string; badge?: string })[] : [];
-      const title = merged.title ? `<div class="tar-collection-header"><h2 class="tar-title tar-collection-title">${escapeHtml(merged.title)}</h2><a href="/shop" class="tar-btn-outline">VIEW ALL</a></div>` : '';
+      const items = Array.isArray(merged.items) ? merged.items as (ResolvedItem & { whatsapp?: string; badge?: string })[] : [];
+      const title = merged.title ? `<div class="tar-collection-header"><h2 class="tar-title tar-collection-title">${escapeHtml(merged.title)}</h2></div>` : '';
       const binding = context.binding;
       const detail = binding?.detail?.path;
-      const quickAdd = merged.quickAdd === true;
       if (!items.length) {
         // A bound slot with no live records shows its empty text, never invented cards.
         const empty = String(merged.empty || binding?.empty?.text || '');
@@ -768,40 +497,28 @@ function renderNode(node: Node, context: RenderContext): string {
       }
       const cards = items.map((entry, index) => {
         const slug = itemSlug(entry, index);
-        const cardImg = entry.image && /^https:\/\//.test(entry.image) ? entry.image : '';
-        const cardImg2 = entry.image2 && /^https:\/\//.test(entry.image2) ? entry.image2 : '';
+        const cardImg = entry.image && /^https?:\/\//.test(entry.image) ? entry.image : (entry.image ? `/media/${entry.image}` : '');
         const badge = entry.badge ? `<span class="tar-card-badge">${escapeHtml(entry.badge)}</span>` : '';
-        const sizePills = isLookbook ? `
-          <div class="tar-card-sizes">
-            <button type="button" class="tar-size-btn" data-action="cart.add" data-item="${escapeAttribute(slug)}" data-size="XS">XS</button>
-            <button type="button" class="tar-size-btn" data-action="cart.add" data-item="${escapeAttribute(slug)}" data-size="S">S</button>
-            <button type="button" class="tar-size-btn" data-action="cart.add" data-item="${escapeAttribute(slug)}" data-size="M">M</button>
-            <button type="button" class="tar-size-btn" data-action="cart.add" data-item="${escapeAttribute(slug)}" data-size="L">L</button>
-            <button type="button" class="tar-size-btn" data-action="cart.add" data-item="${escapeAttribute(slug)}" data-size="XL">XL</button>
-          </div>` : '';
-        const wishlistBtn = isLookbook ? `<button type="button" class="tar-card-wishlist" aria-label="Wishlist"><svg viewBox="0 0 24 24"><path d="M12 20s-7-4.5-7-9.5A3.5 3.5 0 0112 8a3.5 3.5 0 017 2.5c0 5-7 9.5-7 9.5z"></path></svg></button>` : '';
-        const media = `<div class="tar-card-media">
+        const media = cardImg ? `<div class="tar-card-media">
           ${badge}
-          ${cardImg ? `<img class="tar-card-img" src="${escapeAttribute(cardImg)}" alt="${escapeAttribute(entry.title)}" loading="lazy">` : ''}
-          ${cardImg2 ? `<img class="tar-card-img-alt" src="${escapeAttribute(cardImg2)}" alt="" loading="lazy">` : ''}
-          ${wishlistBtn}
-          ${sizePills}
-        </div>`;
-        const rawSwatches = Array.isArray(entry.swatches) && entry.swatches.length ? entry.swatches : (isLookbook ? ['#000000', '#5B6554', '#8C7C6D', '#E5E7EB'] : []);
-        const cardSwatches = rawSwatches
-          .map((color: string, swatch: number) => `<span class="tar-swatch"${swatch === 0 ? ' data-active' : ''} style="background:${escapeAttribute(color)}"></span>`).join('');
-        const swatchesRow = cardSwatches ? `<div class="tar-swatches">${cardSwatches}</div>` : '';
-        const colours = Number(entry.colours) > 1 ? `<span class="tar-card-colours">${Number(entry.colours)} colours</span>` : '';
-        // Cards always render this default body; a collection's children template feeds its detail pages only.
+          <img class="tar-card-img" src="${escapeAttribute(cardImg)}" alt="${escapeAttribute(entry.title)}" loading="lazy" decoding="async">
+        </div>` : (badge ? `<div class="tar-card-badge-wrap">${badge}</div>` : '');
+        const priceHtml = entry.price !== undefined
+          ? `<span class="tar-price">${formatMoney(entry.price, entry.currency || context.doc.currency || 'INR', context.doc.locale)}</span>`
+          : '';
+        const descHtml = entry.description ? `<p class="tar-card-desc">${escapeHtml(entry.description)}</p>` : '';
+        const whatsappHref = entry.whatsapp || (merged.whatsappPhone ? `https://wa.me/${String(merged.whatsappPhone).replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Hi, I want to order "${entry.title}".`)}` : '');
+        const ctaHtml = whatsappHref
+          ? `<a href="${escapeAttribute(whatsappHref)}" class="tar-btn-whatsapp" target="_blank" rel="noopener">Order on WhatsApp</a>`
+          : '';
         const body = `<div class="tar-card tar-product-card">
               ${media}
-              ${swatchesRow}
               <div class="tar-card-meta">
                 <strong class="tar-product-title">${escapeHtml(entry.title)}</strong>
-                ${colours}
+                ${descHtml}
                 <div class="tar-card-footer">
-                  <span class="tar-price">${entry.price !== undefined && entry.currency ? formatMoney(entry.price, entry.currency, context.doc.locale) : (entry.price !== undefined ? `$${entry.price}` : '')}</span>
-                  ${quickAdd && !isLookbook ? `<button type="button" class="tar-quick-add" data-action="cart.add" data-item="${escapeAttribute(slug)}">Quick add</button>` : ''}
+                  ${priceHtml}
+                  ${ctaHtml}
                 </div>
               </div>
             </div>`;
@@ -812,109 +529,38 @@ function renderNode(node: Node, context: RenderContext): string {
       const secCols = (merged.columns as number | undefined) || context.sectionLayout?.columns || context.doc.design.layout.columns;
       const secKind = context.sectionLayout?.kind;
       const isStack = secKind === 'stack' && secCols === 1;
-      const cols = isStack ? 1 : (typeof secCols === 'number' && secCols > 0 ? secCols : (isLookbook ? 4 : 3));
+      const cols = isStack ? 1 : (typeof secCols === 'number' && secCols > 0 ? secCols : 3);
       const gridStyle = isStack
         ? 'display:flex;flex-direction:column;gap:24px;max-width:720px;margin:0 auto;width:100%;'
-        : `grid-template-columns:repeat(${cols}, minmax(0, 1fr));gap:20px;width:100%;`;
+        : `grid-template-columns:repeat(auto-fill, minmax(min(260px, 100%), 1fr));gap:20px;width:100%;`;
       return `<div id="${id}" class="tar-stack${style}" style="width:100%">${title}<div class="${isStack ? 'tar-stack' : 'tar-grid tar-product-grid'}" style="${gridStyle}">${cards}</div></div>`;
     }
     case 'navigation': {
-      const isLookbook = context.doc.design.theme === 'editorial-lookbook' || context.doc.category === 'retail';
       const links = Array.isArray(merged.links) ? merged.links as { label?: string; href?: string }[] : [];
       const listId = `nav-${escapeAttribute(node.id)}`;
       const rendered = links.map((link) => {
         const href = safeHref(link.href);
         return href ? `<li><a href="${href}">${escapeHtml(link.label)}</a></li>` : '';
       }).join('');
-      const actionIcons = ['heart', 'search', 'user', 'bag'].map((icon) => {
-        const path = ICONS[icon] || ICONS.sparkle;
-        const badge = icon === 'bag' ? '<span class="tar-bag-count">0</span>' : '';
-        return `<span class="tar-nav-icon" aria-label="${icon}"><svg class="tar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="${path}"></path></svg>${badge}</span>`;
-      }).join('');
       return `<header id="${escapeAttribute(node.id)}" class="tar-nav">
-        ${isLookbook ? '<div class="tar-announcement">FREE WORLDWIDE SHIPPING ON ORDERS OVER $150 · EASY 30-DAY RETURNS</div>' : ''}
         <div class="tar-wrap tar-nav-inner">
+          <a class="tar-brand" href="/">${escapeHtml(merged.brand || '')}</a>
           <nav class="tar-menu" data-menu="${listId}" aria-label="Main">
-            <button class="tar-menu-btn" type="button" aria-expanded="false">☰</button>
-            <ul id="${listId}" class="tar-navlinks">${rendered}</ul>
+            ${rendered ? `<button class="tar-menu-btn" type="button" aria-expanded="false">☰</button><ul id="${listId}" class="tar-navlinks">${rendered}</ul>` : ''}
           </nav>
-          <a class="tar-brand" href="/">${escapeHtml(merged.brand)}</a>
-          <div class="tar-nav-actions">${actionIcons}</div>
         </div>
       </header>`;
     }
     case 'footer': {
-      const isLookbook = context.doc.design.theme === 'editorial-lookbook' || context.doc.category === 'retail';
       const brand = escapeHtml(merged.brand || context.doc.pages[0]?.title || '');
       const year = new Date().getFullYear();
-      if (isLookbook) {
-        return `<footer id="${escapeAttribute(node.id)}" class="tar-footer">
-          <div class="tar-wrap">
-            <div class="tar-footer-grid">
-              <div class="tar-footer-newsletter">
-                <div class="tar-footer-newsletter-title">SIGN UP FOR 10% OFF</div>
-                <div class="tar-footer-newsletter-text">Be the first to know about new collection drops and seasonal lookbooks.</div>
-                <form class="tar-footer-form" onsubmit="event.preventDefault()">
-                  <input class="tar-footer-input" type="email" placeholder="Enter your email" aria-label="Email address" required>
-                  <button class="tar-footer-submit" type="submit">JOIN</button>
-                </form>
-                <div class="tar-footer-disclaimer">By subscribing you agree to our Terms and Privacy Policy.</div>
-              </div>
-              <div class="tar-footer-nav">
-                <div class="tar-footer-col">
-                  <span class="tar-footer-title">SHOP</span>
-                  <ul class="tar-footer-links">
-                    <li><a href="/shop">New Arrivals</a></li>
-                    <li><a href="/shop">Best Sellers</a></li>
-                    <li><a href="/shop">Core Collection</a></li>
-                    <li><a href="/shop">Lookbook</a></li>
-                  </ul>
-                </div>
-                <div class="tar-footer-col">
-                  <span class="tar-footer-title">HELP</span>
-                  <ul class="tar-footer-links">
-                    <li><a href="/contact">Shipping & Returns</a></li>
-                    <li><a href="/contact">Order Tracking</a></li>
-                    <li><a href="/contact">Size Guide</a></li>
-                    <li><a href="/contact">Customer Care</a></li>
-                  </ul>
-                </div>
-                <div class="tar-footer-col">
-                  <span class="tar-footer-title">ABOUT</span>
-                  <ul class="tar-footer-links">
-                    <li><a href="/">Our Story</a></li>
-                    <li><a href="/">Sustainability</a></li>
-                    <li><a href="/">Press</a></li>
-                    <li><a href="/">Careers</a></li>
-                  </ul>
-                </div>
-                <div class="tar-footer-col">
-                  <span class="tar-footer-title">LEGAL</span>
-                  <ul class="tar-footer-links">
-                    <li><a href="/">Privacy Policy</a></li>
-                    <li><a href="/">Terms of Service</a></li>
-                    <li><a href="/">Cookie Settings</a></li>
-                  </ul>
-                </div>
-              </div>
-            </div>
-            <div class="tar-footer-bottom">
-              <div class="tar-footer-wordmark">${brand}</div>
-              <div class="tar-footer-payments">
-                <span>Apple Pay</span> · <span>Visa</span> · <span>Mastercard</span> · <span>Klarna</span> · <span>UPI</span>
-              </div>
-              <span>© ${year} ${brand}. All rights reserved.</span>
-            </div>
-          </div>
-        </footer>`;
-      }
       const links = Array.isArray(merged.links) ? merged.links as { label?: string; href?: string }[] : [];
       const rendered = links.map((link) => {
         const href = safeHref(link.href);
         return href ? `<li><a href="${href}">${escapeHtml(link.label)}</a></li>` : '';
       }).join('');
-      const text = escapeHtml(merged.text || `© ${year} ${brand}`);
-      return `<footer id="${escapeAttribute(node.id)}" class="tar-footer"><div class="tar-wrap tar-footer-inner"><span>${text}</span><ul class="tar-footer-links">${rendered}</ul></div></footer>`;
+      const text = escapeHtml(merged.text || `© ${year} ${brand}. All rights reserved.`);
+      return `<footer id="${escapeAttribute(node.id)}" class="tar-footer"><div class="tar-wrap tar-footer-inner"><span>${text}</span>${rendered ? `<ul class="tar-footer-links">${rendered}</ul>` : ''}</div></footer>`;
     }
     case 'menu': {
       const links = Array.isArray(merged.links) ? merged.links as { label?: string; href?: string }[] : [];
@@ -975,7 +621,6 @@ function renderNode(node: Node, context: RenderContext): string {
 }
 
 function renderSection(section: Section, context: RenderContext): string {
-  const isLookbook = context.doc.design.theme === 'editorial-lookbook' || context.doc.category === 'retail';
   const layout = section.layout || { kind: 'flow' };
   const hasCollectionChild = Array.isArray(section.nodes) && section.nodes.some((node) => node.kind === 'collection');
   const columns = (layout.kind === 'grid' && !hasCollectionChild && typeof layout.columns === 'number')
@@ -987,39 +632,8 @@ function renderSection(section: Section, context: RenderContext): string {
   if (section.purpose === 'chrome') {
     return `<section id="${escapeAttribute(section.id)}" class="tar-chrome${style}" data-purpose="chrome">${body}</section>`;
   }
-  if (section.purpose === 'press') {
-    return `<section id="${escapeAttribute(section.id)}" class="tar-section tar-press-strip${style}" data-purpose="press">
-      <div class="tar-wrap">
-        <div class="tar-press-title">AS FEATURED IN</div>
-        <div class="tar-press-logos">
-          <span class="tar-press-logo tar-press-vogue">VOGUE</span>
-          <span class="tar-press-logo tar-press-elle">ELLE</span>
-          <span class="tar-press-logo tar-press-grazia">GRAZIA</span>
-          <span class="tar-press-logo tar-press-harpers">HARPER'S BAZAAR</span>
-          <span class="tar-press-logo tar-press-dazed">DAZED</span>
-          <span class="tar-press-logo tar-press-gq">GQ</span>
-        </div>
-      </div>
-    </section>`;
-  }
-  if (isLookbook && (section.purpose === 'hero' || section.purpose === 'introduction')) {
-    const heroBg = 'https://images.pexels.com/photos/4056723/pexels-photo-4056723.jpeg?auto=compress&cs=tinysrgb&w=1920';
-    return `<section id="${escapeAttribute(section.id)}" class="tar-section tar-lookbook-hero${style}" data-purpose="${escapeAttribute(section.purpose)}">
-      <img class="tar-hero-bg" src="${heroBg}" alt="Hero lifestyle background" loading="eager">
-      <div class="tar-hero-overlay"></div>
-      <div class="tar-wrap tar-stack">${body}</div>
-    </section>`;
-  }
-  if (isLookbook && section.purpose === 'story') {
-    const midheroBg = 'https://images.pexels.com/photos/6311612/pexels-photo-6311612.jpeg?auto=compress&cs=tinysrgb&w=1920';
-    return `<section id="${escapeAttribute(section.id)}" class="tar-section tar-lookbook-midhero${style}" data-purpose="story">
-      <img class="tar-midhero-bg" src="${midheroBg}" alt="Sweats fabrics lifestyle banner" loading="lazy">
-      <div class="tar-hero-overlay"></div>
-      <div class="tar-wrap tar-stack">${body}</div>
-    </section>`;
-  }
-  if (isLookbook && section.purpose === 'action') {
-    return `<section id="${escapeAttribute(section.id)}" class="tar-section tar-lookbook-action${style}" data-purpose="action"><div class="tar-wrap">${body}</div></section>`;
+  if (section.purpose === 'notice') {
+    return `<aside id="${escapeAttribute(section.id)}" class="tar-notice${style}" role="note" data-purpose="notice">${body}</aside>`;
   }
   return `<section id="${escapeAttribute(section.id)}" class="tar-section${style}" data-purpose="${escapeAttribute(section.purpose)}"><div class="tar-wrap${kind}"${columns}>${body}</div></section>`;
 }
@@ -1056,7 +670,7 @@ function pageHtml(doc: SiteDocument, page: Page, body: string, origin: string | 
   ${pageMeta(doc, page, origin, canonicalPath, titleOverride)}
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Lora:ital,wght@0,400;0,600;1,400&family=Mukta+Malar:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,600;0,700;1,400&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="${cssPath}">
   ${runtime ? '<script src="/site.js" defer></script>' : ''}
 </head>

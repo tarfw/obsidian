@@ -306,7 +306,7 @@ export function collectIssues(doc: SiteDocument): Issue[] {
   checkText(issues, doc.brief?.goal, 300, 'Brief goal', 'brief.goal', false);
   checkText(issues, doc.brief?.audience, 300, 'Brief audience', 'brief.audience', false);
   checkText(issues, doc.brief?.tone, 300, 'Brief tone', 'brief.tone', false);
-  if (doc.category !== undefined && !CATEGORY_IDS.includes(doc.category)) issues.push({ level: 'blocking', area: 'document', path: 'category', message: 'Category must be a registered archetype.' });
+  if (doc.category !== undefined && !(CATEGORY_IDS as readonly string[]).includes(doc.category)) issues.push({ level: 'blocking', area: 'document', path: 'category', message: 'Category must be a registered archetype.' });
 
   for (const report of auditDesign(doc.design)) issues.push({ level: report.level, area: `design.${report.area}`, path: 'design', message: report.message });
   for (const key of ['display', 'heading', 'body'] as const) {

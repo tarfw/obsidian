@@ -3,6 +3,7 @@ import { getValidIdToken, invalidateGoogleToken } from './auth';
 import type { AskOutcome, Asset, AssetSummary, Checks, EditOutcome, ReleaseManifest, SiteDocument, SiteSnapshot } from './site-schema';
 
 export const HARNESS_URL = (process.env.EXPO_PUBLIC_TARHARNESS_URL || 'https://tarharness.tar-54d.workers.dev').replace(/\/$/, '');
+export const SITES_URL = (process.env.EXPO_PUBLIC_SITES_URL || 'https://tar-sites.tar-54d.workers.dev').replace(/\/$/, '');
 
 export type HarnessRole = 'owner' | 'admin' | 'member' | 'guest';
 export type WorkRole = string;
@@ -98,7 +99,7 @@ export class HarnessRequestError extends Error { constructor(readonly status: nu
 export function createOperationKey(prefix: string) { return `${prefix}:${randomUUID()}`; }
 let syncRouteAvailable = true;
 
-async function request<T>(path: string, options: { method?: 'GET' | 'POST' | 'PUT'; body?: Record<string, unknown>; key?: string; missingRouteOk?: boolean } = {}): Promise<T> {
+async function request<T>(path: string, options: { method?: 'GET' | 'POST' | 'PUT' | 'DELETE'; body?: Record<string, unknown>; key?: string; missingRouteOk?: boolean } = {}): Promise<T> {
   const method = options.method || 'GET';
   const route = path.split('?')[0];
   const started = Date.now();
@@ -116,7 +117,7 @@ async function request<T>(path: string, options: { method?: 'GET' | 'POST' | 'PU
     if (!token) throw new HarnessRequestError(0, 'Connect and sign in to refresh TAR.', 'offline_auth');
     let response: Response;
     try {
-      response = await fetch(`${HARNESS_URL}${path}`, { method, headers: { Authorization: `Bearer ${token}`, ...(options.body ? { 'Content-Type': 'application/json' } : {}), ...(method === 'POST' || method === 'PUT' ? { 'Idempotency-Key': options.key || createOperationKey('tarapp') } : {}) }, body: options.body ? JSON.stringify(options.body) : undefined, signal: controller.signal });
+      response = await fetch(`${HARNESS_URL}${path}`, { method, headers: { Authorization: `Bearer ${token}`, ...(options.body ? { 'Content-Type': 'application/json' } : {}), ...(method === 'POST' || method === 'PUT' || method === 'DELETE' ? { 'Idempotency-Key': options.key || createOperationKey('tarapp') } : {}) }, body: options.body ? JSON.stringify(options.body) : undefined, signal: controller.signal });
     } catch (cause) {
       if (controller.signal.aborted) throw new HarnessRequestError(408, 'TAR did not respond in time. Check your connection and retry.');
       throw cause;
@@ -171,8 +172,9 @@ export function clearRegistryCache(slug?: string) {
   else registryCache.clear();
 }
 
-const workspacePath = (slug: string, suffix: string) => `/v1/workspaces/${encodeURIComponent(slug)}/${suffix}`;
+const workspacePath = (slug: string, suffix = '') => suffix ? `/v1/workspaces/${encodeURIComponent(slug)}/${suffix}` : `/v1/workspaces/${encodeURIComponent(slug)}`;
 export const harness = {
+  deleteWorkspace: (slug: string) => request<{ deleted: boolean }>(workspacePath(slug), { method: 'DELETE' }),
   pos: <T>(slug: string, section: string, search = '', offset = 0) => request<T>(workspacePath(slug, 'pos/' + section) + '?q=' + encodeURIComponent(search) + '&offset=' + offset),
   posOverview: (slug: string) => request<{ settings: unknown | null }>(workspacePath(slug, 'pos/overview'), { missingRouteOk: true }),
   posProductContent: (slug: string, productId: string) => request<{ content: Record<string, unknown> }>(workspacePath(slug, `pos/products/${encodeURIComponent(productId)}/content`)),
@@ -238,10 +240,31 @@ export const harness = {
   site: {
     get: (slug: string) => request<SiteSnapshot>(workspacePath(slug, 'site')),
     available: (slug: string) => request<{ site: unknown | null }>(workspacePath(slug, 'site'), { missingRouteOk: true }),
-    generate: (slug: string, input: { title?: string; prompt?: string; theme?: string; audience?: string; tone?: string; records?: string[] }, operationKey?: string) =>
+    reset: (slug: string) => request<{ reset: boolean; siteId: string; site: SiteDocument }>(workspacePath(slug, 'site'), { method: 'DELETE' }),
+    generate: (slug: string, input: { title?: string; prompt?: string; theme?: string; audience?: string; tone?: string; records?: string[]; taste?: string[]; reset?: boolean }, operationKey?: string) =>
       request<{ siteId: string; version: number; state: string; site: SiteDocument; preview: { html: string; css: string; hash: string }; composed: boolean; note?: string }>(
         workspacePath(slug, 'actions/site.generate'),
         { method: 'POST', body: input, key: operationKey || createOperationKey('site.generate') }
+      ),
+    tasteAdd: (slug: string, siteId: string, bullet: string, operationKey?: string) =>
+      request<{ siteId: string; version: number; state: string; site: SiteDocument; preview: { html: string; css: string; hash: string } }>(
+        workspacePath(slug, 'actions/site.taste.add'),
+        { method: 'POST', body: { siteId, bullet }, key: operationKey || createOperationKey('site.taste.add') }
+      ),
+    tasteRemove: (slug: string, siteId: string, bullet: string, operationKey?: string) =>
+      request<{ siteId: string; version: number; state: string; site: SiteDocument; preview: { html: string; css: string; hash: string } }>(
+        workspacePath(slug, 'actions/site.taste.remove'),
+        { method: 'POST', body: { siteId, bullet }, key: operationKey || createOperationKey('site.taste.remove') }
+      ),
+    noticeSet: (slug: string, siteId: string, notice: string, operationKey?: string) =>
+      request<{ siteId: string; version: number; state: string; site: SiteDocument; preview: { html: string; css: string; hash: string }; notice: string }>(
+        workspacePath(slug, 'actions/site.notice.set'),
+        { method: 'POST', body: { siteId, notice }, key: operationKey || createOperationKey('site.notice.set') }
+      ),
+    sectionsSet: (slug: string, siteId: string, order: string[], hidden?: string[], operationKey?: string) =>
+      request<{ siteId: string; version: number; state: string; site: SiteDocument; preview: { html: string; css: string; hash: string } }>(
+        workspacePath(slug, 'actions/site.sections.set'),
+        { method: 'POST', body: { siteId, order, ...(hidden ? { hidden } : {}) }, key: operationKey || createOperationKey('site.sections.set') }
       ),
     ask: (slug: string, siteId: string, command: string, target?: string, operationKey?: string) =>
       request<AskOutcome>(

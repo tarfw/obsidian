@@ -337,11 +337,11 @@ describe('site ask and edit', () => {
 
     // 6. Retail site with collection section
     const retailResult = await Effect.runPromise(executeGateway(client, ownerAccess, {
-      actionId: 'site.generate', idempotencyKey: `gen-retail-${Math.random()}`, input: { title: 'Kanchi Silks', prompt: 'Adanola luxury activewear retail', category: 'retail' },
+      actionId: 'site.generate', idempotencyKey: `gen-retail-${Math.random()}`, input: { title: 'Kanchi Silks', prompt: 'Kanchi luxury silk sarees retail', category: 'goods' },
     }));
     const retailSiteId = String(retailResult.siteId);
     const retailSite = retailResult.site as SiteDocument;
-    const collectionId = retailSite.pages[0].sections.find((s) => s.purpose === 'collection')?.id || 'collection';
+    const collectionId = retailSite.pages[0].sections.find((s) => s.purpose === 'collection' || s.purpose === 'catalog')?.id || retailSite.pages[0].sections[0].id;
 
     // List View on Collection
     const listView = await Effect.runPromise(executeGateway(client, ownerAccess, {

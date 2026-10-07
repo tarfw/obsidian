@@ -8,9 +8,10 @@ import { readDocument } from './adapt.ts';
 import { inspectDocument } from './inspect.ts';
 import { assetReader } from './asset.ts';
 import { applyPexels } from './pexels.ts';
-import { CATEGORIES, CATEGORY_IDS, PURPOSE_IDEAS, THEME_IDS } from './design.ts';
+import { CATEGORY_IDS } from './design.ts';
+import { type Blueprint, type BusinessKind, type DensityToken, type LeadSection, type ToneToken, type TypographyToken, compileSectionOrder, catalogLayoutFor, checkPublishGate, hashState } from './blueprint.ts';
 import { BudgetExceeded, DEFAULT_BUDGET, GROQ_DEFAULT_MODEL, ModelRunner, SITE_MODEL_FALLBACKS, readClaims, writeCopy } from './model.ts';
-import { buildSite, defaultBlueprint, tasteBias, type Blueprint, type Facts, type Slot } from './build.ts';
+import { buildSite, defaultBlueprint, tasteBias, type Facts, type Slot } from './build.ts';
 import { slugify } from './html.ts';
 import { checkClaims, fanOut, flagDrift } from './judgment.ts';
 import { DOCUMENT_VERSION, type Asset, type Node, type Page, type PersonaRule, type ReleaseFile, type ReleaseManifest, type Section, type SiteDocument } from './document.ts';
@@ -253,53 +254,102 @@ async function saveEvent(client: Client, context: AccessContext, action: string,
  * batched call. With no model key the deterministic defaults still produce a
  * valid site.
  */
-export async function executeSiteGenerate(client: Client, context: AccessContext, input: Record<string, unknown>, key: string, inputHash: string, typesafe?: string, ai?: Ai, control?: D1Database, model?: string, groqApiKey?: string, content?: R2Bucket, pexelsApiKey?: string): Promise<Record<string, unknown>> {
+export async function executeSiteGenerate(
+  client: Client,
+  context: AccessContext,
+  input: Record<string, unknown>,
+  key: string,
+  inputHash: string,
+  typesafe?: string,
+  ai?: Ai,
+  control?: D1Database,
+  model?: string,
+  groqApiKey?: string,
+  content?: R2Bucket,
+  pexelsApiKey?: string,
+): Promise<Record<string, unknown>> {
   const title = text(input.title) || context.workspace.name || 'Workspace';
   const prompt = text(input.prompt ?? input.description, 2000);
-  if (input.theme !== undefined && !THEME_IDS.includes(String(input.theme))) throw badRequest('Choose a registered site theme.');
-  const existing = await getSiteRecord(client);
+  if (input.reset === true) {
+    await client.execute("DELETE FROM records WHERE type='site'");
+  }
+  const existing = input.reset === true ? null : await getSiteRecord(client);
   const previous = existing ? readDocument(existing.data).doc : null;
   const brief = { goal: prompt || `${title} online`, audience: text(input.audience, 200), tone: text(input.tone, 120) };
-  const gathered = await publicFacts(client, input, previous);
+  const gathered = await publicFacts(client, input, previous, context);
   const cache = { control, workspace: context.workspace.id, version: 'create-2' };
+  const inputTaste = strings(input.taste, 20);
+  const taste = inputTaste.length ? inputTaste : ((previous?.taste?.bullets || previous?.taste?.accepted || []) as string[]);
   const avoided = [...tasteBias(previous?.taste)];
+
   const judged = await fanOut(typesafe, cache, {
+    trade: text(input.trade) || brief.audience,
+    taste,
+    facts: {
+      ...gathered.judged,
+      items: gathered.facts.items?.length ?? 0,
+      proofs: gathered.facts.proofs || [],
+      season: gathered.facts.season || '',
+    },
     brief,
-    facts: gathered.judged,
-    purposes: Object.keys(PURPOSE_IDEAS),
     assets: gathered.assets,
     avoid: avoided,
   });
-  // Category resolves once: Jev's confident pick, else an explicit input, else the carried value, else the floor.
-  const requested = String(input.category || '');
-  const category = judged.category || (CATEGORY_IDS.includes(requested) ? requested : '') || previous?.category || 'none';
-  const spec = CATEGORIES[category] || CATEGORIES.none;
-  const hasItems = (gathered.facts.items || []).length > 0;
-  const hasServices = (gathered.facts.services || []).length > 0;
-  // Owner-bound facts always win; otherwise Jev decides, and the category gate is the floor.
-  const product = hasItems ? true : (judged.product ?? spec.gates.includes('product'));
-  const service = hasServices ? true : (judged.service ?? spec.gates.includes('service'));
-  const defaults = defaultBlueprint(category, previous?.taste);
-  const theme = input.theme ? String(input.theme) : judged.theme || defaults.theme;
-  const blueprint: Blueprint = {
-    category,
-    product,
-    service,
-    theme,
-    density: judged.density || defaults.density,
-    tone: judged.tone || defaults.tone,
-    columns: Math.min(4, Math.max(2, judged.columns || defaults.columns)),
-    heroStyle: judged.heroStyle || defaults.heroStyle,
-    flow: judged.flow || defaults.flow,
-    quickAdd: judged.quickAdd === null ? defaults.quickAdd : judged.quickAdd,
-    purposes: judged.purposes.length ? judged.purposes : defaults.purposes,
-    extras: strings(input.pages, 3),
-    assets: judged.assets.slice(0, 3),
-    enquiry: input.enquiry === true || judged.enquiry === true || Boolean(previous?.journeys.length),
+
+  const kind = (input.kind as BusinessKind) || judged.kind || 'goods';
+  const defaults = defaultBlueprint(kind);
+  const typography = (input.typography as TypographyToken) || judged.typography || defaults.typography;
+  const tone = (input.tone as ToneToken) || judged.tone || defaults.tone;
+  const density = (typeof input.density === 'number' ? input.density as DensityToken : undefined) || judged.density || defaults.density;
+  const lead = (input.lead as LeadSection) || judged.lead || defaults.lead;
+
+  const gate = checkPublishGate(gathered.facts);
+  const catalogLayout = catalogLayoutFor(gathered.facts.items?.length ?? 0);
+  const sections = compileSectionOrder(kind, lead, {
+    notice: Boolean(input.notice || gathered.facts.notice),
+    spotlight: judged.spotlight,
+    story: judged.story,
+    trust: judged.trust && (gathered.facts.proofs?.length ?? 0) > 0,
+  });
+
+  const blueprintPre: Omit<Blueprint, 'hash'> = {
+    kind,
+    typography,
+    tone,
+    density,
+    lead,
+    headerStyle: 'fullbleed',
+    catalogLayout,
+    sections,
+    gate,
+    revision: previous ? (previous.revision || 1) + 1 : 1,
   };
+  const hash = await hashState(taste, gathered.facts);
+  const blueprint: Blueprint = {
+    ...blueprintPre,
+    hash,
+  };
+
   const locale = text(input.locale, 8) || previous?.locale || 'en';
-  const built = buildSite({ title, brief, facts: gathered.facts, blueprint, assets: gathered.assetsRegistered, locale, previous });
+  const built = buildSite({
+    title,
+    brief,
+    facts: {
+      ...gathered.facts,
+      notice: typeof input.notice === 'string' ? input.notice : gathered.facts.notice,
+    },
+    blueprint,
+    assets: gathered.assetsRegistered,
+    locale,
+    previous,
+  });
   const site = built.doc;
+  site.taste = {
+    bullets: taste,
+    accepted: taste,
+    rejected: previous?.taste?.rejected || [],
+  };
+
   const prose = await writeDraft(ai, model, groqApiKey, site, built.slots, gathered.judged);
   let note = prose.note;
   if (prose.claims.length) {
@@ -308,14 +358,16 @@ export async function executeSiteGenerate(client: Client, context: AccessContext
   }
   if (note && !site.claims?.length) site.claims = [];
   validateDocument(site);
-  const siteId = existing?.id || `site_${crypto.randomUUID()}`; const at = now();
+  const siteId = existing?.id || `site_${crypto.randomUUID()}`;
+  const at = now();
   const compiled = await compileDocument(site);
   const rawHtml = String(compiled.files.find((file) => file.path === '/index.html')?.body || '');
   const css = String(compiled.files.find((file) => file.path === '/style.css')?.body || '');
   const preview = { html: rawHtml.replace('</head>', `<style>${css}</style></head>`), css, hash: compiled.hash };
   const version = existing ? existing.version + 1 : 1;
   const state = existing?.state === 'live' ? 'live' : 'draft';
-  const result = { siteId, version, state, site, preview, composed: Boolean(prose.wrote), blueprint, ...(note ? { note } : {}) };
+  const result = { siteId, version, state, site, preview, composed: Boolean(prose.wrote), blueprint, gate: built.gate, ...(note ? { note } : {}) };
+
   // Placeholder photography lands as a follow-up revision so creation stays fast.
   const withPlaceholders = async (): Promise<Record<string, unknown>> => {
     if (!content || !pexelsApiKey || input.photos === false) return result;
@@ -328,6 +380,7 @@ export async function executeSiteGenerate(client: Client, context: AccessContext
       return result;
     }
   };
+
   if (existing) {
     const saved = await client.batch([
       { sql: 'UPDATE records SET title=?,data=?,version=?,updated=? WHERE id=? AND version=?', args: [title, JSON.stringify(site), version, at, siteId, existing.version] },
@@ -344,6 +397,129 @@ export async function executeSiteGenerate(client: Client, context: AccessContext
   ], 'write');
   if (created[0].rowsAffected !== 1 || created[1].rowsAffected !== 1) throw conflict('A site was created concurrently. Refresh and edit that site.');
   return withPlaceholders();
+}
+
+export async function executeSiteTasteAdd(
+  client: Client,
+  context: AccessContext,
+  input: Record<string, unknown>,
+  key: string,
+  inputHash: string,
+  typesafe?: string,
+  control?: D1Database,
+): Promise<Record<string, unknown>> {
+  const bullet = text(input.bullet, 200);
+  if (!bullet) throw badRequest('Provide a taste bullet.');
+  const current = await getSiteRecord(client, text(input.siteId, 160) || undefined);
+  if (!current) throw notFound('Site was not found.');
+  const doc = readDocument(current.data).doc;
+  const currentTaste = ((doc.taste?.bullets || doc.taste?.accepted || []) as string[]);
+  const nextTaste = [...currentTaste.filter((b: string) => b !== bullet), bullet];
+  return executeSiteGenerate(client, context, { siteId: current.id, title: doc.pages[0]?.title, taste: nextTaste }, key, inputHash, typesafe, undefined, control);
+}
+
+export async function executeSiteTasteRemove(
+  client: Client,
+  context: AccessContext,
+  input: Record<string, unknown>,
+  key: string,
+  inputHash: string,
+  typesafe?: string,
+  control?: D1Database,
+): Promise<Record<string, unknown>> {
+  const bullet = text(input.bullet, 200);
+  if (!bullet) throw badRequest('Provide a taste bullet to remove.');
+  const current = await getSiteRecord(client, text(input.siteId, 160) || undefined);
+  if (!current) throw notFound('Site was not found.');
+  const doc = readDocument(current.data).doc;
+  const currentTaste = ((doc.taste?.bullets || doc.taste?.accepted || []) as string[]);
+  const nextTaste = currentTaste.filter((b: string) => b !== bullet);
+  return executeSiteGenerate(client, context, { siteId: current.id, title: doc.pages[0]?.title, taste: nextTaste }, key, inputHash, typesafe, undefined, control);
+}
+
+export async function executeSiteNoticeSet(
+  client: Client,
+  context: AccessContext,
+  input: Record<string, unknown>,
+  key: string,
+  inputHash: string,
+): Promise<Record<string, unknown>> {
+  const current = await getSiteRecord(client, text(input.siteId, 160) || undefined);
+  if (!current) throw notFound('Site was not found.');
+  const notice = typeof input.notice === 'string' ? text(input.notice, 300) : '';
+  const doc = readDocument(current.data).doc;
+  const home = doc.pages.find((p) => p.id === 'home' || p.path === '/');
+  if (home) {
+    home.sections = home.sections.filter((s) => s.purpose !== 'notice');
+    if (notice) {
+      home.sections.unshift({
+        id: 'notice',
+        purpose: 'notice',
+        layout: { kind: 'stack' },
+        style: { base: { pad: 'sm', background: 'token:color.surface' } },
+        nodes: [{ id: 'notice-text', kind: 'text', props: { text: notice } }],
+      });
+    }
+  }
+  doc.revision += 1;
+  validateDocument(doc);
+  const version = current.version + 1;
+  const at = now();
+  const compiled = await compileDocument(doc);
+  const rawHtml = String(compiled.files.find((file) => file.path === '/index.html')?.body || '');
+  const css = String(compiled.files.find((file) => file.path === '/style.css')?.body || '');
+  const preview = { html: rawHtml.replace('</head>', `<style>${css}</style></head>`), css, hash: compiled.hash };
+  const result = { siteId: current.id, version, state: current.state, site: doc, preview, notice };
+  const saved = await client.batch([
+    { sql: 'UPDATE records SET data=?,version=?,updated=? WHERE id=? AND version=?', args: [JSON.stringify(doc), version, at, current.id, current.version] },
+    { sql: `INSERT INTO events(id,kind,record_id,action_id,state,actor_id,input_hash,idempotency_key,data,created_at,updated_at)
+      SELECT ?, 'action', ?, 'site.notice.set', 'accepted', ?, ?, ?, ?, ?, ? WHERE changes()=1`, args: [`evt_${crypto.randomUUID()}`, current.id, context.identity.id, inputHash, key, JSON.stringify({ result }), at, at] },
+  ], 'write');
+  if (saved[0].rowsAffected !== 1 || saved[1].rowsAffected !== 1) throw conflict('Site was modified concurrently. Refresh and try again.');
+  return result;
+}
+
+export async function executeSiteSectionsSet(
+  client: Client,
+  context: AccessContext,
+  input: Record<string, unknown>,
+  key: string,
+  inputHash: string,
+): Promise<Record<string, unknown>> {
+  const current = await getSiteRecord(client, text(input.siteId, 160) || undefined);
+  if (!current) throw notFound('Site was not found.');
+  const order = strings(input.order, 10);
+  const hidden = new Set(strings(input.hidden, 10));
+  const doc = readDocument(current.data).doc;
+  const home = doc.pages.find((p) => p.id === 'home' || p.path === '/');
+  if (home && order.length) {
+    const existingMap = new Map(home.sections.map((s) => [s.id, s]));
+    const nextSections: Section[] = [];
+    for (const sid of order) {
+      const sec = existingMap.get(sid);
+      if (sec && !hidden.has(sid)) nextSections.push(sec);
+    }
+    for (const s of home.sections) {
+      if (!order.includes(s.id) && !hidden.has(s.id) && !nextSections.includes(s)) nextSections.push(s);
+    }
+    home.sections = nextSections;
+  }
+  doc.revision += 1;
+  validateDocument(doc);
+  const version = current.version + 1;
+  const at = now();
+  const compiled = await compileDocument(doc);
+  const rawHtml = String(compiled.files.find((file) => file.path === '/index.html')?.body || '');
+  const css = String(compiled.files.find((file) => file.path === '/style.css')?.body || '');
+  const preview = { html: rawHtml.replace('</head>', `<style>${css}</style></head>`), css, hash: compiled.hash };
+  const result = { siteId: current.id, version, state: current.state, site: doc, preview };
+  const saved = await client.batch([
+    { sql: 'UPDATE records SET data=?,version=?,updated=? WHERE id=? AND version=?', args: [JSON.stringify(doc), version, at, current.id, current.version] },
+    { sql: `INSERT INTO events(id,kind,record_id,action_id,state,actor_id,input_hash,idempotency_key,data,created_at,updated_at)
+      SELECT ?, 'action', ?, 'site.sections.set', 'accepted', ?, ?, ?, ?, ?, ? WHERE changes()=1`, args: [`evt_${crypto.randomUUID()}`, current.id, context.identity.id, inputHash, key, JSON.stringify({ result }), at, at] },
+  ], 'write');
+  if (saved[0].rowsAffected !== 1 || saved[1].rowsAffected !== 1) throw conflict('Site was modified concurrently. Refresh and try again.');
+  return result;
 }
 
 export async function executeSiteCompile(client: Client, bucket: R2Bucket | undefined, context: AccessContext, input: Record<string, unknown>, key: string, inputHash: string, control?: D1Database, domain?: string, content?: R2Bucket): Promise<Record<string, unknown>> {
@@ -489,7 +665,7 @@ export async function executeSiteUnpublish(client: Client, context: AccessContex
  * Prices and stock come from public bindings, copy details from the owner's own
  * request, and assets from the approved store.
  */
-async function publicFacts(client: Client, input: Record<string, unknown>, previous: SiteDocument | null): Promise<{ facts: Facts; judged: Record<string, unknown>; assets: { id: string; description: string }[]; assetsRegistered: Asset[] }> {
+async function publicFacts(client: Client, input: Record<string, unknown>, previous: SiteDocument | null, context?: AccessContext): Promise<{ facts: Facts; judged: Record<string, unknown>; assets: { id: string; description: string }[]; assetsRegistered: Asset[] }> {
   const records = strings(input.records, 40).filter((id) => /^[a-zA-Z0-9._:-]{1,160}$/.test(id));
   const channel = text(input.channel, 40) || 'default';
   // No hand-picked records: fall back to the owner's published catalog so a store
@@ -508,16 +684,20 @@ async function publicFacts(client: Client, input: Record<string, unknown>, previ
     const faq = object(entry);
     return { q: text(faq.q || faq.question, 200), a: text(faq.a || faq.answer, 400) };
   }).filter((entry) => entry.q && entry.a);
+  const contactEmail = text(input.email, 120) || (context?.identity?.email ? text(context.identity.email, 120) : '');
   const facts: Facts = {
-    ...(items.length ? { items, channel } : {}),
-    ...(services.length ? { services } : {}),
+    ...(items.length ? { items: items as Facts['items'], channel } : {}),
+    ...(services.length ? { services: services as Facts['services'] } : {}),
     ...(features.length ? { features } : {}),
     ...(proof.length ? { proof } : {}),
     ...(questions.length ? { questions } : {}),
     ...(hours.length ? { hours } : {}),
     ...(text(input.address, 200) ? { address: text(input.address, 200) } : {}),
     ...(text(input.phone, 40) ? { phone: text(input.phone, 40) } : {}),
-    ...(text(input.email, 120) ? { email: text(input.email, 120) } : {}),
+    ...(contactEmail ? { email: contactEmail } : {}),
+    ...(text(input.notice, 300) ? { notice: text(input.notice, 300) } : {}),
+    ...(Array.isArray(input.proofs) ? { proofs: strings(input.proofs, 6) } : {}),
+    ...(text(input.season, 80) ? { season: text(input.season, 80) } : {}),
   };
   const judged = {
     catalog: items.slice(0, 20).map((item) => ({ title: item.title, price: item.price, currency: item.currency })),

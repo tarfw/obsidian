@@ -60,15 +60,8 @@ export function normalizeDocument(doc: SiteDocument): SiteDocument {
       meta: { description: `${title} — ${brand}` },
       sections: [
         {
-          id: `${id}-bar`,
-          purpose: 'chrome',
-          layout: { kind: 'stack' },
-          style: { base: { pad: 'token:space.unit' } },
-          nodes: [{ id: `${id}-nav`, kind: 'navigation', props: { brand, links: navLinks } }],
-        },
-        {
-          id: `${id}-intro`,
-          purpose: 'introduction',
+          id: `${id}-hero`,
+          purpose: 'header',
           layout: { kind: 'stack' },
           style: { base: { pad: 'token:space.section' } },
           nodes: [
@@ -77,19 +70,67 @@ export function normalizeDocument(doc: SiteDocument): SiteDocument {
           ],
         },
         {
-          id: `${id}-foot`,
-          purpose: 'chrome',
+          id: `${id}-contact`,
+          purpose: 'contact',
           layout: { kind: 'stack' },
           style: { base: { pad: 'token:space.unit' } },
-          nodes: [{ id: `${id}-end`, kind: 'footer', props: { brand, text: `© ${new Date().getFullYear()} ${brand}`, links: [] } }],
+          nodes: [{ id: `${id}-end`, kind: 'button', props: { label: 'Chat on WhatsApp', href: 'https://wa.me/', variant: 'filled' } }],
         },
       ],
     };
   });
 
+  const allPages = [...doc.pages, ...synthesizedPages];
+
+  // Purge legacy sections (chrome, categories, recommendations, press, etc.)
+  const cleanPages: Page[] = allPages.map((page) => {
+    const cleanSections = page.sections.flatMap((s) => {
+      if (s.purpose === 'chrome' || s.purpose === 'categories' || s.purpose === 'recommendations' || s.purpose === 'press') {
+        return [];
+      }
+      if (s.purpose === 'introduction') {
+        return [{ ...s, id: 'hero', purpose: 'header' }];
+      }
+      if (s.purpose === 'collection') {
+        return [{ ...s, purpose: 'catalog' }];
+      }
+      if (s.purpose === 'promo') {
+        return [{ ...s, purpose: 'spotlight' }];
+      }
+      if (s.purpose === 'action') {
+        return [{ ...s, purpose: 'contact' }];
+      }
+      return [s];
+    });
+
+    // Ensure header and contact exist
+    const hasHeader = cleanSections.some((s) => s.purpose === 'header' || s.id === 'hero');
+    if (!hasHeader) {
+      cleanSections.unshift({
+        id: 'hero',
+        purpose: 'header',
+        layout: { kind: 'stack' },
+        style: { base: { pad: 'md' } },
+        nodes: [{ id: 'hero-title', kind: 'heading', props: { text: brand, level: 1 } }],
+      });
+    }
+    const hasContact = cleanSections.some((s) => s.purpose === 'contact');
+    if (!hasContact) {
+      cleanSections.push({
+        id: 'contact',
+        purpose: 'contact',
+        layout: { kind: 'stack' },
+        style: { base: { pad: 'md' } },
+        nodes: [{ id: 'contact-btn', kind: 'button', props: { label: 'Chat on WhatsApp', href: 'https://wa.me/', variant: 'filled' } }],
+      });
+    }
+
+    return { ...page, sections: cleanSections };
+  });
+
   return {
     ...doc,
-    pages: [...doc.pages, ...synthesizedPages],
+    pages: cleanPages,
   };
 }
 

@@ -268,6 +268,43 @@ export const actionCatalog = [
     output: ['siteId', 'version', 'revision', 'diff'], roles: ['owner', 'admin'], effects: ['record_update'],
   },
   {
+    id: 'site.taste.add', version: 1, type: 'app', title: 'Add taste bullet',
+    description: 'Add a merchant taste bullet to steer the site generation.', interfaceKey: 'form',
+    fields: [
+      { key: 'siteId', label: 'Site', kind: 'record', required: true },
+      { key: 'bullet', label: 'Taste bullet', kind: 'text', required: true },
+    ],
+    output: ['siteId', 'version', 'site', 'blueprint'], roles: ['owner', 'admin'], effects: ['record_update'],
+  },
+  {
+    id: 'site.taste.remove', version: 1, type: 'app', title: 'Remove taste bullet',
+    description: 'Remove a merchant taste bullet from site steering.', interfaceKey: 'form',
+    fields: [
+      { key: 'siteId', label: 'Site', kind: 'record', required: true },
+      { key: 'bullet', label: 'Taste bullet', kind: 'text', required: true },
+    ],
+    output: ['siteId', 'version', 'site', 'blueprint'], roles: ['owner', 'admin'], effects: ['record_update'],
+  },
+  {
+    id: 'site.notice.set', version: 1, type: 'app', title: 'Set notice banner',
+    description: 'Update the urgent announcement banner on the storefront with zero AI call.', interfaceKey: 'form',
+    fields: [
+      { key: 'siteId', label: 'Site', kind: 'record', required: true },
+      { key: 'notice', label: 'Notice text', kind: 'text', required: false },
+    ],
+    output: ['siteId', 'version', 'site', 'notice'], roles: ['owner', 'admin'], effects: ['record_update'],
+  },
+  {
+    id: 'site.sections.set', version: 1, type: 'app', title: 'Configure storefront sections',
+    description: 'Reorder or toggle visibility of storefront sections.', interfaceKey: 'form',
+    fields: [
+      { key: 'siteId', label: 'Site', kind: 'record', required: true },
+      { key: 'order', label: 'Section order', kind: 'text', required: false },
+      { key: 'hidden', label: 'Hidden sections', kind: 'text', required: false },
+    ],
+    output: ['siteId', 'version', 'site'], roles: ['owner', 'admin'], effects: ['record_update'],
+  },
+  {
     id: 'site.checks', version: 1, type: 'app', title: 'Read site checks',
     description: 'Read the deterministic checks stored with a compiled candidate.', interfaceKey: 'confirmation',
     fields: [

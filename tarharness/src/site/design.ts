@@ -1,12 +1,12 @@
 /**
- * Site design system: typed tokens, design.md import/export and contrast checks.
+ * Site design system: 3 design tokens (typography, tone, density),
+ * WCAG contrast audit, token resolution, and design reference import/export.
  *
- * Markdown is the readable view of the typed design, never a second source of
- * truth. Import records the original reference, its hash and every decision that
- * resolved a conflict, ambiguity or unsupported value.
+ * Jev picks tokens and sections; content always comes from Facts.
  */
 
 import { DENSITY_VALUES, EASING_VALUES, LIMITS, type Style } from './document.ts';
+import type { TypographyToken, ToneToken, DensityToken } from './blueprint.ts';
 
 export interface DesignDirection {
   audience: string;
@@ -36,7 +36,6 @@ export interface DesignType {
   scale: number;
   leading: number;
   weight: number;
-  /** Global letter-spacing in em (0 default); the lookbook uses 0.025. */
   tracking?: number;
 }
 
@@ -99,84 +98,136 @@ export interface Design {
   source?: DesignSource;
 }
 
-export const SANS = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-export const SERIF = 'Georgia, "Times New Roman", serif';
+export const SANS = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Mukta Malar", sans-serif';
+export const SERIF = 'Georgia, "Times New Roman", "Mukta Malar", serif';
+export const GROTESK = 'system-ui, -apple-system, "Helvetica Neue", "Mukta Malar", sans-serif';
 
-import { DEFAULT_DESIGN, THEMES, THEME_IDS } from './themes/index.ts';
-export { DEFAULT_DESIGN, THEMES, THEME_IDS };
-
-/** Home-page section orders the builder and the `flow` judgment share. */
-export const FLOWS = ['classic_lookbook', 'commerce_first', 'editorial_first'] as const;
-export type Flow = typeof FLOWS[number];
-
-/** A commerce gate: which rail, binding and journey a category carries. */
-export type Gate = 'product' | 'service';
-
-export interface CategorySpec {
-  readonly id: string;
-  readonly sector: string;
-  /** Plain words the `category` judgment uses to match a brief. */
-  readonly criteria: string;
-  readonly flow: Flow;
-  readonly theme: string;
-  readonly gates: readonly Gate[];
-}
-
-/**
- * Registered category archetypes. A category is catalog data: it
- * sets the default flow, the floor theme and the commerce-gate priors, and the
- * `category` judgment may only choose among these ids.
- */
-export const CATEGORIES: Record<string, CategorySpec> = {
-  retail: { id: 'retail', sector: 'Goods', criteria: 'Physical goods, catalog, shipping', flow: 'classic_lookbook', theme: 'editorial-lookbook', gates: ['product'] },
-  estate: { id: 'estate', sector: 'Goods', criteria: 'Property listings, viewings', flow: 'editorial_first', theme: 'editorial-light', gates: ['product', 'service'] },
-  food: { id: 'food', sector: 'Hospitality', criteria: 'Food and drink, menu, hours', flow: 'commerce_first', theme: 'editorial-chalk', gates: ['product', 'service'] },
-  stay: { id: 'stay', sector: 'Hospitality', criteria: 'Room bookings, availability', flow: 'editorial_first', theme: 'editorial-light', gates: ['product', 'service'] },
-  event: { id: 'event', sector: 'Hospitality', criteria: 'Gatherings, tickets, schedule', flow: 'commerce_first', theme: 'streetwear-dark', gates: ['product'] },
-  care: { id: 'care', sector: 'Service', criteria: 'Personal or wellness appointments', flow: 'classic_lookbook', theme: 'minimal-clean', gates: ['service'] },
-  health: { id: 'health', sector: 'Service', criteria: 'Medical care, appointments, trust', flow: 'classic_lookbook', theme: 'minimal-clean', gates: ['service'] },
-  trade: { id: 'trade', sector: 'Service', criteria: 'Field work, quotes, jobs', flow: 'editorial_first', theme: 'minimal-clean', gates: ['service'] },
-  firm: { id: 'firm', sector: 'Professional', criteria: 'Scoped professional engagements', flow: 'editorial_first', theme: 'editorial-light', gates: ['service'] },
-  company: { id: 'company', sector: 'Professional', criteria: 'Business presence without a direct sale', flow: 'editorial_first', theme: 'editorial-light', gates: [] },
-  software: { id: 'software', sector: 'Professional', criteria: 'Software apps, features, demo', flow: 'commerce_first', theme: 'minimal-clean', gates: ['product', 'service'] },
-  expert: { id: 'expert', sector: 'Knowledge', criteria: 'Talks, reports, advisory', flow: 'editorial_first', theme: 'editorial-light', gates: ['product', 'service'] },
-  learning: { id: 'learning', sector: 'Knowledge', criteria: 'Courses, curriculum, coaching', flow: 'commerce_first', theme: 'minimal-clean', gates: ['product', 'service'] },
-  studio: { id: 'studio', sector: 'Knowledge', criteria: 'Creative portfolio, visual work', flow: 'editorial_first', theme: 'streetwear-dark', gates: [] },
-  media: { id: 'media', sector: 'Content', criteria: 'Articles, episodes, newsletter', flow: 'editorial_first', theme: 'editorial-light', gates: [] },
-  personal: { id: 'personal', sector: 'Content', criteria: 'Individual resume, creator identity', flow: 'editorial_first', theme: 'minimal-clean', gates: [] },
-  cause: { id: 'cause', sector: 'Mission', criteria: 'Non-profit, donations, volunteers', flow: 'editorial_first', theme: 'editorial-chalk', gates: [] },
-  civic: { id: 'civic', sector: 'Public', criteria: 'Official public body, notices', flow: 'classic_lookbook', theme: 'minimal-clean', gates: ['service'] },
-  club: { id: 'club', sector: 'Public', criteria: 'Member activities, joining', flow: 'classic_lookbook', theme: 'minimal-clean', gates: ['service'] },
-  none: { id: 'none', sector: 'Fallback', criteria: 'No clear archetype; gates come from supplied facts', flow: 'commerce_first', theme: 'minimal-clean', gates: [] },
+export const FONT_STACKS: Record<TypographyToken, { display: string; heading: string; body: string }> = {
+  sans: { display: SANS, heading: SANS, body: SANS },
+  serif: { display: SERIF, heading: SERIF, body: SANS },
+  grotesk: { display: GROTESK, heading: GROTESK, body: GROTESK },
 };
 
-export const CATEGORY_IDS: readonly string[] = Object.keys(CATEGORIES);
+export const TONE_COLORS: Record<ToneToken, DesignColor> = {
+  canvas: {
+    canvas: '#ffffff',
+    ink: '#000000',
+    accent: '#18181b',
+    accentink: '#ffffff',
+    surface: '#f4f4f5',
+    border: '#e4e4e7',
+    muted: '#71717a',
+    success: '#16a34a',
+    danger: '#dc2626',
+  },
+  surface: {
+    canvas: '#edebe4',
+    ink: '#1c1917',
+    accent: '#292524',
+    accentink: '#ffffff',
+    surface: '#e5e2da',
+    border: '#d8d4c9',
+    muted: '#78716c',
+    success: '#16a34a',
+    danger: '#dc2626',
+  },
+  ink: {
+    canvas: '#111111',
+    ink: '#f8fafc',
+    accent: '#ffffff',
+    accentink: '#111111',
+    surface: '#1c1c1f',
+    border: '#27272a',
+    muted: '#94a3b8',
+    success: '#22c55e',
+    danger: '#ef4444',
+  },
+};
 
-/** Registered section purposes a creation fan-out may include, by any domain. */
+export function densitySpace(density: DensityToken = 2): DesignSpace {
+  if (density === 1) return { unit: 6, section: 64, container: 1200 };
+  if (density === 3) return { unit: 12, section: 128, container: 1200 };
+  return { unit: 8, section: 96, container: 1200 };
+}
+
+export function createDesign(
+  typography: TypographyToken = 'sans',
+  tone: ToneToken = 'canvas',
+  density: DensityToken = 2,
+  brief: { audience?: string; goal?: string; tone?: string } = {},
+): Design {
+  const fonts = FONT_STACKS[typography] || FONT_STACKS.sans;
+  const colors = TONE_COLORS[tone] || TONE_COLORS.canvas;
+  const space = densitySpace(density);
+  const densityWord = density === 1 ? 'compact' : density === 3 ? 'airy' : 'balanced';
+
+  return {
+    theme: tone,
+    direction: {
+      audience: brief.audience || 'Local customers and visitors',
+      purpose: brief.goal || 'Storefront',
+      voice: brief.tone || 'Warm, authentic and direct',
+      density: densityWord,
+      idea: 'Zero-touch autonomous storefront',
+    },
+    color: { ...colors },
+    type: {
+      display: fonts.display,
+      heading: fonts.heading,
+      body: fonts.body,
+      base: 16,
+      scale: 1.25,
+      leading: 1.5,
+      weight: 600,
+      tracking: typography === 'grotesk' ? 0.01 : 0,
+    },
+    space,
+    shape: { sm: 4, md: 8, lg: 16, pill: 9999 },
+    elevation: { low: 2, high: 8 },
+    layout: { columns: 3, gap: 16, align: 'start' },
+    motion: { duration: 200, easing: 'easeout', reduce: true },
+    guidance: ['Under 150 KB static HTML', 'No heavy animation', 'Tamil font stack supported'],
+  };
+}
+
+export const DEFAULT_DESIGN = createDesign('sans', 'canvas', 2);
+
+export const THEME_IDS = ['canvas', 'surface', 'ink'] as const;
+export const THEMES: Record<string, Design> = {
+  canvas: createDesign('sans', 'canvas', 2),
+  surface: createDesign('sans', 'surface', 2),
+  ink: createDesign('sans', 'ink', 2),
+  'minimal-clean': createDesign('sans', 'canvas', 2),
+  'editorial-light': createDesign('serif', 'canvas', 2),
+  'editorial-lookbook': createDesign('serif', 'canvas', 3),
+  'editorial-chalk': createDesign('serif', 'surface', 2),
+  'streetwear-dark': createDesign('grotesk', 'ink', 1),
+};
+
+export const CATEGORY_IDS = ['goods', 'food', 'services', 'wholesale'] as const;
+export const CATEGORIES: Record<string, { id: string; sector: string; criteria: string }> = {
+  goods: { id: 'goods', sector: 'Goods', criteria: 'Sells physical goods, retail catalog' },
+  food: { id: 'food', sector: 'Food', criteria: 'Sells prepared food, bakery, sweets, menu' },
+  services: { id: 'services', sector: 'Services', criteria: 'Sells time or skill, tailor, salon, clinic' },
+  wholesale: { id: 'wholesale', sector: 'Wholesale', criteria: 'Sells in bulk, B2B trade, wholesale enquiry' },
+};
+
 export const PURPOSE_IDEAS: Record<string, string> = {
-  introduction: 'open the page with the offer in one line',
-  collection: 'show bound products with live prices and availability',
-  services: 'show bound bookable services with live availability',
-  recommendations: 'surface more bound items the visitor may like',
-  split: 'present two approved media assets side by side as an editorial break',
-  categories: 'link the declared pages as a text-tab filter',
-  promo: 'a full-width band carrying one clear call to action',
-  press: 'monochrome publication press logos affirming brand trust',
-  community: 'community photo mosaic and social hashtag grid',
-  features: 'state what makes the offer practical',
-  proof: 'carry evidence such as results or reviews',
-  story: 'explain the business in its own words',
-  questions: 'answer common questions',
-  hours: 'state when the business is open',
-  contact: 'show how to reach the business',
-  action: 'invite the visitor to start one clear next step',
+  header: 'photo and shop intro',
+  notice: '1-tap shop announcement or delivery notice',
+  spotlight: 'festival or promotional offer banner',
+  catalog: 'products catalog with live prices and WhatsApp order',
+  menu: 'prepared food menu with portions and pickup',
+  services: 'services list with enquiry and booking CTA',
+  story: 'craft, heritage or owner story',
+  trust: 'certificates, verified quotes, COD and shop address',
+  contact: 'WhatsApp order button, phone call and address',
 };
 
 export const COLOR_KEYS: readonly (keyof DesignColor)[] = [
   'canvas', 'ink', 'accent', 'accentink', 'surface', 'border', 'muted', 'success', 'danger',
 ];
 
-/** The four colour pairs an owner can name for a section, shared by builder, router and variants. */
 export const TONE_STYLE: Record<string, Style> = {
   canvas: { background: 'token:color.canvas', color: 'token:color.ink' },
   surface: { background: 'token:color.surface', color: 'token:color.ink' },
@@ -202,7 +253,6 @@ export const TOKENS: readonly TokenEntry[] = [
   { group: 'motion', key: 'duration', kind: 'number' }, { group: 'motion', key: 'easing', kind: 'enum' },
 ];
 
-/** Resolve `token:group.key` against the design. Returns undefined for unknown tokens. */
 export function resolveToken(design: Design, ref: string): string | number | undefined {
   if (!ref.startsWith('token:')) return undefined;
   const [group, key] = ref.slice('token:'.length).split('.');
@@ -232,7 +282,6 @@ export function luminance(value: string): number | null {
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
-/** WCAG contrast ratio, or null when either colour is not a plain hex value. */
 export function contrast(a: string, b: string): number | null {
   const la = luminance(a);
   const lb = luminance(b);
@@ -283,7 +332,6 @@ const AREA_ALIASES: Record<string, string> = {
   layout: 'layout', grid: 'layout',
   motion: 'motion', transition: 'motion', transitions: 'motion', animation: 'motion',
   guidance: 'guidance', rules: 'guidance', notes: 'guidance',
-  component: 'guidance', components: 'guidance', imagery: 'guidance', image: 'guidance', images: 'guidance',
 };
 
 const COLOR_WORDS: Record<string, keyof DesignColor> = {
@@ -299,7 +347,7 @@ const COLOR_WORDS: Record<string, keyof DesignColor> = {
 };
 
 const FONT_ALIASES: Record<string, string> = {
-  serif: SERIF, sans: SANS, sansserif: SANS, system: SANS, monospace: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+  serif: SERIF, sans: SANS, sansserif: SANS, system: SANS, grotesk: GROTESK,
 };
 
 function clone(design: Design): Design {
@@ -312,10 +360,6 @@ export interface DesignParse {
   notes: string[];
 }
 
-/**
- * Parse the readable design.md view into a proposed typed design.
- * Never grants permission or instructions: only known areas and keys are read.
- */
 export function parseDesign(markdown: string, previous: Design = DEFAULT_DESIGN): DesignParse {
   const design = clone(previous);
   const decisions: DesignDecision[] = [];
@@ -353,8 +397,8 @@ export function parseDesign(markdown: string, previous: Design = DEFAULT_DESIGN)
     const line = raw.trim();
     const heading = /^(#{1,6})\s+(.*)$/.exec(line);
     if (heading) {
-      const text = heading[2].toLowerCase().replace(/[^a-z ]/g, '').trim();
-      const word = text.split(/\s+/).find((part) => AREA_ALIASES[part]) || '';
+      const textVal = heading[2].toLowerCase().replace(/[^a-z ]/g, '').trim();
+      const word = textVal.split(/\s+/).find((part) => AREA_ALIASES[part]) || '';
       area = AREA_ALIASES[word] || '';
       continue;
     }
@@ -384,8 +428,6 @@ export function parseDesign(markdown: string, previous: Design = DEFAULT_DESIGN)
       if (scale && /scale|ratio/i.test(key)) { assign('scale', scale); continue; }
       const leading = /^(\d\.\d+)$/.exec(value)?.[1];
       if (leading && /leading|line/i.test(key)) { assign('leading', leading); continue; }
-      const tracking = /^(0\.\d+)em$/i.exec(value)?.[1] ?? (/tracking/i.test(key) ? /^0\.\d+$/.exec(value)?.[1] : undefined);
-      if (tracking && /tracking/i.test(key)) { assign('tracking', tracking); continue; }
       const font = FONT_ALIASES[value.toLowerCase().replace(/[^a-z]/g, '')];
       if (font && /display|heading|body|font/i.test(key)) { assign(key.includes('body') ? 'body' : 'heading', font); continue; }
       if (/figma|google|licensed|font/i.test(body)) {
@@ -399,42 +441,22 @@ export function parseDesign(markdown: string, previous: Design = DEFAULT_DESIGN)
       if (/unit|increment|step|base/i.test(key || value)) assign('unit', String(numbers[0]));
       else if (/section|block|gutter|vertical/i.test(key)) assign('section', String(numbers[0]));
       else if (/container|max|width/i.test(key)) assign('container', String(numbers[0]));
-      if (numbers.length > 1 && /unit|increment/i.test(key || value) && numbers.some((value) => value % numbers[0] !== 0)) {
-        decide({ area: 'space', question: 'Keep spacing consistent', choice: `Use ${numbers[0]}px increments`, alternatives: numbers.map(String), note: 'Values outside the increment are rounded to the nearest step.' });
-      }
       continue;
     }
     if (area === 'shape') {
-      const numbers = [...value.matchAll(/(\d+)\s*(px)?/gi)].map((match) => Number.parseInt(match[1], 10));
-      if (!numbers.length) continue;
-      const roles: (keyof DesignShape)[] = ['sm', 'md', 'lg', 'pill'];
-      if (key && (roles as readonly string[]).includes(key)) { assign(key, String(numbers[0])); continue; }
-      if (numbers.length === 3) notes.push('Three radius values were read as sm, md and lg; the pill radius keeps its full value.');
-      if (numbers.length === 4) decide({ area: 'shape', question: 'Normalise the radius scale', choice: 'sm, md, lg and pill roles', alternatives: numbers.map(String) });
-      numbers.slice(0, roles.length).forEach((number, index) => assign(roles[index], String(number)));
-      continue;
-    }
-    if (area === 'surface' || area === 'elevation') {
-      const numbers = [...value.matchAll(/(\d+)\s*(px)?/gi)].map((match) => Number.parseInt(match[1], 10));
-      if (!numbers.length) continue;
-      if (/high|strong|lg|large/i.test(key || value)) assign('high', String(numbers[0]));
-      else assign('low', String(numbers[0]));
-      continue;
-    }
-    if (area === 'layout') {
       const numbers = [...value.matchAll(/(\d+(?:\.\d+)?)\s*(px)?/gi)].map((match) => Number.parseFloat(match[1]));
-      if (!numbers.length) continue;
-      if (/column/i.test(key || value)) assign('columns', String(numbers[0]));
-      else if (/gap|gutter/i.test(key)) assign('gap', String(numbers[0]));
-      else if (/container|width|max/i.test(key)) assign('container', String(numbers[0]));
+      if (numbers.length > 3) decide({ area: 'shape', question: 'Limit border radii', choice: 'Keep 3 standard radii', note: 'Too many radii make the surface noisy.' });
+      if (numbers[0] !== undefined) assign('sm', String(numbers[0]));
+      if (numbers[1] !== undefined) assign('md', String(numbers[1]));
+      if (numbers[2] !== undefined) assign('lg', String(numbers[2]));
+      if (numbers[3] !== undefined) assign('pill', String(numbers[3]));
       continue;
     }
     if (area === 'motion') {
-      const numbers = [...value.matchAll(/(\d+(?:\.\d+)?)\s*(ms|s)?/gi)].map((match) => Number.parseFloat(match[1]) * (match[2] === 's' ? 1000 : 1));
-      if (numbers.length && /duration|speed|time/i.test(key || value)) assign('duration', String(numbers[0]));
-      const easing = (EASING_VALUES as readonly string[]).find((value2) => value.toLowerCase().includes(value2)) || (value.toLowerCase().includes('ease-in-out') ? 'easeinout' : '');
-      if (easing) assign('easing', easing);
-      if (/reduce|prefers/i.test(value)) assign('reduce', 'true');
+      const ms = /(\d+)\s*ms/i.exec(value)?.[1];
+      if (ms) assign('duration', ms);
+      if (/ease|linear/i.test(value)) assign('easing', value.toLowerCase().replace(/[^a-z]/g, ''));
+      if (/reduce|respect/i.test(key || value)) assign('reduce', String(/true|yes|1/i.test(value)));
       continue;
     }
     if (area === 'guidance') {
@@ -446,7 +468,7 @@ export function parseDesign(markdown: string, previous: Design = DEFAULT_DESIGN)
       if (/audience|who/i.test(key)) assign('audience', value.slice(0, 200));
       else if (/purpose|goal/i.test(key)) assign('purpose', value.slice(0, 200));
       else if (/voice|tone/i.test(key)) assign('voice', value.slice(0, 200));
-      else if (/density/i.test(key)) assign('density', (DENSITY_VALUES as readonly string[]).find((option) => value.toLowerCase().includes(option)) || design.direction.density);
+      else if (/density/i.test(key)) assign('density', (['compact', 'balanced', 'airy'] as const).find((option) => value.toLowerCase().includes(option)) || design.direction.density);
       else if (/idea|concept|direction/i.test(key)) assign('idea', value.slice(0, 200));
     }
   }
@@ -455,7 +477,6 @@ export function parseDesign(markdown: string, previous: Design = DEFAULT_DESIGN)
   return { design, decisions, notes };
 }
 
-/** Export the typed design as its readable markdown view. */
 export function exportDesign(design: Design | undefined | null): string {
   if (!design) return '';
   const direction = design.direction || DEFAULT_DESIGN.direction;
@@ -463,10 +484,6 @@ export function exportDesign(design: Design | undefined | null): string {
   const type = design.type || DEFAULT_DESIGN.type;
   const space = design.space || DEFAULT_DESIGN.space;
   const shape = design.shape || DEFAULT_DESIGN.shape;
-  const elevation = design.elevation || DEFAULT_DESIGN.elevation;
-  const layout = design.layout || DEFAULT_DESIGN.layout;
-  const motion = design.motion || DEFAULT_DESIGN.motion;
-  const guidance = Array.isArray(design.guidance) ? design.guidance : [];
 
   const lines: string[] = [];
   lines.push('# Design');
@@ -476,7 +493,6 @@ export function exportDesign(design: Design | undefined | null): string {
   lines.push(`- purpose: ${direction.purpose || ''}`);
   lines.push(`- voice: ${direction.voice || ''}`);
   lines.push(`- density: ${direction.density || 'balanced'}`);
-  lines.push(`- idea: ${direction.idea || ''}`);
   lines.push('');
   lines.push('## Foundations');
   for (const key of COLOR_KEYS) lines.push(`- ${key}: ${color[key] || DEFAULT_DESIGN.color[key]}`);
@@ -486,10 +502,6 @@ export function exportDesign(design: Design | undefined | null): string {
   lines.push(`- heading: ${type.heading || DEFAULT_DESIGN.type.heading}`);
   lines.push(`- body: ${type.body || DEFAULT_DESIGN.type.body}`);
   lines.push(`- base: ${type.base || 16}px`);
-  lines.push(`- scale: ${type.scale || 1.25}`);
-  lines.push(`- leading: ${type.leading || 1.6}`);
-  lines.push(`- weight: ${type.weight || 600}`);
-  if (type.tracking) lines.push(`- tracking: ${type.tracking}em`);
   lines.push('');
   lines.push('## Spacing');
   lines.push(`- unit: ${space.unit || 8}px`);
@@ -501,32 +513,5 @@ export function exportDesign(design: Design | undefined | null): string {
   lines.push(`- md: ${shape.md ?? 8}px`);
   lines.push(`- lg: ${shape.lg ?? 16}px`);
   lines.push(`- pill: ${shape.pill ?? 9999}px`);
-  lines.push('');
-  lines.push('## Elevation');
-  lines.push(`- low: ${elevation.low ?? 2}px`);
-  lines.push(`- high: ${elevation.high ?? 8}px`);
-  lines.push('');
-  lines.push('## Layout');
-  lines.push(`- columns: ${layout.columns || 1}`);
-  lines.push(`- gap: ${layout.gap || 16}px`);
-  lines.push(`- align: ${layout.align || 'start'}`);
-  lines.push('');
-  lines.push('## Motion');
-  lines.push(`- duration: ${motion.duration || 200}ms`);
-  lines.push(`- easing: ${motion.easing || 'easeout'}`);
-  lines.push(`- reduce: ${motion.reduce ? 'true' : 'false'}`);
-  if (guidance.length) {
-    lines.push('');
-    lines.push('## Guidance');
-    for (const entry of guidance) lines.push(`- ${entry}`);
-  }
-  if (design.source) {
-    lines.push('');
-    lines.push('## Source');
-    lines.push(`- reference: ${design.source.reference || ''}`);
-    lines.push(`- hash: ${design.source.hash || ''}`);
-    lines.push(`- revision: ${design.source.revision || 1}`);
-    for (const decision of design.source.decisions || []) lines.push(`- decision: ${decision.area} - ${decision.question} - ${decision.choice}`);
-  }
   return `${lines.join('\n')}\n`;
 }

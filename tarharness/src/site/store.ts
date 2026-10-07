@@ -278,11 +278,28 @@ export async function executeSiteGenerate(
   const gathered = await publicFacts(client, input, previous, context);
   const cache = { control, workspace: context.workspace.id, version: 'create-2' };
   const inputTaste = strings(input.taste, 20);
-  const taste = inputTaste.length ? inputTaste : ((previous?.taste?.bullets || previous?.taste?.accepted || []) as string[]);
+  let taste = inputTaste.length ? inputTaste : ((previous?.taste?.bullets || previous?.taste?.accepted || []) as string[]);
+  let trade = text(input.trade);
+
+  // Day 0 Inheritance: If site has no taste or trade yet, inherit from workspace taste record
+  if (!taste.length || !trade) {
+    const tasteRow = await client.execute("SELECT data FROM records WHERE id='taste' AND type='taste' AND archived IS NULL LIMIT 1");
+    if (tasteRow.rows[0]) {
+      try {
+        const workspaceTasteData = object(JSON.parse(String(tasteRow.rows[0].data)));
+        if (!taste.length && Array.isArray(workspaceTasteData.taste) && workspaceTasteData.taste.length) {
+          taste = workspaceTasteData.taste.map(String).filter(Boolean).slice(0, 20);
+        }
+        if (!trade && typeof workspaceTasteData.trade === 'string' && workspaceTasteData.trade.trim()) {
+          trade = workspaceTasteData.trade.trim();
+        }
+      } catch { /* ignore damaged record */ }
+    }
+  }
   const avoided = [...tasteBias(previous?.taste)];
 
   const judged = await fanOut(typesafe, cache, {
-    trade: text(input.trade) || brief.audience,
+    trade: trade || brief.audience,
     taste,
     facts: {
       ...gathered.judged,

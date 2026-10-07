@@ -7,9 +7,11 @@ import {
   Alert,
   Animated,
   Easing,
+  Image,
   KeyboardAvoidingView,
   Linking,
   Modal,
+  PanResponder,
   Platform,
   ScrollView,
   StyleSheet,
@@ -19,6 +21,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { TarAvatar } from './TarAvatar';
 import { harness, SITES_URL } from '@/lib/harness';
 import type { Section, SiteDocument, SiteSnapshot } from '@/lib/site-schema';
 
@@ -39,14 +42,134 @@ export interface ToastInfo {
 const siteSnapshotCache = new Map<string, SiteSnapshot>();
 const siteStorageKey = (slug: string) => `tar_site_snap_${slug}`;
 
-const QUICK_TASTE_SUGGESTIONS = [
+const STYLE_SUGGESTIONS = [
   'Pure Silk & Handloom',
   'Festive Collection',
   'Minimalist & Elegant',
-  'WhatsApp Orders',
-  'Same-Day Delivery',
   'Traditional Craft',
+  'Modern Chic',
+  'Handmade & Organic',
 ];
+
+const VOICE_SUGGESTIONS = [
+  'Warm & Welcoming',
+  'Luxury & Exclusive',
+  'Authentic & Artisanal',
+  'Friendly & Caring',
+  'Bold & Energetic',
+  'Calm & Poetic',
+];
+
+const RULES_SUGGESTIONS = [
+  'No Flashy Popups',
+  'No Neon Colors',
+  'No Fake Urgency',
+  'No Clutter',
+  'No Low-Res Photos',
+  'No Hidden Fees',
+];
+
+function SlideItem({
+  text,
+  onDelete,
+  disabled,
+}: {
+  text: string;
+  onDelete: () => void;
+  disabled?: boolean;
+}) {
+  const x = useRef(new Animated.Value(0)).current;
+  const open = useRef(false);
+
+  const responder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, gesture) => {
+        return Math.abs(gesture.dx) > 8 && Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.5;
+      },
+      onPanResponderMove: (_, gesture) => {
+        const offset = open.current ? -72 : 0;
+        const target = offset + gesture.dx;
+        if (target <= 0 && target >= -80) {
+          x.setValue(target);
+        } else if (target > 0) {
+          x.setValue(0);
+        }
+      },
+      onPanResponderRelease: (_, gesture) => {
+        if (gesture.dx < -30 || (open.current && gesture.dx < 15)) {
+          Animated.spring(x, {
+            toValue: -72,
+            useNativeDriver: true,
+            tension: 80,
+            friction: 10,
+          }).start(() => {
+            open.current = true;
+          });
+        } else {
+          Animated.spring(x, {
+            toValue: 0,
+            useNativeDriver: true,
+            tension: 80,
+            friction: 10,
+          }).start(() => {
+            open.current = false;
+          });
+        }
+      },
+    }),
+  ).current;
+
+  const close = () => {
+    Animated.spring(x, {
+      toValue: 0,
+      useNativeDriver: true,
+      tension: 80,
+      friction: 10,
+    }).start(() => {
+      open.current = false;
+    });
+  };
+
+  return (
+    <View style={item.wrap}>
+      <View style={item.under}>
+        <TouchableOpacity
+          style={item.action}
+          onPress={() => {
+            close();
+            onDelete();
+          }}
+          disabled={disabled}
+          activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel={`Delete ${text}`}
+        >
+          <Ionicons name="trash-outline" size={16} color="#ffffff" />
+          <Text style={item.label}>Delete</Text>
+        </TouchableOpacity>
+      </View>
+
+      <Animated.View
+        style={[
+          item.front,
+          {
+            transform: [{ translateX: x }],
+          },
+        ]}
+        {...responder.panHandlers}
+      >
+        <TouchableOpacity
+          activeOpacity={1}
+          onPress={close}
+          style={item.content}
+        >
+          <Text style={item.dot}>•</Text>
+          <Text style={item.text}>{text}</Text>
+        </TouchableOpacity>
+      </Animated.View>
+    </View>
+  );
+}
 
 export default function SiteScreen({
   visible,
@@ -77,6 +200,10 @@ export default function SiteScreen({
 
   // Modals
   const [tasteDrawerOpen, setTasteDrawerOpen] = useState(false);
+  const [tab, setTab] = useState<'style' | 'voice' | 'rules'>('style');
+  const [segwidth, setSegwidth] = useState(240);
+  const tabAnim = useRef(new Animated.Value(0)).current;
+  const fadeAnim = useRef(new Animated.Value(1)).current;
   const [noticeModalOpen, setNoticeModalOpen] = useState(false);
 
   // Rotation animation for in-card publish button
@@ -138,6 +265,56 @@ export default function SiteScreen({
     const textNode = noticeSec.nodes?.find((n) => n.kind === 'text');
     return textNode?.props?.text ? String(textNode.props.text) : null;
   }, [sections]);
+
+  const sectionMeta = useCallback((purpose: string) => {
+    switch (purpose) {
+      case 'header':
+        return { title: 'Header & Hero', icon: 'storefront-outline' as const };
+      case 'notice':
+        return { title: 'Announcement Banner', icon: 'megaphone-outline' as const };
+      case 'spotlight':
+        return { title: 'Spotlight & Offers', icon: 'sparkles-outline' as const };
+      case 'catalog':
+        return { title: 'Product Catalog', icon: 'grid-outline' as const };
+      case 'menu':
+        return { title: 'Food & Menu', icon: 'restaurant-outline' as const };
+      case 'services':
+        return { title: 'Services & Booking', icon: 'calendar-outline' as const };
+      case 'story':
+        return { title: 'Heritage & Story', icon: 'book-outline' as const };
+      case 'trust':
+        return { title: 'Trust & Verified Badges', icon: 'shield-checkmark-outline' as const };
+      case 'contact':
+        return { title: 'WhatsApp & Contact', icon: 'logo-whatsapp' as const };
+      default:
+        return { title: purpose.charAt(0).toUpperCase() + purpose.slice(1), icon: 'layers-outline' as const };
+    }
+  }, []);
+
+  const displaySections = useMemo(() => {
+    if (!sections.length) {
+      const defaultKind = site?.blueprint?.kind || site?.category || 'goods';
+      const mainSection = defaultKind === 'services' ? 'services' : defaultKind === 'food' ? 'menu' : 'catalog';
+      return [
+        { id: 'header', purpose: 'header', layout: { kind: 'stack' }, nodes: [] },
+        { id: 'notice', purpose: 'notice', layout: { kind: 'stack' }, nodes: [] },
+        { id: mainSection, purpose: mainSection, layout: { kind: 'stack' }, nodes: [] },
+        { id: 'contact', purpose: 'contact', layout: { kind: 'stack' }, nodes: [] },
+      ] as Section[];
+    }
+    const hasNotice = sections.some((s) => s.purpose === 'notice');
+    if (hasNotice) {
+      return sections;
+    }
+    const result: Section[] = [];
+    for (const sec of sections) {
+      result.push(sec);
+      if (sec.purpose === 'header') {
+        result.push({ id: 'notice', purpose: 'notice', layout: { kind: 'stack' }, nodes: [] });
+      }
+    }
+    return result;
+  }, [sections, site?.blueprint?.kind, site?.category]);
 
   // Load site snapshot
   const loadSite = useCallback(async () => {
@@ -295,6 +472,91 @@ export default function SiteScreen({
       );
     }
   }, [addTasteBullet]);
+
+  const switchTab = useCallback((nextTab: 'style' | 'voice' | 'rules') => {
+    if (tab === nextTab) return;
+    const target = nextTab === 'style' ? 0 : nextTab === 'voice' ? 1 : 2;
+
+    Animated.spring(tabAnim, {
+      toValue: target,
+      useNativeDriver: true,
+      tension: 72,
+      friction: 10,
+    }).start();
+
+    Animated.sequence([
+      Animated.timing(fadeAnim, {
+        toValue: 0.15,
+        duration: 80,
+        easing: Easing.out(Easing.ease),
+        useNativeDriver: true,
+      }),
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 170,
+        easing: Easing.out(Easing.ease),
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    setTab(nextTab);
+  }, [tab, tabAnim, fadeAnim]);
+
+  const tabBullets = useMemo(() => {
+    if (tab === 'voice') {
+      return tasteBullets.filter(
+        (b) => b.toLowerCase().startsWith('voice:') || b.toLowerCase().startsWith('tone:'),
+      );
+    }
+    if (tab === 'rules') {
+      return tasteBullets.filter(
+        (b) =>
+          b.toLowerCase().startsWith('avoid:') ||
+          b.toLowerCase().startsWith('rule:') ||
+          b.toLowerCase().startsWith('no '),
+      );
+    }
+    return tasteBullets.filter(
+      (b) =>
+        !b.toLowerCase().startsWith('voice:') &&
+        !b.toLowerCase().startsWith('tone:') &&
+        !b.toLowerCase().startsWith('avoid:') &&
+        !b.toLowerCase().startsWith('rule:') &&
+        !b.toLowerCase().startsWith('no '),
+    );
+  }, [tasteBullets, tab]);
+
+  const tabSuggestions = useMemo(() => {
+    if (tab === 'voice') return VOICE_SUGGESTIONS;
+    if (tab === 'rules') return RULES_SUGGESTIONS;
+    return STYLE_SUGGESTIONS;
+  }, [tab]);
+
+  const placeholder = useMemo(() => {
+    if (tab === 'voice') return 'Add brand voice...';
+    if (tab === 'rules') return 'Add rule or avoid...';
+    return 'Add style...';
+  }, [tab]);
+
+  const handleAddTaste = useCallback(
+    (customText?: string) => {
+      const raw = (customText || newBullet).trim();
+      if (!raw) return;
+      let bullet = raw;
+      if (tab === 'voice' && !raw.toLowerCase().startsWith('voice:') && !raw.toLowerCase().startsWith('tone:')) {
+        bullet = `Voice: ${raw}`;
+      } else if (
+        tab === 'rules' &&
+        !raw.toLowerCase().startsWith('avoid:') &&
+        !raw.toLowerCase().startsWith('rule:') &&
+        !raw.toLowerCase().startsWith('no ')
+      ) {
+        bullet = `Avoid: ${raw}`;
+      }
+      void addTasteBullet(bullet);
+    },
+    [newBullet, tab, addTasteBullet],
+  );
 
   // Set or clear notice
   const handleSaveNotice = useCallback(async () => {
@@ -598,55 +860,67 @@ export default function SiteScreen({
 
             <View style={styles.divider} />
 
-            {/* 3. SECTIONS (Flat list, zero badges/clutter) */}
+            {/* 3. SECTIONS (Dynamic Jev Blueprint List) */}
             <View style={styles.sectionsContainer}>
               <Text style={styles.sectionLabel}>SECTIONS</Text>
               <View style={styles.sectionsList}>
-                {/* 1. Header & Hero */}
-                <View style={styles.sectionRow}>
-                  <View style={styles.sectionRowLeft}>
-                    <Ionicons name="storefront-outline" size={18} color="#0f172a" />
-                    <Text style={styles.sectionRowTitle}>Header & Hero</Text>
-                  </View>
-                </View>
+                {displaySections.map((sec, idx) => {
+                  const isLast = idx === displaySections.length - 1;
+                  const isNotice = sec.purpose === 'notice';
+                  if (isNotice) {
+                    return (
+                      <TouchableOpacity
+                        key={sec.id || `notice-${idx}`}
+                        style={[
+                          styles.sectionRow,
+                          activeNotice ? styles.sectionRowActiveNotice : null,
+                          isLast ? styles.sectionRowLast : null,
+                        ]}
+                        activeOpacity={0.7}
+                        onPress={() => {
+                          setNoticeText(activeNotice || '');
+                          setNoticeModalOpen(true);
+                        }}
+                      >
+                        <View style={styles.sectionRowLeft}>
+                          <Ionicons
+                            name="megaphone-outline"
+                            size={18}
+                            color={activeNotice ? '#b45309' : '#0f172a'}
+                          />
+                          <Text
+                            style={[
+                              styles.sectionRowTitle,
+                              activeNotice ? styles.sectionRowActiveNoticeText : null,
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {activeNotice ? `"${activeNotice}"` : 'Announcement Banner'}
+                          </Text>
+                        </View>
+                        <Text style={styles.plusActionText}>{activeNotice ? '›' : '+'}</Text>
+                      </TouchableOpacity>
+                    );
+                  }
 
-                {/* 2. Announcement Banner */}
-                <TouchableOpacity
-                  style={[styles.sectionRow, activeNotice ? styles.sectionRowActiveNotice : null]}
-                  activeOpacity={0.7}
-                  onPress={() => {
-                    setNoticeText(activeNotice || '');
-                    setNoticeModalOpen(true);
-                  }}
-                >
-                  <View style={styles.sectionRowLeft}>
-                    <Ionicons
-                      name="megaphone-outline"
-                      size={18}
-                      color={activeNotice ? '#b45309' : '#0f172a'}
-                    />
-                    <Text style={[styles.sectionRowTitle, activeNotice ? styles.sectionRowActiveNoticeText : null]} numberOfLines={1}>
-                      {activeNotice ? `"${activeNotice}"` : 'Announcement Banner'}
-                    </Text>
-                  </View>
-                  <Text style={styles.plusActionText}>{activeNotice ? '›' : '+'}</Text>
-                </TouchableOpacity>
-
-                {/* 3. Product Catalog */}
-                <View style={styles.sectionRow}>
-                  <View style={styles.sectionRowLeft}>
-                    <Ionicons name="grid-outline" size={18} color="#0f172a" />
-                    <Text style={styles.sectionRowTitle}>Product Catalog</Text>
-                  </View>
-                </View>
-
-                {/* 4. WhatsApp & Contact */}
-                <View style={[styles.sectionRow, styles.sectionRowLast]}>
-                  <View style={styles.sectionRowLeft}>
-                    <Ionicons name="logo-whatsapp" size={18} color="#16a34a" />
-                    <Text style={styles.sectionRowTitle}>WhatsApp & Contact</Text>
-                  </View>
-                </View>
+                  const meta = sectionMeta(sec.purpose);
+                  const isContact = sec.purpose === 'contact';
+                  return (
+                    <View
+                      key={sec.id || `${sec.purpose}-${idx}`}
+                      style={[styles.sectionRow, isLast ? styles.sectionRowLast : null]}
+                    >
+                      <View style={styles.sectionRowLeft}>
+                        <Ionicons
+                          name={meta.icon}
+                          size={18}
+                          color={isContact ? '#16a34a' : '#0f172a'}
+                        />
+                        <Text style={styles.sectionRowTitle}>{meta.title}</Text>
+                      </View>
+                    </View>
+                  );
+                })}
               </View>
             </View>
 
@@ -675,120 +949,215 @@ export default function SiteScreen({
           </ScrollView>
         )}
 
-        {/* TASTE DRAWER (COMPACT, UNCLUTTERED, ZERO HINTS) */}
+        {/* TASTE SCREEN (FULL SCREEN REWORKED TO TASTE WITH SMOOTH TRANSITIONS) */}
         <Modal
           visible={tasteDrawerOpen}
-          transparent
           animationType="slide"
           onRequestClose={() => setTasteDrawerOpen(false)}
         >
-          <TouchableOpacity
-            style={styles.modalOverlay}
-            activeOpacity={1}
-            onPress={() => setTasteDrawerOpen(false)}
-          >
+          <View style={[drawer.root, { paddingTop: Math.max(insets.top, 12) }]}>
             <KeyboardAvoidingView
               behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-              style={styles.keyboardView}
+              style={drawer.keyboard}
             >
-              <TouchableOpacity
-                activeOpacity={1}
-                style={[
-                  styles.drawerContainer,
-                  { paddingBottom: Math.max(insets.bottom + 16, 28) },
-                ]}
-                onPress={(e) => e.stopPropagation()}
-              >
-                {/* Header */}
-                <View style={styles.drawerHeader}>
-                  <Text style={styles.drawerTitle}>Taste</Text>
-                  <TouchableOpacity
-                    onPress={() => setTasteDrawerOpen(false)}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  >
-                    <Ionicons name="close" size={20} color="#0f172a" />
-                  </TouchableOpacity>
-                </View>
+              {/* TOP HEADER BAR */}
+              <View style={drawer.header}>
+                {/* Left: Circular Back Button */}
+                <TouchableOpacity
+                  style={drawer.menu}
+                  onPress={() => setTasteDrawerOpen(false)}
+                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel="Back to store"
+                >
+                  <Ionicons name="chevron-back" size={22} color="#0f172a" />
+                </TouchableOpacity>
 
-                {/* Input row */}
-                <View style={styles.drawerInputRow}>
-                  <TextInput
-                    style={styles.drawerInput}
-                    placeholder="Add style..."
-                    placeholderTextColor="#94a3b8"
-                    value={newBullet}
-                    onChangeText={setNewBullet}
-                    onSubmitEditing={() => void addTasteBullet()}
-                    returnKeyType="done"
-                    editable={!busy}
+                {/* Center: Segmented Pill (Style | Voice | Rules) with Smooth Animated Slider */}
+                <View
+                  style={drawer.segment}
+                  onLayout={(e) => {
+                    const w = e.nativeEvent.layout.width;
+                    if (w > 0) setSegwidth(w);
+                  }}
+                >
+                  {/* Smooth sliding pill indicator */}
+                  <Animated.View
+                    style={[
+                      drawer.indicator,
+                      {
+                        width: Math.max(20, (segwidth - 6) / 3),
+                        transform: [
+                          {
+                            translateX: tabAnim.interpolate({
+                              inputRange: [0, 1, 2],
+                              outputRange: [0, (segwidth - 6) / 3, ((segwidth - 6) / 3) * 2],
+                            }),
+                          },
+                        ],
+                      },
+                    ]}
                   />
+
                   <TouchableOpacity
-                    style={[styles.drawerAddBtn, (!newBullet.trim() || busy) && styles.btnDisabled]}
-                    onPress={() => void addTasteBullet()}
-                    disabled={busy || !newBullet.trim()}
-                    accessibilityRole="button"
-                    accessibilityLabel="Add fact"
+                    style={drawer.tab}
+                    onPress={() => switchTab('style')}
+                    activeOpacity={0.8}
                   >
-                    <Ionicons name="arrow-up-circle" size={28} color="#0f172a" />
+                    <Text style={[drawer.label, tab === 'style' && drawer.active]}>
+                      Style
+                    </Text>
                   </TouchableOpacity>
+
                   <TouchableOpacity
-                    style={styles.drawerMicBtn}
-                    onPress={handleVoiceOrPromptAdd}
-                    disabled={busy}
-                    accessibilityRole="button"
-                    accessibilityLabel="Voice input"
+                    style={drawer.tab}
+                    onPress={() => switchTab('voice')}
+                    activeOpacity={0.8}
                   >
-                    <Ionicons name="mic-outline" size={20} color="#64748b" />
+                    <Text style={[drawer.label, tab === 'voice' && drawer.active]}>
+                      Voice
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={drawer.tab}
+                    onPress={() => switchTab('rules')}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[drawer.label, tab === 'rules' && drawer.active]}>
+                      Rules
+                    </Text>
                   </TouchableOpacity>
                 </View>
 
-                {/* Quick suggestions */}
-                <View style={styles.suggestionsWrap}>
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.suggestionsScroll}
-                  >
-                    {QUICK_TASTE_SUGGESTIONS.filter((s) => !tasteBullets.includes(s)).map((sugg) => (
-                      <TouchableOpacity
-                        key={sugg}
-                        onPress={() => void addTasteBullet(sugg)}
-                        disabled={busy}
-                        style={styles.suggestionPill}
-                      >
-                        <Text style={styles.suggestionText}>+ {sugg}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                </View>
+                {/* Right: Circular Avatar Button with TAR Assistant Avatar */}
+                <TouchableOpacity
+                  style={drawer.avatar}
+                  activeOpacity={0.8}
+                  onPress={handleVoiceOrPromptAdd}
+                  accessibilityRole="button"
+                  accessibilityLabel="AI Taste Assistant"
+                >
+                  <TarAvatar size={30} bgColor="#d8b4fe" expression="happy" />
+                </TouchableOpacity>
+              </View>
 
-                {/* Blocks List without hints */}
+              {/* CONTENT BODY WITH SMOOTH FADE TRANSITION */}
+              <Animated.View style={[drawer.body, { opacity: fadeAnim }]}>
                 <ScrollView
-                  style={styles.drawerScroll}
-                  contentContainerStyle={styles.drawerScrollContent}
+                  style={drawer.scroll}
+                  contentContainerStyle={drawer.content}
                   keyboardShouldPersistTaps="handled"
                   showsVerticalScrollIndicator={false}
                 >
-                  {tasteBullets.map((block, idx) => (
-                    <View key={idx} style={styles.drawerBlockRow}>
-                      <Text style={styles.drawerBlockBullet}>•</Text>
-                      <Text style={styles.drawerBlockText}>{block}</Text>
-                      <TouchableOpacity
-                        style={styles.drawerRemoveBtn}
-                        onPress={() => void removeTasteBullet(block)}
-                        disabled={busy}
-                        accessibilityRole="button"
-                        accessibilityLabel="Remove note"
-                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                      >
-                        <Ionicons name="close-circle-outline" size={20} color="#94a3b8" />
-                      </TouchableOpacity>
+                  {tabBullets.length === 0 ? (
+                    <View style={drawer.empty}>
+                      <Text style={drawer.title}>
+                        {tab === 'style'
+                          ? 'No style bullets yet'
+                          : tab === 'voice'
+                          ? 'No voice guidelines yet'
+                          : 'No rules or constraints yet'}
+                      </Text>
+                      <Text style={drawer.sub}>
+                        {tab === 'style'
+                          ? 'Tap style suggestions below or type your visual preferences.'
+                          : tab === 'voice'
+                          ? 'Define your brand tone, customer dialogue, or storytelling style.'
+                          : 'Set boundaries on what the AI storefront should avoid.'}
+                      </Text>
                     </View>
-                  ))}
+                  ) : (
+                    tabBullets.map((block, idx) => {
+                      const display = block.replace(/^(voice|tone|avoid|rule):\s*/i, '');
+                      return (
+                        <React.Fragment key={block + idx}>
+                          <SlideItem
+                            text={display}
+                            onDelete={() => void removeTasteBullet(block)}
+                            disabled={busy}
+                          />
+                          {idx < tabBullets.length - 1 && <View style={item.line} />}
+                        </React.Fragment>
+                      );
+                    })
+                  )}
                 </ScrollView>
-              </TouchableOpacity>
+              </Animated.View>
+
+              {/* QUICK SUGGESTIONS (Smooth fade matching tab) */}
+              <Animated.View style={[drawer.chips, { opacity: fadeAnim }]}>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={drawer.row}
+                >
+                  {tabSuggestions
+                    .filter((s) => !tasteBullets.some((b) => b.includes(s)))
+                    .map((sugg) => (
+                      <TouchableOpacity
+                        key={sugg}
+                        onPress={() => void handleAddTaste(sugg)}
+                        disabled={busy}
+                        style={drawer.chip}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={drawer.tag}>+ {sugg}</Text>
+                      </TouchableOpacity>
+                    ))}
+                </ScrollView>
+              </Animated.View>
+
+              {/* FLOATING PILL INPUT BAR */}
+              <View
+                style={[
+                  drawer.footer,
+                  { paddingBottom: insets.bottom > 0 ? insets.bottom + 8 : 24 },
+                ]}
+              >
+                <View style={drawer.pill}>
+                  <TextInput
+                    style={drawer.field}
+                    placeholder={placeholder}
+                    placeholderTextColor="#94a3b8"
+                    value={newBullet}
+                    onChangeText={setNewBullet}
+                    onSubmitEditing={() => void handleAddTaste()}
+                    returnKeyType="send"
+                    editable={!busy}
+                  />
+                  <View style={drawer.icons}>
+                    <TouchableOpacity
+                      style={drawer.btn}
+                      onPress={() => {
+                        if (newBullet.trim()) {
+                          void handleAddTaste();
+                        } else {
+                          handleVoiceOrPromptAdd();
+                        }
+                      }}
+                      disabled={busy}
+                      accessibilityRole="button"
+                      accessibilityLabel="Add fact"
+                      hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+                    >
+                      <Ionicons name="add" size={24} color="#64748b" />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={drawer.btn}
+                      onPress={handleVoiceOrPromptAdd}
+                      disabled={busy}
+                      accessibilityRole="button"
+                      accessibilityLabel="Voice input"
+                      hitSlop={{ top: 8, bottom: 8, left: 4, right: 8 }}
+                    >
+                      <Ionicons name="mic-outline" size={21} color="#64748b" />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
             </KeyboardAvoidingView>
-          </TouchableOpacity>
+          </View>
         </Modal>
 
 
@@ -1111,111 +1480,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
-  // Drawers Common
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.45)',
-    justifyContent: 'flex-end',
-  },
-  keyboardView: {
-    justifyContent: 'flex-end',
-  },
-  drawerContainer: {
-    height: '75%',
-    backgroundColor: '#ffffff',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingHorizontal: 20,
-    paddingTop: 18,
-    gap: 12,
-  },
-  drawerHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingBottom: 4,
-  },
-  drawerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#0f172a',
-  },
-  drawerInputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  drawerInput: {
-    flex: 1,
-    height: 44,
-    backgroundColor: '#f8fafc',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    fontSize: 14,
-    color: '#0f172a',
-  },
-  drawerAddBtn: {
-    padding: 2,
-  },
-  drawerMicBtn: {
-    padding: 4,
-  },
-  suggestionsWrap: {
-    gap: 6,
-  },
-  suggestionsScroll: {
-    gap: 8,
-    paddingVertical: 2,
-  },
-  suggestionPill: {
-    backgroundColor: '#f8fafc',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 14,
-  },
-  suggestionText: {
-    fontSize: 12,
-    color: '#475569',
-    fontWeight: '500',
-  },
-  drawerScroll: {
-    flex: 1,
-  },
-  drawerScrollContent: {
-    gap: 8,
-    paddingVertical: 4,
-  },
-  drawerBlockRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    backgroundColor: '#f8fafc',
-    borderRadius: 8,
-  },
-  drawerBlockBullet: {
-    fontSize: 16,
-    color: '#64748b',
-    fontWeight: '700',
-    marginRight: 8,
-  },
-  drawerBlockText: {
-    fontSize: 14,
-    color: '#0f172a',
-    fontWeight: '500',
-    flex: 1,
-  },
-  drawerRemoveBtn: {
-    padding: 4,
-  },
-  btnDisabled: {
-    opacity: 0.35,
-  },
+
 
 
   subtleLink: {
@@ -1292,5 +1557,214 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#ffffff',
     fontWeight: '600',
+  },
+});
+
+const item = StyleSheet.create({
+  wrap: {
+    position: 'relative',
+    overflow: 'hidden',
+    backgroundColor: '#ffffff',
+  },
+  under: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    right: 0,
+    width: 72,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#ef4444',
+  },
+  action: {
+    flex: 1,
+    width: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 2,
+  },
+  label: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  front: {
+    backgroundColor: '#ffffff',
+  },
+  content: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    gap: 10,
+    backgroundColor: '#ffffff',
+  },
+  dot: {
+    fontSize: 16,
+    lineHeight: 22,
+    color: '#94a3b8',
+  },
+  text: {
+    flex: 1,
+    fontSize: 15,
+    lineHeight: 22,
+    color: '#0f172a',
+    fontWeight: '400',
+  },
+  line: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: '#f1f5f9',
+    marginLeft: 16,
+    marginRight: 16,
+  },
+});
+
+const drawer = StyleSheet.create({
+  root: {
+    flex: 1,
+    backgroundColor: '#ffffff',
+  },
+  keyboard: {
+    flex: 1,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  menu: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#edf2f7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  segment: {
+    flex: 1,
+    maxWidth: 240,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#edf2f7',
+    padding: 3,
+    flexDirection: 'row',
+    alignItems: 'center',
+    position: 'relative',
+    marginHorizontal: 8,
+  },
+  indicator: {
+    position: 'absolute',
+    top: 3,
+    left: 3,
+    bottom: 3,
+    backgroundColor: '#18181b',
+    borderRadius: 19,
+  },
+  tab: {
+    flex: 1,
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1,
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#64748b',
+  },
+  active: {
+    color: '#ffffff',
+    fontWeight: '600',
+  },
+  avatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#edf2f7',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  body: {
+    flex: 1,
+  },
+  scroll: {
+    flex: 1,
+  },
+  content: {
+    paddingVertical: 8,
+  },
+  empty: {
+    paddingHorizontal: 20,
+    paddingTop: 48,
+    alignItems: 'center',
+    gap: 8,
+  },
+  title: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#0f172a',
+    textAlign: 'center',
+  },
+  sub: {
+    fontSize: 13,
+    color: '#64748b',
+    textAlign: 'center',
+    lineHeight: 18,
+    maxWidth: 280,
+  },
+  chips: {
+    paddingHorizontal: 16,
+    marginBottom: 8,
+  },
+  row: {
+    gap: 8,
+    paddingVertical: 2,
+  },
+  chip: {
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  tag: {
+    fontSize: 12,
+    color: '#475569',
+    fontWeight: '500',
+  },
+  footer: {
+    paddingHorizontal: 16,
+    paddingTop: 4,
+  },
+  pill: {
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: '#edf2f7',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: 18,
+    paddingRight: 12,
+  },
+  field: {
+    flex: 1,
+    fontSize: 15,
+    color: '#0f172a',
+    height: '100%',
+  },
+  icons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  btn: {
+    padding: 2,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

@@ -30,7 +30,6 @@ import { useAgentName } from '@/lib/agent';
 const ink = '#1B1C20';
 const muted = '#626671';
 const blue = '#3157A8';
-const emerald = '#18865B';
 const borderLine = '#E5E7EB';
 const BRAND_COLORS = [
   '#EA580C',
@@ -115,8 +114,6 @@ type OpenAction = {
 interface FeedSection {
   key: string;
   title: string;
-  iconName: keyof typeof Ionicons.glyphMap;
-  iconColor: string;
   data: NowRow[];
 }
 
@@ -237,8 +234,6 @@ export default function NowScreen() {
       result.push({
         key: 'up_next',
         title: 'Up Next',
-        iconName: 'reload-circle-outline',
-        iconColor: emerald,
         data: upNextRows,
       });
     }
@@ -246,8 +241,6 @@ export default function NowScreen() {
       result.push({
         key: 'available',
         title: 'Available',
-        iconName: 'ellipse-outline',
-        iconColor: emerald,
         data: availableRows,
       });
     }
@@ -255,8 +248,6 @@ export default function NowScreen() {
       result.push({
         key: 'waiting',
         title: 'Waiting',
-        iconName: 'time-outline',
-        iconColor: muted,
         data: waitingRows,
       });
     }
@@ -264,8 +255,6 @@ export default function NowScreen() {
       result.push({
         key: 'completed',
         title: 'Completed',
-        iconName: 'checkmark-circle',
-        iconColor: emerald,
         data: completedRows,
       });
     }
@@ -274,8 +263,6 @@ export default function NowScreen() {
       result.push({
         key: 'all',
         title: 'Active Work',
-        iconName: 'reload-circle-outline',
-        iconColor: emerald,
         data: feed.rows,
       });
     }
@@ -347,7 +334,6 @@ export default function NowScreen() {
             <View key={section.key} style={styles.sectionContainer}>
               {/* Full-Width Rectangular Section Bar */}
               <View style={styles.sectionBar}>
-                <Ionicons name={section.iconName} size={15} color={section.iconColor} />
                 <Text style={styles.sectionBarTitle}>{section.title}</Text>
               </View>
 
@@ -510,32 +496,18 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   sectionBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
     backgroundColor: '#F8F9FA',
     paddingVertical: 7,
     paddingHorizontal: 16,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderColor: borderLine,
-    gap: 8,
   },
   sectionBarTitle: {
     fontSize: 13,
     fontWeight: '700',
     color: ink,
     letterSpacing: -0.1,
-  },
-  sectionBarBadge: {
-    backgroundColor: '#E5E7EB',
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    borderRadius: 6,
-  },
-  sectionBarBadgeText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#4B5563',
   },
   itemRow: {
     minHeight: 52,

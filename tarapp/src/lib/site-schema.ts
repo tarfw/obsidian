@@ -101,6 +101,7 @@ export interface SiteDocument {
   redirects: { from: string; to: string; status: number }[];
   locks: Lock[];
   policy: { publicEnquiry?: boolean; publicOrdering?: boolean; allowedCurrencies?: string[]; turnstile?: string };
+  category?: BusinessKind | string;
   personas?: Persona[];
   taste?: Taste;
   blueprint?: Blueprint;

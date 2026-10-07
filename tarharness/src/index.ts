@@ -13,7 +13,7 @@ import { posSummary, readPos } from './pos/store.ts';
 import { readProductContent } from './pos/content.ts';
 import { serveSitePreview } from './site/preview.ts';
 import { readDocument } from './site/adapt.ts';
-import { defaultSite } from './site/build.ts';
+import { buildSite, defaultBlueprint, defaultSite } from './site/build.ts';
 import { exportDesign } from './site/design.ts';
 import { compileDocument } from './site/compile.ts';
 import { canExecute, canReadRecord, canRunFlowStep, canUseWorkRole, isCook, managesMembers, workRoleNames } from './access.ts';
@@ -802,7 +802,37 @@ async function handle(request: Request, env: RuntimeEnv, ctx: ExecutionContext):
         }
       }
       if (!siteRows.length) {
-        const initialDoc = defaultSite(current.workspace.name, `${current.workspace.name} — official online store, products and services.`);
+        const tasteRow = await Effect.runPromise(query<Record<string, unknown>>(client, {
+          sql: "SELECT data FROM records WHERE id='taste' AND type='taste' AND archived IS NULL LIMIT 1",
+        }));
+        let inheritedTaste: string[] = [];
+        let inheritedTrade = '';
+        if (tasteRow.length && tasteRow[0].data) {
+          try {
+            const td = object(typeof tasteRow[0].data === 'string' ? JSON.parse(String(tasteRow[0].data)) : tasteRow[0].data);
+            if (Array.isArray(td.taste)) inheritedTaste = td.taste.map(String).filter(Boolean).slice(0, 20);
+            if (typeof td.trade === 'string') inheritedTrade = td.trade.trim();
+          } catch { /* ignore */ }
+        }
+
+        const tradeLower = inheritedTrade.toLowerCase();
+        const isService = tradeLower.includes('service') || tradeLower.includes('consulting') || tradeLower.includes('tailor') || tradeLower.includes('clinic') || tradeLower.includes('salon');
+        const isFood = tradeLower.includes('food') || tradeLower.includes('beverage') || tradeLower.includes('bakery') || tradeLower.includes('restaurant') || tradeLower.includes('cafe');
+        const kind = isService ? 'services' : isFood ? 'food' : 'goods';
+
+        const blueprint = defaultBlueprint(kind);
+        const built = buildSite({
+          title: current.workspace.name,
+          brief: { goal: `${current.workspace.name} online`, audience: inheritedTrade, tone: '' },
+          facts: {},
+          blueprint,
+          assets: [],
+        });
+        const initialDoc = built.doc;
+        if (inheritedTaste.length) {
+          initialDoc.taste = { bullets: inheritedTaste, accepted: inheritedTaste, rejected: [] };
+        }
+
         const siteId = `site_${crypto.randomUUID()}`;
         const at = Date.now();
         await client.batch([

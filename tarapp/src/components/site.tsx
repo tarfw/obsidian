@@ -5,6 +5,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
+  Animated,
+  Easing,
   KeyboardAvoidingView,
   Linking,
   Modal,
@@ -75,8 +77,36 @@ export default function SiteScreen({
 
   // Modals
   const [tasteDrawerOpen, setTasteDrawerOpen] = useState(false);
-  const [publishDrawerOpen, setPublishDrawerOpen] = useState(false);
   const [noticeModalOpen, setNoticeModalOpen] = useState(false);
+
+  // Rotation animation for in-card publish button
+  const [spinAnim] = useState(() => new Animated.Value(0));
+
+  useEffect(() => {
+    if (busy) {
+      const loop = Animated.loop(
+        Animated.timing(spinAnim, {
+          toValue: 1,
+          duration: 900,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        }),
+      );
+      loop.start();
+      return () => loop.stop();
+    }
+    spinAnim.setValue(0);
+    return undefined;
+  }, [busy, spinAnim]);
+
+  const spin = useMemo(
+    () =>
+      spinAnim.interpolate({
+        inputRange: [0, 1],
+        outputRange: ['0deg', '360deg'],
+      }),
+    [spinAnim],
+  );
 
   // Inputs
   const [newBullet, setNewBullet] = useState('');
@@ -434,7 +464,7 @@ export default function SiteScreen({
       onRequestClose={onClose}
     >
       <View style={[styles.root, { paddingTop: Math.max(insets.top, 10) }]}>
-        {/* Navigation Bar: ‹ {workspaceName}   [Open/Preview Arrow ↗] */}
+        {/* Navigation Bar: ‹ {workspaceName}   [Publish / Live ↗] */}
         <View style={styles.topNavBar}>
           <View style={styles.navLeft}>
             <TouchableOpacity
@@ -445,18 +475,49 @@ export default function SiteScreen({
             >
               <Ionicons name="chevron-back" size={22} color="#0f172a" />
             </TouchableOpacity>
-            <Text style={styles.navTitle} numberOfLines={1}>
-              {workspaceName || 'Online Store'}
-            </Text>
+            <View style={styles.navTitleWrap}>
+              <Text style={styles.navTitle} numberOfLines={1}>
+                {workspaceName || 'Online Store'}
+              </Text>
+              <TouchableOpacity onPress={handleCopyLink} hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}>
+                <Text style={styles.navSubtitle} numberOfLines={1}>
+                  {displayDomain}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
+          {/* Top-Right Action Button: Publish / Live ↗ */}
           <TouchableOpacity
-            accessibilityLabel="Open storefront in browser"
-            onPress={openInBrowser}
-            style={styles.navPreviewBtn}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            style={[
+              styles.navActionBtn,
+              isLive ? styles.navActionBtnLive : styles.navActionBtnDraft,
+              busy && styles.navActionBtnBusy,
+            ]}
+            onPress={isLive ? openInBrowser : () => void publishSite()}
+            onLongPress={isLive ? () => void publishSite() : undefined}
+            disabled={busy}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel={isLive ? 'Open live store' : 'Publish store'}
           >
-            <Ionicons name="open-outline" size={20} color="#0f172a" />
+            {busy ? (
+              <View style={styles.navActionContent}>
+                <Animated.View style={{ transform: [{ rotate: spin }] }}>
+                  <Ionicons name="sync" size={13} color="#ffffff" />
+                </Animated.View>
+                <Text style={styles.navActionTextBusy}>Publishing</Text>
+              </View>
+            ) : isLive ? (
+              <View style={styles.navActionContent}>
+                <Text style={styles.navActionTextLive}>Live</Text>
+                <Ionicons name="open-outline" size={13} color="#2563eb" />
+              </View>
+            ) : (
+              <View style={styles.navActionContent}>
+                <Text style={styles.navActionTextDraft}>Publish</Text>
+              </View>
+            )}
           </TouchableOpacity>
         </View>
 
@@ -488,8 +549,8 @@ export default function SiteScreen({
               </View>
             ) : null}
 
-            {/* Busy Banner */}
-            {busy && busyMessage ? (
+            {/* Busy Banner (only for non-publish messages like taste updates) */}
+            {busy && busyMessage && !busyMessage.toLowerCase().includes('publishing') ? (
               <View style={styles.busyBanner}>
                 <ActivityIndicator size="small" color="#0f172a" />
                 <Text style={styles.busyText}>{busyMessage}</Text>
@@ -510,31 +571,6 @@ export default function SiteScreen({
                 </TouchableOpacity>
               </View>
             ) : null}
-
-            {/* 1. Status & Domain Single Text Row (Tapping opens Publish Drawer) */}
-            <TouchableOpacity
-              style={styles.statusRow}
-              onPress={() => setPublishDrawerOpen(true)}
-              activeOpacity={0.7}
-              accessibilityRole="button"
-              accessibilityLabel="Manage publication and domain"
-            >
-              <View style={styles.statusRowLeft}>
-                <Ionicons name="globe-outline" size={15} color="#64748b" />
-                <Text style={styles.statusDomainText} numberOfLines={1}>
-                  {displayDomain}
-                </Text>
-              </View>
-              <View style={styles.statusRowRight}>
-                <View style={[styles.statusDot, isLive ? styles.statusDotLive : styles.statusDotDraft]} />
-                <Text style={[styles.statusStateText, isLive ? styles.statusTextLive : styles.statusTextDraft]}>
-                  {isLive ? 'Live' : 'Draft'}
-                </Text>
-                <Ionicons name="chevron-forward" size={14} color="#94a3b8" />
-              </View>
-            </TouchableOpacity>
-
-            <View style={styles.divider} />
 
             {/* 2. TASTE (Flat list matching CreateWorkspace) */}
             <TouchableOpacity
@@ -613,6 +649,29 @@ export default function SiteScreen({
                 </View>
               </View>
             </View>
+
+            {site && site.revision > 1 ? (
+              <TouchableOpacity
+                onPress={() => void undoLastChange()}
+                disabled={busy}
+                style={styles.subtleLink}
+                accessibilityRole="button"
+                accessibilityLabel="Undo last change"
+              >
+                <Text style={styles.subtleLinkText}>Undo change (rev {site.revision})</Text>
+              </TouchableOpacity>
+            ) : null}
+
+            {/* Subtle Reset Storefront Link */}
+            <TouchableOpacity
+              onPress={resetStore}
+              disabled={busy}
+              style={styles.subtleLink}
+              accessibilityRole="button"
+              accessibilityLabel="Reset Storefront"
+            >
+              <Text style={styles.subtleLinkText}>Reset Storefront to Default</Text>
+            </TouchableOpacity>
           </ScrollView>
         )}
 
@@ -732,129 +791,7 @@ export default function SiteScreen({
           </TouchableOpacity>
         </Modal>
 
-        {/* PUBLISH DRAWER (COMPACT, UNCLUTTERED, SIMPLE) */}
-        <Modal
-          visible={publishDrawerOpen}
-          transparent
-          animationType="slide"
-          onRequestClose={() => setPublishDrawerOpen(false)}
-        >
-          <TouchableOpacity
-            style={styles.modalOverlay}
-            activeOpacity={1}
-            onPress={() => setPublishDrawerOpen(false)}
-          >
-            <TouchableOpacity
-              activeOpacity={1}
-              style={[
-                styles.publishDrawerCard,
-                { paddingBottom: Math.max(insets.bottom + 16, 28) },
-              ]}
-              onPress={(e) => e.stopPropagation()}
-            >
-              <View style={styles.drawerHeader}>
-                <Text style={styles.drawerTitle}>{workspaceName || 'Online Store'}</Text>
-                <TouchableOpacity
-                  onPress={() => setPublishDrawerOpen(false)}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  <Ionicons name="close" size={20} color="#0f172a" />
-                </TouchableOpacity>
-              </View>
 
-              {/* Status and Domain Row */}
-              <View style={styles.drawerStatusRow}>
-                <View style={styles.drawerDomainWrap}>
-                  <Ionicons name="globe-outline" size={15} color="#64748b" />
-                  <Text style={styles.drawerDomainText} numberOfLines={1}>
-                    {displayDomain}
-                  </Text>
-                  <TouchableOpacity
-                    onPress={handleCopyLink}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                    style={styles.drawerCopyBtn}
-                  >
-                    <Ionicons name="copy-outline" size={15} color="#0284c7" />
-                  </TouchableOpacity>
-                </View>
-
-                <View style={styles.drawerStatusRight}>
-                  <View style={[styles.statusDot, isLive ? styles.statusDotLive : styles.statusDotDraft]} />
-                  <Text style={[styles.statusStateText, isLive ? styles.statusTextLive : styles.statusTextDraft]}>
-                    {isLive ? 'Live' : 'Draft'}
-                  </Text>
-                </View>
-              </View>
-
-              {/* Main Actions */}
-              <View style={styles.publishActionsWrap}>
-                {isLive ? (
-                  <View style={styles.liveActionsRow}>
-                    <TouchableOpacity
-                      onPress={() => {
-                        setPublishDrawerOpen(false);
-                        openInBrowser();
-                      }}
-                      style={styles.liveOpenBtn}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={styles.liveOpenBtnText}>Open Store ↗</Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      onPress={() => {
-                        setPublishDrawerOpen(false);
-                        void publishSite();
-                      }}
-                      disabled={busy}
-                      style={styles.liveRepublishBtn}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={styles.liveRepublishBtnText}>Republish</Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : (
-                  <TouchableOpacity
-                    onPress={() => {
-                      setPublishDrawerOpen(false);
-                      void publishSite();
-                    }}
-                    disabled={busy}
-                    style={styles.publishBtn}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={styles.publishBtnText}>Publish Live</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-
-              {/* Subtle Utilities */}
-              {site && site.revision > 1 ? (
-                <TouchableOpacity
-                  onPress={() => {
-                    setPublishDrawerOpen(false);
-                    void undoLastChange();
-                  }}
-                  disabled={busy}
-                  style={styles.subtleLink}
-                >
-                  <Text style={styles.subtleLinkText}>Undo change (rev {site.revision})</Text>
-                </TouchableOpacity>
-              ) : null}
-
-              <TouchableOpacity
-                onPress={() => {
-                  setPublishDrawerOpen(false);
-                  resetStore();
-                }}
-                disabled={busy}
-                style={styles.subtleLink}
-              >
-                <Text style={styles.subtleLinkText}>Reset Storefront to Default</Text>
-              </TouchableOpacity>
-            </TouchableOpacity>
-          </TouchableOpacity>
-        </Modal>
 
         {/* NOTICE MODAL */}
         <Modal
@@ -934,66 +871,68 @@ const styles = StyleSheet.create({
   navLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
     flex: 1,
+    marginRight: 10,
   },
   navBackBtn: {
     padding: 2,
-    marginRight: 2,
+  },
+  navTitleWrap: {
+    flex: 1,
   },
   navTitle: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '700',
     color: '#0f172a',
     letterSpacing: -0.3,
   },
-  navPreviewBtn: {
-    padding: 4,
-  },
-  statusRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 12,
-  },
-  statusRowLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    flex: 1,
-    marginRight: 12,
-  },
-  statusDomainText: {
-    fontSize: 14,
+  navSubtitle: {
+    fontSize: 11,
+    color: '#64748b',
     fontWeight: '500',
-    color: '#0f172a',
-    flexShrink: 1,
+    marginTop: 1,
   },
-  statusRowRight: {
+  navActionBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 68,
+  },
+  navActionBtnDraft: {
+    backgroundColor: '#2563eb',
+  },
+  navActionBtnLive: {
+    backgroundColor: '#eff6ff',
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+  },
+  navActionBtnBusy: {
+    backgroundColor: '#2563eb',
+    opacity: 0.9,
+  },
+  navActionContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    justifyContent: 'center',
+    gap: 4,
   },
-  statusStateText: {
+  navActionTextDraft: {
     fontSize: 13,
+    fontWeight: '700',
+    color: '#ffffff',
+  },
+  navActionTextLive: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#2563eb',
+  },
+  navActionTextBusy: {
+    fontSize: 12,
     fontWeight: '600',
-  },
-  statusDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
-  },
-  statusDotLive: {
-    backgroundColor: '#16a34a',
-  },
-  statusDotDraft: {
-    backgroundColor: '#d97706',
-  },
-  statusTextLive: {
-    color: '#16a34a',
-  },
-  statusTextDraft: {
-    color: '#d97706',
+    color: '#ffffff',
   },
   divider: {
     height: StyleSheet.hairlineWidth,
@@ -1278,102 +1217,7 @@ const styles = StyleSheet.create({
     opacity: 0.35,
   },
 
-  // Publish Drawer
-  publishDrawerCard: {
-    backgroundColor: '#ffffff',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingHorizontal: 20,
-    paddingTop: 18,
-    gap: 14,
-  },
-  drawerStatusRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 6,
-  },
-  drawerDomainWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    flex: 1,
-    marginRight: 10,
-  },
-  drawerDomainText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#0f172a',
-    flexShrink: 1,
-  },
-  drawerCopyBtn: {
-    padding: 3,
-  },
-  drawerStatusRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-  },
-  publishActionsWrap: {
-    gap: 10,
-    marginTop: 4,
-  },
-  publishBtn: {
-    minHeight: 48,
-    height: 48,
-    width: '100%',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#2563eb',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-  },
-  publishBtnText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#ffffff',
-  },
-  liveActionsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    width: '100%',
-  },
-  liveOpenBtn: {
-    flex: 1,
-    minHeight: 48,
-    height: 48,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#2563eb',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-  },
-  liveOpenBtnText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#ffffff',
-  },
-  liveRepublishBtn: {
-    flex: 1,
-    minHeight: 48,
-    height: 48,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#f1f5f9',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-  },
-  liveRepublishBtnText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#0f172a',
-  },
+
   subtleLink: {
     alignItems: 'center',
     paddingVertical: 4,

@@ -221,14 +221,13 @@ async function activatePublication(control: D1Database | undefined, domain: stri
   if (owned && (owned.workspace !== context.workspace.id || owned.site !== site)) throw conflict('This site hostname is already assigned.');
   const previous = await primary.prepare('SELECT site,epoch,release,hash,domain,mode,status FROM sites WHERE workspace=?').bind(context.workspace.id)
     .first<{ site: string; epoch: number; release: string; hash: string; domain: string; mode: string; status: string }>();
-  if (previous && previous.site !== site) throw conflict('Another site already owns this workspace publication.');
-  if (previous?.release === manifest.id && previous.hash === manifest.hash && previous.domain === host && previous.mode === mode && previous.status === 'active') return origin;
+  if (previous?.release === manifest.id && previous.hash === manifest.hash && previous.domain === host && previous.mode === mode && previous.status === 'active' && previous.site === site) return origin;
   if (expected !== undefined && (previous?.epoch || 0) !== expected) throw conflict('Live publication changed since this candidate was prepared. Compile and review it again.');
   const at = now();
   const statements = [
     previous
-      ? control.prepare("UPDATE sites SET release=?,hash=?,epoch=epoch+1,domain=?,mode=?,status='active',updated=? WHERE workspace=? AND site=? AND epoch=?")
-        .bind(manifest.id, manifest.hash, host, mode, at, context.workspace.id, site, previous.epoch)
+      ? control.prepare("UPDATE sites SET site=?,release=?,hash=?,epoch=epoch+1,domain=?,mode=?,status='active',updated=? WHERE workspace=? AND epoch=?")
+        .bind(site, manifest.id, manifest.hash, host, mode, at, context.workspace.id, previous.epoch)
       : control.prepare("INSERT INTO sites(workspace,site,release,hash,epoch,domain,mode,status,updated) VALUES(?,?,?,?,1,?,?,'active',?)")
         .bind(context.workspace.id, site, manifest.id, manifest.hash, host, mode, at),
   ];
@@ -527,7 +526,6 @@ export async function executeSiteCompile(client: Client, bucket: R2Bucket | unde
   const current = await getSiteRecord(client, text(input.siteId, 160) || undefined); if (!current) throw notFound('Site was not found.');
   const authority = control ? await control.withSession('first-primary').prepare('SELECT site,epoch FROM sites WHERE workspace=?')
     .bind(context.workspace.id).first<{ site: string; epoch: number }>() : null;
-  if (authority && authority.site !== current.id) throw conflict('Another site owns this workspace publication.');
   const releaseId = `rel_${crypto.randomUUID()}`;
   const currentDocument = readDocument(current.data).doc;
   const { manifest } = await saveRelease(client, bucket, content, context, current, releaseId, (currentDocument.releases?.length || 0) + 1, domain, authority?.epoch || 0);
@@ -611,7 +609,6 @@ export async function executeSiteRollback(client: Client, context: AccessContext
   const release = document.releases.find((entry) => entry.id === releaseId)!;
   const authority = control ? await control.withSession('first-primary').prepare('SELECT site,epoch FROM sites WHERE workspace=?')
     .bind(context.workspace.id).first<{ site: string; epoch: number }>() : null;
-  if (authority && authority.site !== current.id) throw conflict('Another site owns this workspace publication.');
   if (control && release.host !== siteHost(domain, context.workspace.slug))
     throw conflict('This release was built for another primary address. Compile a new candidate for the current address.');
   if (control) {
@@ -642,10 +639,9 @@ export async function executeSiteUnpublish(client: Client, context: AccessContex
   if (!current) throw notFound('Site was not found.');
   const live = await control.withSession('first-primary').prepare('SELECT site,epoch,status FROM sites WHERE workspace=?')
     .bind(context.workspace.id).first<{ site: string; epoch: number; status: string }>();
-  if (live && live.site !== current.id) throw conflict('Another site owns this workspace publication.');
   if (live?.status === 'active') {
-    const blocked = await control.prepare("UPDATE sites SET status='paused',release='',hash='',epoch=epoch+1,updated=? WHERE workspace=? AND site=? AND epoch=? AND status='active'")
-      .bind(now(), context.workspace.id, current.id, live.epoch).run();
+    const blocked = await control.prepare("UPDATE sites SET status='paused',release='',hash='',epoch=epoch+1,updated=? WHERE workspace=? AND epoch=? AND status='active'")
+      .bind(now(), context.workspace.id, live.epoch).run();
     if (blocked.meta.changes !== 1) throw conflict('Site publication changed concurrently. Refresh and try again.');
   }
   const site = { ...readDocument(current.data).doc, currentRelease: null };

@@ -297,6 +297,7 @@ export interface SiteDocument {
   redirects: Redirect[];
   locks: Lock[];
   policy: SitePolicy;
+  blueprint?: import('./blueprint.ts').Blueprint;
   personas?: Persona[];
   taste?: Taste;
   /** Prose claims checked against supplied evidence; unresolved claims block publish. */

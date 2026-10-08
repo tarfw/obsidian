@@ -9,7 +9,7 @@ import { inspectDocument } from './inspect.ts';
 import { assetReader } from './asset.ts';
 import { applyPexels } from './pexels.ts';
 import { CATEGORY_IDS } from './design.ts';
-import { type Blueprint, type BusinessKind, type DensityToken, type LeadSection, type ToneToken, type TypographyToken, compileSectionOrder, catalogLayoutFor, checkPublishGate, hashState } from './blueprint.ts';
+import { type Blueprint, type BusinessKind, type DensityToken, type HeroPattern, type LeadSection, type ToneToken, type TypographyToken, compileSectionOrder, catalogLayoutFor, checkPublishGate, hashState } from './blueprint.ts';
 import { BudgetExceeded, DEFAULT_BUDGET, GROQ_DEFAULT_MODEL, ModelRunner, SITE_MODEL_FALLBACKS, readClaims, writeCopy } from './model.ts';
 import { buildSite, defaultBlueprint, tasteBias, type Facts, type Slot } from './build.ts';
 import { slugify } from './html.ts';
@@ -277,12 +277,13 @@ export async function executeSiteGenerate(
   const brief = { goal: prompt || `${title} online`, audience: text(input.audience, 200), tone: text(input.tone, 120) };
   const gathered = await publicFacts(client, input, previous, context);
   const cache = { control, workspace: context.workspace.id, version: 'create-2' };
-  const inputTaste = strings(input.taste, 20);
-  let taste = inputTaste.length ? inputTaste : ((previous?.taste?.bullets || previous?.taste?.accepted || []) as string[]);
+  const inputTasteProvided = Array.isArray(input.taste);
+  const inputTaste = inputTasteProvided ? strings(input.taste, 20) : [];
+  let taste = inputTasteProvided ? inputTaste : ((previous?.taste?.bullets || previous?.taste?.accepted || []) as string[]);
   let trade = text(input.trade);
 
-  // Day 0 Inheritance: If site has no taste or trade yet, inherit from workspace taste record
-  if (!taste.length || !trade) {
+  // Day 0 Inheritance: Only inherit on initial site creation if neither site nor caller provided taste
+  if (!previous && !inputTasteProvided) {
     const tasteRow = await client.execute("SELECT data FROM records WHERE id='taste' AND type='taste' AND archived IS NULL LIMIT 1");
     if (tasteRow.rows[0]) {
       try {
@@ -328,13 +329,15 @@ export async function executeSiteGenerate(
     trust: judged.trust && (gathered.facts.proofs?.length ?? 0) > 0,
   });
 
+  const heroPattern = (input.heroPattern as HeroPattern) || judged.heroPattern || defaults.heroPattern || 'split';
   const blueprintPre: Omit<Blueprint, 'hash'> = {
     kind,
     typography,
     tone,
     density,
     lead,
-    headerStyle: 'fullbleed',
+    headerStyle: heroPattern === 'split' ? 'split' : 'fullbleed',
+    heroPattern,
     catalogLayout,
     sections,
     gate,
@@ -444,12 +447,35 @@ export async function executeSiteTasteRemove(
   control?: D1Database,
 ): Promise<Record<string, unknown>> {
   const bullet = text(input.bullet, 200);
-  if (!bullet) throw badRequest('Provide a taste bullet to remove.');
+  const clearAll = input.clearAll === true || bullet === '__ALL__';
+  if (!bullet && !clearAll) throw badRequest('Provide a taste bullet to remove.');
   const current = await getSiteRecord(client, text(input.siteId, 160) || undefined);
   if (!current) throw notFound('Site was not found.');
   const doc = readDocument(current.data).doc;
   const currentTaste = ((doc.taste?.bullets || doc.taste?.accepted || []) as string[]);
-  const nextTaste = currentTaste.filter((b: string) => b !== bullet);
+  const nextTaste = clearAll ? [] : currentTaste.filter((b: string) => b !== bullet);
+
+  // Keep workspace taste record in sync so old seed bullets never resurrect
+  if (clearAll) {
+    try {
+      await client.execute("UPDATE records SET data=json_set(data, '$.taste', json('[]')) WHERE id='taste' AND type='taste'");
+    } catch { /* ignore */ }
+  } else if (bullet) {
+    try {
+      const tasteRow = await client.execute("SELECT data FROM records WHERE id='taste' AND type='taste' AND archived IS NULL LIMIT 1");
+      if (tasteRow.rows[0]) {
+        const workspaceTasteData = object(JSON.parse(String(tasteRow.rows[0].data)));
+        if (Array.isArray(workspaceTasteData.taste)) {
+          const filtered = workspaceTasteData.taste.filter((b: unknown) => String(b) !== bullet);
+          await client.execute({
+            sql: "UPDATE records SET data=json_set(data, '$.taste', json(?)) WHERE id='taste' AND type='taste'",
+            args: [JSON.stringify(filtered)],
+          });
+        }
+      }
+    } catch { /* ignore */ }
+  }
+
   return executeSiteGenerate(client, context, { siteId: current.id, title: doc.pages[0]?.title, taste: nextTaste }, key, inputHash, typesafe, undefined, control);
 }
 

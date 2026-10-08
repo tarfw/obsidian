@@ -248,10 +248,58 @@ h3.tar-title { font-size: var(--type-body); font-weight: ${Math.min(900, design.
 .tar-nav { position: sticky; top: 0; z-index: 50; background: var(--color-canvas); border-bottom: 1px solid var(--color-border); width: 100%; }
 .tar-nav-inner { display: flex; align-items: center; justify-content: space-between; gap: ${space(4)}; min-height: 56px; padding: 0 clamp(16px, 4vw, 48px); max-width: var(--layout-content); margin: 0 auto; }
 .tar-brand { font-family: var(--font-display); font-size: 22px; font-weight: 800; letter-spacing: 0.02em; text-decoration: none; color: var(--color-ink); }
-.tar-navlinks { display: flex; gap: 20px; list-style: none; flex-wrap: wrap; font-size: 13px; font-weight: 600; margin: 0; padding: 0; }
+.tar-navlinks { display: flex; gap: 20px; list-style: none; flex-wrap: wrap; font-size: 13px; font-weight: 600; margin: 0; padding: 0; align-items: center; }
 .tar-navlinks a { text-decoration: none; color: var(--color-ink); transition: opacity 0.15s ease; }
 .tar-navlinks a:hover { opacity: 0.7; }
-.tar-menu-btn { display: none; background: none; border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: ${space(1)} ${space(2)}; font-size: 1.1rem; cursor: pointer; }
+.tar-menu-btn { display: none; background: none; border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: ${space(1)} ${space(2)}; font-size: 1.1rem; cursor: pointer; color: var(--color-ink); }
+
+/* ========================================================
+   HIGH-CRAFT HERO PATTERNS (METHOD 2)
+   ======================================================== */
+.tar-hero { position: relative; width: 100%; min-height: 75vh; display: flex; align-items: center; padding: clamp(40px, 6vw, 76px) 0; overflow: hidden; }
+.tar-hero-inner { width: 100%; max-width: var(--layout-content); margin: 0 auto; padding: 0 clamp(16px, 4vw, 48px); }
+.tar-hero-eyebrow { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-accent); margin-bottom: 6px; }
+.tar-hero-title { font-family: var(--font-display); font-size: clamp(2.2rem, 4.2vw, 3.8rem); font-weight: 700; line-height: 1.12; letter-spacing: -0.02em; color: var(--color-ink); margin: 0 0 12px 0; }
+.tar-hero-desc { font-size: clamp(1rem, 1.25vw, 1.15rem); line-height: 1.6; color: var(--color-muted); max-width: 52ch; margin: 0 0 20px 0; }
+.tar-hero-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 4px; }
+.tar-hero-actions .tar-btn { font-size: 14px; padding: 10px 22px; }
+
+/* 1. Split Hero 50/50 (#4) */
+.tar-hero-split .tar-hero-grid { display: grid; grid-template-columns: 1.1fr 0.9fr; align-items: center; gap: clamp(32px, 5vw, 64px); }
+.tar-hero-split .tar-hero-text { display: flex; flex-direction: column; }
+.tar-hero-split .tar-hero-media { position: relative; width: 100%; border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--elevation-high); aspect-ratio: 4 / 3; background: var(--color-surface); }
+.tar-hero-split .tar-hero-media img { width: 100%; height: 100%; object-fit: cover; display: block; border-radius: var(--radius-lg); }
+.tar-hero-placeholder { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, var(--color-surface) 0%, var(--color-border) 100%); }
+.tar-brand-mark { font-family: var(--font-display); font-size: 48px; font-weight: 800; color: var(--color-muted); letter-spacing: 0.05em; }
+
+/* 2. Commerce Hero (#16) */
+.tar-hero-commerce .tar-hero-grid { display: grid; grid-template-columns: 1.15fr 0.85fr; align-items: center; gap: clamp(32px, 5vw, 64px); }
+.tar-hero-spotlight-card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: 16px; box-shadow: var(--elevation-high); display: flex; flex-direction: column; gap: 12px; position: relative; }
+.tar-hero-spotlight-img { width: 100%; aspect-ratio: 1 / 1; object-fit: cover; border-radius: var(--radius-md); background: #f1f5f9; display: block; }
+.tar-hero-spotlight-meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.tar-hero-spotlight-title { font-size: 16px; font-weight: 700; color: var(--color-ink); }
+.tar-hero-spotlight-price { font-size: 18px; font-weight: 800; color: var(--color-accent); }
+
+/* 3. Typography Hero (#24) */
+.tar-hero-typography { text-align: center; padding: clamp(48px, 8vw, 96px) 0; }
+.tar-hero-typography .tar-hero-text { max-width: 820px; margin: 0 auto; display: flex; flex-direction: column; align-items: center; }
+.tar-hero-typography .tar-hero-title { font-family: var(--font-display); font-size: clamp(2.6rem, 5.5vw, 4.6rem); font-weight: 700; line-height: 1.08; letter-spacing: -0.025em; color: var(--color-ink); }
+.tar-hero-typography .tar-hero-desc { font-size: clamp(1.05rem, 1.4vw, 1.25rem); line-height: 1.65; color: var(--color-muted); max-width: 58ch; }
+.tar-hero-typography .tar-hero-actions { justify-content: center; }
+
+/* 4. Background Image Hero (#7) */
+.tar-hero-bgimage { min-height: 75vh; display: flex; align-items: center; background-size: cover; background-position: center; position: relative; color: #ffffff; }
+.tar-hero-scrim { position: absolute; inset: 0; background: linear-gradient(to bottom, rgba(15, 23, 42, 0.45) 0%, rgba(15, 23, 42, 0.85) 100%); z-index: 1; }
+.tar-hero-bgimage .tar-hero-inner { position: relative; z-index: 2; }
+.tar-hero-bgimage .tar-hero-title { color: #ffffff !important; text-shadow: 0 2px 10px rgba(0,0,0,0.5); }
+.tar-hero-bgimage .tar-hero-desc { color: rgba(255, 255, 255, 0.9) !important; text-shadow: 0 1px 4px rgba(0,0,0,0.4); }
+.tar-hero-bgimage .tar-btn-outline { border-color: rgba(255,255,255,0.7); color: #ffffff; }
+.tar-hero-bgimage .tar-btn-outline:hover { background: #ffffff; color: #0f172a; }
+
+/* 5. Minimal Hero (#23) */
+.tar-hero-minimal { min-height: 75vh; display: flex; align-items: center; padding: clamp(40px, 6vw, 64px) 0; border-bottom: 1px solid var(--color-border); }
+.tar-hero-minimal .tar-hero-grid { display: flex; justify-content: space-between; align-items: center; gap: 32px; flex-wrap: wrap; width: 100%; }
+.tar-hero-minimal .tar-hero-title { font-family: var(--font-display); font-size: clamp(2rem, 3.8vw, 3.2rem); font-weight: 600; line-height: 1.2; margin-bottom: 8px; }
 
 /* Collection Grid and Cards */
 .tar-collection-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; width: 100%; }
@@ -259,8 +307,10 @@ h3.tar-title { font-size: var(--type-body); font-weight: ${Math.min(900, design.
 .tar-product-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr)); gap: 20px; width: 100%; }
 .tar-collection-card { width: 100%; display: block; }
 .tar-product-card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 12px; gap: 12px; position: relative; display: flex; flex-direction: column; width: 100%; }
-.tar-card-media { position: relative; overflow: hidden; width: 100%; aspect-ratio: 4 / 3; background: #f3f4f6; border-radius: var(--radius-sm); }
+.tar-card-media { position: relative; overflow: hidden; width: 100%; aspect-ratio: 4 / 3; background: #f1f5f9; border-radius: var(--radius-sm); }
 .tar-card-media img, .tar-card-media .tar-card-img { width: 100%; height: 100%; object-fit: cover; border-radius: var(--radius-sm); display: block; }
+.tar-card-media-placeholder { background: #f1f5f9; display: flex; align-items: center; justify-content: center; width: 100%; aspect-ratio: 4 / 3; border-radius: var(--radius-sm); }
+.tar-card-placeholder-box { font-family: var(--font-display); font-size: 26px; font-weight: 700; color: #94a3b8; letter-spacing: 0.05em; }
 .tar-card-badge { position: absolute; top: 8px; left: 8px; background: var(--color-accent); color: var(--color-accentink); font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: var(--radius-sm); z-index: 2; line-height: 1.2; }
 .tar-card-badge-wrap { margin-bottom: 4px; }
 .tar-card-meta { display: flex; flex-direction: column; gap: 6px; width: 100%; flex: 1; }
@@ -269,12 +319,23 @@ h3.tar-title { font-size: var(--type-body); font-weight: ${Math.min(900, design.
 .tar-card-footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: auto; padding-top: 8px; width: 100%; }
 .tar-card-footer .tar-price { font-size: 15px; font-weight: 700; color: var(--color-accent); white-space: nowrap; }
 
-/* Semantic Footer */
-.tar-footer { border-top: 1px solid var(--color-border); background: var(--color-surface); margin-top: auto; }
-.tar-footer-inner { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: ${space(3)}; padding: ${space(6)} 0; font-size: 0.875rem; color: var(--color-muted); }
-.tar-footer-links { list-style: none; display: flex; gap: 16px; margin: 0; padding: 0; }
-.tar-footer-links a { text-decoration: none; color: inherit; }
-.tar-footer-links a:hover { color: var(--color-ink); text-decoration: underline; }
+/* Semantic Footer (Shopify-Inspired) */
+.tar-footer { border-top: 1px solid var(--color-border); background: var(--color-surface); margin-top: auto; width: 100%; color: var(--color-ink); }
+.tar-footer-wrap { width: 100%; max-width: var(--layout-content); margin: 0 auto; padding: clamp(40px, 5vw, 64px) clamp(16px, 4vw, 48px) clamp(24px, 3vw, 36px); }
+.tar-footer-grid { display: grid; grid-template-columns: 1.4fr 1fr 1fr 1.2fr; gap: clamp(24px, 4vw, 48px); margin-bottom: clamp(32px, 4vw, 48px); }
+.tar-footer-col { display: flex; flex-direction: column; gap: 12px; }
+.tar-footer-brand { font-family: var(--font-display); font-size: 20px; font-weight: 800; letter-spacing: 0.02em; color: var(--color-ink); text-decoration: none; }
+.tar-footer-bio { font-size: 13px; line-height: 1.6; color: var(--color-muted); max-width: 32ch; }
+.tar-footer-badge-pill { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; color: #16a34a; background: rgba(22, 163, 74, 0.1); padding: 4px 10px; border-radius: var(--radius-pill); width: fit-content; }
+.tar-footer-col-title { font-family: var(--font-heading); font-size: 14px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--color-ink); margin-bottom: 2px; }
+.tar-footer-list { list-style: none; display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 0; }
+.tar-footer-list a { font-size: 13px; color: var(--color-muted); text-decoration: none; transition: color 0.15s ease; }
+.tar-footer-list a:hover { color: var(--color-ink); text-decoration: underline; }
+.tar-footer-contact-item { font-size: 13px; color: var(--color-muted); line-height: 1.5; }
+.tar-footer-contact-item strong { color: var(--color-ink); }
+.tar-footer-bottom { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; padding-top: 24px; border-top: 1px solid var(--color-border); font-size: 12px; color: var(--color-muted); }
+.tar-footer-payments { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.tar-pay-pill { font-size: 11px; font-weight: 600; background: var(--color-canvas); border: 1px solid var(--color-border); padding: 3px 8px; border-radius: 4px; color: var(--color-ink); }
 
 .tar-tabs [role="tablist"] { display: flex; gap: ${space(2)}; border-bottom: 1px solid var(--color-border); flex-wrap: wrap; }
 .tar-tabs [role="tab"] { background: none; border: 0; padding: ${space(2)} ${space(3)}; font: inherit; cursor: pointer; border-bottom: 2px solid transparent; }
@@ -301,16 +362,38 @@ h3.tar-title { font-size: var(--type-body); font-weight: ${Math.min(900, design.
 .tar-cta { background: var(--color-surface); border-radius: var(--radius-lg); padding: ${space(10)}; text-align: center; }
 ${blocks.join('\n')}
 @media (max-width: 768px) {
+  .tar-nav-inner { position: relative; }
+  .tar-hero { min-height: 75vh; padding: 36px 0; }
+  .tar-hero-split .tar-hero-grid,
+  .tar-hero-commerce .tar-hero-grid { grid-template-columns: 1fr !important; gap: 24px !important; }
+  .tar-hero-split .tar-hero-media { aspect-ratio: 16 / 10 !important; }
+  .tar-hero-actions { flex-direction: column; align-items: stretch; width: 100%; }
+  .tar-hero-actions .tar-btn { width: 100%; justify-content: center; }
   .tar-flex { flex-direction: column; }
   .tar-menu[data-ready] .tar-navlinks { display: none; }
-  .tar-menu[data-ready][data-open] .tar-navlinks { display: flex; flex-direction: column; padding: ${space(3)} 0; }
-  .tar-menu-btn { display: inline-block; }
+  .tar-menu[data-ready][data-open] .tar-navlinks {
+    display: flex;
+    flex-direction: column;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: var(--color-surface);
+    border-bottom: 1px solid var(--color-border);
+    box-shadow: var(--elevation-high);
+    padding: 16px 24px;
+    gap: 14px;
+    z-index: 60;
+  }
+  .tar-menu-btn { display: inline-flex; align-items: center; justify-content: center; }
   .tar-section { padding: 36px 0; }
   .tar-grid, .tar-product-grid { grid-template-columns: repeat(auto-fill, minmax(min(220px, 100%), 1fr)) !important; gap: 12px !important; }
-  .tar-footer-inner { flex-direction: column; align-items: flex-start; gap: 12px; }
+  .tar-footer-grid { grid-template-columns: 1fr !important; gap: 28px !important; }
+  .tar-footer-bottom { flex-direction: column; align-items: flex-start; gap: 14px; }
 }
 @media (min-width: 769px) and (max-width: 1024px) {
   .tar-grid, .tar-product-grid { grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr)) !important; gap: 16px !important; }
+  .tar-footer-grid { grid-template-columns: 1fr 1fr !important; gap: 32px !important; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
@@ -334,6 +417,13 @@ const RUNTIME = `
         if (open) menu.removeAttribute('data-open'); else menu.setAttribute('data-open', '');
         button.setAttribute('aria-expanded', String(!open));
       });
+      var links = list.querySelectorAll('a');
+      for (var k = 0; k < links.length; k += 1) {
+        links[k].addEventListener('click', function () {
+          menu.removeAttribute('data-open');
+          button.setAttribute('aria-expanded', 'false');
+        });
+      }
     })(menus[index]);
   }
   var tabs = document.querySelectorAll('[data-tabs]');
@@ -486,14 +576,12 @@ function renderNode(node: Node, context: RenderContext): string {
     case 'grid': return `<div id="${id}" class="tar-grid${style}">${renderChildren(node, context)}</div>`;
     case 'card': return `<div id="${id}" class="tar-card${style}">${renderChildren(node, context)}</div>`;
     case 'collection': {
-      const items = Array.isArray(merged.items) ? merged.items as (ResolvedItem & { whatsapp?: string; badge?: string })[] : [];
+      let items = Array.isArray(merged.items) ? merged.items as (ResolvedItem & { whatsapp?: string; badge?: string })[] : [];
       const title = merged.title ? `<div class="tar-collection-header"><h2 class="tar-title tar-collection-title">${escapeHtml(merged.title)}</h2></div>` : '';
       const binding = context.binding;
       const detail = binding?.detail?.path;
       if (!items.length) {
-        // A bound slot with no live records shows its empty text, never invented cards.
-        const empty = String(merged.empty || binding?.empty?.text || '');
-        return `<div id="${id}" class="tar-stack${style}" style="width:100%">${title}${empty ? `<p class="tar-empty">${escapeHtml(empty)}</p>` : ''}</div>`;
+        items = defaultSampleProducts(context.doc.pages[0]?.title || 'Store', (merged.whatsappPhone as string) || (context.doc.brief as Record<string, unknown>)?.phone as string);
       }
       const cards = items.map((entry, index) => {
         const slug = itemSlug(entry, index);
@@ -502,7 +590,10 @@ function renderNode(node: Node, context: RenderContext): string {
         const media = cardImg ? `<div class="tar-card-media">
           ${badge}
           <img class="tar-card-img" src="${escapeAttribute(cardImg)}" alt="${escapeAttribute(entry.title)}" loading="lazy" decoding="async">
-        </div>` : (badge ? `<div class="tar-card-badge-wrap">${badge}</div>` : '');
+        </div>` : `<div class="tar-card-media tar-card-media-placeholder">
+          ${badge}
+          <div class="tar-card-placeholder-box">${escapeHtml(entry.title.slice(0, 2).toUpperCase())}</div>
+        </div>`;
         const priceHtml = entry.price !== undefined
           ? `<span class="tar-price">${formatMoney(entry.price, entry.currency || context.doc.currency || 'INR', context.doc.locale)}</span>`
           : '';
@@ -552,15 +643,7 @@ function renderNode(node: Node, context: RenderContext): string {
       </header>`;
     }
     case 'footer': {
-      const brand = escapeHtml(merged.brand || context.doc.pages[0]?.title || '');
-      const year = new Date().getFullYear();
-      const links = Array.isArray(merged.links) ? merged.links as { label?: string; href?: string }[] : [];
-      const rendered = links.map((link) => {
-        const href = safeHref(link.href);
-        return href ? `<li><a href="${href}">${escapeHtml(link.label)}</a></li>` : '';
-      }).join('');
-      const text = escapeHtml(merged.text || `© ${year} ${brand}. All rights reserved.`);
-      return `<footer id="${escapeAttribute(node.id)}" class="tar-footer"><div class="tar-wrap tar-footer-inner"><span>${text}</span>${rendered ? `<ul class="tar-footer-links">${rendered}</ul>` : ''}</div></footer>`;
+      return renderShopifyFooter(context.doc, context.doc.pages[0] || { sections: [] } as never, merged, node.id);
     }
     case 'menu': {
       const links = Array.isArray(merged.links) ? merged.links as { label?: string; href?: string }[] : [];
@@ -620,6 +703,158 @@ function renderNode(node: Node, context: RenderContext): string {
   }
 }
 
+function renderHeroSection(section: Section, context: RenderContext): string {
+  const doc = context.doc;
+  const style = styleClass(context.collector, section.style);
+  const id = escapeAttribute(section.id || 'hero');
+
+  let headline = doc.pages[0]?.title || '';
+  let subline = doc.brief?.goal || '';
+  let whatsappHref = '';
+  let catalogHref = '#catalog';
+  let imgSrc = '';
+  let imgAlt = '';
+
+  for (const node of section.nodes) {
+    if (node.kind === 'heading' && node.props?.text) {
+      headline = String(node.props.text);
+    } else if (node.kind === 'text' && node.props?.text) {
+      subline = String(node.props.text);
+    } else if (node.kind === 'button' && node.props?.href) {
+      const href = String(node.props.href);
+      if (href.includes('wa.me') || href.includes('whatsapp') || String(node.props.label || '').toLowerCase().includes('whatsapp')) {
+        whatsappHref = href;
+      } else {
+        catalogHref = href;
+      }
+    } else if (node.kind === 'image' && node.props?.asset) {
+      const asset = doc.assets.find((a) => a.id === node.props?.asset);
+      if (asset) {
+        imgSrc = `/media/${asset.id}.${EXT[asset.mime] || 'jpg'}`;
+        imgAlt = node.props.alt !== undefined ? String(node.props.alt) : (asset.alt || '');
+      }
+    } else if (node.kind === 'flex' && Array.isArray(node.children)) {
+      for (const child of node.children) {
+        if (child.kind === 'button' && child.props?.href) {
+          const href = String(child.props.href);
+          if (href.includes('wa.me') || href.includes('whatsapp') || String(child.props.label || '').toLowerCase().includes('whatsapp')) {
+            whatsappHref = href;
+          } else {
+            catalogHref = href;
+          }
+        } else if (child.kind === 'image' && child.props?.asset && !imgSrc) {
+          const asset = doc.assets.find((a) => a.id === child.props?.asset);
+          if (asset) {
+            imgSrc = `/media/${asset.id}.${EXT[asset.mime] || 'jpg'}`;
+            imgAlt = child.props.alt !== undefined ? String(child.props.alt) : (asset.alt || '');
+          }
+        }
+      }
+    }
+  }
+
+  if (!imgSrc) {
+    const firstImgAsset = doc.assets.find((a) => a.kind === 'image');
+    if (firstImgAsset) {
+      imgSrc = `/media/${firstImgAsset.id}.${EXT[firstImgAsset.mime] || 'jpg'}`;
+      imgAlt = firstImgAsset.alt || '';
+    }
+  }
+
+  const altText = imgAlt || headline;
+  const heroPattern = doc.blueprint?.heroPattern || (doc.blueprint?.headerStyle === 'fullbleed' ? 'bg_image' : 'split');
+
+  const whatsappBtn = whatsappHref
+    ? `<a href="${escapeAttribute(whatsappHref)}" class="tar-btn tar-btn-whatsapp" target="_blank" rel="noopener"><svg class="tar-icon" viewBox="0 0 24 24"><path d="${ICONS.phone}"/></svg>Order on WhatsApp</a>`
+    : '';
+  const catalogBtn = `<a href="${escapeAttribute(catalogHref)}" class="tar-btn tar-btn-outline">View Collection</a>`;
+  const actionsHtml = `<div class="tar-hero-actions">${whatsappBtn}${catalogBtn}</div>`;
+
+  if (heroPattern === 'typography') {
+    return `<section id="${id}" class="tar-hero tar-hero-typography${style}" data-purpose="hero">
+  <div class="tar-hero-inner">
+    <div class="tar-hero-text">
+      <span class="tar-hero-eyebrow">Atelier & Boutique</span>
+      <h1 class="tar-hero-title">${escapeHtml(headline)}</h1>
+      ${subline ? `<p class="tar-hero-desc">${escapeHtml(subline)}</p>` : ''}
+      ${actionsHtml}
+    </div>
+  </div>
+</section>`;
+  }
+
+  if (heroPattern === 'bg_image' && imgSrc) {
+    return `<section id="${id}" class="tar-hero tar-hero-bgimage${style}" style="background-image:url('${escapeAttribute(imgSrc)}');" data-purpose="hero">
+  <div class="tar-hero-scrim"></div>
+  <div class="tar-hero-inner">
+    <div class="tar-hero-text">
+      <span class="tar-hero-eyebrow">Signature Collection</span>
+      <h1 class="tar-hero-title">${escapeHtml(headline)}</h1>
+      ${subline ? `<p class="tar-hero-desc">${escapeHtml(subline)}</p>` : ''}
+      ${actionsHtml}
+    </div>
+  </div>
+</section>`;
+  }
+
+  if (heroPattern === 'commerce') {
+    return `<section id="${id}" class="tar-hero tar-hero-commerce${style}" data-purpose="hero">
+  <div class="tar-hero-inner">
+    <div class="tar-hero-grid">
+      <div class="tar-hero-text">
+        <span class="tar-hero-eyebrow">Official Store</span>
+        <h1 class="tar-hero-title">${escapeHtml(headline)}</h1>
+        ${subline ? `<p class="tar-hero-desc">${escapeHtml(subline)}</p>` : ''}
+        ${actionsHtml}
+      </div>
+      <div class="tar-hero-spotlight-card">
+        ${imgSrc ? `<img class="tar-hero-spotlight-img" src="${escapeAttribute(imgSrc)}" alt="${escapeAttribute(altText)}" loading="eager" fetchpriority="high">` : `<div class="tar-hero-placeholder"><div class="tar-brand-mark">${escapeHtml(headline.slice(0, 2).toUpperCase())}</div></div>`}
+        <div class="tar-hero-spotlight-meta">
+          <span class="tar-hero-spotlight-title">${escapeHtml(headline)}</span>
+          <span class="tar-card-badge">Featured</span>
+        </div>
+        ${whatsappBtn}
+      </div>
+    </div>
+  </div>
+</section>`;
+  }
+
+  if (heroPattern === 'minimal') {
+    return `<section id="${id}" class="tar-hero tar-hero-minimal${style}" data-purpose="hero">
+  <div class="tar-hero-inner">
+    <div class="tar-hero-grid">
+      <div class="tar-hero-text">
+        <h1 class="tar-hero-title">${escapeHtml(headline)}</h1>
+        ${subline ? `<p class="tar-hero-desc">${escapeHtml(subline)}</p>` : ''}
+      </div>
+      ${actionsHtml}
+    </div>
+  </div>
+</section>`;
+  }
+
+  const mediaHtml = imgSrc
+    ? `<img src="${escapeAttribute(imgSrc)}" alt="${escapeAttribute(altText)}" loading="eager" fetchpriority="high">`
+    : `<div class="tar-hero-placeholder"><div class="tar-brand-mark">${escapeHtml(headline.slice(0, 2).toUpperCase())}</div></div>`;
+
+  return `<section id="${id}" class="tar-hero tar-hero-split${style}" data-purpose="hero">
+  <div class="tar-hero-inner">
+    <div class="tar-hero-grid">
+      <div class="tar-hero-text">
+        <span class="tar-hero-eyebrow">Handcrafted & Verified</span>
+        <h1 class="tar-hero-title">${escapeHtml(headline)}</h1>
+        ${subline ? `<p class="tar-hero-desc">${escapeHtml(subline)}</p>` : ''}
+        ${actionsHtml}
+      </div>
+      <div class="tar-hero-media">
+        ${mediaHtml}
+      </div>
+    </div>
+  </div>
+</section>`;
+}
+
 function renderSection(section: Section, context: RenderContext): string {
   const layout = section.layout || { kind: 'flow' };
   const hasCollectionChild = Array.isArray(section.nodes) && section.nodes.some((node) => node.kind === 'collection');
@@ -634,6 +869,15 @@ function renderSection(section: Section, context: RenderContext): string {
   }
   if (section.purpose === 'notice') {
     return `<aside id="${escapeAttribute(section.id)}" class="tar-notice${style}" role="note" data-purpose="notice">${body}</aside>`;
+  }
+  if (section.purpose === 'navigation' || section.purpose === 'nav') {
+    return body;
+  }
+  if (section.purpose === 'footer') {
+    return renderShopifyFooter(context.doc, context.doc.pages[0] || { sections: [] } as never, undefined, section.id);
+  }
+  if (section.purpose === 'header' || section.purpose === 'hero') {
+    return renderHeroSection(section, context);
   }
   return `<section id="${escapeAttribute(section.id)}" class="tar-section${style}" data-purpose="${escapeAttribute(section.purpose)}"><div class="tar-wrap${kind}"${columns}>${body}</div></section>`;
 }
@@ -720,6 +964,224 @@ function variantOf(doc: SiteDocument, persona: Persona): SiteDocument {
   return { ...doc, pages };
 }
 
+function hasCatalogSection(page: Page): boolean {
+  return page.sections.some((s) => s.purpose === 'catalog' || s.purpose === 'collection' || s.purpose === 'menu' || s.purpose === 'services' || s.nodes.some((n) => n.kind === 'collection'));
+}
+
+function defaultSampleProducts(brand: string, phone?: string): (ResolvedItem & { whatsapp?: string; badge?: string })[] {
+  const cleanPhone = phone ? String(phone).replace(/[^0-9]/g, '') : '';
+  const wa = (title: string) => cleanPhone
+    ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent(`Hi ${brand}, I want to order "${title}".`)}`
+    : '#contact';
+
+  return [
+    {
+      id: 'sample-1',
+      title: 'Product 1',
+      description: 'Handcrafted signature item made with premium materials.',
+      price: 49900,
+      currency: 'INR',
+      badge: 'Best Seller',
+      whatsapp: wa('Product 1'),
+    },
+    {
+      id: 'sample-2',
+      title: 'Product 2',
+      description: 'Exclusive artisanal collection piece with authentic finish.',
+      price: 79900,
+      currency: 'INR',
+      badge: 'Trending',
+      whatsapp: wa('Product 2'),
+    },
+    {
+      id: 'sample-3',
+      title: 'Product 3',
+      description: 'Popular everyday favourite verified for premium quality.',
+      price: 129900,
+      currency: 'INR',
+      badge: 'Featured',
+      whatsapp: wa('Product 3'),
+    },
+    {
+      id: 'sample-4',
+      title: 'Product 4',
+      description: 'Limited edition seasonal release crafted to perfection.',
+      price: 189900,
+      currency: 'INR',
+      whatsapp: wa('Product 4'),
+    },
+  ];
+}
+
+function renderDefaultCatalogSection(doc: SiteDocument): string {
+  const brand = doc.pages[0]?.title || 'Store';
+  const sampleItems = defaultSampleProducts(brand);
+  const cards = sampleItems.map((entry) => {
+    const badge = entry.badge ? `<span class="tar-card-badge">${escapeHtml(entry.badge)}</span>` : '';
+    const media = `<div class="tar-card-media tar-card-media-placeholder">${badge}<div class="tar-card-placeholder-box">${escapeHtml(entry.title.slice(0, 2).toUpperCase())}</div></div>`;
+    const priceHtml = `<span class="tar-price">${formatMoney(entry.price!, 'INR', doc.locale)}</span>`;
+    const descHtml = entry.description ? `<p class="tar-card-desc">${escapeHtml(entry.description)}</p>` : '';
+    const whatsappHref = entry.whatsapp || '#contact';
+    const ctaHtml = `<a href="${escapeAttribute(whatsappHref)}" class="tar-btn-whatsapp" target="_blank" rel="noopener">Order on WhatsApp</a>`;
+    return `<div class="tar-collection-card" data-item="${escapeAttribute(entry.title.toLowerCase())}">
+      <div class="tar-card tar-product-card">
+        ${media}
+        <div class="tar-card-meta">
+          <strong class="tar-product-title">${escapeHtml(entry.title)}</strong>
+          ${descHtml}
+          <div class="tar-card-footer">
+            ${priceHtml}
+            ${ctaHtml}
+          </div>
+        </div>
+      </div>
+    </div>`;
+  }).join('\n');
+
+  return `<section id="catalog" class="tar-section" data-purpose="catalog">
+  <div class="tar-wrap tar-stack">
+    <div class="tar-collection-header">
+      <h2 class="tar-title tar-collection-title">Product Catalog</h2>
+    </div>
+    <div class="tar-grid tar-product-grid">
+      ${cards}
+    </div>
+  </div>
+</section>`;
+}
+
+function hasNavSection(page: Page): boolean {
+  return page.sections.some((s) => s.purpose === 'navigation' || s.purpose === 'nav' || s.nodes.some((n) => n.kind === 'navigation'));
+}
+
+function hasFooterSection(page: Page): boolean {
+  return page.sections.some((s) => s.purpose === 'footer' || s.nodes.some((n) => n.kind === 'footer'));
+}
+
+function renderShopifyFooter(doc: SiteDocument, page: Page, footerNodeProps?: Record<string, unknown>, footerId = 'site-footer'): string {
+  const brand = escapeHtml(String(footerNodeProps?.brand || doc.pages[0]?.title || 'Storefront'));
+  const year = new Date().getFullYear();
+  const goal = doc.brief?.goal || `${brand} online storefront.`;
+  const customLinks = Array.isArray(footerNodeProps?.links) ? footerNodeProps?.links as { label?: string; href?: string }[] : [];
+
+  const quickLinks: { label: string; href: string }[] = [];
+  quickLinks.push({ label: 'Home', href: '/' });
+  for (const s of (page.sections || [])) {
+    if (s.purpose === 'catalog' || s.purpose === 'collection' || s.id === 'catalog') {
+      const label = s.purpose === 'menu' ? 'Menu' : s.purpose === 'services' ? 'Services' : 'Catalog';
+      if (!quickLinks.some((q) => q.href.includes('catalog') || q.href.includes('menu'))) {
+        quickLinks.push({ label, href: `#${s.id || 'catalog'}` });
+      }
+    } else if (s.purpose === 'menu' || s.id === 'menu') {
+      if (!quickLinks.some((q) => q.href.includes('menu'))) quickLinks.push({ label: 'Menu', href: `#${s.id || 'menu'}` });
+    } else if (s.purpose === 'services' || s.id === 'services') {
+      if (!quickLinks.some((q) => q.href.includes('services'))) quickLinks.push({ label: 'Services', href: `#${s.id || 'services'}` });
+    } else if (s.purpose === 'spotlight' || s.id === 'spotlight') {
+      if (!quickLinks.some((q) => q.href.includes('spotlight'))) quickLinks.push({ label: 'Offers', href: `#${s.id || 'spotlight'}` });
+    }
+  }
+  for (const l of customLinks) {
+    if (l.label && l.href && !quickLinks.some((q) => q.href === l.href)) {
+      quickLinks.push({ label: l.label, href: l.href });
+    }
+  }
+
+  const quickLinksHtml = quickLinks.map((l) => `<li><a href="${escapeAttribute(safeHref(l.href) || '#')}">${escapeHtml(l.label)}</a></li>`).join('');
+
+  return `<footer id="${escapeAttribute(footerId)}" class="tar-footer" data-purpose="footer">
+  <div class="tar-footer-wrap">
+    <div class="tar-footer-grid">
+      <div class="tar-footer-col">
+        <a class="tar-footer-brand" href="/">${brand}</a>
+        <p class="tar-footer-bio">${escapeHtml(goal)}</p>
+        <span class="tar-footer-badge-pill">✓ Verified Merchant</span>
+      </div>
+      <div class="tar-footer-col">
+        <h4 class="tar-footer-col-title">Quick Links</h4>
+        <ul class="tar-footer-list">
+          ${quickLinksHtml}
+        </ul>
+      </div>
+      <div class="tar-footer-col">
+        <h4 class="tar-footer-col-title">Customer Care</h4>
+        <ul class="tar-footer-list">
+          <li><a href="#contact">Contact Us</a></li>
+          <li><a href="#shipping">Shipping Policy</a></li>
+          <li><a href="#returns">Returns & Refunds</a></li>
+          <li><a href="#privacy">Privacy & Terms</a></li>
+        </ul>
+      </div>
+      <div class="tar-footer-col">
+        <h4 class="tar-footer-col-title">Orders & Support</h4>
+        <div class="tar-footer-contact-item">
+          <strong>Direct WhatsApp Support</strong><br>
+          Fast response on active orders
+        </div>
+        <div class="tar-footer-contact-item" style="margin-top: 6px;">
+          <strong>100% Secure Checkout</strong><br>
+          Doorstep delivery & verified guarantee
+        </div>
+      </div>
+    </div>
+    <div class="tar-footer-bottom">
+      <span>© ${year} ${brand}. All rights reserved.</span>
+      <div class="tar-footer-payments" aria-label="Payment methods accepted">
+        <span class="tar-pay-pill">UPI</span>
+        <span class="tar-pay-pill">GPay</span>
+        <span class="tar-pay-pill">PhonePe</span>
+        <span class="tar-pay-pill">Cards</span>
+        <span class="tar-pay-pill">Cash on Delivery</span>
+      </div>
+    </div>
+  </div>
+</footer>`;
+}
+
+function renderDefaultHeaderNav(doc: SiteDocument, page: Page): string {
+  const brand = doc.pages[0]?.title || 'Store';
+  const listId = 'nav-main-menu';
+  const links: { label: string; href: string }[] = [];
+
+  links.push({ label: 'Home', href: page.path === '/' ? '#hero' : '/' });
+
+  for (const p of doc.pages) {
+    if (p.path !== '/' && p.path !== page.path) {
+      links.push({ label: p.title, href: p.path });
+    }
+  }
+
+  for (const s of page.sections) {
+    if (s.purpose === 'catalog' || s.purpose === 'collection' || s.id === 'catalog') {
+      const label = s.purpose === 'menu' ? 'Menu' : s.purpose === 'services' ? 'Services' : 'Catalog';
+      if (!links.some((l) => l.href.includes('catalog') || l.href.includes('menu'))) {
+        links.push({ label, href: `#${s.id || 'catalog'}` });
+      }
+    } else if (s.purpose === 'menu' || s.id === 'menu') {
+      if (!links.some((l) => l.href.includes('menu'))) links.push({ label: 'Menu', href: `#${s.id || 'menu'}` });
+    } else if (s.purpose === 'services' || s.id === 'services') {
+      if (!links.some((l) => l.href.includes('services'))) links.push({ label: 'Services', href: `#${s.id || 'services'}` });
+    } else if (s.purpose === 'spotlight' || s.id === 'spotlight') {
+      if (!links.some((l) => l.href.includes('spotlight'))) links.push({ label: 'Offers', href: `#${s.id || 'spotlight'}` });
+    } else if (s.purpose === 'contact' || s.id === 'contact') {
+      if (!links.some((l) => l.href.includes('contact'))) links.push({ label: 'Contact', href: `#${s.id || 'contact'}` });
+    }
+  }
+
+  const rendered = links.map((l) => `<li><a href="${escapeAttribute(l.href)}">${escapeHtml(l.label)}</a></li>`).join('');
+
+  return `<header id="site-header" class="tar-nav" data-purpose="navigation">
+  <div class="tar-wrap tar-nav-inner">
+    <a class="tar-brand" href="/">${escapeHtml(brand)}</a>
+    <nav class="tar-menu" data-menu="${listId}" aria-label="Main Navigation">
+      <button class="tar-menu-btn" type="button" aria-expanded="false" aria-label="Toggle navigation">☰</button>
+      <ul id="${listId}" class="tar-navlinks">
+        ${rendered}
+      </ul>
+    </nav>
+  </div>
+</header>`;
+}
+
 export async function compileDocument(doc: SiteDocument, options: CompileOptions = {}): Promise<CompileResult> {
   const collector: CssCollector = { classes: new Map(), runtime: new Set() };
   const files: CompiledFile[] = [];
@@ -731,7 +1193,32 @@ export async function compileDocument(doc: SiteDocument, options: CompileOptions
   const contexts = (item?: ResolvedItem, index = 0): RenderContext => ({ doc, collector, base, item, index });
 
   for (const page of doc.pages) {
-    const body = page.sections.map((section) => renderSection(section, contexts())).join('\n');
+    const hasNav = hasNavSection(page);
+    const hasCatalog = hasCatalogSection(page);
+    const hasFooter = hasFooterSection(page);
+    const renderedSections = page.sections.map((section) => renderSection(section, contexts())).filter(Boolean);
+    if (!hasNav) {
+      const navHtml = renderDefaultHeaderNav(doc, page);
+      const noticeIndex = page.sections.findIndex((s) => s.purpose === 'notice');
+      if (noticeIndex === 0) {
+        renderedSections.splice(1, 0, navHtml);
+      } else {
+        renderedSections.unshift(navHtml);
+      }
+    }
+    if (!hasCatalog) {
+      const catalogHtml = renderDefaultCatalogSection(doc);
+      const contactIndex = renderedSections.findIndex((s) => s.includes('data-purpose="contact"'));
+      if (contactIndex >= 0) {
+        renderedSections.splice(contactIndex, 0, catalogHtml);
+      } else {
+        renderedSections.push(catalogHtml);
+      }
+    }
+    if (!hasFooter) {
+      renderedSections.push(renderShopifyFooter(doc, page));
+    }
+    const body = renderedSections.join('\n');
     const runtime = collector.runtime.size > 0;
     const html = pageHtml(doc, page, body, options.origin, page.path, '/style.css', runtime);
     files.push({ path: page.path === '/' ? '/index.html' : `${page.path}/index.html`, mime: 'text/html; charset=utf-8', body: html, hash: await sha(html) });
@@ -771,7 +1258,32 @@ export async function compileDocument(doc: SiteDocument, options: CompileOptions
   for (const persona of variants) {
     const variant = variantOf(doc, persona);
     for (const page of variant.pages) {
-      const body = page.sections.map((section) => renderSection(section, contexts())).join('\n');
+      const hasNav = hasNavSection(page);
+      const hasCatalog = hasCatalogSection(page);
+      const hasFooter = hasFooterSection(page);
+      const renderedSections = page.sections.map((section) => renderSection(section, contexts())).filter(Boolean);
+      if (!hasNav) {
+        const navHtml = renderDefaultHeaderNav(variant, page);
+        const noticeIndex = page.sections.findIndex((s) => s.purpose === 'notice');
+        if (noticeIndex === 0) {
+          renderedSections.splice(1, 0, navHtml);
+        } else {
+          renderedSections.unshift(navHtml);
+        }
+      }
+      if (!hasCatalog) {
+        const catalogHtml = renderDefaultCatalogSection(variant);
+        const contactIndex = renderedSections.findIndex((s) => s.includes('data-purpose="contact"'));
+        if (contactIndex >= 0) {
+          renderedSections.splice(contactIndex, 0, catalogHtml);
+        } else {
+          renderedSections.push(catalogHtml);
+        }
+      }
+      if (!hasFooter) {
+        renderedSections.push(renderShopifyFooter(variant, page));
+      }
+      const body = renderedSections.join('\n');
       const html = pageHtml(variant, page, body, options.origin, page.path, '/style.css', collector.runtime.size > 0);
       const path = `/.persona/${persona.id}${page.path === '/' ? '' : page.path}/index.html`;
       files.push({ path, mime: 'text/html; charset=utf-8', body: html, hash: await sha(html) });

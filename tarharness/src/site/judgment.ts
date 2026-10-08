@@ -8,7 +8,7 @@
  */
 
 import { askSystemOne, choiceOf, noulOf, scoreOf, JEV_MODEL, type SystemOneQuestion } from '../brain/systemone.ts';
-import type { BusinessKind, DensityToken, LeadSection, ToneToken, TypographyToken } from './blueprint.ts';
+import type { BusinessKind, DensityToken, HeroPattern, LeadSection, ToneToken, TypographyToken } from './blueprint.ts';
 
 export const JUDGMENT = {
   noulThreshold: 0.65,
@@ -69,6 +69,7 @@ export interface CreateJudgment {
   typography: TypographyToken | null;
   tone: ToneToken | null;
   density: DensityToken | null;
+  heroPattern?: HeroPattern | null;
   // Compat helpers for transitional callers
   category?: string | null;
   theme?: string | null;
@@ -160,6 +161,17 @@ export async function fanOut(
       instructions: 'How airy should spacing be?',
       criteria: ['1: Compact', '2: Balanced', '3: Airy'],
     },
+    heroPattern: {
+      type: 'choice',
+      instructions: 'Which hero section pattern fits taste, trade and media?',
+      criteria: {
+        split: 'Split 50/50: editorial headline left with visual right (#4)',
+        commerce: 'Commerce hero: product spotlight with price pill and direct order CTA (#16)',
+        typography: 'Typography hero: oversized serif statement, dark luxury ink canvas (#24)',
+        bg_image: 'Atmospheric hero: full background photography with auto-contrast scrim (#7)',
+        minimal: 'Minimal hero: clean balanced spacing and refined navigation (#23)',
+      },
+    },
   };
 
   // Trust is asked ONLY if code finds proof. Never inferred without proof!
@@ -191,6 +203,7 @@ export async function fanOut(
       typography: 'sans',
       tone: 'canvas',
       density: 2,
+      heroPattern: 'split',
       category: 'goods',
       theme: 'canvas',
       columns: 3,
@@ -211,6 +224,7 @@ export async function fanOut(
   const typeChoice = choiceOf(result.typography);
   const toneChoice = choiceOf(result.tone);
   const densityScore = scoreOf(result.density);
+  const heroChoice = choiceOf(result.heroPattern);
 
   const kind: BusinessKind = (kindChoice.choice === 'food' || kindChoice.choice === 'services' || kindChoice.choice === 'wholesale')
     ? kindChoice.choice
@@ -237,6 +251,15 @@ export async function fanOut(
   const densityVal = densityScore.score;
   const density: DensityToken = densityVal === 1 ? 1 : densityVal === 3 ? 3 : 2;
 
+  const heroPattern: HeroPattern = (
+    heroChoice.choice === 'commerce' ||
+    heroChoice.choice === 'typography' ||
+    heroChoice.choice === 'bg_image' ||
+    heroChoice.choice === 'minimal'
+  )
+    ? heroChoice.choice
+    : 'split';
+
   const purposes = ['header'];
   if (spotlight) purposes.push('spotlight');
   purposes.push(kind === 'food' ? 'menu' : kind === 'services' ? 'services' : 'catalog');
@@ -253,6 +276,7 @@ export async function fanOut(
     typography,
     tone,
     density,
+    heroPattern,
     category: kind,
     theme: tone,
     columns: density === 1 ? 4 : density === 3 ? 2 : 3,

@@ -14,6 +14,7 @@ export type ToneToken = 'canvas' | 'surface' | 'ink';
 export type DensityToken = 1 | 2 | 3;
 export type CatalogLayout = 'flat' | 'pills' | 'rails';
 export type HeaderStyle = 'split' | 'fullbleed';
+export type HeroPattern = 'split' | 'commerce' | 'typography' | 'bg_image' | 'minimal' | 'fullbleed';
 
 export interface SectionSummary {
   kind: SectionKind;
@@ -29,6 +30,7 @@ export interface Blueprint {
   lead: LeadSection;
   sections: SectionKind[];
   headerStyle: HeaderStyle;
+  heroPattern?: HeroPattern;
   catalogLayout: CatalogLayout;
   gate: boolean;
   hash: string;
@@ -106,7 +108,8 @@ export function defaultBlueprint(kind: BusinessKind = 'goods', itemCount = 0, ga
     density: 2,
     lead: 'catalog',
     sections: ['header', mainCatalog, 'contact'],
-    headerStyle: 'fullbleed',
+    headerStyle: 'split',
+    heroPattern: 'split',
     catalogLayout: catalogLayoutFor(itemCount),
     gate,
     hash: '',

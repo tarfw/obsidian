@@ -114,6 +114,24 @@ export function normalizeDocument(doc: SiteDocument): SiteDocument {
         nodes: [{ id: 'hero-title', kind: 'heading', props: { text: brand, level: 1 } }],
       });
     }
+    const hasCatalog = cleanSections.some((s) => s.purpose === 'catalog' || s.purpose === 'collection' || s.purpose === 'menu' || s.purpose === 'services' || s.id === 'catalog');
+    if (!hasCatalog) {
+      cleanSections.push({
+        id: 'catalog',
+        purpose: 'catalog',
+        layout: { kind: 'grid', columns: 3 },
+        style: { base: { pad: 'md' } },
+        nodes: [{
+          id: 'catalog-items',
+          kind: 'collection',
+          props: {
+            title: 'Catalog',
+            slot: 'items',
+            items: [],
+          },
+        }],
+      });
+    }
     const hasContact = cleanSections.some((s) => s.purpose === 'contact');
     if (!hasContact) {
       cleanSections.push({

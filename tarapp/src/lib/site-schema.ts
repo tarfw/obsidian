@@ -55,6 +55,7 @@ export type ToneToken = 'canvas' | 'surface' | 'ink';
 export type DensityToken = 1 | 2 | 3;
 export type CatalogLayout = 'flat' | 'pills' | 'rails';
 export type HeaderStyle = 'split' | 'fullbleed';
+export type HeroPattern = 'split' | 'commerce' | 'typography' | 'bg_image' | 'minimal' | 'fullbleed';
 
 export interface SectionSummary {
   kind: SectionKind;
@@ -70,6 +71,7 @@ export interface Blueprint {
   lead: LeadSection;
   sections: SectionKind[];
   headerStyle: HeaderStyle;
+  heroPattern?: HeroPattern;
   catalogLayout: CatalogLayout;
   gate: boolean;
   hash: string;

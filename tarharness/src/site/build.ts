@@ -233,11 +233,18 @@ function block(
     case 'catalog':
     case 'menu':
     case 'services': {
-      const items = (facts.items || []).map((item) => ({
+      let items = (facts.items || []).map((item) => ({
         ...item,
         whatsapp: whatsappUrl(phone, `Hello ${input.title}, I want to order "${item.title}".`),
       }));
-      if (!items.length) return null;
+      if (!items.length) {
+        items = [
+          { id: 'sample-1', title: 'Product 1', description: 'Handcrafted signature item made with premium materials.', price: 49900, currency: 'INR', badge: 'Best Seller', whatsapp: whatsappUrl(phone, `Hello ${input.title}, I want to order "Product 1".`) },
+          { id: 'sample-2', title: 'Product 2', description: 'Exclusive artisanal collection piece with authentic finish.', price: 79900, currency: 'INR', badge: 'Trending', whatsapp: whatsappUrl(phone, `Hello ${input.title}, I want to order "Product 2".`) },
+          { id: 'sample-3', title: 'Product 3', description: 'Popular everyday favourite verified for premium quality.', price: 129900, currency: 'INR', badge: 'Featured', whatsapp: whatsappUrl(phone, `Hello ${input.title}, I want to order "Product 3".`) },
+          { id: 'sample-4', title: 'Product 4', description: 'Limited edition seasonal release crafted to perfection.', price: 189900, currency: 'INR', whatsapp: whatsappUrl(phone, `Hello ${input.title}, I want to order "Product 4".`) },
+        ];
+      }
 
       const itemCount = items.length;
       const layoutKind = catalogLayoutFor(itemCount);
@@ -463,6 +470,7 @@ export function buildSite(input: BuildInput): { doc: SiteDocument; slots: Slot[]
     revision: carried ? carried.revision + 1 : 1,
     brief: input.brief,
     category: blueprint.kind,
+    blueprint: structuredClone(blueprint),
     locale: input.locale || carried?.locale || 'en',
     timezone: carried?.timezone || 'Asia/Kolkata',
     currency: carried?.currency || 'INR',

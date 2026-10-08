@@ -13,14 +13,25 @@
 
 ## 1. Model
 
-$$\text{Facts (records)} + \text{Taste (bullets)} \xrightarrow{\text{1 Jev fan-out}} \text{Blueprint} \xrightarrow{\text{code}} \text{static page on Edge}$$
+```text
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│ METHOD 2: PRE-DESIGNED PATTERN CATALOG (80 PROVEN PATTERNS + JEV SELECTOR)             │
+├────────────────────────────────────────────────────────────────────────────────────────┤
+│ Merchant Taste ──> [JEV: Match Pattern ID 1..80] ─┬─> [Pre-tested CSS] ──> 100% Mobile │
+│                                                   │   (Zero Drift)         Responsive  │
+│                                                   └─> [LLM: Copy Only] ──> <150 KB Page│
+│                                                       (Facts-Grounded)     Floor       │
+└────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+$$\text{Facts (records)} + \text{Taste (bullets)} \xrightarrow{\text{1 Jev fan-out}} \text{Blueprint (Pattern + Tokens)} \xrightarrow{\text{pre-tested CSS}} \text{static page on Edge}$$
 
 | Layer | Owner | Holds |
 | :--- | :--- | :--- |
-| **Facts** | Records (code) | Products, prices, stock, contact, proofs, policies. Models never touch money. |
+| **Facts** | Records (code) | Products, prices, stock, contact, proofs, media assets. Models never touch money. |
 | **Taste** | Merchant (voice or text) | Plain bullets about style, focus and vibe. |
-| **Blueprint** | Jev (typed judgments) | `kind` · section order · 3 design tokens. |
-| **Page** | Code | Compiles Blueprint + Facts into HTML. Real copy only. |
+| **Blueprint** | Jev (typed judgments) | `kind` · `heroPattern` (from 80-pattern catalog) · section order · 3 design tokens. |
+| **Page** | Code | Maps Blueprint patterns to pre-compiled responsive CSS + Facts into HTML. LLM fills copy slots only. Zero ad-hoc CSS. |
 
 Jev re-runs only when the hash of (Taste + Facts) changes. Otherwise nothing runs.
 
@@ -100,7 +111,7 @@ The app list and the web page show the same sections in the same order.
 
 | Section | Rule | Jev decides |
 | :--- | :--- | :--- |
-| `header` | Always. Code floor. | Photo style: `split` or `fullbleed`. |
+| `header` | Always. Code floor. | **Hero Pattern ID** (from 80-pattern catalog: Split 50/50, Commerce, Typography, etc.). |
 | `notice` | Closed today, delivery delayed. 1-tap, no Jev. | None. |
 | `spotlight` | Festival or offer. | `Noul`: is a festival or offer relevant now? |
 | `catalog` / `menu` / `services` | Chosen by `kind`. | None. Code picks the layout by item count: ≤15 flat grid · 16–60 filter pills · >60 category rails. |
@@ -110,15 +121,26 @@ The app list and the web page show the same sections in the same order.
 
 Order: Jev picks the first section after `header` (`spotlight`, `catalog` or `story`). Code fixes the rest.
 
-### Design tokens
+### Design tokens & Pattern Engine
 
 | Token | Primitive | Values | Default |
 | :--- | :---: | :--- | :--- |
+| `heroPattern` | Choice | Curated 80-pattern catalog (`split`, `commerce`, `typography`, `bg_image`, etc.) | `commerce` |
 | `typography` | Choice | `serif` · `sans` · `grotesk` | `sans` |
 | `tone` | Choice | `canvas` · `surface` · `ink` | `canvas` |
 | `density` | Score | `1 compact` · `2 balanced` · `3 airy` | `2` |
 
-There are no templates. Jev picks tokens and which sections exist. Content always comes from Facts.
+**Method 2 Guarantee:** Zero ad-hoc CSS synthesis. Jev selects proven section patterns; code pairs them with battle-tested, pre-compiled responsive CSS. LLM fills copy slots only; models never generate layout code.
+
+### 80-Pattern Catalog Taxonomy (Core Families)
+
+| Pattern Family | Key Pattern IDs | Best Matched Trade & Taste | Typical Structure |
+| :--- | :--- | :--- | :--- |
+| **Commerce & Retail** | `#4 Split 50/50`, `#5 Asymmetric`, `#16 Commerce Hero` | Sarees, jewelry, apparel, retail goods | Split text left + product right + WhatsApp CTA |
+| **Minimal & Luxury** | `#23 Minimal`, `#24 Typography`, `#25 Statement` | Luxury atelier, watches, bespoke tailoring | Editorial serif headline, pure ink canvas, zero bloat |
+| **Atmospheric & Media**| `#6 Full-Screen`, `#7 Background Image`, `#33 Gallery` | Boutiques, heritage looms, cafes, bakeries | Large photo + auto-scrim overlay + centered headline |
+| **Promotion & Festival**| `#39 Pricing`, `#40 Promotion`, `#41 Countdown` | Deepavali/Pongal sales, festive kits | Offer headline + discount pill + instant WhatsApp order |
+| **Craft & Founder Story**| `#19 Personal`, `#20 Founder`, `#49 Storytelling` | Master weavers, home kitchens, crafts | Artisan portrait + workshop story + trust mark |
 
 ---
 
@@ -132,17 +154,18 @@ Every question runs in parallel over the same state. Code applies the answers.
   "state": {
     "trade": "Handloom & Apparel",
     "taste": ["Pure silk sarees direct from Salem", "Dark luxury tone with gold accent", "Lead with Deepavali bridal sarees"],
-    "facts": { "items": 28, "proofs": ["handloom mark"], "season": "Deepavali in 14 days" }
+    "facts": { "items": 28, "proofs": ["handloom mark"], "hasHeroMedia": true, "season": "Deepavali in 14 days" }
   },
   "questions": {
-    "kind":       { "type": "choice", "instructions": "What does this business mainly do?", "criteria": { "goods": "Sells physical goods", "food": "Sells prepared food", "services": "Sells time or skill", "wholesale": "Sells in bulk" } },
-    "spotlight":  { "type": "noul",   "instructions": "Do taste or season call for a festival or offer section now?" },
-    "story":      { "type": "noul",   "instructions": "Do taste or facts call for a craft or owner story?" },
-    "trust":      { "type": "noul",   "instructions": "Is the listed proof strong enough to show a trust section?" },
-    "lead":       { "type": "choice", "instructions": "What should lead the page after the header?", "criteria": { "spotlight": "Festival or offer", "catalog": "Products first", "story": "Craft story" } },
-    "typography": { "type": "choice", "instructions": "Which heading style fits the taste?", "criteria": { "serif": "Classic display", "sans": "Clean modern", "grotesk": "Bold geometric" } },
-    "tone":       { "type": "choice", "instructions": "Which surface tone fits the taste?", "criteria": { "ink": "Dark", "canvas": "Light", "surface": "Warm tinted" } },
-    "density":    { "type": "score",  "instructions": "How airy should spacing be?", "criteria": ["1: Compact", "2: Balanced", "3: Airy"] }
+    "kind":        { "type": "choice", "instructions": "What does this business mainly do?", "criteria": { "goods": "Sells physical goods", "food": "Sells prepared food", "services": "Sells time or skill", "wholesale": "Sells in bulk" } },
+    "heroPattern": { "type": "choice", "instructions": "Which hero section pattern fits taste, trade and media?", "criteria": { "split": "Split Hero 50/50 (#4)", "commerce": "Commerce Hero with CTA (#16)", "typography": "Typography Hero (#24)", "bg_image": "Background Image Hero (#7)", "minimal": "Minimal Hero (#23)" } },
+    "spotlight":   { "type": "noul",   "instructions": "Do taste or season call for a festival or offer section now?" },
+    "story":       { "type": "noul",   "instructions": "Do taste or facts call for a craft or owner story?" },
+    "trust":       { "type": "noul",   "instructions": "Is the listed proof strong enough to show a trust section?" },
+    "lead":        { "type": "choice", "instructions": "What should lead the page after the header?", "criteria": { "spotlight": "Festival or offer", "catalog": "Products first", "story": "Craft story" } },
+    "typography":  { "type": "choice", "instructions": "Which heading style fits the taste?", "criteria": { "serif": "Classic display", "sans": "Clean modern", "grotesk": "Bold geometric" } },
+    "tone":        { "type": "choice", "instructions": "Which surface tone fits the taste?", "criteria": { "ink": "Dark", "canvas": "Light", "surface": "Warm tinted" } },
+    "density":     { "type": "score",  "instructions": "How airy should spacing be?", "criteria": ["1: Compact", "2: Balanced", "3: Airy"] }
   }
 }
 ```
@@ -151,14 +174,15 @@ Every question runs in parallel over the same state. Code applies the answers.
 // Response
 {
   "answers": {
-    "kind":       { "choice": "goods",     "confidence": 0.99 },
-    "spotlight":  { "probability": 0.93 },
-    "story":      { "probability": 0.31 },
-    "trust":      { "probability": 0.88 },
-    "lead":       { "choice": "spotlight", "confidence": 0.97 },
-    "typography": { "choice": "serif",     "confidence": 0.96 },
-    "tone":       { "choice": "ink",       "confidence": 0.99 },
-    "density":    { "score": 2,            "confidence": 0.94 }
+    "kind":        { "choice": "goods",     "confidence": 0.99 },
+    "heroPattern": { "choice": "split",     "confidence": 0.97 },
+    "spotlight":   { "probability": 0.93 },
+    "story":       { "probability": 0.31 },
+    "trust":       { "probability": 0.88 },
+    "lead":        { "choice": "spotlight", "confidence": 0.97 },
+    "typography":  { "choice": "serif",     "confidence": 0.96 },
+    "tone":        { "choice": "ink",       "confidence": 0.99 },
+    "density":     { "score": 2,            "confidence": 0.94 }
   }
 }
 ```
@@ -196,7 +220,9 @@ Every question runs in parallel over the same state. Code applies the answers.
 | Money | Integer minor units. Price changes are merchant-only. Offers stay under MRP and above the margin floor. |
 | Delivery | Perishables are same-day or pickup only. Pincode checker. Fee matrix. |
 | Trust | Certificates, quotes and badges render only from uploaded proof. |
-| Page | Under 150 KB, lazy WebP, no heavy animation, bundled Tamil font. |
+| CSS & Layout | Zero ad-hoc CSS synthesis. Every section renders via a pre-compiled, tested stylesheet. Zero horizontal scroll. |
+| Media & Scrim | Camera snaps auto-cropped to responsive ratios; auto-contrast scrim guarantees text legibility over any photo. |
+| Page Budget | Under 150 KB total, lazy WebP/AVIF, zero heavy animation, bundled Tamil font. |
 | Language | Written in English. Translation is a separate downstream LLM step. |
 
 ---

@@ -1088,6 +1088,11 @@ function renderShopifyFooter(doc: SiteDocument, page: Page, footerNodeProps?: Re
 
   const quickLinksHtml = quickLinks.map((l) => `<li><a href="${escapeAttribute(safeHref(l.href) || '#')}">${escapeHtml(l.label)}</a></li>`).join('');
 
+  const phone = String(doc.brief?.phone || (doc.brief as Record<string, unknown>)?.whatsappPhone || '');
+  const cleanPhone = phone.replace(/[^0-9]/g, '');
+  const address = String(doc.brief?.address || '');
+  const email = String(doc.brief?.email || '');
+
   return `<footer id="${escapeAttribute(footerId)}" class="tar-footer" data-purpose="footer">
   <div class="tar-footer-wrap">
     <div class="tar-footer-grid">
@@ -1105,7 +1110,6 @@ function renderShopifyFooter(doc: SiteDocument, page: Page, footerNodeProps?: Re
       <div class="tar-footer-col">
         <h4 class="tar-footer-col-title">Customer Care</h4>
         <ul class="tar-footer-list">
-          <li><a href="#contact">Contact Us</a></li>
           <li><a href="#shipping">Shipping Policy</a></li>
           <li><a href="#returns">Returns & Refunds</a></li>
           <li><a href="#privacy">Privacy & Terms</a></li>
@@ -1115,12 +1119,11 @@ function renderShopifyFooter(doc: SiteDocument, page: Page, footerNodeProps?: Re
         <h4 class="tar-footer-col-title">Orders & Support</h4>
         <div class="tar-footer-contact-item">
           <strong>Direct WhatsApp Support</strong><br>
-          Fast response on active orders
+          ${cleanPhone ? `<a href="https://wa.me/${cleanPhone}" class="tar-btn-whatsapp" style="margin-top:8px;display:inline-flex;" target="_blank" rel="noopener">Chat on WhatsApp</a>` : 'Instant assistance on WhatsApp'}
         </div>
-        <div class="tar-footer-contact-item" style="margin-top: 6px;">
-          <strong>100% Secure Checkout</strong><br>
-          Doorstep delivery & verified guarantee
-        </div>
+        ${phone ? `<div class="tar-footer-contact-item" style="margin-top: 8px;"><strong>Phone:</strong> <a href="tel:${escapeAttribute(phone)}">${escapeHtml(phone)}</a></div>` : ''}
+        ${email ? `<div class="tar-footer-contact-item" style="margin-top: 4px;"><strong>Email:</strong> <a href="mailto:${escapeAttribute(email)}">${escapeHtml(email)}</a></div>` : ''}
+        ${address ? `<div class="tar-footer-contact-item" style="margin-top: 4px;"><strong>Address:</strong> ${escapeHtml(address)}</div>` : ''}
       </div>
     </div>
     <div class="tar-footer-bottom">
@@ -1196,7 +1199,10 @@ export async function compileDocument(doc: SiteDocument, options: CompileOptions
     const hasNav = hasNavSection(page);
     const hasCatalog = hasCatalogSection(page);
     const hasFooter = hasFooterSection(page);
-    const renderedSections = page.sections.map((section) => renderSection(section, contexts())).filter(Boolean);
+    const renderedSections = page.sections
+      .filter((section) => section.purpose !== 'contact' && section.id !== 'contact')
+      .map((section) => renderSection(section, contexts()))
+      .filter(Boolean);
     if (!hasNav) {
       const navHtml = renderDefaultHeaderNav(doc, page);
       const noticeIndex = page.sections.findIndex((s) => s.purpose === 'notice');
@@ -1261,7 +1267,10 @@ export async function compileDocument(doc: SiteDocument, options: CompileOptions
       const hasNav = hasNavSection(page);
       const hasCatalog = hasCatalogSection(page);
       const hasFooter = hasFooterSection(page);
-      const renderedSections = page.sections.map((section) => renderSection(section, contexts())).filter(Boolean);
+      const renderedSections = page.sections
+        .filter((section) => section.purpose !== 'contact' && section.id !== 'contact')
+        .map((section) => renderSection(section, contexts()))
+        .filter(Boolean);
       if (!hasNav) {
         const navHtml = renderDefaultHeaderNav(variant, page);
         const noticeIndex = page.sections.findIndex((s) => s.purpose === 'notice');

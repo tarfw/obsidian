@@ -289,7 +289,9 @@ function block(
     }
 
     case 'story': {
-      const text = brief.goal || `Authentic ${input.title} handcrafted with decades of heritage.`;
+      // Only include story if merchant actually gave a story in Taste/Facts; never show dummy "Cloth21 online" text
+      const text = brief.goal && brief.goal !== `${input.title} online` ? brief.goal : '';
+      if (!text) return null;
       slots.push({ id: `${at}-body`, limit: 600, purpose: 'story', current: text });
       return {
         id: at,
@@ -336,9 +338,9 @@ function block(
         id: at,
         purpose: 'contact',
         layout: { kind: 'stack' },
-        style: style(density, tone === 'ink' ? 'surface' : 'ink'),
+        style: style(density, 'surface'),
         nodes: [
-          { id: `${at}-title`, kind: 'heading', props: { text: `Contact ${input.title}`, level: 2 } },
+          { id: `${at}-title`, kind: 'heading', props: { text: `Contact & Orders`, level: 2 } },
           ...(details.length ? [{ id: `${at}-list`, kind: 'list' as const, props: { items: details } }] : []),
           {
             id: `${at}-cta-row`,

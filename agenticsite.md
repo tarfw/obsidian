@@ -15,16 +15,17 @@
 
 ```text
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
-│ METHOD 2: PRE-DESIGNED PATTERN CATALOG (80 PROVEN PATTERNS + JEV SELECTOR)             │
+│ METHOD 2: PRE-DESIGNED PATTERN CATALOG (70 PATTERNS + JEV SELECTOR + 8 PRIMITIVES)     │
 ├────────────────────────────────────────────────────────────────────────────────────────┤
-│ Merchant Taste ──> [JEV: Match Pattern ID 1..80] ─┬─> [Pre-tested CSS] ──> 100% Mobile │
-│                                                   │   (Zero Drift)         Responsive  │
-│                                                   └─> [LLM: Copy Only] ──> <150 KB Page│
-│                                                       (Facts-Grounded)     Floor       │
+│ Merchant Taste ──> [JEV: Match Pattern IDs 1..70] ──> [8 Engine Primitives] ──> Mobile│
+│                                                       (nav, hero, banner,      Responsive
+│                                                        collection, cards,      <150 KB 
+│                                                        accordion, media,       Page Floor
+│                                                        action)                 Zero Drift
 └────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-$$\text{Facts (records)} + \text{Taste (bullets)} \xrightarrow{\text{1 Jev fan-out}} \text{Blueprint (Pattern + Tokens)} \xrightarrow{\text{pre-tested CSS}} \text{static page on Edge}$$
+$$\text{Facts (records)} + \text{Taste (bullets)} \xrightarrow{\text{1 Jev fan-out}} \text{Blueprint (70 Patterns + Tokens)} \xrightarrow{\text{8 Engine Primitives}} \text{static page on Edge}$$
 
 | Layer | Owner | Holds |
 | :--- | :--- | :--- |
@@ -84,11 +85,11 @@ SITE TOOL (workspace)                     TASTE DRAWER (>70% overlay)
 │ • WhatsApp quick order on all cards  ││                                      │
 ├──────────────────────────────────────┤│                                      │
 │ SECTIONS               (Jev Decided) ││                                      │
-│ 1. Header    • Photo & shop intro    ││                                      │
-│ 2. Spotlight • Deepavali banner      ││                                      │
-│ 3. Catalog   • 28 silk sarees        ││                                      │
-│ 4. Trust     • Handloom mark & COD   ││                                      │
-│ 5. Contact   • WhatsApp order button ││ [ Speak style bullet with mic...  ]  │
+│ 1. Header Navigation                 ││                                      │
+│ 2. Hero Section (75vh Split)         ││                                      │
+│ 3. Announcement Banner               ││                                      │
+│ 4. Product Catalog (28 silk sarees)  ││                                      │
+│ 5. Store Footer (Shopify-Style)      ││ [ Speak style bullet with mic...  ]  │
 └──────────────────────────────────────┘└──────────────────────────────────────┘
 ```
 
@@ -107,40 +108,39 @@ The app list and the web page show the same sections in the same order.
 | `services` | Tailor, salon, clinic, rental | Services list, enquiry or booking CTA |
 | `wholesale` | Bulk trade | Retail price plus "Bulk enquiry" WhatsApp action |
 
-### Section kinds (closed set)
+### Section kinds (70 Pre-designed patterns mapped to 8 Primitives)
 
-| Section | Rule | Jev decides |
+| Primitive | What It Renders | Which Patterns It Compiles |
 | :--- | :--- | :--- |
-| `header` | Always. Code floor. | **Hero Pattern ID** (from 80-pattern catalog: Split 50/50, Commerce, Typography, etc.). |
-| `notice` | Closed today, delivery delayed. 1-tap, no Jev. | None. |
-| `spotlight` | Festival or offer. | `Noul`: is a festival or offer relevant now? |
-| `catalog` / `menu` / `services` | Chosen by `kind`. | None. Code picks the layout by item count: ≤15 flat grid · 16–60 filter pills · >60 category rails. |
-| `story` | Craft, heritage or owner. | `Noul`: do Taste or Facts support it? |
-| `trust` | Needs uploaded proof (certificate, verified quotes, COD, shop address). | `Noul`, asked only if code finds proof. Never inferred. |
-| `contact` | Always. Code floor. | Primary CTA: WhatsApp, call or map. |
-
-Order: Jev picks the first section after `header` (`spotlight`, `catalog` or `story`). Code fixes the rest.
+| **`nav`** | Sticky topbar, header, mega menu, and Shopify-style footer | `#1` Announcement Bar, `#2` Header / Brand Nav, `#3` Mega Menu, `#68` Store Footer, `#69` Sticky Cart Bar |
+| **`hero`** | High-impact 75vh focal showcases | `#4` Split 50/50, `#16` Commerce Hero, `#17` Seasonal Hero, `#24` Typography Hero, `#26` Minimal Hero |
+| **`banner`** | Horizontal highlight strips & urgent ribbons | `#5` Promotional Banner, `#12` Offers, `#13` Flash Sale, `#41` Countdown, `#45` Delivery Banner, `#46` Trust Badges |
+| **`collection`** | Product & category grids with live prices & 1-tap checkout | `#6` Featured Products, `#7` Product Catalog, `#8` Categories, `#9` Showcase, `#10` Best Sellers, `#11` New Arrivals |
+| **`cards`** | Structured item grids (icon + title + description) | `#20` Value Props, `#23` Brand Story, `#28` Reviews, `#29` Testimonials, `#31` Press, `#40` Features Grid |
+| **`accordion`** | Expandable disclosure rows for dense information | `#37` FAQ, `#58` Shipping Policy, `#61` Return Policy, `#62` Size Guide, `#63` Fabric Care Guide |
+| **`media`** | Image galleries, lookbooks, and feeds | `#30` Instagram Grid, `#32` UGC Gallery, `#34` Lookbook, `#35` Before / After, `#50` Behind the Scenes |
+| **`action`** | Single focused conversion actions & floats | `#14` Product Finder, `#15` Search Bar, `#38` VIP Newsletter, `#65` WhatsApp Float Button |
 
 ### Design tokens & Pattern Engine
 
 | Token | Primitive | Values | Default |
 | :--- | :---: | :--- | :--- |
-| `heroPattern` | Choice | Curated 80-pattern catalog (`split`, `commerce`, `typography`, `bg_image`, etc.) | `commerce` |
+| `heroPattern` | Choice | Curated 70-pattern catalog (`split`, `commerce`, `typography`, `bg_image`, `minimal`) | `split` |
 | `typography` | Choice | `serif` · `sans` · `grotesk` | `sans` |
 | `tone` | Choice | `canvas` · `surface` · `ink` | `canvas` |
 | `density` | Score | `1 compact` · `2 balanced` · `3 airy` | `2` |
 
-**Method 2 Guarantee:** Zero ad-hoc CSS synthesis. Jev selects proven section patterns; code pairs them with battle-tested, pre-compiled responsive CSS. LLM fills copy slots only; models never generate layout code.
+**Method 2 Guarantee:** Zero ad-hoc CSS synthesis. Jev selects proven section patterns; code pairs them with battle-tested, pre-compiled responsive CSS via 8 Engine Primitives. Contact details (phone, email, WhatsApp, address) live directly in the Shopify-style footer and floating pill. Models never generate layout code.
 
-### 80-Pattern Catalog Taxonomy (Core Families)
+### 70-Pattern Catalog Taxonomy (Core Families)
 
 | Pattern Family | Key Pattern IDs | Best Matched Trade & Taste | Typical Structure |
 | :--- | :--- | :--- | :--- |
-| **Commerce & Retail** | `#4 Split 50/50`, `#5 Asymmetric`, `#16 Commerce Hero` | Sarees, jewelry, apparel, retail goods | Split text left + product right + WhatsApp CTA |
-| **Minimal & Luxury** | `#23 Minimal`, `#24 Typography`, `#25 Statement` | Luxury atelier, watches, bespoke tailoring | Editorial serif headline, pure ink canvas, zero bloat |
-| **Atmospheric & Media**| `#6 Full-Screen`, `#7 Background Image`, `#33 Gallery` | Boutiques, heritage looms, cafes, bakeries | Large photo + auto-scrim overlay + centered headline |
-| **Promotion & Festival**| `#39 Pricing`, `#40 Promotion`, `#41 Countdown` | Deepavali/Pongal sales, festive kits | Offer headline + discount pill + instant WhatsApp order |
-| **Craft & Founder Story**| `#19 Personal`, `#20 Founder`, `#49 Storytelling` | Master weavers, home kitchens, crafts | Artisan portrait + workshop story + trust mark |
+| **Commerce & Retail** | `#4 Split 50/50`, `#7 Catalog`, `#10 Best Sellers`, `#16 Commerce Hero` | Sarees, jewelry, apparel, retail goods | Split text left + product right + WhatsApp CTA |
+| **Minimal & Luxury** | `#23 Brand Story`, `#24 Typography`, `#26 Minimal Hero` | Luxury atelier, watches, bespoke tailoring | Editorial serif headline, pure ink canvas, zero bloat |
+| **Atmospheric & Media**| `#17 Seasonal Hero`, `#30 Instagram Grid`, `#34 Lookbook` | Boutiques, heritage looms, cafes, bakeries | Large photo + auto-scrim overlay + centered headline |
+| **Promotion & Festival**| `#5 Promo Banner`, `#12 Offers`, `#13 Flash Sale`, `#41 Countdown` | Deepavali/Pongal sales, festive kits | Offer headline + discount pill + instant WhatsApp order |
+| **Trust & Guarantees** | `#20 Value Props`, `#37 FAQ`, `#46 Trust Badges`, `#68 Footer` | Master weavers, certified gold, COD stores | Hallmark pills (Silk Mark), expandable FAQs, rich footer |
 
 ---
 

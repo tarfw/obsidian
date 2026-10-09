@@ -295,7 +295,6 @@ export default function SiteScreen({
         { id: 'hero', purpose: 'hero', layout: { kind: 'stack' }, nodes: [] },
         { id: 'notice', purpose: 'notice', layout: { kind: 'stack' }, nodes: [] },
         { id: mainSection, purpose: mainSection, layout: { kind: 'stack' }, nodes: [] },
-        { id: 'contact', purpose: 'contact', layout: { kind: 'stack' }, nodes: [] },
         { id: 'footer', purpose: 'footer', layout: { kind: 'stack' }, nodes: [] },
       ] as Section[];
     }
@@ -311,8 +310,8 @@ export default function SiteScreen({
       result.push({ id: 'nav', purpose: 'navigation', layout: { kind: 'stack' }, nodes: [] });
     }
     for (const sec of sections) {
-      if (sec.purpose === 'contact' && !hasCatalog && !result.some((s) => s.purpose === mainCatalogSection)) {
-        result.push({ id: mainCatalogSection, purpose: mainCatalogSection, layout: { kind: 'grid', columns: 3 }, nodes: [] });
+      if (sec.purpose === 'contact' || sec.id === 'contact') {
+        continue;
       }
       result.push(sec);
       if (sec.purpose === 'header' || sec.purpose === 'hero') {

@@ -581,7 +581,7 @@ function renderNode(node: Node, context: RenderContext): string {
       const binding = context.binding;
       const detail = binding?.detail?.path;
       if (!items.length) {
-        items = defaultSampleProducts(context.doc.pages[0]?.title || 'Store', (merged.whatsappPhone as string) || (context.doc.brief as Record<string, unknown>)?.phone as string);
+        items = defaultSampleProducts(context.doc.pages[0]?.title || 'Store', (merged.whatsappPhone as string) || (context.doc.brief as unknown as Record<string, unknown>)?.phone as string);
       }
       const cards = items.map((entry, index) => {
         const slug = itemSlug(entry, index);

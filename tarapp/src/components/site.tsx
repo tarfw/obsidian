@@ -302,17 +302,27 @@ export default function SiteScreen({
     const hasNav = sections.some((s) => s.purpose === 'navigation' || s.purpose === 'nav' || s.id === 'nav');
     const hasNotice = sections.some((s) => s.purpose === 'notice');
     const hasFooter = sections.some((s) => s.purpose === 'footer' || s.id === 'footer');
+    const hasCatalog = sections.some((s) => s.purpose === 'catalog' || s.purpose === 'collection' || s.purpose === 'menu' || s.purpose === 'services' || s.id === 'catalog');
+    const defaultKind = site?.blueprint?.kind || site?.category || 'goods';
+    const mainCatalogSection = defaultKind === 'services' ? 'services' : defaultKind === 'food' ? 'menu' : 'catalog';
+
     const result: Section[] = [];
     if (!hasNav) {
       result.push({ id: 'nav', purpose: 'navigation', layout: { kind: 'stack' }, nodes: [] });
     }
     for (const sec of sections) {
+      if (sec.purpose === 'contact' && !hasCatalog && !result.some((s) => s.purpose === mainCatalogSection)) {
+        result.push({ id: mainCatalogSection, purpose: mainCatalogSection, layout: { kind: 'grid', columns: 3 }, nodes: [] });
+      }
       result.push(sec);
       if (sec.purpose === 'header' || sec.purpose === 'hero') {
         if (!hasNotice) {
           result.push({ id: 'notice', purpose: 'notice', layout: { kind: 'stack' }, nodes: [] });
         }
       }
+    }
+    if (!hasCatalog && !result.some((s) => s.purpose === mainCatalogSection)) {
+      result.push({ id: mainCatalogSection, purpose: mainCatalogSection, layout: { kind: 'grid', columns: 3 }, nodes: [] });
     }
     if (!hasFooter) {
       result.push({ id: 'footer', purpose: 'footer', layout: { kind: 'stack' }, nodes: [] });

@@ -24,6 +24,7 @@ export interface SectionSummary {
 
 export interface Blueprint {
   kind: BusinessKind;
+  style?: string;
   typography: TypographyToken;
   tone: ToneToken;
   density: DensityToken;
@@ -103,6 +104,7 @@ export function defaultBlueprint(kind: BusinessKind = 'goods', itemCount = 0, ga
   const mainCatalog = catalogSectionFor(kind);
   return {
     kind,
+    style: 'dark-luxury',
     typography: 'sans',
     tone: 'canvas',
     density: 2,
@@ -123,6 +125,7 @@ export function compileSectionOrder(
   included: {
     notice?: boolean;
     spotlight?: boolean;
+    catalog?: boolean;
     story?: boolean;
     trust?: boolean;
   },
@@ -132,13 +135,15 @@ export function compileSectionOrder(
 
   if (included.notice) result.push('notice');
 
+  const hasCatalog = included.catalog ?? true;
+
   // Lead section chosen by Jev
-  const resolvedLead = lead === 'catalog' ? catalogKind : lead;
+  const resolvedLead = lead === 'catalog' ? (hasCatalog ? catalogKind : lead) : lead;
   if (resolvedLead === 'spotlight' && included.spotlight) {
     result.push('spotlight');
   } else if (resolvedLead === 'story' && included.story) {
     result.push('story');
-  } else {
+  } else if (hasCatalog) {
     result.push(catalogKind);
   }
 
@@ -146,7 +151,7 @@ export function compileSectionOrder(
   if (included.spotlight && !result.includes('spotlight')) {
     result.push('spotlight');
   }
-  if (!result.includes(catalogKind)) {
+  if (hasCatalog && !result.includes(catalogKind)) {
     result.push(catalogKind);
   }
   if (included.story && !result.includes('story')) {

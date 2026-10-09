@@ -151,7 +151,7 @@ function compileCss(design: Design, collector: CssCollector): string {
     }
   });
   return `
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Lora:ital,wght@0,400;0,600;1,400&family=Mukta+Malar:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,600;0,700;1,400&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&family=Lora:ital,wght@0,400;0,600;1,400&family=Mukta+Malar:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,600;0,700;1,400&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Poppins:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap');
 
 :root {
   --color-canvas: ${design.color.canvas};
@@ -598,10 +598,7 @@ function renderNode(node: Node, context: RenderContext): string {
           ? `<span class="tar-price">${formatMoney(entry.price, entry.currency || context.doc.currency || 'INR', context.doc.locale)}</span>`
           : '';
         const descHtml = entry.description ? `<p class="tar-card-desc">${escapeHtml(entry.description)}</p>` : '';
-        const whatsappHref = entry.whatsapp || (merged.whatsappPhone ? `https://wa.me/${String(merged.whatsappPhone).replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Hi, I want to order "${entry.title}".`)}` : '');
-        const ctaHtml = whatsappHref
-          ? `<a href="${escapeAttribute(whatsappHref)}" class="tar-btn-whatsapp" target="_blank" rel="noopener">Order on WhatsApp</a>`
-          : '';
+        const ctaHtml = '';
         const body = `<div class="tar-card tar-product-card">
               ${media}
               <div class="tar-card-meta">
@@ -764,11 +761,8 @@ function renderHeroSection(section: Section, context: RenderContext): string {
   const altText = imgAlt || headline;
   const heroPattern = doc.blueprint?.heroPattern || (doc.blueprint?.headerStyle === 'fullbleed' ? 'bg_image' : 'split');
 
-  const whatsappBtn = whatsappHref
-    ? `<a href="${escapeAttribute(whatsappHref)}" class="tar-btn tar-btn-whatsapp" target="_blank" rel="noopener"><svg class="tar-icon" viewBox="0 0 24 24"><path d="${ICONS.phone}"/></svg>Order on WhatsApp</a>`
-    : '';
   const catalogBtn = `<a href="${escapeAttribute(catalogHref)}" class="tar-btn tar-btn-outline">View Collection</a>`;
-  const actionsHtml = `<div class="tar-hero-actions">${whatsappBtn}${catalogBtn}</div>`;
+  const actionsHtml = `<div class="tar-hero-actions">${catalogBtn}</div>`;
 
   if (heroPattern === 'typography') {
     return `<section id="${id}" class="tar-hero tar-hero-typography${style}" data-purpose="hero">
@@ -813,7 +807,6 @@ function renderHeroSection(section: Section, context: RenderContext): string {
           <span class="tar-hero-spotlight-title">${escapeHtml(headline)}</span>
           <span class="tar-card-badge">Featured</span>
         </div>
-        ${whatsappBtn}
       </div>
     </div>
   </div>
@@ -914,8 +907,8 @@ function pageHtml(doc: SiteDocument, page: Page, body: string, origin: string | 
   ${pageMeta(doc, page, origin, canonicalPath, titleOverride)}
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Lora:ital,wght@0,400;0,600;1,400&family=Mukta+Malar:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,600;0,700;1,400&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="${cssPath}">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&family=Lora:ital,wght@0,400;0,600;1,400&family=Mukta+Malar:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,600;0,700;1,400&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Poppins:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="${cssPath}?v=${doc.revision || 1}">
   ${runtime ? '<script src="/site.js" defer></script>' : ''}
 </head>
 <body>
@@ -1021,8 +1014,7 @@ function renderDefaultCatalogSection(doc: SiteDocument): string {
     const media = `<div class="tar-card-media tar-card-media-placeholder">${badge}<div class="tar-card-placeholder-box">${escapeHtml(entry.title.slice(0, 2).toUpperCase())}</div></div>`;
     const priceHtml = `<span class="tar-price">${formatMoney(entry.price!, 'INR', doc.locale)}</span>`;
     const descHtml = entry.description ? `<p class="tar-card-desc">${escapeHtml(entry.description)}</p>` : '';
-    const whatsappHref = entry.whatsapp || '#contact';
-    const ctaHtml = `<a href="${escapeAttribute(whatsappHref)}" class="tar-btn-whatsapp" target="_blank" rel="noopener">Order on WhatsApp</a>`;
+    const ctaHtml = '';
     return `<div class="tar-collection-card" data-item="${escapeAttribute(entry.title.toLowerCase())}">
       <div class="tar-card tar-product-card">
         ${media}
@@ -1088,10 +1080,11 @@ function renderShopifyFooter(doc: SiteDocument, page: Page, footerNodeProps?: Re
 
   const quickLinksHtml = quickLinks.map((l) => `<li><a href="${escapeAttribute(safeHref(l.href) || '#')}">${escapeHtml(l.label)}</a></li>`).join('');
 
-  const phone = String(doc.brief?.phone || (doc.brief as Record<string, unknown>)?.whatsappPhone || '');
+  const briefData = (doc.brief as unknown as Record<string, unknown>) || {};
+  const phone = String(briefData.phone || briefData.whatsappPhone || '');
   const cleanPhone = phone.replace(/[^0-9]/g, '');
-  const address = String(doc.brief?.address || '');
-  const email = String(doc.brief?.email || '');
+  const address = String(briefData.address || '');
+  const email = String(briefData.email || '');
 
   return `<footer id="${escapeAttribute(footerId)}" class="tar-footer" data-purpose="footer">
   <div class="tar-footer-wrap">

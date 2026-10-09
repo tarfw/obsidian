@@ -4,7 +4,7 @@
 | :--- | :--- |
 | **Goal** | Zero-touch, edge-served storefront for any workspace ([workspace.md](file:///c:/tarfwk/tar/workspace.md)). |
 | **Principle** | Agent runs ~95%. Merchant does 3 jobs: 📷 Photo · ✅ Confirm · 📦 Ship. |
-| **Steering** | Taste bullets only. Add one to steer, delete it to undo. |
+| **Steering** | 1-tap **Design System**: shows Jev's autonomous pick with flat list of 3 curated Refero `design.md` systems. Zero Brand clutter. |
 | **Triage** | Personal **Now** feed ([inbox.md](file:///c:/tarfwk/tar/inbox.md)); row tap opens detail. |
 | **Storefront** | Opens in the native browser. `tarapp` embeds no web engine ([merchants.md](file:///c:/tarfwk/tar/merchants.md)). |
 | **Serving** | Pre-rendered static HTML on the Edge. No AI on visits. |
@@ -15,26 +15,26 @@
 
 ```text
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
-│ METHOD 2: PRE-DESIGNED PATTERN CATALOG (70 PATTERNS + JEV SELECTOR + 8 PRIMITIVES)     │
+│ METHOD 2: REFERO DESIGN SYSTEMS + 8 ENGINE PRIMITIVES                                  │
 ├────────────────────────────────────────────────────────────────────────────────────────┤
-│ Merchant Taste ──> [JEV: Match Pattern IDs 1..70] ──> [8 Engine Primitives] ──> Mobile│
-│                                                       (nav, hero, banner,      Responsive
-│                                                        collection, cards,      <150 KB 
-│                                                        accordion, media,       Page Floor
-│                                                        action)                 Zero Drift
+│ Store Style (design.md) ──────> CSS Variable Tokens ──────────────┐                    │
+│                                                                   ▼                    │
+│ Catalog Facts + Trade ──> [Jev: Autonomous Design & Copy Selector] ─> [8 Engine       │
+│                                                                         Primitives] ──>│
+│                                                                                        ▼
+│                                                                                 Static Mobile
+│                                                                                 Storefront (<150KB)
 └────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-$$\text{Facts (records)} + \text{Taste (bullets)} \xrightarrow{\text{1 Jev fan-out}} \text{Blueprint (70 Patterns + Tokens)} \xrightarrow{\text{8 Engine Primitives}} \text{static page on Edge}$$
+$$\text{Facts (records)} + \text{Trade} \xrightarrow{\text{Jev Autonomous Selector}} \text{Selected } \texttt{design.md} \xrightarrow{\text{8 Primitives (CSS Tokens)}} \text{Static Page}$$
 
 | Layer | Owner | Holds |
 | :--- | :--- | :--- |
 | **Facts** | Records (code) | Products, prices, stock, contact, proofs, media assets. Models never touch money. |
-| **Taste** | Merchant (voice or text) | Plain bullets about style, focus and vibe. |
-| **Blueprint** | Jev (typed judgments) | `kind` · `heroPattern` (from 80-pattern catalog) · section order · 3 design tokens. |
-| **Page** | Code | Maps Blueprint patterns to pre-compiled responsive CSS + Facts into HTML. LLM fills copy slots only. Zero ad-hoc CSS. |
-
-Jev re-runs only when the hash of (Taste + Facts) changes. Otherwise nothing runs.
+| **Store Style** | Curated `design.md` catalog | Complete design systems from [styles.refero.design](https://styles.refero.design/). Provides 100% of CSS tokens (colors, font pairings, radii, spacing). Zero AI hallucination. |
+| **Blueprint** | Jev Autonomous | Jev auto-selects from the 3 Refero `design.md` systems based on merchant trade/catalog. Merchant can 1-tap override anytime. |
+| **Page** | Code (8 Primitives) | Injects `design.md` CSS variables into pre-compiled semantic HTML templates. Static, responsive, zero ad-hoc CSS synthesis. |
 
 ---
 
@@ -42,10 +42,10 @@ Jev re-runs only when the hash of (Taste + Facts) changes. Otherwise nothing run
 
 | Step | Surface | What happens |
 | :--- | :--- | :--- |
-| **1. Add workspace** | `workspace.add` | Name, Taste, photos. About 30 seconds. |
-| **2. Auto-publish** | Gateway | Publish gate passes, then the store goes live with no review. |
-| **3. Daily triage** | `space.now` | Orders and 1-tap questions. Tap a row to see details. |
-| **4. Steer (rare)** | `site` tool | Edit Taste bullets. Jev updates the Blueprint. Undo available. |
+| **1. Add workspace** | `workspace.add` | Name, photos, catalog. Jev auto-selects a fitting default `design.md` based on trade. About 30 seconds. |
+| **2. Auto-publish** | Gateway | Publish gate passes, store goes live immediately on edge. |
+| **3. Daily triage** | `space.now` | Orders and 1-tap proposals. Tap a row to see details. |
+| **4. Steer & Tweak** | `site` tool | **DESIGN card**: shows active Refero system (`design.md`). Tap opens the flat list of the 3 Refero design systems to override. 1-tap "Publish". |
 
 **Publish gate (code):** a contact method plus at least one product or service. Otherwise a "coming soon + WhatsApp" page is shown.
 
@@ -54,181 +54,164 @@ Jev re-runs only when the hash of (Taste + Facts) changes. Otherwise nothing run
 ## 3. App Screens
 
 ```text
-NOW SCREEN (`space.now`)                DETAIL (opened on row tap)
+NOW SCREEN (`space.now`)                SITE SCREEN (`site`)
 ┌──────────────────────────────────────┐┌──────────────────────────────────────┐
-│ NOW                    Find > Tools >││ ‹ Back to Now           Order Review │
-│ Murugan Silks / Owner / Salem        ││                                      │
-│--------------------------------------││ Order #18 · COD ₹2,400               │
-│ [A] Confirm Order #18        DUE 15m>││ • Customer: Anitha (Salem)           │
-│     Salem · COD ₹2,400 · 2 sarees    ││ • Items: 2x Kanchi Cotton Sarees     │
-│ [A] Ship Order #17           DUE 2h >││ • Address: Door 4, Gandhi Rd (Valid) │
-│     Chennai · Courier pickup         ││ • COD Risk: Low                      │
-│ [?] Deepavali 10% Offer     PROPOSAL>││                                      │
-│     Activate festive kit banner      ││ [ Confirm Order ]    [ Print Slip ]  │
-│ Ask TAR...                          >││                                      │
-└──────────────────────────────────────┘└──────────────────────────────────────┘
+│ NOW                    Find > Tools >││ ‹ Murugan stores     [↗]     Publish │
+│ Murugan Silks / Owner / Salem        ││   tar-sites.tar-54d.workers.dev/...  │
+│--------------------------------------│├──────────────────────────────────────┤
+│ [A] Confirm Order #18        DUE 15m>││ DESIGN                               │
+│     Salem · COD ₹2,400 · 2 sarees    ││ ┌──────────────────────────────────┐ │
+│ [A] Ship Order #17           DUE 2h >││ │ ●●●● arte*                       │ │
+│     Chennai · Courier pickup         ││ │ Wheat cream & harvest copper     │ │
+│ [?] Deepavali 10% Offer     PROPOSAL>││ │ Best for: Heritage craft, organic│ │
+│     Activate festive kit banner      ││ └──────────────────────────────────┘ │
+│ Ask TAR...                          >││ SECTIONS                             │
+└──────────────────────────────────────┘│ ≡ Header Navigation                  │
+                                        │ ✨ Hero Section (75vh)                │
+                                        │ 📢 Announcement Banner            +  │
+                                        │ ⊞ Product Catalog (Clean)            │
+                                        │ ▭ Store Footer                       │
+                                        │                                      │
+                                        │       Reset Storefront to Default    │
+                                        └──────────────────────────────────────┘
 ```
 
 ```text
-SITE TOOL (workspace)                     TASTE DRAWER (>70% overlay)
-┌──────────────────────────────────────┐┌──────────────────────────────────────┐
-│ ‹ Tools      Online Store     [Live] ││ Taste                         [Done] │
-├──────────────────────────────────────┤├──────────────────────────────────────┤
-│ STORE LINK                           ││ [ Describe style or vibe... ]  [ + ] │
-│ tamilnadu.shop/murugan-silks         │├──────────────────────────────────────┤
-│ [ Open in Browser ↗ ]                ││ • Pure silk sarees from Salem    [x] │
-├──────────────────────────────────────┤│ • Dark luxury tone with gold     [x] │
-│ TASTE                (Tap to edit ›) ││ • Lead with Deepavali collection [x] │
-│ • Pure silk sarees direct from Salem ││ • WhatsApp order on all cards    [x] │
-│ • Dark luxury tone with gold accent  ││                                      │
-│ • Lead with Deepavali bridal sarees  ││                                      │
-│ • WhatsApp quick order on all cards  ││                                      │
-├──────────────────────────────────────┤│                                      │
-│ SECTIONS               (Jev Decided) ││                                      │
-│ 1. Header Navigation                 ││                                      │
-│ 2. Hero Section (75vh Split)         ││                                      │
-│ 3. Announcement Banner               ││                                      │
-│ 4. Product Catalog (28 silk sarees)  ││                                      │
-│ 5. Store Footer (Shopify-Style)      ││ [ Speak style bullet with mic...  ]  │
-└──────────────────────────────────────┘└──────────────────────────────────────┘
+DESIGN SYSTEMS MODAL (Opened on "DESIGN" card tap)
+┌──────────────────────────────────────┐
+│ ‹ Back     Design Systems       Done │
+│ styles.refero.design tokens          │
+├──────────────────────────────────────┤
+│ 💡 Jev autonomously selects the best │
+│ system from facts. Tap to override:  │
+│                                      │
+│ ┌──────────────────────────────────┐ │
+│ │ Mollie                           │ │
+│ │ [●][●][●][●]                  ( )│ │
+│ │ Paper, oat, espresso & copper    │ │
+│ │ Best for: Fine silk, luxury goods│ │
+│ │ Typography: Inter · Plex Mono    │ │
+│ ├──────────────────────────────────┤ │
+│ │ arte*                            │ │
+│ │ [●][●][●][●]                 (✓) │ │
+│ │ Wheat cream, copper & citron beam│ │
+│ │ Best for: Heritage craft, bakery │ │
+│ │ Typography: Parafina · Poppins   │ │
+│ ├──────────────────────────────────┤ │
+│ │ Magic Spoon                      │ │
+│ │ [●][●][●][●]                  ( )│ │
+│ │ Electric grape, concord & lilac  │ │
+│ │ Best for: Confectionery & youth  │ │
+│ │ Typography: Heavy Poppins 700    │ │
+│ └──────────────────────────────────┘ │
+└──────────────────────────────────────┘
 ```
 
-The app list and the web page show the same sections in the same order.
-
 ---
 
-## 4. Blueprint (what Jev decides)
+## 4. Refero `design.md` Token Architecture
 
-### Business kind (one Choice)
+Instead of prompting an AI to synthesize disconnected CSS attributes, styles are defined as **complete, designer-grade markdown systems** sourced from [Refero Design](https://styles.refero.design/).
 
-| `kind` | Examples | Sets |
-| :--- | :--- | :--- |
-| `goods` | Sarees, jewellery, grocery, hardware | Catalog, cart, product pages |
-| `food` | Home kitchen, bakery, sweets | Menu with portions, same-day or pickup only |
-| `services` | Tailor, salon, clinic, rental | Services list, enquiry or booking CTA |
-| `wholesale` | Bulk trade | Retail price plus "Bulk enquiry" WhatsApp action |
+### Supported Style Reference Presets (`designmds/`)
 
-### Section kinds (70 Pre-designed patterns mapped to 8 Primitives)
-
-| Primitive | What It Renders | Which Patterns It Compiles |
-| :--- | :--- | :--- |
-| **`nav`** | Sticky topbar, header, mega menu, and Shopify-style footer | `#1` Announcement Bar, `#2` Header / Brand Nav, `#3` Mega Menu, `#68` Store Footer, `#69` Sticky Cart Bar |
-| **`hero`** | High-impact 75vh focal showcases | `#4` Split 50/50, `#16` Commerce Hero, `#17` Seasonal Hero, `#24` Typography Hero, `#26` Minimal Hero |
-| **`banner`** | Horizontal highlight strips & urgent ribbons | `#5` Promotional Banner, `#12` Offers, `#13` Flash Sale, `#41` Countdown, `#45` Delivery Banner, `#46` Trust Badges |
-| **`collection`** | Product & category grids with live prices & 1-tap checkout | `#6` Featured Products, `#7` Product Catalog, `#8` Categories, `#9` Showcase, `#10` Best Sellers, `#11` New Arrivals |
-| **`cards`** | Structured item grids (icon + title + description) | `#20` Value Props, `#23` Brand Story, `#28` Reviews, `#29` Testimonials, `#31` Press, `#40` Features Grid |
-| **`accordion`** | Expandable disclosure rows for dense information | `#37` FAQ, `#58` Shipping Policy, `#61` Return Policy, `#62` Size Guide, `#63` Fabric Care Guide |
-| **`media`** | Image galleries, lookbooks, and feeds | `#30` Instagram Grid, `#32` UGC Gallery, `#34` Lookbook, `#35` Before / After, `#50` Behind the Scenes |
-| **`action`** | Single focused conversion actions & floats | `#14` Product Finder, `#15` Search Bar, `#38` VIP Newsletter, `#65` WhatsApp Float Button |
-
-### Design tokens & Pattern Engine
-
-| Token | Primitive | Values | Default |
-| :--- | :---: | :--- | :--- |
-| `heroPattern` | Choice | Curated 70-pattern catalog (`split`, `commerce`, `typography`, `bg_image`, `minimal`) | `split` |
-| `typography` | Choice | `serif` · `sans` · `grotesk` | `sans` |
-| `tone` | Choice | `canvas` · `surface` · `ink` | `canvas` |
-| `density` | Score | `1 compact` · `2 balanced` · `3 airy` | `2` |
-
-**Method 2 Guarantee:** Zero ad-hoc CSS synthesis. Jev selects proven section patterns; code pairs them with battle-tested, pre-compiled responsive CSS via 8 Engine Primitives. Contact details (phone, email, WhatsApp, address) live directly in the Shopify-style footer and floating pill. Models never generate layout code.
-
-### 70-Pattern Catalog Taxonomy (Core Families)
-
-| Pattern Family | Key Pattern IDs | Best Matched Trade & Taste | Typical Structure |
+| Style Name | Archetype / Source | Best For | Core Tokens (`design.md`) |
 | :--- | :--- | :--- | :--- |
-| **Commerce & Retail** | `#4 Split 50/50`, `#7 Catalog`, `#10 Best Sellers`, `#16 Commerce Hero` | Sarees, jewelry, apparel, retail goods | Split text left + product right + WhatsApp CTA |
-| **Minimal & Luxury** | `#23 Brand Story`, `#24 Typography`, `#26 Minimal Hero` | Luxury atelier, watches, bespoke tailoring | Editorial serif headline, pure ink canvas, zero bloat |
-| **Atmospheric & Media**| `#17 Seasonal Hero`, `#30 Instagram Grid`, `#34 Lookbook` | Boutiques, heritage looms, cafes, bakeries | Large photo + auto-scrim overlay + centered headline |
-| **Promotion & Festival**| `#5 Promo Banner`, `#12 Offers`, `#13 Flash Sale`, `#41 Countdown` | Deepavali/Pongal sales, festive kits | Offer headline + discount pill + instant WhatsApp order |
-| **Trust & Guarantees** | `#20 Value Props`, `#37 FAQ`, `#46 Trust Badges`, `#68 Footer` | Master weavers, certified gold, COD stores | Hallmark pills (Silk Mark), expandable FAQs, rich footer |
+| **Dark Luxury / Ledger** | [DESIGN1.md](file:///c:/tarfwk/tar/designmds/DESIGN1.md) (Mollie) | Fine silk, jewelry, watches, luxury goods | Paper `#ffffff`, Ink `#000000`, Oat Surface `#f7f4f1`, Ledger Brown `#3b281d`, Copper Link `#e07122`. Typography: Inter Variable display + IBM Plex Mono uppercase labels. |
+| **Vibrant Pop / Pastel** | [DESIGN2.md](file:///c:/tarfwk/tar/designmds/DESIGN2.md) (Magic Spoon) | Confectionery, snacks, youth apparel, beverages | Electric Grape gradient, Deep Concord `#3f0791`, Lilac Aisle `#dad9ff`, Marshmallow cards. Typography: Heavy Poppins 700 with chunky pill buttons. |
+| **Harvest Editorial** | [DESIGN3.md](file:///c:/tarfwk/tar/designmds/DESIGN3.md) (arte*) | Heritage craft, organic farm, bakeries, cafes | Wheat Cream `#e5dccd`, Harvest Copper `#ab5700`, Citron Beam `#e8e359`, Morning Glory `#7997ff`. Typography: Parafina rounded display + Poppins body. |
+
+### Deterministic Token Mapping into 8 Engine Primitives
+
+All 8 Primitives consume the standardized CSS variables emitted by the active `design.md`:
+
+```css
+:root {
+  /* Colors from design.md */
+  --site-bg:          var(--color-paper);
+  --site-text:        var(--color-ink);
+  --site-surface:     var(--color-oat-surface);
+  --site-accent:      var(--color-copper-link);
+  --site-dark-panel:  var(--color-espresso-panel);
+
+  /* Typography from design.md */
+  --site-font-display: var(--font-display);
+  --site-font-body:    var(--font-body);
+  --site-font-mono:    var(--font-mono);
+
+  /* Geometry & Shapes from design.md */
+  --site-radius-card: var(--radius-card, 16px);
+  --site-radius-pill: var(--radius-pill, 999px);
+  --site-density:     var(--spacing-base, 4px);
+}
+```
+
+**Zero CSS Drift Guarantee:** No LLM ever produces CSS strings, color codes, or spacing values. The primitives are rigid, tested CSS grid/flex components rendered statically.
 
 ---
 
-## 5. Taste → Blueprint (one call)
+## 5. What Jev Decides vs Code & Design Systems
 
-Every question runs in parallel over the same state. Code applies the answers.
+Because styling is 100% locked inside `design.md`, Jev is only used where semantic understanding is required:
+
+| Decision | Decided By | Mechanism |
+| :--- | :--- | :--- |
+| **Colors, typography, radii, spacing** | **Selected `design.md`** | Direct CSS variable injection (Deterministic). |
+| **Default Style recommendation on onboarding** | **Jev** | Choice question matching catalog/trade to the best `design.md` preset. |
+| **Hero pattern & section order** | **Merchant or Jev** | 1-tap selection on the Design tab, or auto-selected by Jev if untouched. |
+| **Spotlight / Festival Banner activation** | **Jev** | `Noul` evaluation on upcoming holidays (e.g. Deepavali in 14 days) + catalog facts. |
+| **Hero headline & microcopy** | **Jev** | Fast LLM slot fill aligning Brand preferences (*"Pure Silk & Handloom"*) with facts. |
+| **Claim verification** | **Jev** | `Noul` checks copy claims against facts (e.g., "Silk Mark certified" dropped if no proof). |
+
+### Jev Selection Payload (Streamlined)
 
 ```json
 // Request
 {
   "state": {
     "trade": "Handloom & Apparel",
-    "taste": ["Pure silk sarees direct from Salem", "Dark luxury tone with gold accent", "Lead with Deepavali bridal sarees"],
-    "facts": { "items": 28, "proofs": ["handloom mark"], "hasHeroMedia": true, "season": "Deepavali in 14 days" }
+    "brand": ["Pure Silk & Handloom", "Festive Collection direct from Salem"],
+    "facts": { "items": 28, "proofs": ["handloom mark"], "season": "Deepavali in 14 days" },
+    "activeStyle": "dark-luxury"
   },
   "questions": {
-    "kind":        { "type": "choice", "instructions": "What does this business mainly do?", "criteria": { "goods": "Sells physical goods", "food": "Sells prepared food", "services": "Sells time or skill", "wholesale": "Sells in bulk" } },
-    "heroPattern": { "type": "choice", "instructions": "Which hero section pattern fits taste, trade and media?", "criteria": { "split": "Split Hero 50/50 (#4)", "commerce": "Commerce Hero with CTA (#16)", "typography": "Typography Hero (#24)", "bg_image": "Background Image Hero (#7)", "minimal": "Minimal Hero (#23)" } },
-    "spotlight":   { "type": "noul",   "instructions": "Do taste or season call for a festival or offer section now?" },
-    "story":       { "type": "noul",   "instructions": "Do taste or facts call for a craft or owner story?" },
-    "trust":       { "type": "noul",   "instructions": "Is the listed proof strong enough to show a trust section?" },
-    "lead":        { "type": "choice", "instructions": "What should lead the page after the header?", "criteria": { "spotlight": "Festival or offer", "catalog": "Products first", "story": "Craft story" } },
-    "typography":  { "type": "choice", "instructions": "Which heading style fits the taste?", "criteria": { "serif": "Classic display", "sans": "Clean modern", "grotesk": "Bold geometric" } },
-    "tone":        { "type": "choice", "instructions": "Which surface tone fits the taste?", "criteria": { "ink": "Dark", "canvas": "Light", "surface": "Warm tinted" } },
-    "density":     { "type": "score",  "instructions": "How airy should spacing be?", "criteria": ["1: Compact", "2: Balanced", "3: Airy"] }
+    "kind":        { "type": "choice", "instructions": "What does this business mainly do?", "criteria": { "goods": "Physical goods", "food": "Prepared food", "services": "Services", "wholesale": "Bulk trade" } },
+    "heroPattern": { "type": "choice", "instructions": "Which hero layout best fits catalog facts?", "criteria": { "split": "Split 50/50", "spotlight": "Product Spotlight", "editorial": "Editorial Type", "fullbleed": "Fullbleed Photo", "minimal": "Minimal Clean" } },
+    "spotlight":   { "type": "noul",   "instructions": "Do brand bullets or season call for a festival banner now?" },
+    "trust":       { "type": "noul",   "instructions": "Is the listed proof verified to show trust badges?" },
+    "heroHeadline":{ "type": "string", "instructions": "Draft 1 punchy hero headline matching brand bullets." },
+    "brandStory":  { "type": "string", "instructions": "Draft 1 concise heritage or owner story paragraph matching facts." }
   }
 }
 ```
-
-```json
-// Response
-{
-  "answers": {
-    "kind":        { "choice": "goods",     "confidence": 0.99 },
-    "heroPattern": { "choice": "split",     "confidence": 0.97 },
-    "spotlight":   { "probability": 0.93 },
-    "story":       { "probability": 0.31 },
-    "trust":       { "probability": 0.88 },
-    "lead":        { "choice": "spotlight", "confidence": 0.97 },
-    "typography":  { "choice": "serif",     "confidence": 0.96 },
-    "tone":        { "choice": "ink",       "confidence": 0.99 },
-    "density":     { "score": 2,            "confidence": 0.94 }
-  }
-}
-```
-
-| Rule | Behaviour |
-| :--- | :--- |
-| Thresholds | A `Noul` above 0.65 includes the section. Tune on real data. |
-| Low confidence | Keep the previous value or the default. Never ask the merchant. |
-| Conflicting bullets | The latest bullet wins, applied by code. |
-| Undo | Every Blueprint change is a revision. Deleting a bullet reverts it. A 1-tap Undo is also available. |
-| Verification | A `Noul` checks each copy claim against Facts. Unbacked claims are dropped. |
 
 ---
 
-## 6. Autonomy
+## 6. Autonomy Matrix
 
 | Level | Examples | Route |
 | :--- | :--- | :--- |
-| **[AUTO]** | Image compression, alt text, SEO and sitemap, policies from facts, track page, WhatsApp share card, sold-out hiding. | Silent. |
-| **[CONFIRM]** | Festival banner, new copy, low-stock rule, missing phone. | 1-tap card in Now. |
+| **[AUTO]** | Token compilation from `design.md`, image compression, alt text, SEO sitemap, policies from facts, track page, WhatsApp share card, sold-out hiding. | Silent. |
+| **[CONFIRM]** | Seasonal banner activation, new headline copy, low-stock alerts. | 1-tap card in Now feed. |
 | **[MERCHANT ONLY]** | Prices, refunds, cancellations, deleting items. | Owner taps. Models never touch money. |
-
-| Smart question (Now) | Buttons |
-| :--- | :--- |
-| Add shop phone for WhatsApp orders? | `Add 98xxxxxx` · `Skip` |
-| Deepavali in 14 days. Activate 10% banner kit? | `Activate` · `Skip` |
-| Crimson Saree has 1 left. Auto-hide at 0? | `Auto-hide` · `Keep` |
 
 ---
 
-## 7. Code-Owned Floors (Jev never decides)
+## 7. Code-Owned Floors (Jev never touches)
 
 | Area | Rule |
 | :--- | :--- |
-| Money | Integer minor units. Price changes are merchant-only. Offers stay under MRP and above the margin floor. |
-| Delivery | Perishables are same-day or pickup only. Pincode checker. Fee matrix. |
-| Trust | Certificates, quotes and badges render only from uploaded proof. |
-| CSS & Layout | Zero ad-hoc CSS synthesis. Every section renders via a pre-compiled, tested stylesheet. Zero horizontal scroll. |
-| Media & Scrim | Camera snaps auto-cropped to responsive ratios; auto-contrast scrim guarantees text legibility over any photo. |
-| Page Budget | Under 150 KB total, lazy WebP/AVIF, zero heavy animation, bundled Tamil font. |
-| Language | Written in English. Translation is a separate downstream LLM step. |
+| Money | Minor integer units. Price changes are strictly merchant-owned. |
+| Styling & CSS | Defined exclusively by curated `design.md` token files and pre-compiled CSS. Zero runtime CSS generation. |
+| Trust & Guarantees | Certificates and badges render only from validated proof records. |
+| Page Budget | Under 150 KB total, WebP/AVIF compression, zero heavy JS frameworks on edge storefront. |
+| Responsive Layout | Zero horizontal scroll across all device viewports. |
 
 ---
 
-## 8. Cost (estimates, measure before committing)
+## 8. Cost & Performance
 
-- Jev fan-out: about ₹0.10 per run, on Day 0 and on each Taste or Fact change (cached otherwise).
-- Copy drafts: about ₹0.04 each. Claim checks: about ₹0.10 each.
-- A 30-product month: about ₹10–15 in total. Visits cost ₹0.
+- **Storefront Visits:** ₹0 (Served from static Edge CDN).
+- **Design Switching:** ₹0 (Instant client-side CSS token swap, zero LLM calls).
+- **Onboarding / Brand Update:** ~₹0.10 per Jev copy run (cached unless Brand bullets or facts change).
+- **Monthly Overhead:** ₹5–15 for an active merchant updating catalogs.

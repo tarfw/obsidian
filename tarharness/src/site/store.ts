@@ -315,6 +315,7 @@ export async function executeSiteGenerate(
 
   const kind = (input.kind as BusinessKind) || judged.kind || 'goods';
   const defaults = defaultBlueprint(kind);
+  const style = (input.style as string) || (input.tone ? undefined : (judged.style || previous?.blueprint?.style || defaults.style || 'dark-luxury'));
   const typography = (input.typography as TypographyToken) || judged.typography || defaults.typography;
   const tone = (input.tone as ToneToken) || judged.tone || defaults.tone;
   const density = (typeof input.density === 'number' ? input.density as DensityToken : undefined) || judged.density || defaults.density;
@@ -325,6 +326,7 @@ export async function executeSiteGenerate(
   const sections = compileSectionOrder(kind, lead, {
     notice: Boolean(input.notice || gathered.facts.notice),
     spotlight: judged.spotlight,
+    catalog: (gathered.facts.items?.length ?? 0) > 0,
     story: judged.story,
     trust: judged.trust && (gathered.facts.proofs?.length ?? 0) > 0,
   });
@@ -332,6 +334,7 @@ export async function executeSiteGenerate(
   const heroPattern = (input.heroPattern as HeroPattern) || judged.heroPattern || defaults.heroPattern || 'split';
   const blueprintPre: Omit<Blueprint, 'hash'> = {
     kind,
+    style,
     typography,
     tone,
     density,

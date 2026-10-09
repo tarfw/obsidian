@@ -65,6 +65,7 @@ export interface SectionSummary {
 
 export interface Blueprint {
   kind: BusinessKind;
+  style?: string;
   typography: TypographyToken;
   tone: ToneToken;
   density: DensityToken;

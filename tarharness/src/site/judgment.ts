@@ -62,6 +62,7 @@ async function answers(
 
 export interface CreateJudgment {
   kind: BusinessKind | null;
+  style?: string | null;
   spotlight: boolean;
   story: boolean;
   trust: boolean;
@@ -119,6 +120,15 @@ export async function fanOut(
         food: 'Sells prepared food',
         services: 'Sells time or skill',
         wholesale: 'Sells in bulk',
+      },
+    },
+    style: {
+      type: 'choice',
+      instructions: 'Which store design system best matches the trade, products, and brand vibe?',
+      criteria: {
+        'dark-luxury': 'Luxury & High-End Retail (Mollie): Paper canvas, black ink, oat surface, ledger brown controls, copper links. Ideal for fine silk sarees, jewelry, watches, atelier, premium craftsmanship.',
+        'neon-pop': 'Neon Pop & Playful Energy (Magic Spoon): Lilac canvas, deep concord ink, marshmallow cards, electric grape gradients, chunky pill buttons. Ideal for confectionery, snacks, youth streetwear, playful modern brands.',
+        'harvest-editorial': 'Sunlit Harvest & Earth Editorial (arte*): Wheat cream canvas, harvest copper ink, citron beam accent, rounded display typography. Ideal for heritage craft, organic farm, bakeries, cafes, handloom.',
       },
     },
     spotlight: {
@@ -196,6 +206,7 @@ export async function fanOut(
   if (!result) {
     return {
       kind: 'goods',
+      style: 'dark-luxury',
       spotlight: false,
       story: Boolean(input.brief?.goal),
       trust: false,
@@ -205,7 +216,7 @@ export async function fanOut(
       density: 2,
       heroPattern: 'split',
       category: 'goods',
-      theme: 'canvas',
+      theme: 'dark-luxury',
       columns: 3,
       heroStyle: 'fullbleed_16_6',
       flow: 'commerce_first',
@@ -217,6 +228,7 @@ export async function fanOut(
   }
 
   const kindChoice = choiceOf(result.kind);
+  const styleChoice = choiceOf(result.style);
   const spotlightProb = noulOf(result.spotlight).probability ?? 0;
   const storyProb = noulOf(result.story).probability ?? 0;
   const trustProb = hasProof ? (noulOf(result.trust).probability ?? 0) : 0;
@@ -230,6 +242,10 @@ export async function fanOut(
     ? kindChoice.choice
     : 'goods';
 
+  const style = (styleChoice.choice === 'neon-pop' || styleChoice.choice === 'harvest-editorial')
+    ? styleChoice.choice
+    : 'dark-luxury';
+
   const spotlight = spotlightProb >= JUDGMENT.noulThreshold;
   const story = storyProb >= JUDGMENT.noulThreshold;
   const trust = hasProof && trustProb >= JUDGMENT.noulThreshold;
@@ -242,11 +258,11 @@ export async function fanOut(
 
   const typography: TypographyToken = (typeChoice.choice === 'serif' || typeChoice.choice === 'grotesk')
     ? typeChoice.choice
-    : 'sans';
+    : (style === 'harvest-editorial' ? 'serif' : style === 'neon-pop' ? 'grotesk' : 'sans');
 
   const tone: ToneToken = (toneChoice.choice === 'surface' || toneChoice.choice === 'ink')
     ? toneChoice.choice
-    : 'canvas';
+    : (style === 'neon-pop' || style === 'harvest-editorial' ? 'surface' : 'canvas');
 
   const densityVal = densityScore.score;
   const density: DensityToken = densityVal === 1 ? 1 : densityVal === 3 ? 3 : 2;
@@ -269,6 +285,7 @@ export async function fanOut(
 
   return {
     kind,
+    style,
     spotlight,
     story,
     trust,
@@ -278,7 +295,7 @@ export async function fanOut(
     density,
     heroPattern,
     category: kind,
-    theme: tone,
+    theme: style,
     columns: density === 1 ? 4 : density === 3 ? 2 : 3,
     heroStyle: 'fullbleed_16_6',
     flow: lead === 'spotlight' ? 'classic_lookbook' : 'commerce_first',

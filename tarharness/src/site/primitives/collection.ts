@@ -53,7 +53,6 @@ export function renderCollectionPrimitive(props: CollectionProps): string {
     ${item.description ? `<p class="tar-card-desc">${escapeHtml(item.description)}</p>` : ''}
     <div class="tar-card-footer">
       ${formattedPrice ? `<span class="tar-card-price">${escapeHtml(formattedPrice)}</span>` : ''}
-      <a class="tar-btn tar-btn-sm tar-btn-order" href="${escapeAttribute(waLink)}">Order on WhatsApp</a>
     </div>
   </div>
 </article>`;

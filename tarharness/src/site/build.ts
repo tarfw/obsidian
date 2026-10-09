@@ -9,7 +9,7 @@
  * omitted, never faked. Prices and money stay strictly code-owned.
  */
 
-import { createDesign, TONE_STYLE, type Design } from './design.ts';
+import { createDesign, resolveDesign, THEMES, TONE_STYLE, type Design } from './design.ts';
 import {
   DOCUMENT_VERSION,
   type Asset,
@@ -146,15 +146,6 @@ function block(
           props: {},
           children: [
             {
-              id: `${at}-cta-whatsapp`,
-              kind: 'button',
-              props: {
-                label: 'Order on WhatsApp',
-                href: whatsappUrl(phone, `Hello ${input.title}, I want to place an order.`),
-                variant: 'filled',
-              },
-            },
-            {
               id: `${at}-cta-catalog`,
               kind: 'button',
               props: { label: 'View Collection', href: '#catalog', variant: 'outline' },
@@ -221,8 +212,8 @@ function block(
             id: `${at}-cta`,
             kind: 'button',
             props: {
-              label: 'Claim Offer on WhatsApp',
-              href: whatsappUrl(phone, `Hello ${input.title}, I want to claim the ${bannerTitle}.`),
+              label: 'View Offers',
+              href: '#catalog',
               variant: 'filled',
             },
           },
@@ -437,18 +428,21 @@ export function buildSite(input: BuildInput): { doc: SiteDocument; slots: Slot[]
       {
         notice: Boolean(input.facts.notice),
         spotlight: input.blueprint.sections.includes('spotlight'),
+        catalog: (input.facts.items?.length ?? 0) > 0,
         story: input.blueprint.sections.includes('story'),
         trust: input.blueprint.sections.includes('trust') && (input.facts.proofs?.length ?? 0) > 0,
       },
     ),
   };
 
-  const design: Design = createDesign(
-    blueprint.typography,
-    blueprint.tone,
-    blueprint.density,
-    input.brief,
-  );
+  const design: Design = blueprint.style
+    ? resolveDesign(blueprint.style)
+    : createDesign(
+        blueprint.typography,
+        blueprint.tone,
+        blueprint.density,
+        input.brief,
+      );
 
   const homeSections: Section[] = [];
   for (const sectionKind of blueprint.sections) {

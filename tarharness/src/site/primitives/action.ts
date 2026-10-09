@@ -53,7 +53,7 @@ export function renderActionPrimitive(props: ActionProps): string {
     <h2 class="tar-section-title">${escapeHtml(props.title || 'Direct Weaver Support')}</h2>
     <p class="tar-section-sub">${escapeHtml(props.subtitle || 'Have questions about zari purity or custom orders? Speak with us directly.')}</p>
     <div class="tar-actions">
-      <a class="tar-btn tar-btn-primary" href="${escapeAttribute(waLink)}">Order via WhatsApp</a>
+      <a class="tar-btn tar-btn-primary" href="${escapeAttribute(waLink)}">Contact Us</a>
     </div>
   </div>
 </section>`;

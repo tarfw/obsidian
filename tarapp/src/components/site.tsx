@@ -5,13 +5,9 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
-  Animated,
-  Easing,
-  Image,
   KeyboardAvoidingView,
   Linking,
   Modal,
-  PanResponder,
   Platform,
   ScrollView,
   StyleSheet,
@@ -21,9 +17,8 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { TarAvatar } from './TarAvatar';
 import { harness, SITES_URL } from '@/lib/harness';
-import type { HeroPattern, Section, SiteDocument, SiteSnapshot } from '@/lib/site-schema';
+import type { Section, SiteDocument, SiteSnapshot } from '@/lib/site-schema';
 
 export interface SiteScreenProps {
   visible: boolean;
@@ -42,149 +37,33 @@ export interface ToastInfo {
 const siteSnapshotCache = new Map<string, SiteSnapshot>();
 const siteStorageKey = (slug: string) => `tar_site_snap_${slug}`;
 
-const BRAND_SUGGESTIONS = [
-  'Pure Silk & Handloom',
-  'Festive Collection',
-  'Minimalist & Elegant',
-  'Traditional Craft',
-  'Modern Chic',
-  'Handmade & Organic',
-  'Direct Artisan Pricing',
-  'Fast WhatsApp Ordering',
-];
-
-const HERO_PATTERNS = [
-  { key: 'split', title: 'Split 50/50', subtitle: 'Headline left, product photo right' },
-  { key: 'commerce', title: 'Product Spotlight', subtitle: 'Featured card with price & badges' },
-  { key: 'typography', title: 'Editorial Type', subtitle: 'Artisanal display typography centerpiece' },
-  { key: 'bg_image', title: 'Fullbleed Photo', subtitle: 'Hero image with auto-contrast dark scrim' },
-  { key: 'minimal', title: 'Minimal Clean', subtitle: 'Direct headline with inline action cluster' },
-] as const;
-
-const COLOR_THEMES = [
-  { key: 'balanced', label: 'Balanced Slate', swatch: '#334155' },
-  { key: 'refined', label: 'Dark Luxury', swatch: '#09090b' },
-  { key: 'warm', label: 'Silk Gold', swatch: '#b45309' },
-  { key: 'vibrant', label: 'Vibrant Accent', swatch: '#0284c7' },
-] as const;
-
-function SlideItem({
-  text,
-  onDelete,
-  disabled,
-}: {
-  text: string;
-  onDelete: () => void;
-  disabled?: boolean;
-}) {
-  const x = useRef(new Animated.Value(0)).current;
-  const isOpen = useRef(false);
-
-  const close = () => {
-    Animated.spring(x, {
-      toValue: 0,
-      useNativeDriver: true,
-      tension: 100,
-      friction: 12,
-    }).start(() => {
-      isOpen.current = false;
-    });
-  };
-
-  const openSwipe = () => {
-    Animated.spring(x, {
-      toValue: -76,
-      useNativeDriver: true,
-      tension: 100,
-      friction: 12,
-    }).start(() => {
-      isOpen.current = true;
-    });
-  };
-
-  const responder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder: (_, gesture) => {
-        return Math.abs(gesture.dx) > 6 && Math.abs(gesture.dx) > Math.abs(gesture.dy);
-      },
-      onPanResponderTerminationRequest: () => false,
-      onPanResponderMove: (_, gesture) => {
-        const offset = isOpen.current ? -76 : 0;
-        const target = offset + gesture.dx;
-        if (target <= 0 && target >= -130) {
-          x.setValue(target);
-        } else if (target > 0) {
-          x.setValue(0);
-        }
-      },
-      onPanResponderRelease: (_, gesture) => {
-        if (gesture.dx < -110) {
-          Animated.timing(x, {
-            toValue: -320,
-            duration: 160,
-            useNativeDriver: true,
-          }).start(() => {
-            onDelete();
-          });
-          return;
-        }
-        if (gesture.dx < -25 || (isOpen.current && gesture.dx < 15)) {
-          openSwipe();
-        } else {
-          close();
-        }
-      },
-      onPanResponderTerminate: () => {
-        close();
-      },
-    }),
-  ).current;
-
-  return (
-    <View style={item.wrap}>
-      <View style={item.under}>
-        <TouchableOpacity
-          style={item.action}
-          onPress={() => {
-            close();
-            onDelete();
-          }}
-          disabled={disabled}
-          activeOpacity={0.8}
-          accessibilityRole="button"
-          accessibilityLabel={`Delete ${text}`}
-        >
-          <Ionicons name="trash-outline" size={18} color="#ffffff" />
-          <Text style={item.label}>Delete</Text>
-        </TouchableOpacity>
-      </View>
-
-      <Animated.View
-        style={[
-          item.front,
-          {
-            transform: [{ translateX: x }],
-          },
-        ]}
-        {...responder.panHandlers}
-      >
-        <TouchableOpacity
-          activeOpacity={1}
-          onPress={() => {
-            if (isOpen.current) {
-              close();
-            }
-          }}
-          style={item.content}
-        >
-          <Text style={item.dot}>•</Text>
-          <Text style={item.text}>{text}</Text>
-        </TouchableOpacity>
-      </Animated.View>
-    </View>
-  );
+export interface ReferoDesignSystem {
+  key: string;
+  name: string;
+  desc: string;
+  swatches: string[];
 }
+
+export const REFERO_SYSTEMS: readonly ReferoDesignSystem[] = [
+  {
+    key: 'dark-luxury',
+    name: 'Mollie',
+    desc: 'Cashmere oat, dark espresso ledger, and copper accents.',
+    swatches: ['#3b281d', '#e07122', '#000000', '#f7f4f1'],
+  },
+  {
+    key: 'neon-pop',
+    name: 'Magic Spoon',
+    desc: 'Electric grape, deep concord, lilac aisle, and marshmallow pill geometry.',
+    swatches: ['#5b00ed', '#3f0791', '#dad9ff', '#ffffff'],
+  },
+  {
+    key: 'harvest-editorial',
+    name: 'arte*',
+    desc: 'Wheat cream, harvest copper, citron beam, and morning glory.',
+    swatches: ['#ab5700', '#e5dccd', '#e8e359', '#7997ff'],
+  },
+] as const;
 
 export default function SiteScreen({
   visible,
@@ -214,18 +93,12 @@ export default function SiteScreen({
   const [toast, setToast] = useState<ToastInfo | null>(null);
 
   // Modals
-  const [tasteDrawerOpen, setTasteDrawerOpen] = useState(false);
-  const [tab, setTab] = useState<'design' | 'brand'>('design');
-  const [selectedPattern, setSelectedPattern] = useState<HeroPattern | null>(null);
-  const [selectedTone, setSelectedTone] = useState<string | null>(null);
-  const [segwidth, setSegwidth] = useState(240);
-  const tabAnim = useRef(new Animated.Value(0)).current;
-  const fadeAnim = useRef(new Animated.Value(1)).current;
+  const [designModalOpen, setDesignModalOpen] = useState(false);
+  const [selectedStyle, setSelectedStyle] = useState<string | null>(null);
   const [noticeModalOpen, setNoticeModalOpen] = useState(false);
   const pendingPromiseRef = useRef<Promise<unknown> | null>(null);
 
   // Inputs
-  const [newBullet, setNewBullet] = useState('');
   const [noticeText, setNoticeText] = useState('');
 
   const site: SiteDocument | null = snapshot?.site?.data ?? null;
@@ -234,13 +107,6 @@ export default function SiteScreen({
   const defaultSiteUrl = slug ? `${SITES_URL}/${slug}` : null;
   const publicUrl = snapshot?.publicUrl || defaultSiteUrl;
   const displayDomain = publicUrl ? publicUrl.replace(/^https?:\/\//, '') : (slug ? `tar-sites.tar-54d.workers.dev/${slug}` : '');
-
-  const tasteBullets: string[] = useMemo(() => {
-    if (!site?.taste) return [];
-    if (Array.isArray(site.taste.bullets) && site.taste.bullets.length) return site.taste.bullets;
-    if (Array.isArray(site.taste.accepted) && site.taste.accepted.length) return site.taste.accepted;
-    return [];
-  }, [site]);
 
   const sections: Section[] = useMemo(() => {
     if (!site?.pages?.length) return [];
@@ -352,30 +218,10 @@ export default function SiteScreen({
 
   useEffect(() => {
     mountedRef.current = true;
-    let timer: ReturnType<typeof setTimeout> | undefined;
     if (visible && slug) {
-      if (!siteSnapshotCache.has(slug)) {
-        void SecureStore.getItemAsync(siteStorageKey(slug))
-          .then((raw) => {
-            if (raw && mountedRef.current) {
-              try {
-                const stored = JSON.parse(raw) as SiteSnapshot;
-                if (stored?.site?.data) {
-                  siteSnapshotCache.set(slug, stored);
-                  setSnapshot(stored);
-                  setInitialLoading(false);
-                }
-              } catch { /* ignore */ }
-            }
-          })
-          .catch(() => undefined);
-      }
-      timer = setTimeout(() => {
-        void loadSite();
-      }, 0);
+      void loadSite();
     }
     return () => {
-      if (timer) clearTimeout(timer);
       mountedRef.current = false;
     };
   }, [visible, slug, loadSite]);
@@ -389,245 +235,47 @@ export default function SiteScreen({
     return () => clearTimeout(timer);
   }, [toast]);
 
-  // Open in browser
+  // Open in browser (cache-busted query param prevents stale mobile browser cache)
   const openInBrowser = useCallback(() => {
-    const target = publicUrl || (slug ? `${SITES_URL}/${slug}` : null);
-    if (!target) return;
+    const base = publicUrl || (slug ? `${SITES_URL}/${slug}` : null);
+    if (!base) return;
+    const target = `${base}${base.includes('?') ? '&' : '?'}t=${Date.now()}`;
     void Linking.openURL(target).catch(() => {
       Alert.alert('Cannot open link', `Could not open ${target} in browser.`);
     });
   }, [publicUrl, slug]);
 
-  // Add taste bullet
-  const addTasteBullet = useCallback(async (bulletToAdd?: string) => {
-    const bullet = (bulletToAdd || newBullet).trim();
-    if (!bullet || !slug || !siteId || busy) return;
-    setBusy(true);
-    setBusyMessage('Jev updating Blueprint...');
-    setNewBullet('');
+  // Apply selected design system from designmds
+  const handleSelectDesign = useCallback(async (styleKey: string) => {
+    setSelectedStyle(styleKey);
+    if (!slug) return;
+    const p = harness.site.generate(slug, { style: styleKey } as Record<string, unknown>);
+    pendingPromiseRef.current = p;
     try {
-      const res = await harness.site.tasteAdd(slug, siteId, bullet);
+      const res = await p;
       if (mountedRef.current) {
         setSnapshot((prev) => {
           if (!prev) return null;
           const nextSnap: SiteSnapshot = {
             ...prev,
-            site: { id: siteId, version: res.version, state: res.state || prev.site?.state || 'draft', data: res.site },
+            site: { id: res.siteId || prev.site?.id || '', version: res.version, state: res.state || prev.site?.state || 'draft', data: res.site },
             html: res.preview?.html || prev.html,
           };
           siteSnapshotCache.set(slug, nextSnap);
           void SecureStore.setItemAsync(siteStorageKey(slug), JSON.stringify(nextSnap)).catch(() => undefined);
           return nextSnap;
         });
-        setToast({ text: `Taste updated: "${bullet}"` });
       }
-    } catch (err) {
-      if (mountedRef.current) {
-        Alert.alert('Taste update failed', err instanceof Error ? err.message : 'Could not add taste bullet.');
-      }
+    } catch {
+      // Retain optimistic state
     } finally {
-      if (mountedRef.current) {
-        setBusy(false);
-        setBusyMessage('');
+      if (pendingPromiseRef.current === p) {
+        pendingPromiseRef.current = null;
       }
     }
-  }, [slug, siteId, busy, newBullet]);
-
-  // Remove taste bullet
-  const removeTasteBullet = useCallback(async (bullet: string) => {
-    if (!bullet || !slug || !siteId || busy) return;
-    setBusy(true);
-    setBusyMessage('Jev updating Blueprint...');
-    try {
-      const res = await harness.site.tasteRemove(slug, siteId, bullet);
-      if (mountedRef.current) {
-        setSnapshot((prev) => {
-          if (!prev) return null;
-          const nextSnap: SiteSnapshot = {
-            ...prev,
-            site: { id: siteId, version: res.version, state: res.state || prev.site?.state || 'draft', data: res.site },
-            html: res.preview?.html || prev.html,
-          };
-          siteSnapshotCache.set(slug, nextSnap);
-          void SecureStore.setItemAsync(siteStorageKey(slug), JSON.stringify(nextSnap)).catch(() => undefined);
-          return nextSnap;
-        });
-        setToast({ text: `Removed taste bullet` });
-      }
-    } catch (err) {
-      if (mountedRef.current) {
-        Alert.alert('Removal failed', err instanceof Error ? err.message : 'Could not remove taste bullet.');
-      }
-    } finally {
-      if (mountedRef.current) {
-        setBusy(false);
-        setBusyMessage('');
-      }
-    }
-  }, [slug, siteId, busy]);
-
-  // Voice or prompt input for mic
-  const handleVoiceOrPromptAdd = useCallback(() => {
-    if (Platform.OS === 'ios') {
-      Alert.prompt(
-        'Speak / Describe Taste',
-        'Add a style bullet (e.g. "Pure silk sarees direct from Salem"):',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Add', onPress: (text?: string) => text && void addTasteBullet(text) },
-        ],
-        'plain-text',
-      );
-    } else {
-      Alert.alert(
-        'Speak / Describe Taste',
-        'Type or dictate a style bullet into the box above, then tap "+".',
-      );
-    }
-  }, [addTasteBullet]);
-
-  const switchTab = useCallback((nextTab: 'design' | 'brand') => {
-    if (tab === nextTab) return;
-    const target = nextTab === 'design' ? 0 : 1;
-
-    Animated.spring(tabAnim, {
-      toValue: target,
-      useNativeDriver: true,
-      tension: 72,
-      friction: 10,
-    }).start();
-
-    Animated.sequence([
-      Animated.timing(fadeAnim, {
-        toValue: 0.15,
-        duration: 80,
-        easing: Easing.out(Easing.ease),
-        useNativeDriver: true,
-      }),
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 170,
-        easing: Easing.out(Easing.ease),
-        useNativeDriver: true,
-      }),
-    ]).start();
-
-    setTab(nextTab);
-  }, [tab, tabAnim, fadeAnim]);
-
-  const placeholder = 'Add brand note or preference...';
-
-  const handleAddTaste = useCallback(
-    (customText?: string) => {
-      const raw = (customText || newBullet).trim();
-      if (!raw) return;
-      void addTasteBullet(raw);
-    },
-    [newBullet, addTasteBullet],
-  );
-
-  const clearAllTaste = useCallback(() => {
-    if (!slug || !siteId || busy) return;
-    Alert.alert(
-      'Clear All Preferences?',
-      'This will remove all custom bullets and reset to defaults.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Clear All',
-          style: 'destructive',
-          onPress: async () => {
-            setBusy(true);
-            setBusyMessage('Clearing preferences...');
-            try {
-              const res = await harness.site.tasteRemove(slug, siteId, '__ALL__');
-              if (mountedRef.current) {
-                setSnapshot((prev) => {
-                  if (!prev) return null;
-                  const nextSnap: SiteSnapshot = {
-                    ...prev,
-                    site: { id: siteId, version: res.version, state: res.state || prev.site?.state || 'draft', data: res.site },
-                    html: res.preview?.html || prev.html,
-                  };
-                  siteSnapshotCache.set(slug, nextSnap);
-                  void SecureStore.setItemAsync(siteStorageKey(slug), JSON.stringify(nextSnap)).catch(() => undefined);
-                  return nextSnap;
-                });
-                setToast({ text: 'All preferences cleared' });
-              }
-            } catch (err) {
-              if (mountedRef.current) {
-                Alert.alert('Clear failed', err instanceof Error ? err.message : 'Could not clear preferences.');
-              }
-            } finally {
-              if (mountedRef.current) {
-                setBusy(false);
-                setBusyMessage('');
-              }
-            }
-          },
-        },
-      ],
-    );
-  }, [slug, siteId, busy]);
-
-  const handleApplyHeroPattern = useCallback((pattern: HeroPattern) => {
-    setSelectedPattern(pattern);
-    if (!slug) return;
-    const p = harness.site.generate(slug, { heroPattern: pattern } as Record<string, unknown>)
-      .then((res) => {
-        if (mountedRef.current) {
-          setSnapshot((prev) => {
-            if (!prev) return null;
-            const nextSnap: SiteSnapshot = {
-              ...prev,
-              site: { id: res.siteId || prev.site?.id || '', version: res.version, state: res.state || prev.site?.state || 'draft', data: res.site },
-              html: res.preview?.html || prev.html,
-            };
-            siteSnapshotCache.set(slug, nextSnap);
-            void SecureStore.setItemAsync(siteStorageKey(slug), JSON.stringify(nextSnap)).catch(() => undefined);
-            return nextSnap;
-          });
-        }
-      })
-      .catch(() => undefined)
-      .finally(() => {
-        if (pendingPromiseRef.current === p) {
-          pendingPromiseRef.current = null;
-        }
-      });
-    pendingPromiseRef.current = p;
   }, [slug]);
 
-  const handleApplyTone = useCallback((selectedToneVal: string) => {
-    setSelectedTone(selectedToneVal);
-    if (!slug) return;
-    const p = harness.site.generate(slug, { tone: selectedToneVal } as Record<string, unknown>)
-      .then((res) => {
-        if (mountedRef.current) {
-          setSnapshot((prev) => {
-            if (!prev) return null;
-            const nextSnap: SiteSnapshot = {
-              ...prev,
-              site: { id: res.siteId || prev.site?.id || '', version: res.version, state: res.state || prev.site?.state || 'draft', data: res.site },
-              html: res.preview?.html || prev.html,
-            };
-            siteSnapshotCache.set(slug, nextSnap);
-            void SecureStore.setItemAsync(siteStorageKey(slug), JSON.stringify(nextSnap)).catch(() => undefined);
-            return nextSnap;
-          });
-        }
-      })
-      .catch(() => undefined)
-      .finally(() => {
-        if (pendingPromiseRef.current === p) {
-          pendingPromiseRef.current = null;
-        }
-      });
-    pendingPromiseRef.current = p;
-  }, [slug]);
-
-  // Set or clear notice
+  // Set or clear notice banner
   const handleSaveNotice = useCallback(async () => {
     if (!slug || !siteId || busy) return;
     setBusy(true);
@@ -660,7 +308,6 @@ export default function SiteScreen({
       }
     }
   }, [slug, siteId, busy, noticeText]);
-
 
   // Undo last change
   const undoLastChange = useCallback(async () => {
@@ -708,8 +355,14 @@ export default function SiteScreen({
 
       setBusyMessage('Loading latest store state...');
       const freshSnap = await harness.site.get(slug).catch(() => null);
-      const activeSiteId = freshSnap?.site?.id || siteId;
+      let activeSiteId = freshSnap?.site?.id || siteId;
       if (!activeSiteId) throw new Error('Store was not found.');
+
+      if (selectedStyle && freshSnap?.site?.data?.blueprint?.style !== selectedStyle) {
+        setBusyMessage('Applying design system...');
+        const genRes = await harness.site.generate(slug, { style: selectedStyle } as Record<string, unknown>);
+        activeSiteId = genRes.siteId || activeSiteId;
+      }
 
       setBusyMessage('Compiling release candidate...');
       const compiled = await harness.site.compile(slug, activeSiteId);
@@ -746,7 +399,6 @@ export default function SiteScreen({
           void SecureStore.setItemAsync(siteStorageKey(slug), JSON.stringify(nextSnap)).catch(() => undefined);
           return nextSnap;
         });
-        setToast({ text: `Live storefront published!` });
         void loadSite();
       }
     } catch (err) {
@@ -761,11 +413,11 @@ export default function SiteScreen({
     }
   }, [slug, siteId, busy, loadSite]);
 
-  // Purge legacy data & reset storefront
+  // Reset Storefront
   const resetStore = useCallback(() => {
     Alert.alert(
       'Reset Online Store?',
-      'This will completely purge all legacy storefront data and rebuild a clean store using your taste bullets.',
+      'This will reset your storefront to Jev autonomous defaults.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -774,13 +426,13 @@ export default function SiteScreen({
           onPress: async () => {
             if (!slug || busy) return;
             setBusy(true);
-            setBusyMessage('Purging legacy data & rebuilding with Jev...');
+            setBusyMessage('Resetting storefront...');
             try {
               siteSnapshotCache.delete(slug);
               await SecureStore.deleteItemAsync(siteStorageKey(slug)).catch(() => undefined);
               await harness.site.reset(slug);
               if (mountedRef.current) {
-                setToast({ text: 'Store cleanly reset to Autonomous Blueprint' });
+                setToast({ text: 'Store cleanly reset to default' });
                 void loadSite();
               }
             } catch (err) {
@@ -799,11 +451,6 @@ export default function SiteScreen({
     );
   }, [slug, busy, loadSite]);
 
-  const hasLegacySections = useMemo(() => {
-    const legacyPurposes = ['chrome', 'introduction', 'categories', 'collection', 'recommendations', 'press', 'action'];
-    return sections.some((s) => legacyPurposes.includes(s.purpose));
-  }, [sections]);
-
   const handleCopyLink = useCallback(async () => {
     const target = publicUrl || (slug ? `${SITES_URL}/${slug}` : '');
     if (!target) return;
@@ -815,6 +462,18 @@ export default function SiteScreen({
     }
   }, [publicUrl, slug]);
 
+  // Active Design System resolution from the 3 Refero .md files
+  const currentStyleKey = selectedStyle ?? site?.blueprint?.style ?? 'dark-luxury';
+  const activeSystem =
+    REFERO_SYSTEMS.find(
+      (s) =>
+        s.key === currentStyleKey ||
+        s.name.toLowerCase() === currentStyleKey?.toLowerCase() ||
+        (currentStyleKey === 'mollie' && s.key === 'dark-luxury') ||
+        (currentStyleKey === 'magic-spoon' && s.key === 'neon-pop') ||
+        (currentStyleKey?.startsWith('arte') && s.key === 'harvest-editorial'),
+    ) || REFERO_SYSTEMS[0];
+
   return (
     <Modal
       visible={visible}
@@ -822,37 +481,44 @@ export default function SiteScreen({
       presentationStyle="fullScreen"
       onRequestClose={onClose}
     >
-      <View style={[styles.root, { paddingTop: Math.max(insets.top, 10) }]}>
-        {/* Navigation Bar: ‹ {workspaceName}   [Publish / Live ↗] */}
+      <View style={[styles.root, { paddingTop: Math.max(insets.top, 12) }]}>
+        {/* TOP NAVBAR */}
         <View style={styles.topNavBar}>
           <View style={styles.navLeft}>
             <TouchableOpacity
-              accessibilityLabel="Back"
-              onPress={onClose}
               style={styles.navBackBtn}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              onPress={onClose}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityRole="button"
+              accessibilityLabel="Back to workspace"
             >
-              <Ionicons name="chevron-back" size={22} color="#0f172a" />
+              <Ionicons name="chevron-back" size={24} color="#0f172a" />
             </TouchableOpacity>
+
             <View style={styles.navTitleWrap}>
               <Text style={styles.navTitle} numberOfLines={1}>
                 {workspaceName || 'Online Store'}
               </Text>
-              <TouchableOpacity onPress={handleCopyLink} hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}>
-                <Text style={styles.navSubtitle} numberOfLines={1}>
-                  {displayDomain}
-                </Text>
-              </TouchableOpacity>
+              {displayDomain ? (
+                <TouchableOpacity
+                  onPress={handleCopyLink}
+                  activeOpacity={0.7}
+                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                  style={styles.domainRow}
+                >
+                  <Text style={styles.navSubtitle} numberOfLines={1}>
+                    {displayDomain}
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
             </View>
           </View>
 
-          {/* Top-Right Actions: Live icon + Publish text button */}
           <View style={styles.navActions}>
             {isLive ? (
               <TouchableOpacity
                 style={styles.navLiveIcon}
                 onPress={openInBrowser}
-                disabled={busy}
                 activeOpacity={0.6}
                 accessibilityRole="button"
                 accessibilityLabel="Open live store"
@@ -868,16 +534,16 @@ export default function SiteScreen({
               disabled={busy}
               activeOpacity={0.6}
               accessibilityRole="button"
-              accessibilityLabel={isLive ? 'Republish store' : 'Publish store'}
+              accessibilityLabel="Publish store"
             >
               <Text style={styles.navTextBtnLabel}>
-                {busy ? 'Publishing...' : isLive ? 'Republish' : 'Publish'}
+                {busy ? 'Publishing...' : 'Publish'}
               </Text>
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* Main Content Area */}
+        {/* MAIN SCROLL VIEW */}
         {initialLoading && !site ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="small" color="#0f172a" />
@@ -892,59 +558,34 @@ export default function SiteScreen({
             ]}
             showsVerticalScrollIndicator={false}
           >
-            {/* Toast Notification */}
-            {toast ? (
-              <View style={styles.toastBanner}>
-                <Ionicons name="checkmark-circle" size={16} color="#16a34a" />
-                <Text style={styles.toastText} numberOfLines={2}>
-                  {toast.text}
-                </Text>
-                <TouchableOpacity onPress={() => setToast(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                  <Ionicons name="close" size={16} color="#71717a" />
-                </TouchableOpacity>
-              </View>
-            ) : null}
-
-            {/* Busy Banner (only for non-publish messages like taste updates) */}
-            {busy && busyMessage && !busyMessage.toLowerCase().includes('publishing') ? (
-              <View style={styles.busyBanner}>
-                <ActivityIndicator size="small" color="#0f172a" />
-                <Text style={styles.busyText}>{busyMessage}</Text>
-              </View>
-            ) : null}
-
-            {/* Legacy Data Alert Banner */}
-            {hasLegacySections ? (
-              <View style={styles.legacyAlertBanner}>
-                <View style={{ flex: 1, gap: 2 }}>
-                  <Text style={styles.legacyAlertTitle}>Legacy Store Data Detected</Text>
-                  <Text style={styles.legacyAlertDetail}>
-                    Outdated sections detected. Tap below to apply the clean Blueprint.
-                  </Text>
-                </View>
-                <TouchableOpacity onPress={resetStore} disabled={busy} style={styles.legacyResetBtn}>
-                  <Text style={styles.legacyResetBtnText}>Reset</Text>
-                </TouchableOpacity>
-              </View>
-            ) : null}
-
-            {/* 2. TASTE (Opens full-screen taste drawer) */}
-            <TouchableOpacity
-              style={styles.tasteContainer}
-              onPress={() => setTasteDrawerOpen(true)}
-              activeOpacity={0.7}
-              accessibilityRole="button"
-              accessibilityLabel="Taste"
-            >
+            {/* 1. DESIGN CARD (Refero design.md token bundles) */}
+            <View style={styles.sectionBlock}>
               <View style={styles.sectionHeaderRow}>
-                <Text style={styles.sectionLabel}>TASTE</Text>
-                <Text style={styles.plusActionText}>+</Text>
+                <Text style={styles.sectionLabel}>DESIGN</Text>
               </View>
-            </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.designCard}
+                onPress={() => setDesignModalOpen(true)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.designCardHeader}>
+                  <View style={styles.designStyleBadge}>
+                    <View style={styles.swatchRowMini}>
+                      {activeSystem.swatches.map((color, i) => (
+                        <View key={color + i} style={[styles.miniSwatchDot, { backgroundColor: color }]} />
+                      ))}
+                    </View>
+                    <Text style={styles.designStyleName} numberOfLines={1}>{activeSystem.name}</Text>
+                  </View>
+                </View>
+                <Text style={styles.designDescText}>{activeSystem.desc}</Text>
+              </TouchableOpacity>
+            </View>
 
             <View style={styles.divider} />
 
-            {/* 3. SECTIONS (Dynamic Jev Blueprint List) */}
+            {/* 2. SECTIONS LIST */}
             <View style={styles.sectionsContainer}>
               <Text style={styles.sectionLabel}>SECTIONS</Text>
               <View style={styles.sectionsList}>
@@ -982,7 +623,7 @@ export default function SiteScreen({
                             {activeNotice ? `"${activeNotice}"` : 'Announcement Banner'}
                           </Text>
                         </View>
-                        <Text style={styles.plusActionText}>{activeNotice ? '›' : '+'}</Text>
+                        <Text style={styles.plusActionText}>{activeNotice ? 'Edit' : '+'}</Text>
                       </TouchableOpacity>
                     );
                   }
@@ -1020,7 +661,6 @@ export default function SiteScreen({
               </TouchableOpacity>
             ) : null}
 
-            {/* Subtle Reset Storefront Link */}
             <TouchableOpacity
               onPress={resetStore}
               disabled={busy}
@@ -1033,291 +673,81 @@ export default function SiteScreen({
           </ScrollView>
         )}
 
-        {/* TASTE SCREEN (FULL SCREEN REWORKED TO TASTE WITH SMOOTH TRANSITIONS) */}
+        {/* DESIGN SYSTEMS MODAL: Flat list of the 3 .md design systems from designmds */}
         <Modal
-          visible={tasteDrawerOpen}
+          visible={designModalOpen}
           animationType="slide"
-          onRequestClose={() => setTasteDrawerOpen(false)}
+          presentationStyle="fullScreen"
+          onRequestClose={() => setDesignModalOpen(false)}
         >
-          <View style={[drawer.root, { paddingTop: Math.max(insets.top, 12) }]}>
-            <KeyboardAvoidingView
-              behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-              style={drawer.keyboard}
-            >
-              {/* TOP HEADER BAR */}
-              <View style={drawer.header}>
-                {/* Left: Circular Back Button */}
+          <View style={[styles.root, { paddingTop: Math.max(insets.top, 12) }]}>
+            {/* Top Bar */}
+            <View style={styles.topNavBar}>
+              <View style={styles.navLeft}>
                 <TouchableOpacity
-                  style={drawer.menu}
-                  onPress={() => setTasteDrawerOpen(false)}
-                  activeOpacity={0.7}
-                  accessibilityRole="button"
-                  accessibilityLabel="Back to store"
+                  style={styles.navBackBtn}
+                  onPress={() => setDesignModalOpen(false)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 >
-                  <Ionicons name="chevron-back" size={22} color="#0f172a" />
+                  <Ionicons name="chevron-back" size={24} color="#0f172a" />
                 </TouchableOpacity>
-
-                {/* Center: Segmented Pill (Style | Voice | Rules) with Smooth Animated Slider */}
-                <View
-                  style={drawer.segment}
-                  onLayout={(e) => {
-                    const w = e.nativeEvent.layout.width;
-                    if (w > 0) setSegwidth(w);
-                  }}
-                >
-                  {/* Smooth sliding pill indicator */}
-                  <Animated.View
-                    style={[
-                      drawer.indicator,
-                      {
-                        width: Math.max(20, (segwidth - 6) / 2),
-                        transform: [
-                          {
-                            translateX: tabAnim.interpolate({
-                              inputRange: [0, 1],
-                              outputRange: [0, (segwidth - 6) / 2],
-                            }),
-                          },
-                        ],
-                      },
-                    ]}
-                  />
-
-                  <TouchableOpacity
-                    style={drawer.tab}
-                    onPress={() => switchTab('design')}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={[drawer.label, tab === 'design' && drawer.active]}>
-                      Design
-                    </Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={drawer.tab}
-                    onPress={() => switchTab('brand')}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={[drawer.label, tab === 'brand' && drawer.active]}>
-                      Brand
-                    </Text>
-                  </TouchableOpacity>
+                <View style={styles.navTitleWrap}>
+                  <Text style={styles.navTitle}>Design Systems</Text>
                 </View>
-
-                {/* Right: Circular Avatar Button with TAR Assistant Avatar */}
-                <TouchableOpacity
-                  style={drawer.avatar}
-                  activeOpacity={0.8}
-                  onPress={handleVoiceOrPromptAdd}
-                  accessibilityRole="button"
-                  accessibilityLabel="AI Taste Assistant"
-                >
-                  <TarAvatar size={30} bgColor="#d8b4fe" expression="happy" />
-                </TouchableOpacity>
               </View>
+              <TouchableOpacity
+                onPress={() => setDesignModalOpen(false)}
+                style={styles.navTextBtn}
+              >
+                <Text style={styles.navTextBtnLabel}>Done</Text>
+              </TouchableOpacity>
+            </View>
 
-              {/* CONTENT BODY WITH SMOOTH FADE TRANSITION */}
-              <Animated.View style={[drawer.body, { opacity: fadeAnim }]}>
-                <ScrollView
-                  style={drawer.scroll}
-                  contentContainerStyle={drawer.content}
-                  keyboardShouldPersistTaps="handled"
-                  showsVerticalScrollIndicator={false}
-                >
-                  {tab === 'design' ? (
-                    <View style={tokens.wrap}>
-                      <Text style={tokens.groupLabel}>HERO PATTERN (LAYOUT)</Text>
-                      <View style={tokens.cardGrid}>
-                        {HERO_PATTERNS.map((p) => {
-                          const isSelected = (selectedPattern ?? site?.blueprint?.heroPattern ?? 'split') === p.key;
-                          return (
-                            <TouchableOpacity
-                              key={p.key}
-                              style={[tokens.card, isSelected && tokens.cardActive]}
-                              onPress={() => handleApplyHeroPattern(p.key as HeroPattern)}
-                              activeOpacity={0.7}
-                            >
-                              <View style={tokens.cardTop}>
-                                <Text style={[tokens.cardTitle, isSelected && tokens.cardTitleActive]}>
-                                  {p.title}
-                                </Text>
-                                {isSelected && (
-                                  <Ionicons name="checkmark-circle" size={16} color="#0284c7" />
-                                )}
-                              </View>
-                              <Text style={tokens.cardDesc}>{p.subtitle}</Text>
-                            </TouchableOpacity>
-                          );
-                        })}
-                      </View>
-
-                      <Text style={[tokens.groupLabel, { marginTop: 20 }]}>COLOR & MOOD</Text>
-                      <View style={tokens.chipRow}>
-                        {COLOR_THEMES.map((theme) => {
-                          const isSelected = (selectedTone ?? site?.blueprint?.tone ?? 'balanced') === theme.key;
-                          return (
-                            <TouchableOpacity
-                              key={theme.key}
-                              style={[tokens.colorChip, isSelected && tokens.colorChipActive]}
-                              onPress={() => handleApplyTone(theme.key)}
-                              activeOpacity={0.7}
-                            >
-                              <View style={[tokens.swatch, { backgroundColor: theme.swatch }]} />
-                              <Text style={[tokens.chipLabel, isSelected && tokens.chipLabelActive]}>
-                                {theme.label}
-                              </Text>
-                            </TouchableOpacity>
-                          );
-                        })}
-                      </View>
-                    </View>
-                  ) : (
-                    <>
-                      <View style={drawer.brandHeader}>
-                        <Text style={drawer.brandCount}>
-                          {tasteBullets.length} {tasteBullets.length === 1 ? 'preference' : 'preferences'}
+            {/* Flat List */}
+            <ScrollView
+              style={styles.scrollArea}
+              contentContainerStyle={[
+                styles.scrollContent,
+                { paddingBottom: Math.max(insets.bottom + 24, 40) },
+              ]}
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={styles.designFlatList}>
+                {REFERO_SYSTEMS.map((sys) => {
+                  const isSelected = sys.key === currentStyleKey;
+                  return (
+                    <TouchableOpacity
+                      key={sys.key}
+                      style={[styles.systemCard, isSelected && styles.systemCardActive]}
+                      onPress={() => void handleSelectDesign(sys.key)}
+                      activeOpacity={0.7}
+                    >
+                      <View style={styles.systemCardTop}>
+                        <Text style={[styles.systemTitle, isSelected && styles.systemTitleActive]}>
+                          {sys.name}
                         </Text>
-                        {tasteBullets.length > 0 && (
-                          <TouchableOpacity onPress={clearAllTaste} disabled={busy} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                            <Text style={drawer.clearAction}>Clear All</Text>
-                          </TouchableOpacity>
-                        )}
+                        <Ionicons
+                          name={isSelected ? 'checkmark-circle' : 'ellipse-outline'}
+                          size={22}
+                          color={isSelected ? '#0284c7' : '#cbd5e1'}
+                        />
                       </View>
 
-                      {tasteBullets.length === 0 ? (
-                        <View style={drawer.empty}>
-                          <Text style={drawer.title}>No brand preferences yet</Text>
-                          <Text style={drawer.sub}>
-                            Tap suggestions below or add specific brand details you want reflected.
-                          </Text>
-                        </View>
-                      ) : (
-                        tasteBullets.map((block, idx) => {
-                          const display = block.replace(/^(voice|tone|avoid|rule):\s*/i, '');
-                          return (
-                            <React.Fragment key={block + idx}>
-                              <SlideItem
-                                text={display}
-                                onDelete={() => void removeTasteBullet(block)}
-                                disabled={busy}
-                              />
-                              {idx < tasteBullets.length - 1 && <View style={item.line} />}
-                            </React.Fragment>
-                          );
-                        })
-                      )}
-                    </>
-                  )}
-                </ScrollView>
-              </Animated.View>
+                      {/* Swatches Bar */}
+                      <View style={styles.swatchesRow}>
+                        {sys.swatches.map((swatch, idx) => (
+                          <View key={swatch + idx} style={[styles.swatchCircle, { backgroundColor: swatch }]} />
+                        ))}
+                      </View>
 
-              {/* QUICK SUGGESTIONS (Only on Brand tab) */}
-              {tab === 'brand' && (
-                <Animated.View style={[drawer.chips, { opacity: fadeAnim }]}>
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={drawer.row}
-                  >
-                    {BRAND_SUGGESTIONS
-                      .filter((s) => !tasteBullets.some((b) => b.includes(s)))
-                      .map((sugg) => (
-                        <TouchableOpacity
-                          key={sugg}
-                          onPress={() => void handleAddTaste(sugg)}
-                          disabled={busy}
-                          style={drawer.chip}
-                          activeOpacity={0.7}
-                        >
-                          <Text style={drawer.tag}>+ {sugg}</Text>
-                        </TouchableOpacity>
-                      ))}
-                  </ScrollView>
-                </Animated.View>
-              )}
-
-              {/* FLOATING PILL INPUT BAR (Only on Brand tab) */}
-              {tab === 'brand' && (
-                <View
-                  style={[
-                    drawer.footer,
-                    { paddingBottom: insets.bottom > 0 ? insets.bottom + 8 : 24 },
-                  ]}
-                >
-                  <View style={drawer.pill}>
-                    <TextInput
-                      style={drawer.field}
-                      placeholder={placeholder}
-                      placeholderTextColor="#94a3b8"
-                      value={newBullet}
-                      onChangeText={setNewBullet}
-                      onSubmitEditing={() => void handleAddTaste()}
-                      returnKeyType="send"
-                      editable={!busy}
-                    />
-                    <View style={drawer.icons}>
-                      <TouchableOpacity
-                        style={drawer.btn}
-                        onPress={() => {
-                          if (newBullet.trim()) {
-                            void handleAddTaste();
-                          } else {
-                            handleVoiceOrPromptAdd();
-                          }
-                        }}
-                        disabled={busy}
-                        accessibilityRole="button"
-                        accessibilityLabel="Add preference"
-                        hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
-                      >
-                        <Ionicons name="add" size={24} color="#64748b" />
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={drawer.btn}
-                        onPress={handleVoiceOrPromptAdd}
-                        disabled={busy}
-                        accessibilityRole="button"
-                        accessibilityLabel="Voice input"
-                        hitSlop={{ top: 8, bottom: 8, left: 4, right: 8 }}
-                      >
-                        <Ionicons name="mic-outline" size={21} color="#64748b" />
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                </View>
-              )}
-
-              {/* PUBLISH ACTION BAR (Only on Design tab) */}
-              {tab === 'design' && (
-                <View
-                  style={[
-                    drawer.footer,
-                    { paddingBottom: insets.bottom > 0 ? insets.bottom + 8 : 24 },
-                  ]}
-                >
-                  <TouchableOpacity
-                    style={drawer.publishBar}
-                    onPress={async () => {
-                      setTasteDrawerOpen(false);
-                      await publishSite();
-                    }}
-                    disabled={busy}
-                    activeOpacity={0.8}
-                    accessibilityRole="button"
-                    accessibilityLabel="Publish storefront"
-                  >
-                    <Ionicons name="cloud-upload" size={18} color="#ffffff" />
-                    <Text style={drawer.publishBarText}>
-                      {busy ? 'Publishing...' : isLive ? 'Apply & Republish Storefront' : 'Apply & Publish Storefront'}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-            </KeyboardAvoidingView>
+                      <Text style={styles.systemDesc}>{sys.desc}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </ScrollView>
           </View>
         </Modal>
-
-
 
         {/* NOTICE MODAL */}
         <Modal
@@ -1389,7 +819,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 18,
+    paddingVertical: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#f1f5f9',
     backgroundColor: '#ffffff',
@@ -1397,7 +827,7 @@ const styles = StyleSheet.create({
   navLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
     flex: 1,
     marginRight: 10,
   },
@@ -1408,16 +838,18 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   navTitle: {
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: '700',
     color: '#0f172a',
     letterSpacing: -0.3,
   },
+  domainRow: {
+    marginTop: 2,
+  },
   navSubtitle: {
-    fontSize: 11,
+    fontSize: 12,
     color: '#64748b',
     fontWeight: '500',
-    marginTop: 1,
   },
   navActions: {
     flexDirection: 'row',
@@ -1430,7 +862,7 @@ const styles = StyleSheet.create({
     padding: 2,
   },
   navTextBtn: {
-    paddingHorizontal: 4,
+    paddingHorizontal: 6,
     paddingVertical: 6,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1439,14 +871,9 @@ const styles = StyleSheet.create({
     opacity: 0.4,
   },
   navTextBtnLabel: {
-    fontSize: 17,
-    fontWeight: '400',
+    fontSize: 16,
+    fontWeight: '600',
     color: '#007aff',
-  },
-  divider: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: '#e2e8f0',
-    marginVertical: 10,
   },
   loadingContainer: {
     flex: 1,
@@ -1464,90 +891,32 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 16,
-    paddingTop: 10,
+    paddingTop: 16,
   },
-  toastBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f0fdf4',
-    borderWidth: 1,
-    borderColor: '#bbf7d0',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    gap: 8,
-    marginBottom: 10,
+  divider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: '#e2e8f0',
+    marginVertical: 14,
   },
-  toastText: {
-    flex: 1,
-    fontSize: 13,
-    color: '#15803d',
-    fontWeight: '500',
-  },
-  busyBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f1f5f9',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    gap: 10,
-    marginBottom: 10,
-  },
-  busyText: {
-    fontSize: 13,
-    color: '#334155',
-    fontWeight: '500',
-  },
-  legacyAlertBanner: {
-    backgroundColor: '#fff1f2',
-    borderWidth: 1,
-    borderColor: '#fecdd3',
-    borderRadius: 10,
-    padding: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 12,
-  },
-  legacyAlertTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#be123c',
-  },
-  legacyAlertDetail: {
-    fontSize: 12,
-    color: '#9f1239',
-    lineHeight: 16,
-  },
-  legacyResetBtn: {
-    backgroundColor: '#be123c',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  legacyResetBtnText: {
-    color: '#ffffff',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-
-  // Taste
-  tasteContainer: {
-    paddingVertical: 8,
-    minHeight: 40,
-    justifyContent: 'center',
+  sectionBlock: {
+    paddingVertical: 2,
   },
   sectionHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    marginBottom: 8,
   },
   sectionLabel: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#64748B',
+    color: '#64748b',
     letterSpacing: 0.8,
+  },
+  editActionText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#0284c7',
   },
   plusActionText: {
     fontSize: 18,
@@ -1555,26 +924,69 @@ const styles = StyleSheet.create({
     color: '#0284c7',
     paddingHorizontal: 4,
   },
-  bulletsWrap: {
-    gap: 8,
-    paddingVertical: 2,
+
+  // Design Card on Main Screen
+  designCard: {
+    backgroundColor: '#f8fafc',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    padding: 14,
+    gap: 6,
   },
-  bulletRow: {
+  designCardHeader: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  designStyleBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
-  },
-  bulletDot: {
-    fontSize: 16,
-    lineHeight: 22,
-    color: '#334155',
-    fontWeight: '700',
-  },
-  bulletText: {
     flex: 1,
+  },
+  swatchRowMini: {
+    flexDirection: 'row',
+    gap: 3,
+  },
+  miniSwatchDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(0,0,0,0.1)',
+  },
+  designStyleName: {
     fontSize: 15,
-    lineHeight: 22,
-    color: '#1E293B',
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  designArchetype: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#64748b',
+  },
+  fileBadge: {
+    backgroundColor: '#f1f5f9',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  fileBadgeText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#475569',
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+  },
+  designDescText: {
+    fontSize: 12,
+    color: '#64748b',
+    lineHeight: 16,
+  },
+  designBestForText: {
+    fontSize: 12,
+    color: '#0284c7',
+    fontWeight: '500',
   },
 
   // Sections
@@ -1584,7 +996,7 @@ const styles = StyleSheet.create({
   },
   sectionsList: {
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#E2E8F0',
+    borderTopColor: '#e2e8f0',
     marginTop: 4,
   },
   sectionRow: {
@@ -1594,7 +1006,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#E2E8F0',
+    borderBottomColor: '#e2e8f0',
   },
   sectionRowLast: {
     borderBottomWidth: StyleSheet.hairlineWidth,
@@ -1608,7 +1020,7 @@ const styles = StyleSheet.create({
   sectionRowTitle: {
     fontSize: 15,
     fontWeight: '500',
-    color: '#0F172A',
+    color: '#0f172a',
   },
   sectionRowActiveNotice: {
     backgroundColor: '#fffbeb',
@@ -1619,17 +1031,101 @@ const styles = StyleSheet.create({
     color: '#b45309',
     fontWeight: '600',
   },
-
-
-
-
   subtleLink: {
     alignItems: 'center',
-    paddingVertical: 4,
+    paddingVertical: 10,
   },
   subtleLinkText: {
-    fontSize: 12,
+    fontSize: 13,
     color: '#94a3b8',
+  },
+
+  // Design Systems Flat List Modal
+  designNoticeBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#f0f9ff',
+    borderWidth: 1,
+    borderColor: '#bae6fd',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 16,
+  },
+  designNoticeText: {
+    flex: 1,
+    fontSize: 12,
+    color: '#0369a1',
+    lineHeight: 17,
+  },
+  designFlatList: {
+    gap: 12,
+    marginBottom: 20,
+  },
+  systemCard: {
+    backgroundColor: '#ffffff',
+    borderWidth: 1.5,
+    borderColor: '#e2e8f0',
+    borderRadius: 14,
+    padding: 16,
+    gap: 8,
+  },
+  systemCardActive: {
+    borderColor: '#0284c7',
+    backgroundColor: '#f8fafc',
+  },
+  systemCardTop: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+  },
+  systemTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  systemTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  systemTitleActive: {
+    color: '#0284c7',
+  },
+  systemArchetypeBadge: {
+    backgroundColor: '#e2e8f0',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  systemArchetypeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#334155',
+  },
+  systemFileText: {
+    fontSize: 11,
+    color: '#64748b',
+    marginTop: 2,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+  },
+  swatchesRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginVertical: 4,
+  },
+  swatchCircle: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.15)',
+  },
+  systemDesc: {
+    fontSize: 13,
+    color: '#334155',
+    lineHeight: 18,
   },
 
   // Notice Modal
@@ -1696,330 +1192,6 @@ const styles = StyleSheet.create({
   saveNoticeBtnText: {
     fontSize: 14,
     color: '#ffffff',
-    fontWeight: '600',
-  },
-});
-
-const item = StyleSheet.create({
-  wrap: {
-    position: 'relative',
-    overflow: 'hidden',
-    backgroundColor: '#ffffff',
-  },
-  under: {
-    position: 'absolute',
-    top: 0,
-    bottom: 0,
-    right: 0,
-    width: 72,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#ef4444',
-  },
-  action: {
-    flex: 1,
-    width: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 2,
-  },
-  label: {
-    color: '#ffffff',
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  front: {
-    backgroundColor: '#ffffff',
-  },
-  content: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    gap: 10,
-    backgroundColor: '#ffffff',
-  },
-  dot: {
-    fontSize: 16,
-    lineHeight: 22,
-    color: '#94a3b8',
-  },
-  text: {
-    flex: 1,
-    fontSize: 15,
-    lineHeight: 22,
-    color: '#0f172a',
-    fontWeight: '400',
-  },
-  line: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: '#f1f5f9',
-    marginLeft: 16,
-    marginRight: 16,
-  },
-});
-
-const drawer = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: '#ffffff',
-  },
-  keyboard: {
-    flex: 1,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
-  menu: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#edf2f7',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  segment: {
-    flex: 1,
-    maxWidth: 240,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#edf2f7',
-    padding: 3,
-    flexDirection: 'row',
-    alignItems: 'center',
-    position: 'relative',
-    marginHorizontal: 8,
-  },
-  indicator: {
-    position: 'absolute',
-    top: 3,
-    left: 3,
-    bottom: 3,
-    backgroundColor: '#18181b',
-    borderRadius: 19,
-  },
-  tab: {
-    flex: 1,
-    height: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 1,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#64748b',
-  },
-  active: {
-    color: '#ffffff',
-    fontWeight: '600',
-  },
-  avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#edf2f7',
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  body: {
-    flex: 1,
-  },
-  scroll: {
-    flex: 1,
-  },
-  content: {
-    paddingVertical: 8,
-  },
-  empty: {
-    paddingHorizontal: 20,
-    paddingTop: 48,
-    alignItems: 'center',
-    gap: 8,
-  },
-  title: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#0f172a',
-    textAlign: 'center',
-  },
-  sub: {
-    fontSize: 13,
-    color: '#64748b',
-    textAlign: 'center',
-    lineHeight: 18,
-    maxWidth: 280,
-  },
-  chips: {
-    paddingHorizontal: 16,
-    marginBottom: 8,
-  },
-  row: {
-    gap: 8,
-    paddingVertical: 2,
-  },
-  chip: {
-    backgroundColor: '#f8fafc',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-  },
-  tag: {
-    fontSize: 12,
-    color: '#475569',
-    fontWeight: '500',
-  },
-  footer: {
-    paddingHorizontal: 16,
-    paddingTop: 4,
-  },
-  pill: {
-    height: 54,
-    borderRadius: 27,
-    backgroundColor: '#edf2f7',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingLeft: 18,
-    paddingRight: 12,
-  },
-  field: {
-    flex: 1,
-    fontSize: 15,
-    color: '#0f172a',
-    height: '100%',
-  },
-  icons: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  btn: {
-    padding: 2,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  brandHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
-  brandCount: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#64748b',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  clearAction: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#ef4444',
-  },
-  publishBar: {
-    backgroundColor: '#0f172a',
-    borderRadius: 14,
-    height: 50,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  publishBarText: {
-    color: '#ffffff',
-    fontSize: 15,
-    fontWeight: '600',
-  },
-});
-
-const tokens = StyleSheet.create({
-  wrap: {
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 24,
-  },
-  groupLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#64748b',
-    letterSpacing: 0.8,
-    marginBottom: 10,
-  },
-  cardGrid: {
-    gap: 8,
-  },
-  card: {
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    borderRadius: 12,
-    padding: 12,
-  },
-  cardActive: {
-    borderColor: '#0284c7',
-    backgroundColor: '#f0f9ff',
-  },
-  cardTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 4,
-  },
-  cardTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#0f172a',
-  },
-  cardTitleActive: {
-    color: '#0284c7',
-  },
-  cardDesc: {
-    fontSize: 12,
-    color: '#64748b',
-    lineHeight: 16,
-  },
-  chipRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  colorChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  colorChipActive: {
-    borderColor: '#0284c7',
-    backgroundColor: '#f0f9ff',
-  },
-  swatch: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-  },
-  chipLabel: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: '#334155',
-  },
-  chipLabelActive: {
-    color: '#0284c7',
     fontWeight: '600',
   },
 });

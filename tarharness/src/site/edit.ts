@@ -85,7 +85,7 @@ export interface AskResult {
   operations: PatchOperation[];
   summary: string;
   questions: string[];
-  /** Values resolved without a model, so taste memory can credit the owner. */
+  /** Values resolved without a model, so brief memory can credit the owner. */
   choices: Record<string, string>;
 }
 
@@ -511,13 +511,13 @@ export interface EditResult {
   diff: DiffEntry[];
 }
 
-/** Accepted taste is remembered so the next run offers it first; it never decides. */
+/** Accepted brief is remembered so the next run offers it first; it never decides. */
 function remember(doc: SiteDocument, values: Record<string, string>, kind: 'accepted' | 'rejected'): SiteDocument {
   const entries = Object.entries(values).map(([key, value]) => `${key}:${value}`);
   if (!entries.length) return doc;
-  const taste = { ...(doc.taste || {}) };
-  const list = [...new Set([...(taste[kind] || []), ...entries])].slice(-20);
-  return { ...doc, taste: { ...taste, [kind]: list } };
+  const brief = { ...doc.brief };
+  const list = [...new Set([...(brief[kind] || []), ...entries])].slice(-20);
+  return { ...doc, brief: { ...brief, [kind]: list } };
 }
 
 export async function executeSiteEdit(
@@ -592,7 +592,7 @@ async function previewHtml(doc: SiteDocument): Promise<string> {
   }
 }
 
-/** Undo restores an earlier revision as a new revision and records the taste it rejected. */
+/** Undo restores an earlier revision as a new revision and records the brief it rejected. */
 export async function executeSiteUndo(
   client: Client,
   context: AccessContext,
@@ -619,7 +619,7 @@ export async function executeSiteUndo(
     revision: doc.revision + 1,
     currentRelease: doc.currentRelease ?? null,
     releases: doc.releases || [],
-    taste: doc.taste || restored.taste,
+    brief: doc.brief || restored.brief,
   }, { undo: undone }, 'rejected');
   validateDocument(merged);
   const diff = diffSummary(doc, merged);

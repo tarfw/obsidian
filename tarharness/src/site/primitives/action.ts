@@ -4,7 +4,8 @@
  * Newsletter (#38), Contact Form (#43), and WhatsApp Float (#65).
  */
 
-import { escapeAttribute, escapeHtml } from '../html.ts';
+import { escapeAttribute, escapeHtml, safeHref } from '../html.ts';
+import type { Page, SiteDocument } from '../document.ts';
 
 export interface ActionProps {
   kind: 'whatsapp_float' | 'newsletter' | 'search' | 'contact_form';
@@ -58,3 +59,87 @@ export function renderActionPrimitive(props: ActionProps): string {
   </div>
 </section>`;
 }
+
+export function renderShopifyFooter(doc: SiteDocument, page: Page, footerNodeProps?: Record<string, unknown>, footerId = 'site-footer'): string {
+  const brand = escapeHtml(String(footerNodeProps?.brand || doc.pages[0]?.title || 'Storefront'));
+  const year = new Date().getFullYear();
+  const goal = doc.brief?.goal || `${brand} online storefront.`;
+  const customLinks = Array.isArray(footerNodeProps?.links) ? footerNodeProps?.links as { label?: string; href?: string }[] : [];
+
+  const quickLinks: { label: string; href: string }[] = [];
+  quickLinks.push({ label: 'Home', href: '/' });
+  for (const s of (page.sections || [])) {
+    if (s.purpose === 'catalog' || s.purpose === 'collection' || s.id === 'catalog') {
+      const label = s.purpose === 'menu' ? 'Menu' : s.purpose === 'services' ? 'Services' : 'Catalog';
+      if (!quickLinks.some((q) => q.href.includes('catalog') || q.href.includes('menu'))) {
+        quickLinks.push({ label, href: `#${s.id || 'catalog'}` });
+      }
+    } else if (s.purpose === 'menu' || s.id === 'menu') {
+      if (!quickLinks.some((q) => q.href.includes('menu'))) quickLinks.push({ label: 'Menu', href: `#${s.id || 'menu'}` });
+    } else if (s.purpose === 'services' || s.id === 'services') {
+      if (!quickLinks.some((q) => q.href.includes('services'))) quickLinks.push({ label: 'Services', href: `#${s.id || 'services'}` });
+    } else if (s.purpose === 'spotlight' || s.id === 'spotlight') {
+      if (!quickLinks.some((q) => q.href.includes('spotlight'))) quickLinks.push({ label: 'Offers', href: `#${s.id || 'spotlight'}` });
+    }
+  }
+  for (const l of customLinks) {
+    if (l.label && l.href && !quickLinks.some((q) => q.href === l.href)) {
+      quickLinks.push({ label: l.label, href: l.href });
+    }
+  }
+
+  const quickLinksHtml = quickLinks.map((l) => `<li><a href="${escapeAttribute(safeHref(l.href) || '#')}">${escapeHtml(l.label)}</a></li>`).join('');
+
+  const briefData = (doc.brief as unknown as Record<string, unknown>) || {};
+  const phone = String(briefData.phone || briefData.whatsappPhone || '');
+  const cleanPhone = phone.replace(/[^0-9]/g, '');
+  const address = String(briefData.address || '');
+  const email = String(briefData.email || '');
+
+  return `<footer id="${escapeAttribute(footerId)}" class="tar-footer" data-purpose="footer">
+  <div class="tar-footer-wrap">
+    <div class="tar-footer-grid">
+      <div class="tar-footer-col">
+        <a class="tar-footer-brand" href="/">${brand}</a>
+        <p class="tar-footer-bio">${escapeHtml(goal)}</p>
+        <span class="tar-footer-badge-pill">✓ Verified Merchant</span>
+      </div>
+      <div class="tar-footer-col">
+        <h4 class="tar-footer-col-title">Quick Links</h4>
+        <ul class="tar-footer-list">
+          ${quickLinksHtml}
+        </ul>
+      </div>
+      <div class="tar-footer-col">
+        <h4 class="tar-footer-col-title">Customer Care</h4>
+        <ul class="tar-footer-list">
+          <li><a href="#shipping">Shipping Policy</a></li>
+          <li><a href="#returns">Returns & Refunds</a></li>
+          <li><a href="#privacy">Privacy & Terms</a></li>
+        </ul>
+      </div>
+      <div class="tar-footer-col">
+        <h4 class="tar-footer-col-title">Orders & Support</h4>
+        <div class="tar-footer-contact-item">
+          <strong>Direct WhatsApp Support</strong><br>
+          ${cleanPhone ? `<a href="https://wa.me/${cleanPhone}" class="tar-btn-whatsapp" style="margin-top:8px;display:inline-flex;" target="_blank" rel="noopener">Chat on WhatsApp</a>` : 'Instant assistance on WhatsApp'}
+        </div>
+        ${phone ? `<div class="tar-footer-contact-item" style="margin-top: 8px;"><strong>Phone:</strong> <a href="tel:${escapeAttribute(phone)}">${escapeHtml(phone)}</a></div>` : ''}
+        ${email ? `<div class="tar-footer-contact-item" style="margin-top: 4px;"><strong>Email:</strong> <a href="mailto:${escapeAttribute(email)}">${escapeHtml(email)}</a></div>` : ''}
+        ${address ? `<div class="tar-footer-contact-item" style="margin-top: 4px;"><strong>Address:</strong> ${escapeHtml(address)}</div>` : ''}
+      </div>
+    </div>
+    <div class="tar-footer-bottom">
+      <span>© ${year} ${brand}. All rights reserved.</span>
+      <div class="tar-footer-payments" aria-label="Payment methods accepted">
+        <span class="tar-pay-pill">UPI</span>
+        <span class="tar-pay-pill">GPay</span>
+        <span class="tar-pay-pill">PhonePe</span>
+        <span class="tar-pay-pill">Cards</span>
+        <span class="tar-pay-pill">Cash on Delivery</span>
+      </div>
+    </div>
+  </div>
+</footer>`;
+}
+

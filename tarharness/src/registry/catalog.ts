@@ -58,10 +58,10 @@ export const actionCatalog = [
     output: ['enabled', 'version'], roles: ['owner', 'admin'], effects: ['record_update'],
   },
   {
-    id: 'taste.save', version: 1, type: 'app', title: 'Save taste',
-    description: 'Save operational taste profile and classified trade.', interfaceKey: 'form',
+    id: 'brief.save', version: 1, type: 'app', title: 'Save brief',
+    description: 'Save the workspace brief and classified trade.', interfaceKey: 'form',
     fields: [
-      { key: 'taste', label: 'Taste', kind: 'text' },
+      { key: 'brief', label: 'Brief', kind: 'text' },
       { key: 'trade', label: 'Trade', kind: 'text' },
     ],
     output: ['saved'], roles: ['owner', 'admin'], effects: ['record_update'],
@@ -268,20 +268,20 @@ export const actionCatalog = [
     output: ['siteId', 'version', 'revision', 'diff'], roles: ['owner', 'admin'], effects: ['record_update'],
   },
   {
-    id: 'site.taste.add', version: 1, type: 'app', title: 'Add taste bullet',
-    description: 'Add a merchant taste bullet to steer the site generation.', interfaceKey: 'form',
+    id: 'site.brief.add', version: 1, type: 'app', title: 'Add brief bullet',
+    description: 'Add a merchant brief bullet to steer the site generation.', interfaceKey: 'form',
     fields: [
       { key: 'siteId', label: 'Site', kind: 'record', required: true },
-      { key: 'bullet', label: 'Taste bullet', kind: 'text', required: true },
+      { key: 'bullet', label: 'Brief bullet', kind: 'text', required: true },
     ],
     output: ['siteId', 'version', 'site', 'blueprint'], roles: ['owner', 'admin'], effects: ['record_update'],
   },
   {
-    id: 'site.taste.remove', version: 1, type: 'app', title: 'Remove taste bullet',
-    description: 'Remove a merchant taste bullet from site steering.', interfaceKey: 'form',
+    id: 'site.brief.remove', version: 1, type: 'app', title: 'Remove brief bullet',
+    description: 'Remove a merchant brief bullet from site steering.', interfaceKey: 'form',
     fields: [
       { key: 'siteId', label: 'Site', kind: 'record', required: true },
-      { key: 'bullet', label: 'Taste bullet', kind: 'text', required: true },
+      { key: 'bullet', label: 'Brief bullet', kind: 'text', required: true },
     ],
     output: ['siteId', 'version', 'site', 'blueprint'], roles: ['owner', 'admin'], effects: ['record_update'],
   },

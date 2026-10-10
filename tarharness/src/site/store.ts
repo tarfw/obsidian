@@ -9,9 +9,9 @@ import { inspectDocument } from './inspect.ts';
 import { assetReader } from './asset.ts';
 import { applyPexels } from './pexels.ts';
 import { CATEGORY_IDS } from './design.ts';
-import { type Blueprint, type BusinessKind, type DensityToken, type HeroPattern, type LeadSection, type ToneToken, type TypographyToken, compileSectionOrder, catalogLayoutFor, checkPublishGate, hashState } from './blueprint.ts';
+import { type Blueprint, type BusinessKind, type DensityToken, type HeaderStyle, type HeroPattern, type LeadSection, type ToneToken, type TypographyToken, compileSectionOrder, catalogLayoutFor, checkPublishGate, hashState } from './blueprint.ts';
 import { BudgetExceeded, DEFAULT_BUDGET, GROQ_DEFAULT_MODEL, ModelRunner, SITE_MODEL_FALLBACKS, readClaims, writeCopy } from './model.ts';
-import { buildSite, defaultBlueprint, tasteBias, type Facts, type Slot } from './build.ts';
+import { buildSite, defaultBlueprint, briefBias, type Facts, type Slot } from './build.ts';
 import { slugify } from './html.ts';
 import { checkClaims, fanOut, flagDrift } from './judgment.ts';
 import { DOCUMENT_VERSION, type Asset, type Node, type Page, type PersonaRule, type ReleaseFile, type ReleaseManifest, type Section, type SiteDocument } from './document.ts';
@@ -277,38 +277,37 @@ export async function executeSiteGenerate(
   const brief = { goal: prompt || `${title} online`, audience: text(input.audience, 200), tone: text(input.tone, 120) };
   const gathered = await publicFacts(client, input, previous, context);
   const cache = { control, workspace: context.workspace.id, version: 'create-2' };
-  const inputTasteProvided = Array.isArray(input.taste);
-  const inputTaste = inputTasteProvided ? strings(input.taste, 20) : [];
-  let taste = inputTasteProvided ? inputTaste : ((previous?.taste?.bullets || previous?.taste?.accepted || []) as string[]);
+  const inputBriefProvided = Array.isArray(input.brief);
+  const inputBrief = inputBriefProvided ? strings(input.brief, 20) : [];
+  let bullets = inputBriefProvided ? inputBrief : ((previous?.brief?.bullets || previous?.brief?.accepted || []) as string[]);
   let trade = text(input.trade);
 
-  // Day 0 Inheritance: Only inherit on initial site creation if neither site nor caller provided taste
-  if (!previous && !inputTasteProvided) {
-    const tasteRow = await client.execute("SELECT data FROM records WHERE id='taste' AND type='taste' AND archived IS NULL LIMIT 1");
-    if (tasteRow.rows[0]) {
+  // Day 0 Inheritance: Only inherit on initial site creation if neither site nor caller provided a brief
+  if (!previous && !inputBriefProvided) {
+    const briefRow = await client.execute("SELECT data FROM records WHERE id='brief' AND type='brief' AND archived IS NULL LIMIT 1");
+    if (briefRow.rows[0]) {
       try {
-        const workspaceTasteData = object(JSON.parse(String(tasteRow.rows[0].data)));
-        if (!taste.length && Array.isArray(workspaceTasteData.taste) && workspaceTasteData.taste.length) {
-          taste = workspaceTasteData.taste.map(String).filter(Boolean).slice(0, 20);
+        const workspaceBriefData = object(JSON.parse(String(briefRow.rows[0].data)));
+        if (!bullets.length && Array.isArray(workspaceBriefData.brief) && workspaceBriefData.brief.length) {
+          bullets = workspaceBriefData.brief.map(String).filter(Boolean).slice(0, 20);
         }
-        if (!trade && typeof workspaceTasteData.trade === 'string' && workspaceTasteData.trade.trim()) {
-          trade = workspaceTasteData.trade.trim();
+        if (!trade && typeof workspaceBriefData.trade === 'string' && workspaceBriefData.trade.trim()) {
+          trade = workspaceBriefData.trade.trim();
         }
       } catch { /* ignore damaged record */ }
     }
   }
-  const avoided = [...tasteBias(previous?.taste)];
+  const avoided = [...briefBias(previous?.brief)];
 
   const judged = await fanOut(typesafe, cache, {
     trade: trade || brief.audience,
-    taste,
     facts: {
       ...gathered.judged,
       items: gathered.facts.items?.length ?? 0,
       proofs: gathered.facts.proofs || [],
       season: gathered.facts.season || '',
     },
-    brief,
+    brief: { ...brief, bullets },
     assets: gathered.assets,
     avoid: avoided,
   });
@@ -331,7 +330,7 @@ export async function executeSiteGenerate(
     trust: judged.trust && (gathered.facts.proofs?.length ?? 0) > 0,
   });
 
-  const heroPattern = (input.heroPattern as HeroPattern) || judged.heroPattern || defaults.heroPattern || 'split';
+  const heroPattern = (input.heroPattern as HeroPattern) || (previous?.blueprint?.heroPattern as HeroPattern) || judged.heroPattern || defaults.heroPattern || 'split';
   const blueprintPre: Omit<Blueprint, 'hash'> = {
     kind,
     style,
@@ -339,14 +338,14 @@ export async function executeSiteGenerate(
     tone,
     density,
     lead,
-    headerStyle: heroPattern === 'split' ? 'split' : 'fullbleed',
+    headerStyle: (input.headerStyle as HeaderStyle) || (previous?.blueprint?.headerStyle as HeaderStyle) || (heroPattern === 'centered_atmospheric' ? 'floating_pill' : heroPattern === 'split' ? 'split' : 'fullbleed'),
     heroPattern,
     catalogLayout,
     sections,
     gate,
     revision: previous ? (previous.revision || 1) + 1 : 1,
   };
-  const hash = await hashState(taste, gathered.facts);
+  const hash = await hashState(bullets, gathered.facts);
   const blueprint: Blueprint = {
     ...blueprintPre,
     hash,
@@ -366,10 +365,11 @@ export async function executeSiteGenerate(
     previous,
   });
   const site = built.doc;
-  site.taste = {
-    bullets: taste,
-    accepted: taste,
-    rejected: previous?.taste?.rejected || [],
+  site.brief = {
+    ...site.brief,
+    bullets,
+    accepted: bullets,
+    rejected: previous?.brief?.rejected || [],
   };
 
   const prose = await writeDraft(ai, model, groqApiKey, site, built.slots, gathered.judged);
@@ -421,7 +421,7 @@ export async function executeSiteGenerate(
   return withPlaceholders();
 }
 
-export async function executeSiteTasteAdd(
+export async function executeSiteBriefAdd(
   client: Client,
   context: AccessContext,
   input: Record<string, unknown>,
@@ -431,16 +431,16 @@ export async function executeSiteTasteAdd(
   control?: D1Database,
 ): Promise<Record<string, unknown>> {
   const bullet = text(input.bullet, 200);
-  if (!bullet) throw badRequest('Provide a taste bullet.');
+  if (!bullet) throw badRequest('Provide a brief bullet.');
   const current = await getSiteRecord(client, text(input.siteId, 160) || undefined);
   if (!current) throw notFound('Site was not found.');
   const doc = readDocument(current.data).doc;
-  const currentTaste = ((doc.taste?.bullets || doc.taste?.accepted || []) as string[]);
-  const nextTaste = [...currentTaste.filter((b: string) => b !== bullet), bullet];
-  return executeSiteGenerate(client, context, { siteId: current.id, title: doc.pages[0]?.title, taste: nextTaste }, key, inputHash, typesafe, undefined, control);
+  const currentBrief = ((doc.brief?.bullets || doc.brief?.accepted || []) as string[]);
+  const nextBrief = [...currentBrief.filter((b: string) => b !== bullet), bullet];
+  return executeSiteGenerate(client, context, { siteId: current.id, title: doc.pages[0]?.title, brief: nextBrief }, key, inputHash, typesafe, undefined, control);
 }
 
-export async function executeSiteTasteRemove(
+export async function executeSiteBriefRemove(
   client: Client,
   context: AccessContext,
   input: Record<string, unknown>,
@@ -451,27 +451,27 @@ export async function executeSiteTasteRemove(
 ): Promise<Record<string, unknown>> {
   const bullet = text(input.bullet, 200);
   const clearAll = input.clearAll === true || bullet === '__ALL__';
-  if (!bullet && !clearAll) throw badRequest('Provide a taste bullet to remove.');
+  if (!bullet && !clearAll) throw badRequest('Provide a brief bullet to remove.');
   const current = await getSiteRecord(client, text(input.siteId, 160) || undefined);
   if (!current) throw notFound('Site was not found.');
   const doc = readDocument(current.data).doc;
-  const currentTaste = ((doc.taste?.bullets || doc.taste?.accepted || []) as string[]);
-  const nextTaste = clearAll ? [] : currentTaste.filter((b: string) => b !== bullet);
+  const currentBrief = ((doc.brief?.bullets || doc.brief?.accepted || []) as string[]);
+  const nextBrief = clearAll ? [] : currentBrief.filter((b: string) => b !== bullet);
 
-  // Keep workspace taste record in sync so old seed bullets never resurrect
+  // Keep workspace brief record in sync so old seed bullets never resurrect
   if (clearAll) {
     try {
-      await client.execute("UPDATE records SET data=json_set(data, '$.taste', json('[]')) WHERE id='taste' AND type='taste'");
+      await client.execute("UPDATE records SET data=json_set(data, '$.brief', json('[]')) WHERE id='brief' AND type='brief'");
     } catch { /* ignore */ }
   } else if (bullet) {
     try {
-      const tasteRow = await client.execute("SELECT data FROM records WHERE id='taste' AND type='taste' AND archived IS NULL LIMIT 1");
-      if (tasteRow.rows[0]) {
-        const workspaceTasteData = object(JSON.parse(String(tasteRow.rows[0].data)));
-        if (Array.isArray(workspaceTasteData.taste)) {
-          const filtered = workspaceTasteData.taste.filter((b: unknown) => String(b) !== bullet);
+      const briefRow = await client.execute("SELECT data FROM records WHERE id='brief' AND type='brief' AND archived IS NULL LIMIT 1");
+      if (briefRow.rows[0]) {
+        const workspaceBriefData = object(JSON.parse(String(briefRow.rows[0].data)));
+        if (Array.isArray(workspaceBriefData.brief)) {
+          const filtered = workspaceBriefData.brief.filter((b: unknown) => String(b) !== bullet);
           await client.execute({
-            sql: "UPDATE records SET data=json_set(data, '$.taste', json(?)) WHERE id='taste' AND type='taste'",
+            sql: "UPDATE records SET data=json_set(data, '$.brief', json(?)) WHERE id='brief' AND type='brief'",
             args: [JSON.stringify(filtered)],
           });
         }
@@ -479,7 +479,7 @@ export async function executeSiteTasteRemove(
     } catch { /* ignore */ }
   }
 
-  return executeSiteGenerate(client, context, { siteId: current.id, title: doc.pages[0]?.title, taste: nextTaste }, key, inputHash, typesafe, undefined, control);
+  return executeSiteGenerate(client, context, { siteId: current.id, title: doc.pages[0]?.title, brief: nextBrief }, key, inputHash, typesafe, undefined, control);
 }
 
 export async function executeSiteNoticeSet(

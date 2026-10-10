@@ -91,17 +91,17 @@ export async function readCapabilities(client: Client): Promise<CapabilityState>
 }
 
 export async function readWorkspaceTools(client: Client, access: AccessContext, providers: { search: boolean }) {
-  const [state, tasteRow] = await Promise.all([
+  const [state, briefRow] = await Promise.all([
     readCapabilities(client),
-    client.execute("SELECT data FROM records WHERE id='taste' AND type='taste' AND archived IS NULL LIMIT 1").catch(() => ({ rows: [] })),
+    client.execute("SELECT data FROM records WHERE id='brief' AND type='brief' AND archived IS NULL LIMIT 1").catch(() => ({ rows: [] })),
   ]);
 
-  let savedTaste: string[] = [];
+  let savedBrief: string[] = [];
   let savedTrade: string | null = null;
-  if (tasteRow.rows.length > 0) {
+  if (briefRow.rows.length > 0) {
     try {
-      const parsed = JSON.parse(String(tasteRow.rows[0].data));
-      if (Array.isArray(parsed.taste)) savedTaste = parsed.taste.map(String);
+      const parsed = JSON.parse(String(briefRow.rows[0].data));
+      if (Array.isArray(parsed.brief)) savedBrief = parsed.brief.map(String);
       if (typeof parsed.trade === 'string') savedTrade = parsed.trade;
       else if (typeof parsed.trade?.title === 'string') savedTrade = parsed.trade.title;
     } catch { /* ignore */ }
@@ -153,7 +153,7 @@ export async function readWorkspaceTools(client: Client, access: AccessContext, 
     version: state.version,
     canManage: managesMembers(access.member),
     role: access.member.role === 'member' ? access.member.workRole || 'member' : access.member.role,
-    taste: savedTaste,
+    brief: savedBrief,
     trade: savedTrade,
   };
 }

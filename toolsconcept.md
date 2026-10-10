@@ -138,7 +138,7 @@ Count physical cash at shift end, log drawer drops, and balance daily cash with 
 |--------------------------------------------------|
 |  Stock *                      [-] [ 1 ] [+]      |
 |--------------------------------------------------|
-|  Taste                        Pure silk...    >  |
+|  Brief                        Pure silk...    >  |
 |--------------------------------------------------|
 |  Category                     Traditional Silk   |
 |--------------------------------------------------|
@@ -152,19 +152,19 @@ Count physical cash at shift end, log drawer drops, and balance daily cash with 
 +--------------------------------------------------+
 ```
 
-* **Human Inputs (Physical Facts & Taste Only):**
+* **Human Inputs (Physical Facts & Brief Only):**
   1. 📸 **Photo:** Snapped with phone camera or selected from gallery.
   2. 📝 **Product Name:** Typed or voice-dictated name.
   3. 💰 **Price:** Cash rupee price (e.g., ₹8,200). AI never touches money.
   4. 📦 **Stock:** Units on counter shelf (defaults to 1).
-  5. 🧵 **Taste (Detached Drawer >70% Height):** Flat list blocks of text with inline input & microphone. Fully universal across all trades with zero hardcoded tags. Tapping opens an expansive 76% height overlay drawer without displacing the underlying flat list.
+  5. 🧵 **Brief (Detached Drawer >70% Height):** Flat list blocks of text with inline input & microphone. Fully universal across all trades with zero hardcoded tags. Tapping opens an expansive 76% height overlay drawer without displacing the underlying flat list.
 * **Autonomous AI & Deterministic Code Responsibilities (Flat List):**
   * **Top Bar Publish:** 1-tap `Publish` button in top navigation bar; back icon `[←]` at start. Zero AI slop icons or decorations.
   * **Category:** Jev classifies into catalog taxonomy in ~100ms.
   * **Tax:** Defaulted deterministically by store profile (GST 5%).
   * **Unit:** Standardized unit of sale (e.g., piece, meter, kg).
   * **Code / SKU:** Unique SKU generated deterministically.
-  * **Detected Options:** Universal dimensions extracted via Jev from taste and rendered as clean tags.
+  * **Detected Options:** Universal dimensions extracted via Jev from brief and rendered as clean tags.
   * **Tamil Multilingual Edge & WhatsApp:** AI Translator handles Tamil transcription and edge PDP compilation in the background. The merchant UI remains 100% clean English.
 
 | Fact / Asset | Engine | Storage Target / Key | Downstream Destination |

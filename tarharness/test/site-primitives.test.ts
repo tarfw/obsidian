@@ -33,7 +33,7 @@ describe('70 Section Catalog & 8 Engine Primitives', () => {
   it('selects sections deterministically for Kalyan Heritage Silks scenario', () => {
     const selected = selectSectionsDeterministically({
       trade: 'Luxury Handcrafted Kanchipuram Sarees',
-      taste: ['Warm heritage', 'dark ink luxury', 'verified handloom weaver', 'festive Diwali offer'],
+      bullets: ['Warm heritage', 'dark ink luxury', 'verified handloom weaver', 'festive Diwali offer'],
       facts: {
         items: 12,
         proofs: ['Silk Mark', 'Handloom Mark'],

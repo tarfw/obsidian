@@ -46,14 +46,14 @@ function ItemForm(props: ActionInterfaceProps) {
     props.initialInput?.stock !== undefined ? String(props.initialInput.stock) : '1'
   );
 
-  // 2. Universal Taste State (Flat list blocks of text)
-  const initialTaste = String(props.initialInput?.taste || props.initialInput?.description || '');
-  const [tasteBlocks, setTasteBlocks] = useState<string[]>(() => {
-    if (!initialTaste.trim()) return [];
-    return initialTaste.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+  // 2. Universal Brief State (Flat list blocks of text)
+  const initialBrief = String(props.initialInput?.brief || props.initialInput?.description || '');
+  const [briefBlocks, setBriefBlocks] = useState<string[]>(() => {
+    if (!initialBrief.trim()) return [];
+    return initialBrief.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
   });
   const [newBlock, setNewBlock] = useState('');
-  const [tasteModalVisible, setTasteModalVisible] = useState(false);
+  const [briefModalVisible, setBriefModalVisible] = useState(false);
 
   // 3. JEV Judgments & Deterministic Code Guards
   const [category, setCategory] = useState(String(props.initialInput?.category || ''));
@@ -136,9 +136,9 @@ function ItemForm(props: ActionInterfaceProps) {
     setStock(String(next));
   };
 
-  // Run JEV detection from taste blocks
+  // Run JEV detection from brief blocks
   const runJevDetection = async (overrideBlocks?: string[]) => {
-    const blocks = overrideBlocks !== undefined ? overrideBlocks : tasteBlocks;
+    const blocks = overrideBlocks !== undefined ? overrideBlocks : briefBlocks;
     const prompt = blocks.join(', ').trim();
     if (!prompt && !name.trim()) return;
 
@@ -146,7 +146,7 @@ function ItemForm(props: ActionInterfaceProps) {
     try {
       const result = await harness.detectVariants(props.scope, {
         product: name.trim() || 'Product',
-        taste: prompt || name.trim(),
+        brief: prompt || name.trim(),
         input: prompt || name.trim(),
         trade: category.toLowerCase() || 'retail',
       });
@@ -180,25 +180,25 @@ function ItemForm(props: ActionInterfaceProps) {
     if (!text) return;
     const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
     if (lines.length > 0) {
-      setTasteBlocks((prev) => [...prev, ...lines]);
+      setBriefBlocks((prev) => [...prev, ...lines]);
     }
     setNewBlock('');
   };
 
   const removeBlock = (index: number) => {
-    setTasteBlocks((prev) => prev.filter((_, i) => i !== index));
+    setBriefBlocks((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const closeTasteModal = () => {
-    let currentBlocks = [...tasteBlocks];
+  const closeBriefModal = () => {
+    let currentBlocks = [...briefBlocks];
     if (newBlock.trim()) {
       const text = newBlock.trim();
       const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
       currentBlocks = [...currentBlocks, ...lines];
-      setTasteBlocks(currentBlocks);
+      setBriefBlocks(currentBlocks);
       setNewBlock('');
     }
-    setTasteModalVisible(false);
+    setBriefModalVisible(false);
     void runJevDetection(currentBlocks);
   };
 
@@ -246,8 +246,8 @@ function ItemForm(props: ActionInterfaceProps) {
         unit: unit.trim().toLowerCase() || 'piece',
         photoUrl: photo?.uri || '',
         status: 'active',
-        taste: tasteBlocks.join('\n'),
-        description: tasteBlocks.join('\n'),
+        brief: briefBlocks.join('\n'),
+        description: briefBlocks.join('\n'),
         ...(activeVariants.length > 0 ? { variants: activeVariants } : {}),
       };
 
@@ -428,19 +428,19 @@ function ItemForm(props: ActionInterfaceProps) {
             </View>
           </View>
 
-          {/* Row 5: Taste (Tap opens detached bottom sheet) */}
+          {/* Row 5: Brief (Tap opens detached bottom sheet) */}
           <TouchableOpacity
             style={styles.tableRow}
-            onPress={() => setTasteModalVisible(true)}
+            onPress={() => setBriefModalVisible(true)}
             accessibilityRole="button"
           >
-            <Text style={styles.columnLabel}>Taste</Text>
+            <Text style={styles.columnLabel}>Brief</Text>
             <View style={[styles.columnValue, styles.inlineRow]}>
               <Text
                 numberOfLines={1}
-                style={[styles.columnText, tasteBlocks.length === 0 && styles.placeholderText]}
+                style={[styles.columnText, briefBlocks.length === 0 && styles.placeholderText]}
               >
-                {tasteBlocks.length > 0 ? tasteBlocks.join(' · ') : 'Tap to describe...'}
+                {briefBlocks.length > 0 ? briefBlocks.join(' · ') : 'Tap to describe...'}
               </Text>
               <Ionicons name="chevron-forward" size={15} color="#94A3B8" />
             </View>
@@ -509,15 +509,15 @@ function ItemForm(props: ActionInterfaceProps) {
 
       {/* 3. DETACHED BOTTOM DRAWER (>70% Screen Height, Universal Flat List Blocks) */}
       <Modal
-        visible={tasteModalVisible}
+        visible={briefModalVisible}
         animationType="slide"
         transparent={true}
-        onRequestClose={closeTasteModal}
+        onRequestClose={closeBriefModal}
       >
         <TouchableOpacity
           style={styles.modalBackdrop}
           activeOpacity={1}
-          onPress={closeTasteModal}
+          onPress={closeBriefModal}
         >
           <KeyboardAvoidingView
             behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -529,10 +529,10 @@ function ItemForm(props: ActionInterfaceProps) {
             >
               {/* Sheet Header */}
               <View style={styles.sheetHeader}>
-                <Text style={styles.sheetTitle}>Taste</Text>
+                <Text style={styles.sheetTitle}>Brief</Text>
                 <TouchableOpacity
                   style={styles.sheetDoneBtn}
-                  onPress={closeTasteModal}
+                  onPress={closeBriefModal}
                   accessibilityLabel="Done"
                   accessibilityRole="button"
                 >
@@ -541,9 +541,9 @@ function ItemForm(props: ActionInterfaceProps) {
               </View>
 
               {/* Universal Input Row: Text + Mic / Add Button */}
-              <View style={styles.tasteInputRow}>
+              <View style={styles.briefInputRow}>
                 <TextInput
-                  style={styles.tasteInput}
+                  style={styles.briefInput}
                   placeholder="Add note (e.g. Pure silk, 4-Muzham)..."
                   placeholderTextColor="#94A3B8"
                   value={newBlock}
@@ -553,7 +553,7 @@ function ItemForm(props: ActionInterfaceProps) {
                   autoFocus={true}
                 />
                 <TouchableOpacity
-                  style={styles.tasteActionBtn}
+                  style={styles.briefActionBtn}
                   onPress={newBlock.trim() ? addCurrentBlock : () => void runJevDetection()}
                   accessibilityLabel={newBlock.trim() ? 'Add note' : 'Voice input'}
                   accessibilityRole="button"
@@ -570,24 +570,24 @@ function ItemForm(props: ActionInterfaceProps) {
 
               {/* Flat List Blocks of Text */}
               <ScrollView
-                style={styles.tasteBlocksScroll}
-                contentContainerStyle={styles.tasteBlocksContent}
+                style={styles.briefBlocksScroll}
+                contentContainerStyle={styles.briefBlocksContent}
                 keyboardShouldPersistTaps="handled"
               >
-                {tasteBlocks.length === 0 ? (
-                  <View style={styles.tasteEmptyWrap}>
+                {briefBlocks.length === 0 ? (
+                  <View style={styles.briefEmptyWrap}>
                     <Ionicons name="document-text-outline" size={28} color="#CBD5E1" />
-                    <Text style={styles.tasteEmptyTitle}>No details added yet</Text>
-                    <Text style={styles.tasteEmptySub}>
+                    <Text style={styles.briefEmptyTitle}>No details added yet</Text>
+                    <Text style={styles.briefEmptySub}>
                       Type above or tap the microphone to add materials, sizing, options, or notes.
                     </Text>
                   </View>
                 ) : (
-                  <View style={styles.tasteBlocksList}>
-                    {tasteBlocks.map((block, idx) => (
-                      <View key={idx} style={styles.tasteBlockRow}>
+                  <View style={styles.briefBlocksList}>
+                    {briefBlocks.map((block, idx) => (
+                      <View key={idx} style={styles.briefBlockRow}>
                         <Text
-                          style={styles.tasteBlockText}
+                          style={styles.briefBlockText}
                           onPress={() => {
                             setNewBlock(block);
                             removeBlock(idx);
@@ -596,7 +596,7 @@ function ItemForm(props: ActionInterfaceProps) {
                           {block}
                         </Text>
                         <TouchableOpacity
-                          style={styles.tasteBlockRemoveBtn}
+                          style={styles.briefBlockRemoveBtn}
                           onPress={() => removeBlock(idx)}
                           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                           accessibilityLabel="Remove note"
@@ -860,7 +860,7 @@ const styles = StyleSheet.create({
   },
 
   // Input Row
-  tasteInputRow: {
+  briefInputRow: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 10,
@@ -868,29 +868,29 @@ const styles = StyleSheet.create({
     borderBottomColor: '#E2E8F0',
     gap: 10,
   },
-  tasteInput: {
+  briefInput: {
     flex: 1,
     fontSize: 15,
     color: '#0F172A',
     paddingVertical: 4,
   },
-  tasteActionBtn: {
+  briefActionBtn: {
     padding: 4,
     alignItems: 'center',
     justifyContent: 'center',
   },
 
   // Flat List Blocks of Text
-  tasteBlocksScroll: {
+  briefBlocksScroll: {
     flex: 1,
   },
-  tasteBlocksContent: {
+  briefBlocksContent: {
     paddingVertical: 4,
   },
-  tasteBlocksList: {
+  briefBlocksList: {
     gap: 0,
   },
-  tasteBlockRow: {
+  briefBlockRow: {
     minHeight: 48,
     flexDirection: 'row',
     alignItems: 'center',
@@ -900,31 +900,31 @@ const styles = StyleSheet.create({
     borderBottomColor: '#F1F5F9',
     gap: 12,
   },
-  tasteBlockText: {
+  briefBlockText: {
     flex: 1,
     fontSize: 15,
     color: '#1E293B',
     lineHeight: 21,
   },
-  tasteBlockRemoveBtn: {
+  briefBlockRemoveBtn: {
     padding: 6,
   },
 
   // Empty State
-  tasteEmptyWrap: {
+  briefEmptyWrap: {
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 48,
     paddingHorizontal: 24,
     gap: 8,
   },
-  tasteEmptyTitle: {
+  briefEmptyTitle: {
     fontSize: 15,
     fontWeight: '600',
     color: '#64748B',
     marginTop: 4,
   },
-  tasteEmptySub: {
+  briefEmptySub: {
     fontSize: 13,
     color: '#94A3B8',
     textAlign: 'center',

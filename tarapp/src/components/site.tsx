@@ -18,7 +18,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { harness, SITES_URL } from '@/lib/harness';
-import type { Section, SiteDocument, SiteSnapshot } from '@/lib/site-schema';
+import type { HeaderStyle, HeroPattern, Section, SiteDocument, SiteSnapshot } from '@/lib/site-schema';
 
 export interface SiteScreenProps {
   visible: boolean;
@@ -47,23 +47,108 @@ export interface ReferoDesignSystem {
 export const REFERO_SYSTEMS: readonly ReferoDesignSystem[] = [
   {
     key: 'dark-luxury',
-    name: 'Mollie',
-    desc: 'Cashmere oat, dark espresso ledger, and copper accents.',
+    name: 'Rich and premium',
+    desc: 'Dark writing on cream, deep brown buttons, gold detail. Good for silk, jewellery and watches.',
     swatches: ['#3b281d', '#e07122', '#000000', '#f7f4f1'],
   },
   {
     key: 'neon-pop',
-    name: 'Magic Spoon',
-    desc: 'Electric grape, deep concord, lilac aisle, and marshmallow pill geometry.',
+    name: 'Bright and fun',
+    desc: 'Bold colours and big round buttons. Good for snacks, drinks and young clothing.',
     swatches: ['#5b00ed', '#3f0791', '#dad9ff', '#ffffff'],
   },
   {
     key: 'harvest-editorial',
-    name: 'arte*',
-    desc: 'Wheat cream, harvest copper, citron beam, and morning glory.',
+    name: 'Warm and simple',
+    desc: 'Soft cream, copper colours, easy to read. Good for bakeries, farms, crafts and salons.',
     swatches: ['#ab5700', '#e5dccd', '#e8e359', '#7997ff'],
   },
 ] as const;
+
+export interface HeroOptionItem {
+  key: HeroPattern;
+  name: string;
+  desc: string;
+  icon: keyof typeof Ionicons.glyphMap;
+}
+export const HERO_OPTIONS: readonly HeroOptionItem[] = [
+  {
+    key: 'centered_atmospheric',
+    name: 'Big photo, name in the middle',
+    desc: 'One full photo with your shop name and button in the centre.',
+    icon: 'cloud-outline',
+  },
+  {
+    key: 'split',
+    name: 'Photo beside your name',
+    desc: 'Shop name on the left, one good photo on the right.',
+    icon: 'browsers-outline',
+  },
+  {
+    key: 'commerce',
+    name: 'One item first',
+    desc: 'A featured item with its price and a direct order button.',
+    icon: 'pricetag-outline',
+  },
+  {
+    key: 'typography',
+    name: 'Only your shop name',
+    desc: 'Large name and one line about the shop. No photo needed.',
+    icon: 'text-outline',
+  },
+  {
+    key: 'bg_image',
+    name: 'Photo behind the words',
+    desc: 'A full photo behind your shop name.',
+    icon: 'image-outline',
+  },
+  {
+    key: 'fullbleed',
+    name: 'Photo across the top',
+    desc: 'Wide photo stretching from edge to edge.',
+    icon: 'scan-outline',
+  },
+  {
+    key: 'minimal',
+    name: 'Small and tidy',
+    desc: 'Name, one line about the shop, and quick links to your items.',
+    icon: 'remove-outline',
+  },
+];
+
+export interface HeaderOptionItem {
+  key: HeaderStyle;
+  name: string;
+  desc: string;
+  icon: keyof typeof Ionicons.glyphMap;
+}
+
+export const HEADER_OPTIONS: readonly HeaderOptionItem[] = [
+  {
+    key: 'split',
+    name: 'Photo beside name',
+    desc: 'Logo on the left with navigation beside it.',
+    icon: 'grid-outline',
+  },
+  {
+    key: 'floating_pill',
+    name: 'Round menu button',
+    desc: 'Your shop mark in a rounded badge with a menu button.',
+    icon: 'tablet-landscape-outline',
+  },
+  {
+    key: 'minimal',
+    name: 'Name left, menu right',
+    desc: 'Plain bar: shop name on the left, links on the right.',
+    icon: 'menu-outline',
+  },
+  {
+    key: 'fullbleed',
+    name: 'Menu over the photo',
+    desc: 'Links sit on top of the photo at the very top of the page.',
+    icon: 'reorder-two-outline',
+  },
+];
 
 export default function SiteScreen({
   visible,
@@ -95,8 +180,11 @@ export default function SiteScreen({
   // Modals
   const [designModalOpen, setDesignModalOpen] = useState(false);
   const [selectedStyle, setSelectedStyle] = useState<string | null>(null);
+  const [headerModalOpen, setHeaderModalOpen] = useState(false);
+  const [selectedHeaderStyle, setSelectedHeaderStyle] = useState<HeaderStyle | null>(null);
+  const [heroModalOpen, setHeroModalOpen] = useState(false);
+  const [selectedHeroPattern, setSelectedHeroPattern] = useState<HeroPattern | null>(null);
   const [noticeModalOpen, setNoticeModalOpen] = useState(false);
-  const pendingPromiseRef = useRef<Promise<unknown> | null>(null);
 
   // Inputs
   const [noticeText, setNoticeText] = useState('');
@@ -125,28 +213,28 @@ export default function SiteScreen({
     switch (purpose) {
       case 'navigation':
       case 'nav':
-        return { title: 'Header Navigation', icon: 'menu-outline' as const };
+        return { title: 'Menu bar', icon: 'menu-outline' as const };
       case 'header':
       case 'hero':
-        return { title: 'Hero Section (75vh)', icon: 'sparkles-outline' as const };
+        return { title: 'Top of the page', icon: 'sparkles-outline' as const };
       case 'notice':
-        return { title: 'Announcement Banner', icon: 'megaphone-outline' as const };
+        return { title: 'Offer or notice line', icon: 'megaphone-outline' as const };
       case 'spotlight':
-        return { title: 'Spotlight & Offers', icon: 'gift-outline' as const };
+        return { title: 'Festival offer', icon: 'gift-outline' as const };
       case 'catalog':
-        return { title: 'Product Catalog', icon: 'grid-outline' as const };
+        return { title: 'Items for sale', icon: 'grid-outline' as const };
       case 'menu':
-        return { title: 'Food & Menu', icon: 'restaurant-outline' as const };
+        return { title: 'Food and menu', icon: 'restaurant-outline' as const };
       case 'services':
-        return { title: 'Services & Booking', icon: 'calendar-outline' as const };
+        return { title: 'Services and booking', icon: 'calendar-outline' as const };
       case 'story':
-        return { title: 'Heritage & Story', icon: 'book-outline' as const };
+        return { title: 'About your shop', icon: 'book-outline' as const };
       case 'trust':
-        return { title: 'Trust & Verified Badges', icon: 'shield-checkmark-outline' as const };
+        return { title: 'Trust badges', icon: 'shield-checkmark-outline' as const };
       case 'contact':
-        return { title: 'WhatsApp & Contact', icon: 'logo-whatsapp' as const };
+        return { title: 'WhatsApp and contact', icon: 'logo-whatsapp' as const };
       case 'footer':
-        return { title: 'Store Footer', icon: 'browsers-outline' as const };
+        return { title: 'Bottom of the page', icon: 'browsers-outline' as const };
       default:
         return { title: purpose.charAt(0).toUpperCase() + purpose.slice(1), icon: 'layers-outline' as const };
     }
@@ -164,7 +252,7 @@ export default function SiteScreen({
         { id: 'footer', purpose: 'footer', layout: { kind: 'stack' }, nodes: [] },
       ] as Section[];
     }
-    const hasNav = sections.some((s) => s.purpose === 'navigation' || s.purpose === 'nav' || s.id === 'nav');
+    const hasNav = sections.some((s) => (s.purpose === 'navigation' || s.purpose === 'nav' || s.id === 'nav') && s.id !== 'hero');
     const hasNotice = sections.some((s) => s.purpose === 'notice');
     const hasFooter = sections.some((s) => s.purpose === 'footer' || s.id === 'footer');
     const hasCatalog = sections.some((s) => s.purpose === 'catalog' || s.purpose === 'collection' || s.purpose === 'menu' || s.purpose === 'services' || s.id === 'catalog');
@@ -245,35 +333,20 @@ export default function SiteScreen({
     });
   }, [publicUrl, slug]);
 
-  // Apply selected design system from designmds
-  const handleSelectDesign = useCallback(async (styleKey: string) => {
+  // Look picks stay local until Publish applies them, so choosing costs no calls
+  const handleSelectDesign = useCallback((styleKey: string) => {
     setSelectedStyle(styleKey);
-    if (!slug) return;
-    const p = harness.site.generate(slug, { style: styleKey } as Record<string, unknown>);
-    pendingPromiseRef.current = p;
-    try {
-      const res = await p;
-      if (mountedRef.current) {
-        setSnapshot((prev) => {
-          if (!prev) return null;
-          const nextSnap: SiteSnapshot = {
-            ...prev,
-            site: { id: res.siteId || prev.site?.id || '', version: res.version, state: res.state || prev.site?.state || 'draft', data: res.site },
-            html: res.preview?.html || prev.html,
-          };
-          siteSnapshotCache.set(slug, nextSnap);
-          void SecureStore.setItemAsync(siteStorageKey(slug), JSON.stringify(nextSnap)).catch(() => undefined);
-          return nextSnap;
-        });
-      }
-    } catch {
-      // Retain optimistic state
-    } finally {
-      if (pendingPromiseRef.current === p) {
-        pendingPromiseRef.current = null;
-      }
-    }
-  }, [slug]);
+  }, []);
+
+  const handleSelectHeaderStyle = useCallback((styleKey: HeaderStyle) => {
+    setSelectedHeaderStyle(styleKey);
+    setHeaderModalOpen(false);
+  }, []);
+
+  const handleSelectHeroPattern = useCallback((patternKey: HeroPattern) => {
+    setSelectedHeroPattern(patternKey);
+    setHeroModalOpen(false);
+  }, []);
 
   // Set or clear notice banner
   const handleSaveNotice = useCallback(async () => {
@@ -346,28 +419,36 @@ export default function SiteScreen({
   const publishSite = useCallback(async () => {
     if (!slug || busy) return;
     setBusy(true);
-    setBusyMessage('Preparing storefront...');
+    setBusyMessage('Getting your store ready...');
     try {
-      if (pendingPromiseRef.current) {
-        setBusyMessage('Syncing design changes...');
-        await pendingPromiseRef.current;
-      }
-
-      setBusyMessage('Loading latest store state...');
+      setBusyMessage('Checking your store details...');
       const freshSnap = await harness.site.get(slug).catch(() => null);
       let activeSiteId = freshSnap?.site?.id || siteId;
       if (!activeSiteId) throw new Error('Store was not found.');
 
-      if (selectedStyle && freshSnap?.site?.data?.blueprint?.style !== selectedStyle) {
-        setBusyMessage('Applying design system...');
-        const genRes = await harness.site.generate(slug, { style: selectedStyle } as Record<string, unknown>);
+      const desiredStyle = selectedStyle || freshSnap?.site?.data?.blueprint?.style || currentStyleKey;
+      const desiredHero = selectedHeroPattern || freshSnap?.site?.data?.blueprint?.heroPattern || currentHeroKey;
+      const desiredHeader = selectedHeaderStyle || freshSnap?.site?.data?.blueprint?.headerStyle || currentHeaderKey;
+
+      const needsUpdate =
+        (desiredStyle && freshSnap?.site?.data?.blueprint?.style !== desiredStyle) ||
+        (desiredHero && freshSnap?.site?.data?.blueprint?.heroPattern !== desiredHero) ||
+        (desiredHeader && freshSnap?.site?.data?.blueprint?.headerStyle !== desiredHeader);
+
+      if (needsUpdate) {
+        setBusyMessage('Applying your chosen look...');
+        const genRes = await harness.site.generate(slug, {
+          style: desiredStyle,
+          heroPattern: desiredHero,
+          headerStyle: desiredHeader,
+        } as Record<string, unknown>);
         activeSiteId = genRes.siteId || activeSiteId;
       }
 
-      setBusyMessage('Compiling release candidate...');
+      setBusyMessage('Building your store pages...');
       const compiled = await harness.site.compile(slug, activeSiteId);
 
-      setBusyMessage('Publishing live to edge...');
+      setBusyMessage('Making your store live...');
       let published;
       try {
         published = await harness.site.publish(slug, activeSiteId, compiled.releaseId, compiled.hash);
@@ -413,26 +494,26 @@ export default function SiteScreen({
     }
   }, [slug, siteId, busy, loadSite]);
 
-  // Reset Storefront
+  // Start the store over
   const resetStore = useCallback(() => {
     Alert.alert(
-      'Reset Online Store?',
-      'This will reset your storefront to Jev autonomous defaults.',
+      'Start the store over?',
+      'Your store pages go back to a blank beginning. Your items, prices and photos are not touched.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Reset Store',
+          text: 'Start over',
           style: 'destructive',
           onPress: async () => {
             if (!slug || busy) return;
             setBusy(true);
-            setBusyMessage('Resetting storefront...');
+            setBusyMessage('Starting the store over...');
             try {
               siteSnapshotCache.delete(slug);
               await SecureStore.deleteItemAsync(siteStorageKey(slug)).catch(() => undefined);
               await harness.site.reset(slug);
               if (mountedRef.current) {
-                setToast({ text: 'Store cleanly reset to default' });
+                setToast({ text: 'Store started over. Tap Publish when it looks right.' });
                 void loadSite();
               }
             } catch (err) {
@@ -473,6 +554,16 @@ export default function SiteScreen({
         (currentStyleKey === 'magic-spoon' && s.key === 'neon-pop') ||
         (currentStyleKey?.startsWith('arte') && s.key === 'harvest-editorial'),
     ) || REFERO_SYSTEMS[0];
+
+  // Active Header Style Option
+  const currentHeaderKey: HeaderStyle = selectedHeaderStyle ?? site?.blueprint?.headerStyle ?? (selectedHeroPattern === 'centered_atmospheric' || site?.blueprint?.heroPattern === 'centered_atmospheric' ? 'floating_pill' : 'minimal');
+  const activeHeaderOption =
+    HEADER_OPTIONS.find((h) => h.key === currentHeaderKey) || HEADER_OPTIONS[0];
+
+  // Active Hero Design Option
+  const currentHeroKey: HeroPattern = selectedHeroPattern ?? site?.blueprint?.heroPattern ?? 'split';
+  const activeHeroOption =
+    HERO_OPTIONS.find((h) => h.key === currentHeroKey) || HERO_OPTIONS[0];
 
   return (
     <Modal
@@ -558,10 +649,10 @@ export default function SiteScreen({
             ]}
             showsVerticalScrollIndicator={false}
           >
-            {/* 1. DESIGN CARD (Refero design.md token bundles) */}
+            {/* 1. LOOK CARD (design token bundles, named in shop words only) */}
             <View style={styles.sectionBlock}>
               <View style={styles.sectionHeaderRow}>
-                <Text style={styles.sectionLabel}>DESIGN</Text>
+                <Text style={styles.sectionLabel}>HOW YOUR STORE LOOKS</Text>
               </View>
 
               <TouchableOpacity
@@ -580,6 +671,7 @@ export default function SiteScreen({
                   </View>
                 </View>
                 <Text style={styles.designDescText}>{activeSystem.desc}</Text>
+                <Text style={styles.designApplyText}>Tap Publish and your store will show this look.</Text>
               </TouchableOpacity>
             </View>
 
@@ -587,7 +679,7 @@ export default function SiteScreen({
 
             {/* 2. SECTIONS LIST */}
             <View style={styles.sectionsContainer}>
-              <Text style={styles.sectionLabel}>SECTIONS</Text>
+              <Text style={styles.sectionLabel}>WHAT CUSTOMERS SEE</Text>
               <View style={styles.sectionsList}>
                 {displaySections.map((sec, idx) => {
                   const isLast = idx === displaySections.length - 1;
@@ -620,10 +712,56 @@ export default function SiteScreen({
                             ]}
                             numberOfLines={1}
                           >
-                            {activeNotice ? `"${activeNotice}"` : 'Announcement Banner'}
+                            {activeNotice ? `"${activeNotice}"` : 'Offer or notice line'}
                           </Text>
                         </View>
                         <Text style={styles.plusActionText}>{activeNotice ? 'Edit' : '+'}</Text>
+                      </TouchableOpacity>
+                    );
+                  }
+
+                  const isHeader = (sec.purpose === 'navigation' || sec.purpose === 'nav' || sec.id === 'nav') && sec.id !== 'hero';
+                  if (isHeader) {
+                    return (
+                      <TouchableOpacity
+                        key={sec.id || `header-${idx}`}
+                        style={[styles.sectionRow, isLast ? styles.sectionRowLast : null]}
+                        onPress={() => setHeaderModalOpen(true)}
+                        activeOpacity={0.7}
+                        accessibilityRole="button"
+                        accessibilityLabel="Change menu bar look"
+                      >
+                        <View style={styles.sectionRowLeft}>
+                          <Ionicons name="menu-outline" size={18} color="#0f172a" />
+                          <View>
+                            <Text style={styles.sectionRowTitle}>Menu bar</Text>
+                            <Text style={styles.sectionRowOption}>{activeHeaderOption.name}</Text>
+                          </View>
+                        </View>
+                        <Ionicons name="chevron-forward" size={16} color="#94a3b8" />
+                      </TouchableOpacity>
+                    );
+                  }
+
+                  const isHero = sec.purpose === 'hero' || sec.id === 'hero' || (sec.purpose === 'header' && sec.id !== 'nav');
+                  if (isHero) {
+                    return (
+                      <TouchableOpacity
+                        key={sec.id || `hero-${idx}`}
+                        style={[styles.sectionRow, isLast ? styles.sectionRowLast : null]}
+                        onPress={() => setHeroModalOpen(true)}
+                        activeOpacity={0.7}
+                        accessibilityRole="button"
+                        accessibilityLabel="Change the top of your page"
+                      >
+                        <View style={styles.sectionRowLeft}>
+                          <Ionicons name="image-outline" size={18} color="#0f172a" />
+                          <View>
+                            <Text style={styles.sectionRowTitle}>Top of the page</Text>
+                            <Text style={styles.sectionRowOption}>{activeHeroOption.name}</Text>
+                          </View>
+                        </View>
+                        <Ionicons name="chevron-forward" size={16} color="#94a3b8" />
                       </TouchableOpacity>
                     );
                   }
@@ -657,7 +795,7 @@ export default function SiteScreen({
                 accessibilityRole="button"
                 accessibilityLabel="Undo last change"
               >
-                <Text style={styles.subtleLinkText}>Undo change (rev {site.revision})</Text>
+                <Text style={styles.subtleLinkText}>Undo my last change</Text>
               </TouchableOpacity>
             ) : null}
 
@@ -666,9 +804,9 @@ export default function SiteScreen({
               disabled={busy}
               style={styles.subtleLink}
               accessibilityRole="button"
-              accessibilityLabel="Reset Storefront"
+              accessibilityLabel="Start the store over"
             >
-              <Text style={styles.subtleLinkText}>Reset Storefront to Default</Text>
+              <Text style={styles.subtleLinkText}>Start the store over</Text>
             </TouchableOpacity>
           </ScrollView>
         )}
@@ -692,7 +830,7 @@ export default function SiteScreen({
                   <Ionicons name="chevron-back" size={24} color="#0f172a" />
                 </TouchableOpacity>
                 <View style={styles.navTitleWrap}>
-                  <Text style={styles.navTitle}>Design Systems</Text>
+                  <Text style={styles.navTitle}>Choose how your store looks</Text>
                 </View>
               </View>
               <TouchableOpacity
@@ -719,7 +857,7 @@ export default function SiteScreen({
                     <TouchableOpacity
                       key={sys.key}
                       style={[styles.systemCard, isSelected && styles.systemCardActive]}
-                      onPress={() => void handleSelectDesign(sys.key)}
+                      onPress={() => handleSelectDesign(sys.key)}
                       activeOpacity={0.7}
                     >
                       <View style={styles.systemCardTop}>
@@ -749,6 +887,156 @@ export default function SiteScreen({
           </View>
         </Modal>
 
+        {/* HERO DESIGN OPTIONS MODAL: 5 Curated layout archetypes */}
+        <Modal
+          visible={heroModalOpen}
+          animationType="slide"
+          presentationStyle="fullScreen"
+          onRequestClose={() => setHeroModalOpen(false)}
+        >
+          <View style={[styles.root, { paddingTop: Math.max(insets.top, 12) }]}>
+            {/* Top Bar */}
+            <View style={styles.topNavBar}>
+              <View style={styles.navLeft}>
+                <TouchableOpacity
+                  style={styles.navBackBtn}
+                  onPress={() => setHeroModalOpen(false)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Back to site settings"
+                >
+                  <Ionicons name="chevron-back" size={24} color="#0f172a" />
+                </TouchableOpacity>
+                <View style={styles.navTitleWrap}>
+                  <Text style={styles.navTitle}>Top of the page</Text>
+                </View>
+              </View>
+              <TouchableOpacity
+                onPress={() => setHeroModalOpen(false)}
+                style={styles.navTextBtn}
+                accessibilityRole="button"
+                accessibilityLabel="Done"
+              >
+                <Text style={styles.navTextBtnLabel}>Done</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Flat List */}
+            <ScrollView
+              style={styles.scrollArea}
+              contentContainerStyle={[
+                styles.scrollContent,
+                { paddingBottom: Math.max(insets.bottom + 24, 40) },
+              ]}
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={styles.designFlatList}>
+                {HERO_OPTIONS.map((opt) => {
+                  const isSelected = opt.key === currentHeroKey;
+                  return (
+                    <TouchableOpacity
+                      key={opt.key}
+                      style={[styles.systemCard, isSelected && styles.systemCardActive]}
+                      onPress={() => handleSelectHeroPattern(opt.key)}
+                      activeOpacity={0.7}
+                    >
+                      <View style={styles.systemCardTop}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                          <Ionicons name={opt.icon} size={20} color={isSelected ? '#0284c7' : '#475569'} />
+                          <Text style={[styles.systemTitle, isSelected && styles.systemTitleActive]}>
+                            {opt.name}
+                          </Text>
+                        </View>
+                        <Ionicons
+                          name={isSelected ? 'checkmark-circle' : 'ellipse-outline'}
+                          size={22}
+                          color={isSelected ? '#0284c7' : '#cbd5e1'}
+                        />
+                      </View>
+                      <Text style={styles.systemDesc}>{opt.desc}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </ScrollView>
+          </View>
+        </Modal>
+
+        {/* HEADER STYLE OPTIONS MODAL */}
+        <Modal
+          visible={headerModalOpen}
+          animationType="slide"
+          presentationStyle="fullScreen"
+          onRequestClose={() => setHeaderModalOpen(false)}
+        >
+          <View style={[styles.root, { paddingTop: Math.max(insets.top, 12) }]}>
+            {/* Top Bar */}
+            <View style={styles.topNavBar}>
+              <View style={styles.navLeft}>
+                <TouchableOpacity
+                  style={styles.navBackBtn}
+                  onPress={() => setHeaderModalOpen(false)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Back to site settings"
+                >
+                  <Ionicons name="chevron-back" size={24} color="#0f172a" />
+                </TouchableOpacity>
+                <View style={styles.navTitleWrap}>
+                  <Text style={styles.navTitle}>Menu bar</Text>
+                </View>
+              </View>
+              <TouchableOpacity
+                onPress={() => setHeaderModalOpen(false)}
+                style={styles.navTextBtn}
+                accessibilityRole="button"
+                accessibilityLabel="Done"
+              >
+                <Text style={styles.navTextBtnLabel}>Done</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Flat List */}
+            <ScrollView
+              style={styles.scrollArea}
+              contentContainerStyle={[
+                styles.scrollContent,
+                { paddingBottom: Math.max(insets.bottom + 24, 40) },
+              ]}
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={styles.designFlatList}>
+                {HEADER_OPTIONS.map((opt) => {
+                  const isSelected = opt.key === currentHeaderKey;
+                  return (
+                    <TouchableOpacity
+                      key={opt.key}
+                      style={[styles.systemCard, isSelected && styles.systemCardActive]}
+                      onPress={() => handleSelectHeaderStyle(opt.key)}
+                      activeOpacity={0.7}
+                    >
+                      <View style={styles.systemCardTop}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                          <Ionicons name={opt.icon} size={20} color={isSelected ? '#0284c7' : '#475569'} />
+                          <Text style={[styles.systemTitle, isSelected && styles.systemTitleActive]}>
+                            {opt.name}
+                          </Text>
+                        </View>
+                        <Ionicons
+                          name={isSelected ? 'checkmark-circle' : 'ellipse-outline'}
+                          size={22}
+                          color={isSelected ? '#0284c7' : '#cbd5e1'}
+                        />
+                      </View>
+                      <Text style={styles.systemDesc}>{opt.desc}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </ScrollView>
+          </View>
+        </Modal>
+
         {/* NOTICE MODAL */}
         <Modal
           visible={noticeModalOpen}
@@ -762,13 +1050,13 @@ export default function SiteScreen({
           >
             <View style={styles.noticeModalCard}>
               <View style={styles.modalHeaderRow}>
-                <Text style={styles.modalTitle}>Notice Banner</Text>
+                <Text style={styles.modalTitle}>Offer or notice line</Text>
                 <TouchableOpacity onPress={() => setNoticeModalOpen(false)}>
                   <Ionicons name="close" size={20} color="#0f172a" />
                 </TouchableOpacity>
               </View>
               <Text style={styles.noticeModalHint}>
-                1-tap banner on top of the storefront for festival hours, holiday delivery notes, or announcements.
+                A short line at the top of your store: today&apos;s offer, changed timings, or a delivery note.
               </Text>
               <TextInput
                 style={styles.noticeTextInput}
@@ -983,6 +1271,12 @@ const styles = StyleSheet.create({
     color: '#64748b',
     lineHeight: 16,
   },
+  designApplyText: {
+    marginTop: 6,
+    fontSize: 12,
+    color: '#0284c7',
+    lineHeight: 16,
+  },
   designBestForText: {
     fontSize: 12,
     color: '#0284c7',
@@ -1021,6 +1315,25 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '500',
     color: '#0f172a',
+  },
+  sectionRowOption: {
+    fontSize: 12,
+    color: '#64748b',
+    marginTop: 2,
+  },
+  sectionRowRightPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#f1f5f9',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  sectionRowRightText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#475569',
   },
   sectionRowActiveNotice: {
     backgroundColor: '#fffbeb',

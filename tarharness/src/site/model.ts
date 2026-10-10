@@ -93,7 +93,6 @@ export class ModelRunner {
   }
 
   async json<T>(input: { system: string; prompt: string; read: (value: Record<string, unknown>) => T | null; maxTokens?: number; temperature?: number }): Promise<T> {
-    const models = [this.model, ...SITE_MODEL_FALLBACKS.filter((entry) => entry !== this.model)];
     let lastError = '';
     for (let attempt = 0; attempt < 2; attempt += 1) {
       if (this.usage.calls >= this.budget.calls) throw new BudgetExceeded('This run used its model call budget.');
@@ -116,7 +115,10 @@ export class ModelRunner {
           this.usage.prompt += result.promptTokens;
           this.usage.output += result.outputTokens;
         } else if (this.ai) {
-          const runPromise = this.ai.run(models[Math.min(attempt, models.length - 1)], {
+          // `this.model` is a Groq-style id (e.g. qwen/qwen3.8-27b); it is not valid
+          // on Workers AI, so the AI lane always uses the Workers AI fallback list.
+          const aiModel: string = SITE_MODEL_FALLBACKS[Math.min(attempt, SITE_MODEL_FALLBACKS.length - 1)];
+          const runPromise = this.ai.run(aiModel, {
             messages: [
               { role: 'system', content: input.system },
               { role: 'user', content: attempt === 0 ? input.prompt : `${input.prompt}\n\nYour previous answer was rejected: ${lastError}\nReturn corrected JSON only.` },
@@ -153,10 +155,11 @@ export class ModelRunner {
 }
 
 function safeJson(value: string): Record<string, unknown> {
-  const start = value.indexOf('{');
-  const end = value.lastIndexOf('}');
+  const cleaned = value.replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/<\/?think>/gi, '');
+  const start = cleaned.indexOf('{');
+  const end = cleaned.lastIndexOf('}');
   if (start < 0 || end <= start) return {};
-  try { return object(JSON.parse(value.slice(start, end + 1))); } catch { return {}; }
+  try { return object(JSON.parse(cleaned.slice(start, end + 1))); } catch { return {}; }
 }
 
 const SYSTEM = `You compose a marketing website draft as strict JSON. Rules:

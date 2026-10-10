@@ -802,15 +802,15 @@ async function handle(request: Request, env: RuntimeEnv, ctx: ExecutionContext):
         }
       }
       if (!siteRows.length) {
-        const tasteRow = await Effect.runPromise(query<Record<string, unknown>>(client, {
-          sql: "SELECT data FROM records WHERE id='taste' AND type='taste' AND archived IS NULL LIMIT 1",
+        const briefRow = await Effect.runPromise(query<Record<string, unknown>>(client, {
+          sql: "SELECT data FROM records WHERE id='brief' AND type='brief' AND archived IS NULL LIMIT 1",
         }));
-        let inheritedTaste: string[] = [];
+        let inheritedBrief: string[] = [];
         let inheritedTrade = '';
-        if (tasteRow.length && tasteRow[0].data) {
+        if (briefRow.length && briefRow[0].data) {
           try {
-            const td = object(typeof tasteRow[0].data === 'string' ? JSON.parse(String(tasteRow[0].data)) : tasteRow[0].data);
-            if (Array.isArray(td.taste)) inheritedTaste = td.taste.map(String).filter(Boolean).slice(0, 20);
+            const td = object(typeof briefRow[0].data === 'string' ? JSON.parse(String(briefRow[0].data)) : briefRow[0].data);
+            if (Array.isArray(td.brief)) inheritedBrief = td.brief.map(String).filter(Boolean).slice(0, 20);
             if (typeof td.trade === 'string') inheritedTrade = td.trade.trim();
           } catch { /* ignore */ }
         }
@@ -829,8 +829,8 @@ async function handle(request: Request, env: RuntimeEnv, ctx: ExecutionContext):
           assets: [],
         });
         const initialDoc = built.doc;
-        if (inheritedTaste.length) {
-          initialDoc.taste = { bullets: inheritedTaste, accepted: inheritedTaste, rejected: [] };
+        if (inheritedBrief.length) {
+          initialDoc.brief = { ...initialDoc.brief, bullets: inheritedBrief, accepted: inheritedBrief };
         }
 
         const siteId = `site_${crypto.randomUUID()}`;

@@ -4,7 +4,8 @@
  * Product Showcase (#9), Best Sellers (#10), New Arrivals (#11), and Product Carousel (#18).
  */
 
-import { escapeAttribute, escapeHtml } from '../html.ts';
+import { escapeAttribute, escapeHtml, formatMoney } from '../html.ts';
+import type { SiteDocument } from '../document.ts';
 
 export interface CollectionItem {
   id: string;
@@ -67,6 +68,85 @@ export function renderCollectionPrimitive(props: CollectionProps): string {
     </div>
     <div class="tar-grid tar-grid-cols-${columns}">
       ${cardsHtml}
+    </div>
+  </div>
+</section>`;
+}
+
+export function defaultSampleProducts(brand: string, phone?: string): (CollectionItem & { whatsapp?: string })[] {
+  const cleanPhone = phone ? String(phone).replace(/[^0-9]/g, '') : '';
+  const wa = (title: string) => cleanPhone
+    ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent(`Hi ${brand}, I want to order "${title}".`)}`
+    : '#contact';
+
+  return [
+    {
+      id: 'sample-1',
+      title: 'Product 1',
+      description: 'Handcrafted signature item made with premium materials.',
+      price: 49900,
+      currency: 'INR',
+      badge: 'Best Seller',
+      whatsapp: wa('Product 1'),
+    },
+    {
+      id: 'sample-2',
+      title: 'Product 2',
+      description: 'Exclusive artisanal collection piece with authentic finish.',
+      price: 79900,
+      currency: 'INR',
+      badge: 'Trending',
+      whatsapp: wa('Product 2'),
+    },
+    {
+      id: 'sample-3',
+      title: 'Product 3',
+      description: 'Popular everyday favourite verified for premium quality.',
+      price: 129900,
+      currency: 'INR',
+      badge: 'Featured',
+      whatsapp: wa('Product 3'),
+    },
+    {
+      id: 'sample-4',
+      title: 'Product 4',
+      description: 'Limited edition seasonal release crafted to perfection.',
+      price: 189900,
+      currency: 'INR',
+      whatsapp: wa('Product 4'),
+    },
+  ];
+}
+
+export function renderDefaultCatalogSection(doc: SiteDocument): string {
+  const brand = doc.pages[0]?.title || 'Store';
+  const sampleItems = defaultSampleProducts(brand);
+  const cards = sampleItems.map((entry) => {
+    const badge = entry.badge ? `<span class="tar-card-badge">${escapeHtml(entry.badge)}</span>` : '';
+    const media = `<div class="tar-card-media tar-card-media-placeholder">${badge}<div class="tar-card-placeholder-box">${escapeHtml(entry.title.slice(0, 2).toUpperCase())}</div></div>`;
+    const priceHtml = `<span class="tar-price">${formatMoney(entry.price!, 'INR', doc.locale)}</span>`;
+    const descHtml = entry.description ? `<p class="tar-card-desc">${escapeHtml(entry.description)}</p>` : '';
+    return `<div class="tar-collection-card" data-item="${escapeAttribute(entry.title.toLowerCase())}">
+      <div class="tar-card tar-product-card">
+        ${media}
+        <div class="tar-card-meta">
+          <strong class="tar-product-title">${escapeHtml(entry.title)}</strong>
+          ${descHtml}
+          <div class="tar-card-footer">
+            ${priceHtml}
+          </div>
+        </div>
+      </div>
+    </div>`;
+  }).join('\n');
+
+  return `<section id="catalog" class="tar-section" data-purpose="catalog">
+  <div class="tar-wrap tar-stack">
+    <div class="tar-collection-header">
+      <h2 class="tar-title tar-collection-title">Product Catalog</h2>
+    </div>
+    <div class="tar-grid tar-product-grid">
+      ${cards}
     </div>
   </div>
 </section>`;

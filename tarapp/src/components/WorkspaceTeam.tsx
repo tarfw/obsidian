@@ -182,10 +182,10 @@ export default function WorkspaceTeam({
   const [members, setMembers] = useState<HarnessMember[]>([]);
   const [self, setSelf] = useState('');
 
-  // Member form state (Exact Workspace Taste Method)
+  // Member form state (Exact Workspace Brief Method)
   const [email, setEmail] = useState('');
   const [workRole, setWorkRole] = useState('');
-  const [tasteBlocks, setTasteBlocks] = useState<string[]>([]);
+  const [briefBlocks, setBriefBlocks] = useState<string[]>([]);
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [newBlock, setNewBlock] = useState('');
   const [selectedRole, setSelectedRole] = useState(baseRoles[0]);
@@ -238,9 +238,9 @@ export default function WorkspaceTeam({
     };
   }, [reload]);
 
-  // JEV System One live classification: driven strictly from Taste blocks (Same as Workspace)
+  // JEV System One live classification: driven strictly from Brief blocks (Same as Workspace)
   useEffect(() => {
-    const prompt = tasteBlocks.join('. ').trim();
+    const prompt = briefBlocks.join('. ').trim();
     if (!prompt) {
       setWorkRole('');
       setSelectedAccess([]);
@@ -272,20 +272,20 @@ export default function WorkspaceTeam({
     }, 250);
 
     return () => clearTimeout(timer);
-  }, [tasteBlocks, scope]);
+  }, [briefBlocks, scope]);
 
   const addBlock = () => {
     const text = newBlock.trim();
     if (!text) return;
     const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
     if (lines.length > 0) {
-      setTasteBlocks((prev) => [...prev, ...lines]);
+      setBriefBlocks((prev) => [...prev, ...lines]);
     }
     setNewBlock('');
   };
 
   const removeBlock = (index: number) => {
-    setTasteBlocks((prev) => prev.filter((_, i) => i !== index));
+    setBriefBlocks((prev) => prev.filter((_, i) => i !== index));
   };
 
   const closeDrawer = () => {
@@ -347,7 +347,7 @@ export default function WorkspaceTeam({
     const initialBlocks = existingBrief
       ? existingBrief.split(/\r?\n/).map((s) => s.trim()).filter(Boolean)
       : [];
-    setTasteBlocks(initialBlocks);
+    setBriefBlocks(initialBlocks);
     const validToolIds = new Set(MEMBER_TOOLS_CATALOG.map((t) => t.id));
     const access = member.access?.length
       ? member.access.filter((id) => validToolIds.has(id))
@@ -361,7 +361,7 @@ export default function WorkspaceTeam({
   const startAddMember = () => {
     setEditing(null);
     setEmail('');
-    setTasteBlocks([]);
+    setBriefBlocks([]);
     setWorkRole('');
     setSelectedRole(baseRoles[0]);
     setSelectedAccess([]);
@@ -385,7 +385,7 @@ export default function WorkspaceTeam({
       const role = selectedRole.role;
       const wr = workRole.trim().toLowerCase() || 'general';
       const rolesList = [wr];
-      const briefClean = tasteBlocks.join('\n');
+      const briefClean = briefBlocks.join('\n');
       const accessList = [...selectedAccess];
 
       if (editing) {
@@ -410,7 +410,7 @@ export default function WorkspaceTeam({
       }
 
       setEmail('');
-      setTasteBlocks([]);
+      setBriefBlocks([]);
       setWorkRole('');
       setSelectedAccess([]);
       setEditing(null);
@@ -497,18 +497,18 @@ export default function WorkspaceTeam({
 
             <View style={styles.divider} />
 
-            {/* Section 2: TASTE (Exact same Taste method container as Workspace) */}
+            {/* Section 2: BRIEF (Exact same Brief method container as Workspace) */}
             <TouchableOpacity
-              style={styles.tasteContainer}
+              style={styles.briefContainer}
               onPress={() => setDrawerVisible(true)}
               activeOpacity={0.7}
               accessibilityRole="button"
-              accessibilityLabel="Taste"
+              accessibilityLabel="Brief"
             >
-              <Text style={styles.sectionLabel}>TASTE</Text>
-              {tasteBlocks.length > 0 ? (
+              <Text style={styles.sectionLabel}>BRIEF</Text>
+              {briefBlocks.length > 0 ? (
                 <View style={styles.bulletsWrap}>
-                  {tasteBlocks.map((block, idx) => (
+                  {briefBlocks.map((block, idx) => (
                     <View key={idx} style={styles.bulletRow}>
                       <Text style={styles.bulletDot}>•</Text>
                       <Text style={styles.bulletText}>{block}</Text>
@@ -521,11 +521,11 @@ export default function WorkspaceTeam({
             {workRole ? (
               <>
                 <View style={styles.divider} />
-                {/* Section 3: ROLE (JEV Classified from Taste) */}
+                {/* Section 3: ROLE (JEV Classified from Brief) */}
                 <View style={styles.section}>
                   <Text style={styles.sectionLabel}>ROLE</Text>
                   <View style={styles.tradeBox}>
-                    <Text style={styles.tradeText}>{formatRoleName(workRole, tasteBlocks.join(' '))}</Text>
+                    <Text style={styles.tradeText}>{formatRoleName(workRole, briefBlocks.join(' '))}</Text>
                   </View>
                 </View>
               </>
@@ -534,7 +534,7 @@ export default function WorkspaceTeam({
             {activeToolItems.length > 0 ? (
               <>
                 <View style={styles.divider} />
-                {/* Section 4: TOOLS (Autonomous flat list matching Taste) */}
+                {/* Section 4: TOOLS (Autonomous flat list matching Brief) */}
                 <View style={styles.section}>
                   <Text style={styles.sectionLabel}>TOOLS</Text>
                   <View style={styles.toolsList}>
@@ -574,7 +574,7 @@ export default function WorkspaceTeam({
             ) : null}
           </ScrollView>
 
-          {/* DETACHED TASTE DRAWER (>70% Height - Exact same as Workspace) */}
+          {/* DETACHED BRIEF DRAWER (>70% Height - Exact same as Workspace) */}
           <Modal
             visible={drawerVisible}
             animationType="slide"
@@ -599,7 +599,7 @@ export default function WorkspaceTeam({
                 >
                   {/* Drawer Header */}
                   <View style={styles.drawerHeader}>
-                    <Text style={styles.drawerTitle}>Taste</Text>
+                    <Text style={styles.drawerTitle}>Brief</Text>
                     <TouchableOpacity
                       style={styles.drawerDoneBtn}
                       onPress={closeDrawer}
@@ -638,7 +638,7 @@ export default function WorkspaceTeam({
                     contentContainerStyle={styles.drawerScrollContent}
                     keyboardShouldPersistTaps="handled"
                   >
-                    {tasteBlocks.map((block, idx) => (
+                    {briefBlocks.map((block, idx) => (
                       <View key={idx} style={styles.drawerBlockRow}>
                         <Text style={styles.drawerBulletDot}>•</Text>
                         <Text style={styles.drawerItemText}>{block}</Text>
@@ -1061,7 +1061,7 @@ const styles = StyleSheet.create({
     color: '#B45309',
   },
 
-  // Member Form (Exact Workspace Taste Pattern)
+  // Member Form (Exact Workspace Brief Pattern)
   formHeader: {
     minHeight: 56,
     paddingHorizontal: 20,
@@ -1121,7 +1121,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
 
-  // Taste Bullets & Container (Identical to CreateWorkspace)
+  // Brief Bullets & Container (Identical to CreateWorkspace)
   bulletsWrap: {
     gap: 8,
     paddingVertical: 2,
@@ -1143,7 +1143,7 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     color: '#1E293B',
   },
-  tasteContainer: {
+  briefContainer: {
     paddingVertical: 4,
     minHeight: 36,
     gap: 8,
@@ -1201,7 +1201,7 @@ const styles = StyleSheet.create({
     color: '#DC2626',
   },
 
-  // Detached Taste Drawer (>70% Height - Identical to CreateWorkspace)
+  // Detached Brief Drawer (>70% Height - Identical to CreateWorkspace)
   drawerBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(15, 23, 42, 0.45)',

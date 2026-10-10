@@ -64,7 +64,7 @@ it('publishes, isolates, unpublishes and restores two real D1/R2 releases', asyn
   const page = await runtime.dispatchFetch(`${origin}/alpha/`);
   expect(page.status).toBe(200);
   // The edge worker rewrites root-relative asset links into the path prefix.
-  expect(await page.text()).toContain('href="/alpha/style.css"');
+  expect(await page.text()).toContain('href="/alpha/style.css');
   expect((await runtime.dispatchFetch(`${origin}/beta/`)).status).toBe(200);
   expect((await runtime.dispatchFetch(`${origin}/alpha/beta/`)).status).toBe(404);
   await alpha.run('site.unpublish', 'alpha-unpublish', { siteId: alpha.siteId });

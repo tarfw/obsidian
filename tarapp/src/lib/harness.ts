@@ -77,7 +77,7 @@ export interface HarnessActionField { key: string; label: string; kind: HarnessF
 export interface HarnessAction { id: string; version: number; title: string; description: string; type: 'app' | 'agent' | 'human'; interfaceKey: string; fields: HarnessActionField[]; output: string[]; roles: HarnessRole[]; effects: string[]; workRoles?: string[]; }
 export interface HarnessInterfaceContract { key: string; version: number; title: string; presentation: 'sheet' | 'screen' | 'flow'; submitLabel: string; }
 export interface HarnessTool { id: string; title: string; description: string; icon: string; category?: 'work' | 'create' | 'manage' | 'explore'; module: 'core' | 'pos' | 'commerce' | 'site'; kind: 'tool' | 'human' | 'channel' | 'flow' | 'site' | 'action' | 'flows'; reach?: 'none' | 'customer' | 'money' | 'data'; action: string; input: Record<string, unknown>; }
-export interface HarnessTools { tools: HarnessTool[]; modules: { id: 'pos' | 'commerce' | 'site'; title: string; description: string; enabled: boolean }[]; version: number; canManage: boolean; role: string; taste?: string[]; trade?: string | null; }
+export interface HarnessTools { tools: HarnessTool[]; modules: { id: 'pos' | 'commerce' | 'site'; title: string; description: string; enabled: boolean }[]; version: number; canManage: boolean; role: string; brief?: string[]; trade?: string | null; }
 export interface HarnessSpaceContext {
   id: string; label: string; role: string; owner: string; confidence: number;
   source: 'default' | 'routine' | 'override'; held: boolean;
@@ -231,7 +231,7 @@ export const harness = {
   consents: (slug: string, id: string) => request<{ consents: Consent[] }>(workspacePath(slug, `records/${encodeURIComponent(id)}/consents`)),
   flows: (slug: string) => request<{ books: HarnessFlowBook[]; runs: HarnessFlowRun[] }>(workspacePath(slug, 'flows')),
   flowRun: (slug: string, id: string) => request<{ run: HarnessFlowRun }>(workspacePath(slug, `runs/${encodeURIComponent(id)}`)),
-  detectVariants: (slug: string, input: { product: string; input?: string; taste?: string; trade?: string }) =>
+  detectVariants: (slug: string, input: { product: string; input?: string; brief?: string; trade?: string }) =>
     request<VariantDetectionResult>(workspacePath(slug, 'actions/catalog.item.detect'), { method: 'POST', body: input, key: createOperationKey('catalog.item.detect') }),
   executeAction: <T extends Record<string, unknown> = Record<string, unknown>>(slug: string, actionId: string, input: Record<string, unknown>, operationKey: string) => request<T>(workspacePath(slug, `actions/${encodeURIComponent(actionId)}`), { method: 'POST', body: input, key: operationKey }),
   createRecord: (slug: string, input: { type: string; title: string; data?: Record<string, unknown> }) => request<{ record: HarnessRecord }>(workspacePath(slug, 'actions/record.create'), { method: 'POST', body: input, key: createOperationKey('record.create') }),
@@ -241,20 +241,20 @@ export const harness = {
     get: (slug: string) => request<SiteSnapshot>(workspacePath(slug, 'site')),
     available: (slug: string) => request<{ site: unknown | null }>(workspacePath(slug, 'site'), { missingRouteOk: true }),
     reset: (slug: string) => request<{ reset: boolean; siteId: string; site: SiteDocument }>(workspacePath(slug, 'site'), { method: 'DELETE' }),
-    generate: (slug: string, input: { title?: string; prompt?: string; theme?: string; audience?: string; tone?: string; records?: string[]; taste?: string[]; reset?: boolean }, operationKey?: string) =>
+    generate: (slug: string, input: { title?: string; prompt?: string; theme?: string; audience?: string; tone?: string; records?: string[]; brief?: string[]; reset?: boolean }, operationKey?: string) =>
       request<{ siteId: string; version: number; state: string; site: SiteDocument; preview: { html: string; css: string; hash: string }; composed: boolean; note?: string }>(
         workspacePath(slug, 'actions/site.generate'),
         { method: 'POST', body: input, key: operationKey || createOperationKey('site.generate') }
       ),
-    tasteAdd: (slug: string, siteId: string, bullet: string, operationKey?: string) =>
+    briefAdd: (slug: string, siteId: string, bullet: string, operationKey?: string) =>
       request<{ siteId: string; version: number; state: string; site: SiteDocument; preview: { html: string; css: string; hash: string } }>(
-        workspacePath(slug, 'actions/site.taste.add'),
-        { method: 'POST', body: { siteId, bullet }, key: operationKey || createOperationKey('site.taste.add') }
+        workspacePath(slug, 'actions/site.brief.add'),
+        { method: 'POST', body: { siteId, bullet }, key: operationKey || createOperationKey('site.brief.add') }
       ),
-    tasteRemove: (slug: string, siteId: string, bullet: string, operationKey?: string) =>
+    briefRemove: (slug: string, siteId: string, bullet: string, operationKey?: string) =>
       request<{ siteId: string; version: number; state: string; site: SiteDocument; preview: { html: string; css: string; hash: string } }>(
-        workspacePath(slug, 'actions/site.taste.remove'),
-        { method: 'POST', body: { siteId, bullet }, key: operationKey || createOperationKey('site.taste.remove') }
+        workspacePath(slug, 'actions/site.brief.remove'),
+        { method: 'POST', body: { siteId, bullet }, key: operationKey || createOperationKey('site.brief.remove') }
       ),
     noticeSet: (slug: string, siteId: string, notice: string, operationKey?: string) =>
       request<{ siteId: string; version: number; state: string; site: SiteDocument; preview: { html: string; css: string; hash: string }; notice: string }>(

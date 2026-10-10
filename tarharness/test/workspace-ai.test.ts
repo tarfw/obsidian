@@ -228,7 +228,7 @@ describe('Jev workspace & member AI suggestions', () => {
     expect(memberRes.tools).not.toContain('pos');
   });
 
-  it('correctly classifies Delivery and assigns Orders for delivery taste blocks', async () => {
+  it('correctly classifies Delivery and assigns Orders for delivery brief blocks', async () => {
     const deliveryPrompt = 'Claims customer orders and packs delivery parcels. Updates delivery status and customer dropoff';
     const memberRes = await suggestMember(undefined, deliveryPrompt);
     expect(memberRes.workRole).toBe('courier');

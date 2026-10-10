@@ -48,14 +48,17 @@ export interface Section { id: string; purpose: string; layout: { kind: string; 
 export interface Page { id: string; path: string; title: string; meta?: { description?: string }; sections: Section[] }
 export interface Journey { id: string; title: string; kind: string; target: string; enabled: boolean; fields: { key: string; label: string; kind: string; required?: boolean }[] }
 export type BusinessKind = 'goods' | 'food' | 'services' | 'wholesale';
-export type SectionKind = 'header' | 'notice' | 'spotlight' | 'catalog' | 'menu' | 'services' | 'story' | 'trust' | 'contact';
+export type SectionKind = 'header' | 'hero' | 'notice' | 'spotlight' | 'catalog' | 'menu' | 'services' | 'story' | 'trust' | 'contact';
 export type LeadSection = 'spotlight' | 'catalog' | 'story';
 export type TypographyToken = 'serif' | 'sans' | 'grotesk';
 export type ToneToken = 'canvas' | 'surface' | 'ink';
 export type DensityToken = 1 | 2 | 3;
 export type CatalogLayout = 'flat' | 'pills' | 'rails';
-export type HeaderStyle = 'split' | 'fullbleed';
-export type HeroPattern = 'split' | 'commerce' | 'typography' | 'bg_image' | 'minimal' | 'fullbleed';
+export type HeaderStyle = 'split' | 'fullbleed' | 'minimal' | 'floating_pill';
+export const HEADER_STYLES = ['split', 'fullbleed', 'minimal', 'floating_pill'] as const;
+
+export type HeroPattern = 'split' | 'commerce' | 'typography' | 'bg_image' | 'minimal' | 'fullbleed' | 'centered_atmospheric';
+export const HERO_PATTERNS = ['split', 'commerce', 'typography', 'bg_image', 'minimal', 'fullbleed', 'centered_atmospheric'] as const;
 
 export interface SectionSummary {
   kind: SectionKind;
@@ -81,7 +84,6 @@ export interface Blueprint {
 
 export interface PersonaWhen { channel?: string; device?: string; returning?: boolean }
 export interface Persona { id: string; when: PersonaWhen; priority: number; hide?: string[]; order?: string[]; tone?: Record<string, string> }
-export interface Taste { accepted?: string[]; rejected?: string[]; bullets?: string[]; voice?: string }
 export interface ReleaseFile { path: string; mime: string; bytes: number; hash: string; key: string }
 export interface ReleaseManifest {
   id: string; siteId: string; version: number; generation: number; created: number; hash: string;
@@ -94,7 +96,7 @@ export interface Claim { text: string; verdict: 'supported' | 'contradicted' | '
 export interface SiteDocument {
   schema: typeof DOCUMENT_VERSION;
   revision: number;
-  brief: { goal: string; audience: string; tone: string };
+  brief: { goal: string; audience: string; tone: string; bullets?: string[]; accepted?: string[]; rejected?: string[]; voice?: string };
   locale: string; timezone: string; currency: string;
   design: Design;
   assets: Asset[];
@@ -106,7 +108,6 @@ export interface SiteDocument {
   policy: { publicEnquiry?: boolean; publicOrdering?: boolean; allowedCurrencies?: string[]; turnstile?: string };
   category?: BusinessKind | string;
   personas?: Persona[];
-  taste?: Taste;
   blueprint?: Blueprint;
   claims?: Claim[];
   currentRelease?: string | null;

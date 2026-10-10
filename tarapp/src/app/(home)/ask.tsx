@@ -268,14 +268,24 @@ export default function AskScreen() {
             <Text style={styles.headerSubtitle}>Personal Agent AI</Text>
           </View>
         </View>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Close Ask ${agentName}`}
-          onPress={() => router.back()}
-          style={styles.closeBtn}
-        >
-          <Ionicons name="close" size={22} color={muted} />
-        </Pressable>
+        <View style={styles.headerActions}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Settings"
+            onPress={() => router.push('/settings')}
+            style={styles.closeBtn}
+          >
+            <Ionicons name="settings-outline" size={20} color={muted} />
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Close Ask ${agentName}`}
+            onPress={() => router.back()}
+            style={styles.closeBtn}
+          >
+            <Ionicons name="close" size={22} color={muted} />
+          </Pressable>
+        </View>
       </View>
 
       <KeyboardAvoidingView
@@ -464,6 +474,11 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '500',
     color: muted,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   closeBtn: {
     width: 34,

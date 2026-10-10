@@ -2,10 +2,10 @@
  * Deterministic site builder.
  *
  * Implements the Autonomous Site Agent contract (agenticsite.md):
- * Facts (records) + Taste (bullets) -> 1 Jev fan-out -> Blueprint -> code -> static page.
+ * Facts (records) + Brief (bullets) -> 1 Jev fan-out -> Blueprint -> code -> static page.
  *
  * It invents nothing: every block carries supplied facts or plain text derived
- * from the owner's own brief and taste. A block whose evidence is missing is
+ * from the owner's own brief. A block whose evidence is missing is
  * omitted, never faked. Prices and money stay strictly code-owned.
  */
 
@@ -92,8 +92,8 @@ export interface BuildInput {
   previous?: SiteDocument | null;
 }
 
-export function tasteBias(taste: SiteDocument['taste']): Set<string> {
-  return new Set([...(taste?.rejected || [])].map((entry) => entry.split(':').slice(-1)[0]));
+export function briefBias(brief: SiteDocument['brief'] | undefined): Set<string> {
+  return new Set([...(brief?.rejected || [])].map((entry) => entry.split(':').slice(-1)[0]));
 }
 
 const slug = (value: string, fallback: string): string => {
@@ -108,7 +108,7 @@ const style = (density: DensityToken | Density, tone?: ToneToken | Tone): StyleS
   base: { pad: padFor(density), ...(tone && TONE_STYLE[tone] ? TONE_STYLE[tone] : {}) },
 });
 
-export function defaultBlueprint(kind: BusinessKind = 'goods', taste?: SiteDocument['taste']): Blueprint {
+export function defaultBlueprint(kind: BusinessKind = 'goods', brief?: SiteDocument['brief']): Blueprint {
   return createDefaultBlueprint(kind);
 }
 
@@ -132,7 +132,8 @@ function block(
   const density = blueprint.density || 2;
 
   switch (purpose) {
-    case 'header': {
+    case 'header':
+    case 'hero': {
       const headline = input.title;
       const subline = brief.goal || plain;
       slots.push({ id: `${at}-line`, limit: 220, purpose: 'header', current: subline });
@@ -176,8 +177,8 @@ function block(
 
       return {
         id: at,
-        purpose: 'header',
-        layout: { kind: blueprint.headerStyle === 'split' ? 'flex' : 'stack' },
+        purpose: 'hero',
+        layout: { kind: blueprint.heroPattern === 'split' || blueprint.headerStyle === 'split' ? 'flex' : 'stack' },
         style: style(density, tone),
         nodes,
       };
@@ -247,7 +248,6 @@ function block(
           id: `${at}-items`,
           kind: 'collection',
           props: {
-            title: sectionTitle,
             slot: 'items',
             layout: layoutKind,
             items,
@@ -280,7 +280,7 @@ function block(
     }
 
     case 'story': {
-      // Only include story if merchant actually gave a story in Taste/Facts; never show dummy "Cloth21 online" text
+      // Only include story if merchant actually gave a story in Brief/Facts; never show dummy "Cloth21 online" text
       const text = brief.goal && brief.goal !== `${input.title} online` ? brief.goal : '';
       if (!text) return null;
       slots.push({ id: `${at}-body`, limit: 600, purpose: 'story', current: text });

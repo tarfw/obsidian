@@ -143,10 +143,10 @@ export function extractDeterministicVariants(text: string, baseTitle = ''): { di
  */
 export async function detectProductVariants(
   apiKey: string | undefined,
-  params: { product: string; input?: string; taste?: string; trade?: string },
+  params: { product: string; input?: string; brief?: string; trade?: string },
 ): Promise<VariantDetectionResult> {
   const { product, trade = 'retail' } = params;
-  const input = (params.taste || params.input || '').trim();
+  const input = (params.brief || params.input || '').trim();
   const deterministic = extractDeterministicVariants(input, product);
   const deptFallback = inferDeterministicDepartment(`${product} ${input}`, trade);
   const baseName = (product.trim() || input.trim().split(/[,;]/)[0] || 'Item').trim();

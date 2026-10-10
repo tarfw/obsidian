@@ -312,3 +312,68 @@ SEED (1 person)         STEADY (1-2 helpers)    GROWING (2-5 staff)     MULTI-BR
 │ 📷 Add Product              🎤 Tell your agent...      │
 └────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## 13. Products Screen ("Add Product")
+
+> How the product screen works today (`tarapp/src/item/ItemInterface.tsx`, action
+> `catalog.item.save`), checked against the merchant target, showing where the
+> AI agent stops and the merchant begins.
+
+```
+┌────────────────────────────────────────────────────────────────────────────┐
+│ BLOCK: ADD PRODUCT - CURRENT SCREEN                                        │
+├────────────────────────────────────────────────────────────────────────────┤
+│ ‹        Add Product                                         Publish       │
+├───────────────────────┬────────────────────────────────────────────────────┤
+│ Photo                 │ [thumb] Change          (camera / gallery)         │
+│ Name *                │ Saree                                              │
+│ Price (₹) *           │ ₹ 1,200                                            │
+│ Stock *               │ [ - ]  3  [ + ]                                    │
+│ Brief                 │ Pure silk · 4-Muzham · zari border            >    │
+│ Category              │ Silk                    (JEV detected)             │
+│ Tax                   │ GST 5%                  (code default)             │
+│ Unit                  │ piece                   (JEV detected)             │
+│ Code                  │ SKU-SAREE               (code generated)           │
+│ Options               │ [M] [L] [XL]            (JEV split, chips toggle)  │
+└───────────────────────┴────────────────────────────────────────────────────┘
+```
+
+**Merchant target:** solo / family operator, Tamil voice-first, 30-second task,
+camera-first, zero jargon, money never AI-touched, every change 1-tap reversible.
+
+### How it is now
+
+| Row | Control today | Value comes from |
+| :--- | :--- | :--- |
+| Photo | Camera or gallery picker | Merchant |
+| Name | Text field | Merchant (typed) |
+| Price (₹) | Numeric keypad, stored in minor units | Merchant |
+| Stock | +/- stepper | Merchant |
+| Brief | Bottom sheet: mic + typed note blocks | Merchant |
+| Category | Read-only, filled after Brief closes | Jev (`detectVariants`) |
+| Tax | Read-only | Code default 5% GST |
+| Unit | Read-only | Jev |
+| Code | Read-only | Code (deterministic SKU) |
+| Options | Toggle chips | Jev proposes, merchant toggles |
+| Publish | Top-right button | Merchant (1-tap) |
+
+### AI agent vs merchant (target)
+
+| Product area | AI agent handles | Merchant handles |
+| :--- | :--- | :--- |
+| Photo | Compress to WebP/AVIF, alt text, edge cache, catalog image | Takes or picks the photo |
+| Name | Tamil/Tanglish transcript, title draft from Brief | Confirms or edits the words |
+| Price (₹) | MRP lookup, margin floor, festival offer proposal | Sets the price (money is merchant-only, §10) |
+| Stock | Low-stock alert, auto-hide at 0 | Sets the count |
+| Brief | Reads notes into options, category, unit, tax slab | Speaks or types plain words |
+| Category · Unit · Tax | Picks from trade + Brief, enforces slab and MRP cap | Overrides when wrong |
+| Code (SKU) | Nothing (code owns it) | Nothing |
+| Options | Splits Brief into variants for approval | Taps chips to include or exclude |
+| Catalog & store | Syncs item to storefront, WhatsApp share card, SEO | Publishes or Undoes |
+| Money & refunds | Never touched | Merchant only |
+
+**On Publish:** `catalog.item.save` writes the item to Turso, code runs the gate
+checks, and the item syncs to the edge storefront. Undo archives the item and
+restores the previous catalog.

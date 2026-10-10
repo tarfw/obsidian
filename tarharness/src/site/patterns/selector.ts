@@ -2,7 +2,7 @@
  * JEV Pattern Selection Rules for the 70 pre-designed section types.
  *
  * Implements System One prompts and deterministic fallbacks to select the
- * best sequence of sections for a merchant's trade, taste, and facts.
+ * best sequence of sections for a merchant's trade, brief, and facts.
  */
 
 import type { SystemOneQuestion } from '../../brain/systemone.ts';
@@ -10,7 +10,7 @@ import { SECTION_CATALOG, type SectionPattern } from './catalog.ts';
 
 export interface SelectorInput {
   trade: string;
-  taste: readonly string[];
+  bullets: readonly string[];
   facts: {
     items?: number;
     proofs?: string[];
@@ -34,8 +34,8 @@ export interface SelectedSectionResult {
  * Returns System One questions for choosing auxiliary patterns beyond the code floor.
  */
 export function buildPatternQuestions(input: SelectorInput): Record<string, SystemOneQuestion> {
-  const isFestival = Boolean(input.facts.season || input.taste.some((t) => /diwali|deepavali|pongal|festiv|offer|sale|discount/i.test(t)));
-  const isLuxury = input.taste.some((t) => /luxury|heritage|handcrafted|silk|pure|bridal|gold/i.test(t));
+  const isFestival = Boolean(input.facts.season || input.bullets.some((t) => /diwali|deepavali|pongal|festiv|offer|sale|discount/i.test(t)));
+  const isLuxury = input.bullets.some((t) => /luxury|heritage|handcrafted|silk|pure|bridal|gold/i.test(t));
   const hasProof = (input.facts.proofs?.length ?? 0) > 0;
 
   const questions: Record<string, SystemOneQuestion> = {
@@ -95,11 +95,11 @@ export function buildPatternQuestions(input: SelectorInput): Record<string, Syst
  */
 export function selectSectionsDeterministically(input: SelectorInput): SelectedSectionResult[] {
   const results: SelectedSectionResult[] = [];
-  const tasteStr = input.taste.join(' ').toLowerCase();
+  const bulletsStr = input.bullets.join(' ').toLowerCase();
   const tradeStr = input.trade.toLowerCase();
 
-  const isFestival = Boolean(input.facts.season || /diwali|deepavali|pongal|festiv|offer|sale|discount/.test(tasteStr));
-  const isLuxury = /luxury|heritage|handcrafted|silk|kanchipuram|pure|zari|gold|handloom/.test(tasteStr) || /silk|saree|jewel/.test(tradeStr);
+  const isFestival = Boolean(input.facts.season || /diwali|deepavali|pongal|festiv|offer|sale|discount/.test(bulletsStr));
+  const isLuxury = /luxury|heritage|handcrafted|silk|kanchipuram|pure|zari|gold|handloom/.test(bulletsStr) || /silk|saree|jewel/.test(tradeStr);
   const hasProof = (input.facts.proofs?.length ?? 0) > 0;
   const itemCount = input.facts.items ?? 0;
 
@@ -202,7 +202,7 @@ export function selectSectionsDeterministically(input: SelectorInput): SelectedS
   }
 
   // 8. Brand Story (#23)
-  if (isLuxury || /story|weaver|craft|founder|heritage/.test(tasteStr)) {
+  if (isLuxury || /story|weaver|craft|founder|heritage/.test(bulletsStr)) {
     results.push({
       patternId: 23,
       slug: 'brand_story',

@@ -218,6 +218,11 @@ export interface Brief {
   goal: string;
   audience: string;
   tone: string;
+  /** Merchant's own words that steer generation; memory of what was accepted or rejected. */
+  bullets?: readonly string[];
+  accepted?: readonly string[];
+  rejected?: readonly string[];
+  voice?: string;
 }
 
 export interface SitePolicy {
@@ -245,14 +250,6 @@ export interface PersonaWhen {
 
 /** What the edge needs to pick a variant: match rules only, never content. */
 export type PersonaRule = Pick<Persona, 'id' | 'when' | 'priority'>;
-
-/** Learned taste from accepted and rejected edits; biases defaults, never decides. */
-export interface Taste {
-  readonly accepted?: readonly string[];
-  readonly rejected?: readonly string[];
-  readonly bullets?: readonly string[];
-  readonly voice?: string;
-}
 
 export interface ReleaseFile {
   readonly path: string;
@@ -299,7 +296,6 @@ export interface SiteDocument {
   policy: SitePolicy;
   blueprint?: import('./blueprint.ts').Blueprint;
   personas?: Persona[];
-  taste?: Taste;
   /** Prose claims checked against supplied evidence; unresolved claims block publish. */
   claims?: { text: string; verdict: 'supported' | 'contradicted' | 'unsupported'; evidence?: string[] }[];
   /** Compatibility projection of the live release. CONTROL D1 remains the authority. */

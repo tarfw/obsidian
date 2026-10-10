@@ -7,14 +7,14 @@
  */
 
 export type BusinessKind = 'goods' | 'food' | 'services' | 'wholesale';
-export type SectionKind = 'header' | 'notice' | 'spotlight' | 'catalog' | 'menu' | 'services' | 'story' | 'trust' | 'contact';
+export type SectionKind = 'header' | 'hero' | 'notice' | 'spotlight' | 'catalog' | 'menu' | 'services' | 'story' | 'trust' | 'contact';
 export type LeadSection = 'spotlight' | 'catalog' | 'story';
 export type TypographyToken = 'serif' | 'sans' | 'grotesk';
 export type ToneToken = 'canvas' | 'surface' | 'ink';
 export type DensityToken = 1 | 2 | 3;
 export type CatalogLayout = 'flat' | 'pills' | 'rails';
-export type HeaderStyle = 'split' | 'fullbleed';
-export type HeroPattern = 'split' | 'commerce' | 'typography' | 'bg_image' | 'minimal' | 'fullbleed';
+export type HeaderStyle = 'split' | 'fullbleed' | 'minimal' | 'floating_pill';
+export type HeroPattern = 'split' | 'commerce' | 'typography' | 'bg_image' | 'minimal' | 'fullbleed' | 'centered_atmospheric';
 
 export interface SectionSummary {
   kind: SectionKind;
@@ -59,10 +59,12 @@ export interface SiteFacts {
 }
 
 export const SECTION_KINDS: readonly SectionKind[] = [
-  'header', 'notice', 'spotlight', 'catalog', 'menu', 'services', 'story', 'trust', 'contact',
+  'header', 'hero', 'notice', 'spotlight', 'catalog', 'menu', 'services', 'story', 'trust', 'contact',
 ] as const;
 
 export const BUSINESS_KINDS: readonly BusinessKind[] = ['goods', 'food', 'services', 'wholesale'] as const;
+export const HEADER_STYLES: readonly HeaderStyle[] = ['split', 'fullbleed', 'minimal', 'floating_pill'] as const;
+export const HERO_PATTERNS: readonly HeroPattern[] = ['split', 'commerce', 'typography', 'bg_image', 'minimal', 'fullbleed', 'centered_atmospheric'] as const;
 export const TYPOGRAPHY_TOKENS: readonly TypographyToken[] = ['serif', 'sans', 'grotesk'] as const;
 export const TONE_TOKENS: readonly ToneToken[] = ['canvas', 'surface', 'ink'] as const;
 export const DENSITY_TOKENS: readonly DensityToken[] = [1, 2, 3] as const;
@@ -85,9 +87,9 @@ export function checkPublishGate(facts: SiteFacts): boolean {
   return hasContact && hasItems;
 }
 
-export async function hashState(taste: readonly string[], facts: SiteFacts): Promise<string> {
+export async function hashState(brief: readonly string[], facts: SiteFacts): Promise<string> {
   const payload = JSON.stringify({
-    taste: [...taste].sort(),
+    brief: [...brief].sort(),
     items: facts.items?.length ?? 0,
     itemIds: facts.items?.map((item) => item.id).sort(),
     phone: facts.phone || '',
@@ -172,7 +174,9 @@ export function summarizeSections(blueprint: Blueprint, facts: SiteFacts): Secti
   return blueprint.sections.map((kind) => {
     switch (kind) {
       case 'header':
-        return { kind, label: 'Header', detail: blueprint.headerStyle === 'split' ? 'Photo & shop intro' : 'Photo & shop intro' };
+        return { kind, label: 'Header Navigation', detail: 'Clean logo & navigation' };
+      case 'hero':
+        return { kind, label: 'Hero Section', detail: `${blueprint.heroPattern || 'split'} layout` };
       case 'notice':
         return { kind, label: 'Notice', detail: facts.notice || 'Shop announcement' };
       case 'spotlight':
@@ -190,7 +194,7 @@ export function summarizeSections(blueprint: Blueprint, facts: SiteFacts): Secti
         return { kind, label: 'Trust', detail: proofs };
       }
       case 'contact':
-        return { kind, label: 'Contact', detail: 'WhatsApp order button' };
+        return { kind, label: 'Contact', detail: 'Address & inquiries' };
       default:
         return { kind, label: kind, detail: '' };
     }

@@ -158,7 +158,7 @@ Because styling is 100% locked inside `design.md`, Jev is only used where semant
 | :--- | :--- | :--- |
 | **Colors, typography, radii, spacing** | **Selected `design.md`** | Direct CSS variable injection (Deterministic). |
 | **Default Style recommendation on onboarding** | **Jev** | Choice question matching catalog/trade to the best `design.md` preset. |
-| **Hero pattern & section order** | **Merchant or Jev** | 1-tap selection on the Design tab, or auto-selected by Jev if untouched. |
+| **Hero layout option & section order** | **Merchant or Jev** | 1-tap selection on the Sections list in app, or auto-selected by Jev if untouched. |
 | **Spotlight / Festival Banner activation** | **Jev** | `Noul` evaluation on upcoming holidays (e.g. Deepavali in 14 days) + catalog facts. |
 | **Hero headline & microcopy** | **Jev** | Fast LLM slot fill aligning Brand preferences (*"Pure Silk & Handloom"*) with facts. |
 | **Claim verification** | **Jev** | `Noul` checks copy claims against facts (e.g., "Silk Mark certified" dropped if no proof). |

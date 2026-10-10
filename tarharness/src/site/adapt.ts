@@ -61,7 +61,7 @@ export function normalizeDocument(doc: SiteDocument): SiteDocument {
       sections: [
         {
           id: `${id}-hero`,
-          purpose: 'header',
+          purpose: 'hero',
           layout: { kind: 'stack' },
           style: { base: { pad: 'token:space.section' } },
           nodes: [
@@ -89,7 +89,7 @@ export function normalizeDocument(doc: SiteDocument): SiteDocument {
         return [];
       }
       if (s.purpose === 'introduction') {
-        return [{ ...s, id: 'hero', purpose: 'header' }];
+        return [{ ...s, id: 'hero', purpose: 'hero' }];
       }
       if (s.purpose === 'collection') {
         return [{ ...s, purpose: 'catalog' }];
@@ -103,12 +103,14 @@ export function normalizeDocument(doc: SiteDocument): SiteDocument {
       return [s];
     });
 
-    // Ensure header and contact exist
-    const hasHeader = cleanSections.some((s) => s.purpose === 'header' || s.id === 'hero');
-    if (!hasHeader) {
+    // Ensure hero and contact exist
+    const hasHero = cleanSections.some(
+      (s) => s.purpose === 'hero' || s.id === 'hero' || s.id.endsWith('-hero') || s.nodes.some((n) => n.kind === 'heading' && Number((n.props as any)?.level) === 1)
+    );
+    if (!hasHero) {
       cleanSections.unshift({
         id: 'hero',
-        purpose: 'header',
+        purpose: 'hero',
         layout: { kind: 'stack' },
         style: { base: { pad: 'md' } },
         nodes: [{ id: 'hero-title', kind: 'heading', props: { text: brand, level: 1 } }],

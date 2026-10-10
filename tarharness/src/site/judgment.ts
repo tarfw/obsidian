@@ -2,7 +2,7 @@
  * Bounded Jev judgments for the autonomous site workflow.
  *
  * Implements the 1 batched parallel System One Jev request:
- * Facts (records) + Taste (bullets) -> 1 Jev fan-out -> Blueprint.
+ * Facts (records) + Brief (bullets) -> 1 Jev fan-out -> Blueprint.
  *
  * Code owns thresholds, permissions and verification; models never touch money.
  */
@@ -92,17 +92,16 @@ export async function fanOut(
   cache: JudgmentCache,
   input: {
     trade?: string;
-    taste: readonly string[];
     facts: { items?: number | unknown[]; proofs?: string[]; season?: string; [key: string]: unknown };
-    brief?: { goal: string; audience: string; tone: string };
+    brief?: { goal: string; audience: string; tone: string; bullets?: readonly string[] };
     assets?: readonly { id: string; description: string }[];
     avoid?: readonly string[];
     purposes?: readonly string[];
   },
 ): Promise<CreateJudgment> {
-  const taste = [...(input.taste || [])];
-  if (!taste.length && input.brief?.goal) taste.push(input.brief.goal);
-  if (input.brief?.tone) taste.push(input.brief.tone);
+  const bullets = [...(input.brief?.bullets || [])];
+  if (!bullets.length && input.brief?.goal) bullets.push(input.brief.goal);
+  if (input.brief?.tone) bullets.push(input.brief.tone);
 
   const itemCount = Array.isArray(input.facts.items) ? input.facts.items.length : Number(input.facts.items || 0);
   const proofs = Array.isArray(input.facts.proofs) ? input.facts.proofs : [];
@@ -133,11 +132,11 @@ export async function fanOut(
     },
     spotlight: {
       type: 'noul',
-      instructions: 'Do taste or season call for a festival or offer section now?',
+      instructions: 'Do the brief or season call for a festival or offer section now?',
     },
     story: {
       type: 'noul',
-      instructions: 'Do taste or facts call for a craft or owner story?',
+      instructions: 'Do the brief or facts call for a craft or owner story?',
     },
     lead: {
       type: 'choice',
@@ -150,7 +149,7 @@ export async function fanOut(
     },
     typography: {
       type: 'choice',
-      instructions: 'Which heading style fits the taste?',
+      instructions: 'Which heading style fits the brief?',
       criteria: {
         serif: 'Classic display',
         sans: 'Clean modern',
@@ -159,7 +158,7 @@ export async function fanOut(
     },
     tone: {
       type: 'choice',
-      instructions: 'Which surface tone fits the taste?',
+      instructions: 'Which surface tone fits the brief?',
       criteria: {
         ink: 'Dark luxury',
         canvas: 'Light clean',
@@ -173,7 +172,7 @@ export async function fanOut(
     },
     heroPattern: {
       type: 'choice',
-      instructions: 'Which hero section pattern fits taste, trade and media?',
+      instructions: 'Which hero section pattern fits the brief, trade and media?',
       criteria: {
         split: 'Split 50/50: editorial headline left with visual right (#4)',
         commerce: 'Commerce hero: product spotlight with price pill and direct order CTA (#16)',
@@ -194,7 +193,7 @@ export async function fanOut(
 
   const statePayload = {
     trade,
-    taste,
+    bullets,
     facts: {
       items: itemCount,
       proofs,

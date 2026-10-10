@@ -54,7 +54,7 @@ function getWorkspaceBadge(name: string): WorkspaceBadge {
   return { bg, color, initial };
 }
 
-type Page = 'home' | 'workspaces' | 'flows' | 'more';
+type Page = 'home' | 'workspaces' | 'flows';
 type ListedTool = HarnessTool & { scope: string; workspace: string; role: string };
 type OpenAction = { action: HarnessAction; interfaces: HarnessInterfaceContract[]; scope: string; input: Record<string, unknown>; title: string };
 type FlowPicker = { scope: string; workspace: string; action: HarnessAction; interfaces: HarnessInterfaceContract[]; books: HarnessFlowBook[]; runs: HarnessFlowRun[] };
@@ -335,27 +335,20 @@ export default function ToolsScreen() {
     else if (page !== 'home') setPage('home');
     else router.back();
   };
-  const title = page === 'home' ? 'Tools' : page === 'workspaces' ? 'Workspaces'
-    : page === 'flows' ? 'Flows' : 'More';
+  const title = page === 'workspaces' ? 'Workspaces' : 'Flows';
   const bottom = Math.max(insets.bottom + 20, 36);
 
-  return <View style={[styles.page, { paddingTop: insets.top }]}>
-    <View style={styles.header}>
-      {page === 'home' ? (
-        <Text style={styles.titleHome} numberOfLines={1}>{title}</Text>
-      ) : (
-        <>
-          <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={back} style={styles.iconButton}><Ionicons name="arrow-back" size={22} color={ink} /></Pressable>
-          <Text style={styles.title} numberOfLines={1}>{title}</Text>
-        </>
-      )}
-      {page === 'home' ? <View style={styles.headerActions}>
-        <Pressable accessibilityRole="button" accessibilityLabel="More options" onPress={() => setPage('more')} style={styles.iconButton}><Ionicons name="ellipsis-horizontal" size={22} color={ink} /></Pressable>
-      </View> : <View style={styles.iconButton} />}
-    </View>
+  return <View style={[styles.page, { paddingTop: page === 'home' ? 0 : insets.top }]}>
+    {page !== 'home' ? (
+      <View style={styles.header}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={back} style={styles.iconButton}><Ionicons name="arrow-back" size={22} color={ink} /></Pressable>
+        <Text style={styles.title} numberOfLines={1}>{title}</Text>
+        <View style={styles.iconButton} />
+      </View>
+    ) : null}
 
     {page === 'home' ? <>
-      <Pressable accessibilityRole="button" accessibilityLabel="Choose workspace for tools" onPress={() => setPage('workspaces')} style={styles.scopeRow}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Choose workspace for tools" onPress={() => setPage('workspaces')} style={[styles.scopeRow, { paddingTop: insets.top + 12, paddingBottom: 12 }]}>
         <View style={styles.scopeCopy}>
           <Text style={styles.scopeName}>{selected === 'all' ? (active.length > 1 ? 'All workspaces' : active[0]?.name || 'Workspaces') : selectedWorkspace?.name || active[0]?.name || 'Workspace'}</Text>
           {selected !== 'all' ? (
@@ -523,10 +516,6 @@ export default function ToolsScreen() {
       {!flowPicker.books.length ? <Empty title="No Flows" detail="Published processes will appear here." /> : null}
     </ScrollView> : null}
 
-    {page === 'more' ? <ScrollView style={styles.scroll} contentContainerStyle={[styles.content, { paddingBottom: bottom }]}>
-      <Row icon="settings-outline" title="Settings" arrow onPress={() => router.push('/settings')} />
-    </ScrollView> : null}
-
     <ActionInterfaceHost action={openAction?.action || null} contracts={openAction?.interfaces || []} scope={openAction?.scope || current.slug} initialInput={openAction?.input} contextTitle={openAction?.title} onClose={() => setOpenAction(null)} onSuccess={() => { setOpenAction(null); void load(); }} />
     {siteOpen ? <SiteScreen visible onClose={() => { setSiteOpen(null); void load(); }} workspaceName={siteOpen.workspace} subdomain={siteOpen.scope} scope={siteOpen.scope} /> : null}
     {teamScope ? <WorkspaceTeam key={teamScope} scope={teamScope} name={active.find((workspace) => workspace.slug === teamScope)?.name || 'Workspace'} onClose={() => setTeamScope(null)} onChanged={() => void load()} /> : null}
@@ -605,9 +594,8 @@ const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: '#FFFFFF' }, scroll: { flex: 1 },
   header: { minHeight: 58, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   title: { color: ink, fontSize: 22, fontWeight: '700', flex: 1, marginLeft: 8 },
-  titleHome: { color: ink, fontSize: 22, fontWeight: '700', flex: 1, paddingLeft: 8 },
-  headerActions: { flexDirection: 'row' }, iconButton: { width: 44, height: 44, justifyContent: 'center', alignItems: 'center' },
-  scopeRow: { minHeight: 64, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 24, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: line, gap: 12 },
+  iconButton: { width: 44, height: 44, justifyContent: 'center', alignItems: 'center' },
+  scopeRow: { minHeight: 64, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 24, backgroundColor: '#F6F8FA', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: line, gap: 12 },
   scopeCopy: { flex: 1 },
   scopeName: { color: ink, fontSize: 16, fontWeight: '700' },
   scopeRole: { color: muted, fontSize: 12, marginTop: 3, textTransform: 'capitalize' },

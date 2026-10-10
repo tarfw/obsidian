@@ -7,7 +7,7 @@ import { findAction, type ActionId } from '../registry/catalog.ts';
 import { executePos } from '../pos/store.ts';
 import { draftProduct, saveProductContent } from '../pos/content.ts';
 import { canExecute, canReadRecord, canRunFlowStep } from '../access.ts';
-import { executeSiteGenerate, executeSiteScout, executeSiteCompile, executeSitePublish, executeSiteRollback, executeSiteRefresh, executeSiteUnpublish, executeSiteChecks, executeSiteReleases, executeSiteTasteAdd, executeSiteTasteRemove, executeSiteNoticeSet, executeSiteSectionsSet } from '../site/store.ts';
+import { executeSiteGenerate, executeSiteScout, executeSiteCompile, executeSitePublish, executeSiteRollback, executeSiteRefresh, executeSiteUnpublish, executeSiteChecks, executeSiteReleases, executeSiteBriefAdd, executeSiteBriefRemove, executeSiteNoticeSet, executeSiteSectionsSet } from '../site/store.ts';
 import { executeSiteAsk, executeSiteDesignImport, executeSiteEdit, executeSiteUndo } from '../site/edit.ts';
 import { executeSiteAssetGenerate, executeSiteAssetUpload, executeSiteAssets } from '../site/asset.ts';
 import { searchWeb } from '../web/search.ts';
@@ -114,22 +114,22 @@ export function executeGateway(client: Client, context: AccessContext, request: 
         if (committed[0]?.rowsAffected !== 1 || committed[1]?.rowsAffected !== 1) throw conflict('Tools changed. Refresh and try again.');
         return result;
       }
-      if (request.actionId === 'taste.save') {
-        const rawTaste = request.input.taste;
-        const tasteList = Array.isArray(rawTaste) ? rawTaste.map(String) : typeof rawTaste === 'string' ? rawTaste.split(/\r?\n/).map((s) => s.trim()).filter(Boolean) : [];
+      if (request.actionId === 'brief.save') {
+        const rawBrief = request.input.brief;
+        const briefList = Array.isArray(rawBrief) ? rawBrief.map(String) : typeof rawBrief === 'string' ? rawBrief.split(/\r?\n/).map((s) => s.trim()).filter(Boolean) : [];
         const tradeVal = typeof request.input.trade === 'string' ? request.input.trade : typeof request.input.trade === 'object' && request.input.trade !== null ? String((request.input.trade as { title?: unknown }).title || '') : '';
-        const payload = { taste: tasteList, trade: tradeVal };
-        const result = { saved: true, taste: tasteList, trade: tradeVal };
+        const payload = { brief: briefList, trade: tradeVal };
+        const result = { saved: true, brief: briefList, trade: tradeVal };
         await client.batch([
           {
             sql: `INSERT INTO records (id, type, title, state, data, owner, assignee, due, version, created, updated)
-                  VALUES ('taste', 'taste', 'Workspace Taste', 'active', ?, ?, NULL, NULL, 1, ?, ?)
+                  VALUES ('brief', 'brief', 'Workspace Brief', 'active', ?, ?, NULL, NULL, 1, ?, ?)
                   ON CONFLICT(id) DO UPDATE SET data=excluded.data, version=records.version+1, updated=excluded.updated`,
             args: [json(payload), context.identity.id, at, at],
           },
           {
             sql: `INSERT INTO events (id,kind,run_id,record_id,action_id,state,actor_id,input_hash,idempotency_key,data,created_at,updated_at)
-                  SELECT ?, 'action', NULL, 'taste', ?, 'accepted', ?, ?, ?, ?, ?, ? WHERE changes()=1`,
+                  SELECT ?, 'action', NULL, 'brief', ?, 'accepted', ?, ?, ?, ?, ?, ? WHERE changes()=1`,
             args: [`evt_${crypto.randomUUID()}`, request.actionId, context.identity.id, hash, request.idempotencyKey, json({ result }), at, at],
           },
         ], 'write');
@@ -159,8 +159,8 @@ export function executeGateway(client: Client, context: AccessContext, request: 
       if (request.actionId === 'site.rollback') return executeSiteRollback(client, context, request.input, request.idempotencyKey, hash, services.publication, services.siteDomain, services.siteReleases, services.productContent);
       if (request.actionId === 'site.refresh') return executeSiteRefresh(client, services.siteReleases, context, request.input, request.idempotencyKey, hash, services.publication, services.siteDomain, services.productContent);
       if (request.actionId === 'site.unpublish') return executeSiteUnpublish(client, context, request.input, request.idempotencyKey, hash, services.publication);
-      if (request.actionId === 'site.taste.add') return executeSiteTasteAdd(client, context, request.input, request.idempotencyKey, hash, services.typesafe, services.publication);
-      if (request.actionId === 'site.taste.remove') return executeSiteTasteRemove(client, context, request.input, request.idempotencyKey, hash, services.typesafe, services.publication);
+      if (request.actionId === 'site.brief.add') return executeSiteBriefAdd(client, context, request.input, request.idempotencyKey, hash, services.typesafe, services.publication);
+      if (request.actionId === 'site.brief.remove') return executeSiteBriefRemove(client, context, request.input, request.idempotencyKey, hash, services.typesafe, services.publication);
       if (request.actionId === 'site.notice.set') return executeSiteNoticeSet(client, context, request.input, request.idempotencyKey, hash);
       if (request.actionId === 'site.sections.set') return executeSiteSectionsSet(client, context, request.input, request.idempotencyKey, hash);
       if (request.actionId === 'web.search') {

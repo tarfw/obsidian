@@ -137,7 +137,7 @@ export async function suggestCapabilities(apiKey: string | undefined, brief: str
     questions: {
       trade: {
         type: 'choice',
-        instructions: 'Classify this enterprise into its primary commercial trade or atelier category based on its business name and operational taste facts.',
+        instructions: 'Classify this enterprise into its primary commercial trade or atelier category based on its business name and operational brief facts.',
         criteria: {
           apparel: 'Handloom, saree, boutique, textile, tailoring, fabric, or garment atelier',
           food: 'Restaurant, cafe, bakery, eatery, tea stall, kitchen, or food service',

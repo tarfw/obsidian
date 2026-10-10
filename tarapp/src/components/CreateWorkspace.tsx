@@ -193,10 +193,10 @@ function WorkspaceForm({
 
   const [name, setName] = useState(workspace?.name || '');
 
-  // Initialize taste: load actual taste if present.
+  // Initialize brief: load actual brief if present.
   // Sample handloom boutique facts are ONLY applied to the demo brand "Aambal Neyvagam".
   // Other workspaces (e.g. Cloth21) start clean without dummy data.
-  const [tasteBlocks, setTasteBlocks] = useState<string[]>(() => {
+  const [briefBlocks, setBriefBlocks] = useState<string[]>(() => {
     if (workspace?.name && /aambal/i.test(workspace.name)) {
       return [
         'Handloom saree boutique in Kanchipuram',
@@ -204,7 +204,7 @@ function WorkspaceForm({
         'Public website for online catalog & WhatsApp',
       ];
     }
-    const raw = (workspace as unknown as Record<string, unknown>)?.taste;
+    const raw = (workspace as unknown as Record<string, unknown>)?.brief;
     if (typeof raw === 'string' && raw.trim()) {
       return raw.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
     }
@@ -217,7 +217,7 @@ function WorkspaceForm({
   const [trade, setTrade] = useState<string>(() => {
     const rawTrade = (workspace as unknown as Record<string, unknown>)?.trade;
     if (typeof rawTrade === 'string' && rawTrade.trim()) return rawTrade;
-    const initialText = tasteBlocks.join(' ').trim();
+    const initialText = briefBlocks.join(' ').trim();
     if (!initialText) return '';
     return classifyTrade(initialText);
   });
@@ -227,7 +227,7 @@ function WorkspaceForm({
   const [newBlock, setNewBlock] = useState('');
 
   const [selectedTools, setSelectedTools] = useState<string[]>(() => {
-    const initialText = tasteBlocks.join(' ').trim();
+    const initialText = briefBlocks.join(' ').trim();
     if (!initialText) return [];
     const initialTrade = classifyTrade(initialText);
     return computeDefaultTools(initialTrade, initialText);
@@ -247,15 +247,15 @@ function WorkspaceForm({
     return `${base}-${suffix}`;
   }, [existingSlugs, workspaceName, isViewMode, workspace]);
 
-  // Sync saved taste and trade from Turso database
+  // Sync saved brief and trade from Turso database
   useEffect(() => {
     if (workspace) {
       void harness
         .workspaceTools(workspace.slug)
         .then((res) => {
           if (res) {
-            if (Array.isArray(res.taste) && res.taste.length > 0) {
-              setTasteBlocks(res.taste);
+            if (Array.isArray(res.brief) && res.brief.length > 0) {
+              setBriefBlocks(res.brief);
             }
             if (typeof res.trade === 'string' && res.trade.trim()) {
               setTrade(res.trade);
@@ -266,9 +266,9 @@ function WorkspaceForm({
     }
   }, [workspace]);
 
-  // JEV System One live classification: driven strictly and exclusively by Taste data
+  // JEV System One live classification: driven strictly and exclusively by Brief data
   useEffect(() => {
-    const prompt = tasteBlocks.join('. ').trim();
+    const prompt = briefBlocks.join('. ').trim();
     if (!prompt) {
       setTrade('');
       setSelectedTools([]);
@@ -298,7 +298,7 @@ function WorkspaceForm({
     }, 250);
 
     return () => clearTimeout(timer);
-  }, [tasteBlocks]);
+  }, [briefBlocks]);
 
   const close = () => {
     if (!submitting && canClose) {
@@ -312,13 +312,13 @@ function WorkspaceForm({
     if (!text) return;
     const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
     if (lines.length > 0) {
-      setTasteBlocks((prev) => [...prev, ...lines]);
+      setBriefBlocks((prev) => [...prev, ...lines]);
     }
     setNewBlock('');
   };
 
   const removeBlock = (index: number) => {
-    setTasteBlocks((prev) => prev.filter((_, i) => i !== index));
+    setBriefBlocks((prev) => prev.filter((_, i) => i !== index));
   };
 
   const closeDrawer = () => {
@@ -355,13 +355,13 @@ function WorkspaceForm({
       const finalTrade = trade.trim() || 'General Retail & Merchant';
 
       await Promise.all([
-        // 1. Persist Taste Profile & Classified Trade to Turso records
+        // 1. Persist Brief Profile & Classified Trade to Turso records
         harness
           .executeAction(
             targetSlug,
-            'taste.save',
-            { taste: tasteBlocks, trade: finalTrade },
-            createOperationKey(`taste:${targetSlug}`)
+            'brief.save',
+            { brief: briefBlocks, trade: finalTrade },
+            createOperationKey(`brief:${targetSlug}`)
           )
           .catch(() => undefined),
 
@@ -471,18 +471,18 @@ function WorkspaceForm({
 
           <View style={styles.divider} />
 
-          {/* Section 2: TASTE */}
+          {/* Section 2: BRIEF */}
           <TouchableOpacity
-            style={styles.tasteContainer}
+            style={styles.briefContainer}
             onPress={() => setDrawerVisible(true)}
             activeOpacity={0.7}
             accessibilityRole="button"
-            accessibilityLabel="Taste"
+            accessibilityLabel="Brief"
           >
-            <Text style={styles.sectionLabel}>TASTE</Text>
-            {tasteBlocks.length > 0 ? (
+            <Text style={styles.sectionLabel}>BRIEF</Text>
+            {briefBlocks.length > 0 ? (
               <View style={styles.bulletsWrap}>
-                {tasteBlocks.map((block, idx) => (
+                {briefBlocks.map((block, idx) => (
                   <View key={idx} style={styles.bulletRow}>
                     <Text style={styles.bulletDot}>•</Text>
                     <Text style={styles.bulletText}>{block}</Text>
@@ -548,7 +548,7 @@ function WorkspaceForm({
           ) : null}
         </ScrollView>
 
-        {/* DETACHED TASTE DRAWER (>70% Height) */}
+        {/* DETACHED BRIEF DRAWER (>70% Height) */}
         <Modal
           visible={drawerVisible}
           animationType="slide"
@@ -573,7 +573,7 @@ function WorkspaceForm({
               >
                 {/* Drawer Header */}
                 <View style={styles.drawerHeader}>
-                  <Text style={styles.drawerTitle}>Taste</Text>
+                  <Text style={styles.drawerTitle}>Brief</Text>
                   <TouchableOpacity
                     style={styles.drawerDoneBtn}
                     onPress={closeDrawer}
@@ -612,7 +612,7 @@ function WorkspaceForm({
                   contentContainerStyle={styles.drawerScrollContent}
                   keyboardShouldPersistTaps="handled"
                 >
-                  {tasteBlocks.map((block, idx) => (
+                  {briefBlocks.map((block, idx) => (
                     <View key={idx} style={styles.drawerBlockRow}>
                       <Text style={styles.drawerBlockBullet}>•</Text>
                       <Text style={styles.drawerBlockText}>{block}</Text>
@@ -729,7 +729,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
 
-  // Taste
+  // Brief
   bulletsWrap: {
     gap: 8,
     paddingVertical: 2,
@@ -751,7 +751,7 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     color: '#1E293B',
   },
-  tasteContainer: {
+  briefContainer: {
     paddingVertical: 4,
     minHeight: 36,
     gap: 8,

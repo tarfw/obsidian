@@ -109,6 +109,12 @@ export const HERO_OPTIONS: readonly HeroOptionItem[] = [
     icon: 'scan-outline',
   },
   {
+    key: 'cowboy',
+    name: 'Cinematic full screen',
+    desc: 'Oversized statement title, feature badges, and round booking pill.',
+    icon: 'bicycle-outline',
+  },
+  {
     key: 'minimal',
     name: 'Small and tidy',
     desc: 'Name, one line about the shop, and quick links to your items.',
@@ -124,6 +130,12 @@ export interface HeaderOptionItem {
 }
 
 export const HEADER_OPTIONS: readonly HeaderOptionItem[] = [
+  {
+    key: 'cowboy',
+    name: 'Cinematic menu bar',
+    desc: 'Transparent bar with brand star, nav links, account, cart and pill button.',
+    icon: 'sparkles-outline',
+  },
   {
     key: 'split',
     name: 'Photo beside name',
@@ -180,10 +192,6 @@ export default function SiteScreen({
   // Modals
   const [designModalOpen, setDesignModalOpen] = useState(false);
   const [selectedStyle, setSelectedStyle] = useState<string | null>(null);
-  const [headerModalOpen, setHeaderModalOpen] = useState(false);
-  const [selectedHeaderStyle, setSelectedHeaderStyle] = useState<HeaderStyle | null>(null);
-  const [heroModalOpen, setHeroModalOpen] = useState(false);
-  const [selectedHeroPattern, setSelectedHeroPattern] = useState<HeroPattern | null>(null);
   const [noticeModalOpen, setNoticeModalOpen] = useState(false);
 
   // Inputs
@@ -338,16 +346,6 @@ export default function SiteScreen({
     setSelectedStyle(styleKey);
   }, []);
 
-  const handleSelectHeaderStyle = useCallback((styleKey: HeaderStyle) => {
-    setSelectedHeaderStyle(styleKey);
-    setHeaderModalOpen(false);
-  }, []);
-
-  const handleSelectHeroPattern = useCallback((patternKey: HeroPattern) => {
-    setSelectedHeroPattern(patternKey);
-    setHeroModalOpen(false);
-  }, []);
-
   // Set or clear notice banner
   const handleSaveNotice = useCallback(async () => {
     if (!slug || !siteId || busy) return;
@@ -427,20 +425,13 @@ export default function SiteScreen({
       if (!activeSiteId) throw new Error('Store was not found.');
 
       const desiredStyle = selectedStyle || freshSnap?.site?.data?.blueprint?.style || currentStyleKey;
-      const desiredHero = selectedHeroPattern || freshSnap?.site?.data?.blueprint?.heroPattern || currentHeroKey;
-      const desiredHeader = selectedHeaderStyle || freshSnap?.site?.data?.blueprint?.headerStyle || currentHeaderKey;
 
-      const needsUpdate =
-        (desiredStyle && freshSnap?.site?.data?.blueprint?.style !== desiredStyle) ||
-        (desiredHero && freshSnap?.site?.data?.blueprint?.heroPattern !== desiredHero) ||
-        (desiredHeader && freshSnap?.site?.data?.blueprint?.headerStyle !== desiredHeader);
+      const needsUpdate = desiredStyle && freshSnap?.site?.data?.blueprint?.style !== desiredStyle;
 
       if (needsUpdate) {
         setBusyMessage('Applying your chosen look...');
         const genRes = await harness.site.generate(slug, {
           style: desiredStyle,
-          heroPattern: desiredHero,
-          headerStyle: desiredHeader,
         } as Record<string, unknown>);
         activeSiteId = genRes.siteId || activeSiteId;
       }
@@ -555,13 +546,13 @@ export default function SiteScreen({
         (currentStyleKey?.startsWith('arte') && s.key === 'harvest-editorial'),
     ) || REFERO_SYSTEMS[0];
 
-  // Active Header Style Option
-  const currentHeaderKey: HeaderStyle = selectedHeaderStyle ?? site?.blueprint?.headerStyle ?? (selectedHeroPattern === 'centered_atmospheric' || site?.blueprint?.heroPattern === 'centered_atmospheric' ? 'floating_pill' : 'minimal');
+  // Active Header Style Option (decided by Jev in blueprint)
+  const currentHeaderKey: HeaderStyle = site?.blueprint?.headerStyle ?? (site?.blueprint?.heroPattern === 'centered_atmospheric' ? 'floating_pill' : 'minimal');
   const activeHeaderOption =
     HEADER_OPTIONS.find((h) => h.key === currentHeaderKey) || HEADER_OPTIONS[0];
 
-  // Active Hero Design Option
-  const currentHeroKey: HeroPattern = selectedHeroPattern ?? site?.blueprint?.heroPattern ?? 'split';
+  // Active Hero Design Option (decided by Jev in blueprint)
+  const currentHeroKey: HeroPattern = site?.blueprint?.heroPattern ?? 'split';
   const activeHeroOption =
     HERO_OPTIONS.find((h) => h.key === currentHeroKey) || HERO_OPTIONS[0];
 
@@ -723,13 +714,9 @@ export default function SiteScreen({
                   const isHeader = (sec.purpose === 'navigation' || sec.purpose === 'nav' || sec.id === 'nav') && sec.id !== 'hero';
                   if (isHeader) {
                     return (
-                      <TouchableOpacity
+                      <View
                         key={sec.id || `header-${idx}`}
                         style={[styles.sectionRow, isLast ? styles.sectionRowLast : null]}
-                        onPress={() => setHeaderModalOpen(true)}
-                        activeOpacity={0.7}
-                        accessibilityRole="button"
-                        accessibilityLabel="Change menu bar look"
                       >
                         <View style={styles.sectionRowLeft}>
                           <Ionicons name="menu-outline" size={18} color="#0f172a" />
@@ -738,21 +725,16 @@ export default function SiteScreen({
                             <Text style={styles.sectionRowOption}>{activeHeaderOption.name}</Text>
                           </View>
                         </View>
-                        <Ionicons name="chevron-forward" size={16} color="#94a3b8" />
-                      </TouchableOpacity>
+                      </View>
                     );
                   }
 
                   const isHero = sec.purpose === 'hero' || sec.id === 'hero' || (sec.purpose === 'header' && sec.id !== 'nav');
                   if (isHero) {
                     return (
-                      <TouchableOpacity
+                      <View
                         key={sec.id || `hero-${idx}`}
                         style={[styles.sectionRow, isLast ? styles.sectionRowLast : null]}
-                        onPress={() => setHeroModalOpen(true)}
-                        activeOpacity={0.7}
-                        accessibilityRole="button"
-                        accessibilityLabel="Change the top of your page"
                       >
                         <View style={styles.sectionRowLeft}>
                           <Ionicons name="image-outline" size={18} color="#0f172a" />
@@ -761,8 +743,30 @@ export default function SiteScreen({
                             <Text style={styles.sectionRowOption}>{activeHeroOption.name}</Text>
                           </View>
                         </View>
-                        <Ionicons name="chevron-forward" size={16} color="#94a3b8" />
-                      </TouchableOpacity>
+                      </View>
+                    );
+                  }
+
+                  const isFooter = sec.purpose === 'footer' || sec.id === 'site-footer' || sec.id === 'footer';
+                  if (isFooter) {
+                    const isCowboy =
+                      site?.blueprint?.headerStyle === 'cowboy' ||
+                      site?.blueprint?.heroPattern === 'cowboy';
+                    return (
+                      <View
+                        key={sec.id || `footer-${idx}`}
+                        style={[styles.sectionRow, isLast ? styles.sectionRowLast : null]}
+                      >
+                        <View style={styles.sectionRowLeft}>
+                          <Ionicons name="browsers-outline" size={18} color="#0f172a" />
+                          <View>
+                            <Text style={styles.sectionRowTitle}>Bottom of the page</Text>
+                            <Text style={styles.sectionRowOption}>
+                              {isCowboy ? 'Cowboy Minimalist' : 'Storefront Footer'}
+                            </Text>
+                          </View>
+                        </View>
+                      </View>
                     );
                   }
 
@@ -887,155 +891,7 @@ export default function SiteScreen({
           </View>
         </Modal>
 
-        {/* HERO DESIGN OPTIONS MODAL: 5 Curated layout archetypes */}
-        <Modal
-          visible={heroModalOpen}
-          animationType="slide"
-          presentationStyle="fullScreen"
-          onRequestClose={() => setHeroModalOpen(false)}
-        >
-          <View style={[styles.root, { paddingTop: Math.max(insets.top, 12) }]}>
-            {/* Top Bar */}
-            <View style={styles.topNavBar}>
-              <View style={styles.navLeft}>
-                <TouchableOpacity
-                  style={styles.navBackBtn}
-                  onPress={() => setHeroModalOpen(false)}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  accessibilityRole="button"
-                  accessibilityLabel="Back to site settings"
-                >
-                  <Ionicons name="chevron-back" size={24} color="#0f172a" />
-                </TouchableOpacity>
-                <View style={styles.navTitleWrap}>
-                  <Text style={styles.navTitle}>Top of the page</Text>
-                </View>
-              </View>
-              <TouchableOpacity
-                onPress={() => setHeroModalOpen(false)}
-                style={styles.navTextBtn}
-                accessibilityRole="button"
-                accessibilityLabel="Done"
-              >
-                <Text style={styles.navTextBtnLabel}>Done</Text>
-              </TouchableOpacity>
-            </View>
 
-            {/* Flat List */}
-            <ScrollView
-              style={styles.scrollArea}
-              contentContainerStyle={[
-                styles.scrollContent,
-                { paddingBottom: Math.max(insets.bottom + 24, 40) },
-              ]}
-              showsVerticalScrollIndicator={false}
-            >
-              <View style={styles.designFlatList}>
-                {HERO_OPTIONS.map((opt) => {
-                  const isSelected = opt.key === currentHeroKey;
-                  return (
-                    <TouchableOpacity
-                      key={opt.key}
-                      style={[styles.systemCard, isSelected && styles.systemCardActive]}
-                      onPress={() => handleSelectHeroPattern(opt.key)}
-                      activeOpacity={0.7}
-                    >
-                      <View style={styles.systemCardTop}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                          <Ionicons name={opt.icon} size={20} color={isSelected ? '#0284c7' : '#475569'} />
-                          <Text style={[styles.systemTitle, isSelected && styles.systemTitleActive]}>
-                            {opt.name}
-                          </Text>
-                        </View>
-                        <Ionicons
-                          name={isSelected ? 'checkmark-circle' : 'ellipse-outline'}
-                          size={22}
-                          color={isSelected ? '#0284c7' : '#cbd5e1'}
-                        />
-                      </View>
-                      <Text style={styles.systemDesc}>{opt.desc}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </ScrollView>
-          </View>
-        </Modal>
-
-        {/* HEADER STYLE OPTIONS MODAL */}
-        <Modal
-          visible={headerModalOpen}
-          animationType="slide"
-          presentationStyle="fullScreen"
-          onRequestClose={() => setHeaderModalOpen(false)}
-        >
-          <View style={[styles.root, { paddingTop: Math.max(insets.top, 12) }]}>
-            {/* Top Bar */}
-            <View style={styles.topNavBar}>
-              <View style={styles.navLeft}>
-                <TouchableOpacity
-                  style={styles.navBackBtn}
-                  onPress={() => setHeaderModalOpen(false)}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  accessibilityRole="button"
-                  accessibilityLabel="Back to site settings"
-                >
-                  <Ionicons name="chevron-back" size={24} color="#0f172a" />
-                </TouchableOpacity>
-                <View style={styles.navTitleWrap}>
-                  <Text style={styles.navTitle}>Menu bar</Text>
-                </View>
-              </View>
-              <TouchableOpacity
-                onPress={() => setHeaderModalOpen(false)}
-                style={styles.navTextBtn}
-                accessibilityRole="button"
-                accessibilityLabel="Done"
-              >
-                <Text style={styles.navTextBtnLabel}>Done</Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Flat List */}
-            <ScrollView
-              style={styles.scrollArea}
-              contentContainerStyle={[
-                styles.scrollContent,
-                { paddingBottom: Math.max(insets.bottom + 24, 40) },
-              ]}
-              showsVerticalScrollIndicator={false}
-            >
-              <View style={styles.designFlatList}>
-                {HEADER_OPTIONS.map((opt) => {
-                  const isSelected = opt.key === currentHeaderKey;
-                  return (
-                    <TouchableOpacity
-                      key={opt.key}
-                      style={[styles.systemCard, isSelected && styles.systemCardActive]}
-                      onPress={() => handleSelectHeaderStyle(opt.key)}
-                      activeOpacity={0.7}
-                    >
-                      <View style={styles.systemCardTop}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                          <Ionicons name={opt.icon} size={20} color={isSelected ? '#0284c7' : '#475569'} />
-                          <Text style={[styles.systemTitle, isSelected && styles.systemTitleActive]}>
-                            {opt.name}
-                          </Text>
-                        </View>
-                        <Ionicons
-                          name={isSelected ? 'checkmark-circle' : 'ellipse-outline'}
-                          size={22}
-                          color={isSelected ? '#0284c7' : '#cbd5e1'}
-                        />
-                      </View>
-                      <Text style={styles.systemDesc}>{opt.desc}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </ScrollView>
-          </View>
-        </Modal>
 
         {/* NOTICE MODAL */}
         <Modal

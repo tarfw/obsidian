@@ -123,4 +123,69 @@ describe('70 Section Catalog & 8 Engine Primitives', () => {
     const rendered = renderSectionByPatternId(1, { kind: 'announcement', notice: 'Diwali sale live' });
     expect(rendered).toContain('Diwali sale live');
   });
+
+  it('renders Cowboy minimalist footer with dynamic workspace facts and pixel-perfect structure', async () => {
+    const { getPrimitive } = await import('../src/site/registry.ts');
+    const footer = getPrimitive('footer', 'cowboy');
+    const html = footer.render(
+      { id: 'site-footer', purpose: 'footer', nodes: [] },
+      {
+        doc: {
+          schema: '2.0.0',
+          revision: 1,
+          locale: 'en',
+          timezone: 'UTC',
+          currency: 'INR',
+          brief: { goal: 'Handcrafted luxury', audience: 'general', tone: 'luxury', phone: '+919876543210' } as any,
+          design: {} as any,
+          assets: [],
+          components: [],
+          journeys: [],
+          redirects: [],
+          locks: [],
+          policy: {},
+          pages: [
+            {
+              id: 'home',
+              path: '/',
+              title: 'Loom Studio',
+              sections: [
+                {
+                  id: 'catalog',
+                  purpose: 'catalog',
+                  layout: { kind: 'grid', columns: 3 },
+                  nodes: [
+                    {
+                      id: 'col-1',
+                      kind: 'collection',
+                      props: {
+                        items: [
+                          { title: 'Kanchi Pattu', category: 'Silk Sarees' },
+                          { title: 'Linen Kurta', category: 'Linen Wear' },
+                        ],
+                      },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+        collector: { classes: new Map(), runtime: new Set() },
+        base: '',
+      }
+    );
+
+    expect(html).toContain('class="tar-footer-cowboy"');
+    expect(html).toContain('Explore');
+    expect(html).toContain('Services');
+    expect(html).toContain('About us');
+    expect(html).toContain('Help');
+    expect(html).toContain('Stay in the loop');
+    expect(html).toContain('Silk Sarees');
+    expect(html).toContain('Linen Wear');
+    expect(html).toContain('LOOM STUDIO');
+    expect(html).toContain('tar-chat-corner-pill');
+    expect(html).toContain('https://wa.me/919876543210');
+  });
 });
